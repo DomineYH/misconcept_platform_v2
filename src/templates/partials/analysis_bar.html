@@ -1,0 +1,64 @@
+<!-- Frequency bar chart visualization (T070) -->
+<!-- Frequency bar chart visualization (T070) -->
+<div class="chart-container">
+    {% for label, count in distribution.items() %}
+    <div class="chart-row">
+        <div class="chart-label">
+            {{ label }}
+        </div>
+        <div class="chart-bar-wrapper">
+            <div class="chart-bar-container">
+                <!-- Calculate percentage for bar width -->
+                {% set total = distribution.values()|sum %}
+                {% set percentage = (count / total * 100) if total > 0 else 0 %}
+
+                <!-- Bar -->
+                <div class="chart-track">
+                    <div class="chart-fill
+                        {% if label == 'Pressing' %}
+                            bg-pressing
+                        {% elif label == 'Linking' %}
+                            bg-linking
+                        {% elif label == 'Directing' %}
+                            bg-directing
+                        {% elif label == 'Recall' %}
+                            bg-recall
+                        {% else %}
+                            bg-default
+                        {% endif %}
+                        " style="width: {{ percentage }}%">
+                        {% if percentage > 10 %}
+                        {{ count }}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Count label (shown outside if bar too small) -->
+                <div class="chart-value">
+                    {% if percentage <= 10 %} {{ count }} {% endif %} <span class="chart-percentage">
+                        ({{ "%.0f"|format(percentage) }}%)
+                        </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Total count -->
+    <div class="chart-total">
+        <div class="chart-total-row">
+            <div class="chart-total-label">
+                총계
+            </div>
+            <div class="chart-total-value">
+                {{ distribution.values()|sum }}개 질문
+            </div>
+        </div>
+        {% if grade_counts is defined and (grade_counts.get('우수', 0) > 0 or grade_counts.get('개선', 0) > 0) %}
+        <div class="chart-grade-summary">
+            <span class="chart-grade-item grade-excellent">우수 {{ grade_counts.get('우수', 0) }}개</span>
+            <span class="chart-grade-item grade-improve">개선 {{ grade_counts.get('개선', 0) }}개</span>
+        </div>
+        {% endif %}
+    </div>
+</div>

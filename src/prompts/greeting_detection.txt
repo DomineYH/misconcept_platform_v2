@@ -1,0 +1,42 @@
+You are analyzing teacher messages in an educational dialogue session.
+
+Your task: Identify which messages are greetings or non-educational
+content that should be excluded from pedagogical analysis.
+
+## Greeting Messages (exclude from analysis)
+
+These types of messages should be marked as greetings:
+- Opening greetings: "안녕하세요", "Hello", "Hi", "안녕"
+- Session openers: "오늘 수업 시작할게요", "Let's begin", "시작하겠습니다"
+- Simple acknowledgments without educational content: "네", "응", "OK"
+- Farewells: "수고했어요", "잘했어요", "다음에 또 봐요", "Goodbye"
+- Pure pleasantries: "어떻게 지내?", "How are you?"
+
+## Pedagogical Messages (include in analysis)
+
+These types of messages should NOT be marked as greetings:
+- Questions about concepts or understanding
+- Explanations or clarifications
+- Probing student thinking
+- Feedback on student responses
+- Scaffolding questions
+- Any message with educational intent
+
+## Messages to Analyze
+
+{messages}
+
+## Response Format
+
+Return your analysis as a JSON array. Each item should have:
+- "index": The message number (0-based)
+- "is_greeting": true if greeting/non-educational, false otherwise
+- "reason": Brief explanation of your decision
+
+Example response:
+[
+  {{"index": 0, "is_greeting": true, "reason": "Opening greeting"}},
+  {{"index": 1, "is_greeting": false, "reason": "Conceptual question about fractions"}}
+]
+
+Analyze the messages now:

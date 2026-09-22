@@ -1,0 +1,906 @@
+{% extends "layout.html" %}
+
+{% block title %}시나리오 관리 - 관리자{% endblock %}
+
+{% block content %}
+<div class="container scenarios-admin">
+  <!-- Page Header with Create Button -->
+  <header class="page-header-admin">
+    <div class="header-content">
+      <h1>시나리오 관리</h1>
+      <p class="subtitle">대화 시나리오 생성, 수정 및 관리</p>
+    </div>
+    <button type="button" class="btn btn-primary" id="open-create-modal">
+      + 새 시나리오
+    </button>
+  </header>
+
+  <!-- Search and Filter Bar -->
+  <section class="filter-bar">
+    <div class="search-box">
+      <input
+        type="text"
+        id="search-input"
+        placeholder="시나리오 검색..."
+        class="search-input"
+      />
+    </div>
+    <div class="filter-group">
+      <select id="filter-framework" class="filter-select">
+        <option value="">모든 프레임워크</option>
+        {% for framework in frameworks %}
+        <option value="{{ framework.id }}">{{ framework.name }}</option>
+        {% endfor %}
+      </select>
+      <select id="filter-status" class="filter-select">
+        <option value="">모든 상태</option>
+        <option value="active">활성</option>
+        <option value="inactive">비활성</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Scenarios Grid -->
+  <section class="scenarios-grid-container">
+    <h2 class="section-title">
+      시나리오 목록
+      <span class="count-badge">{{ scenarios|length }}개</span>
+    </h2>
+
+    {% if scenarios %}
+    <div class="scenarios-grid" id="scenarios-grid">
+      {% for scenario in scenarios %}
+      <div
+        class="scenario-card {% if scenario.is_active != 1 %}inactive{% endif %}"
+        data-scenario-id="{{ scenario.id }}"
+        data-framework-id="{{ scenario.framework_id }}"
+        data-title="{{ scenario.title }}"
+      >
+        <!-- Status Badge -->
+        <div class="card-status">
+          <label class="status-badge {% if scenario.is_active == 1 %}active{% endif %}">
+            <input
+              type="checkbox"
+              class="status-toggle"
+              data-id="{{ scenario.id }}"
+              {% if scenario.is_active == 1 %}checked{% endif %}
+            />
+            <span class="badge-text">
+              {% if scenario.is_active == 1 %}활성{% else %}비활성{% endif %}
+            </span>
+          </label>
+        </div>
+
+        <!-- Card Content -->
+        <div class="card-body">
+          <h3 class="card-title">{{ scenario.title }}</h3>
+
+          <div class="card-meta">
+            <span class="meta-tag framework">
+              {{ scenario.framework.name }}
+            </span>
+            {% if scenario.tutor_template %}
+            <span class="meta-tag tutor-active">{{ scenario.tutor_template.template_name }}</span>
+            {% endif %}
+            {% for gid in scenario_group_map.get(scenario.id, []) %}
+              {% for g in groups if g.id == gid %}
+              <span class="meta-tag">{{ g.name }}</span>
+              {% endfor %}
+            {% endfor %}
+          </div>
+
+          <p class="card-description">
+            {{ scenario.prompt[:120] }}{% if scenario.prompt|length > 120 %}...{% endif %}
+          </p>
+        </div>
+
+        <!-- Card Actions -->
+        <div class="card-actions">
+          <a
+            href="/admin/sessions-page?scenario_id={{ scenario.id }}"
+            class="btn btn-sm btn-outline"
+          >
+            대화목록
+          </a>
+          <button
+            type="button"
+            class="btn btn-sm btn-secondary edit-btn"
+            data-id="{{ scenario.id }}"
+          >
+            수정
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-danger delete-btn"
+            data-id="{{ scenario.id }}"
+            data-title="{{ scenario.title }}"
+            data-session-count="{{ session_counts[scenario.id] }}"
+          >
+            삭제
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <h3 class="empty-state-title">시나리오가 없습니다</h3>
+      <p>등록된 시나리오가 없습니다.</p>
+      <button type="button" class="btn btn-primary" id="open-create-modal-empty">
+        + 첫 번째 시나리오 만들기
+      </button>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<!-- ========================================
+     CREATE SCENARIO MODAL
+     ======================================== -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal-container modal-lg">
+    <div class="modal-header">
+      <h2>새 시나리오 생성</h2>
+      <button type="button" class="close-modal-btn" data-modal="create-modal" aria-label="닫기">&times;</button>
+    </div>
+    <form id="create-form" class="modal-form">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-title">제목 <span class="required">*</span></label>
+            <input
+              type="text"
+              id="new-title"
+              name="title"
+              required
+              minlength="3"
+              maxlength="200"
+              placeholder="시나리오 제목 입력"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="new-student-name">학생 캐릭터 이름</label>
+            <input
+              type="text"
+              id="new-student-name"
+              name="student_name"
+              maxlength="50"
+              placeholder="예: 민수"
+            />
+            <small class="form-help">채팅 화면에 표시될 학생봇 이름</small>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-subject">과목</label>
+            <input
+              type="text"
+              id="new-subject"
+              name="subject"
+              maxlength="100"
+              placeholder="예: 수학, 과학"
+            />
+            <small class="form-help">채팅 화면에 표시될 과목명</small>
+          </div>
+
+          <div class="form-group">
+            <label for="new-framework">프레임워크 <span class="required">*</span></label>
+            <select id="new-framework" name="framework_id" required>
+              <option value="">선택하세요</option>
+              {% for framework in frameworks %}
+              <option value="{{ framework.id }}">{{ framework.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-student-template">학생봇 템플릿 <span class="required">*</span></label>
+            <select id="new-student-template" name="student_template_id" required>
+              <option value="">선택하세요</option>
+              {% for template in student_templates %}
+              <option value="{{ template.id }}">
+                {{ template.template_name }} (v{{ template.version }})
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="new-tutor-template">튜터봇 템플릿</label>
+            <select id="new-tutor-template" name="tutor_template_id">
+              <option value="">튜터 비활성화</option>
+              {% for template in tutor_templates %}
+              <option value="{{ template.id }}">
+                {{ template.template_name }} (v{{ template.version }})
+              </option>
+              {% endfor %}
+            </select>
+            <small class="form-help">선택하지 않으면 튜터봇이 비활성화됩니다</small>
+          </div>
+
+          <div class="form-group">
+            <label for="new-tutor-sensitivity">튜터봇 민감도</label>
+            <select id="new-tutor-sensitivity" name="tutor_sensitivity">
+              <option value="high">높음 (즉시 개입)</option>
+              <option value="medium" selected>보통 (2회 반복 시)</option>
+              <option value="low">낮음 (3회 반복 시)</option>
+            </select>
+            <small class="form-help">튜터봇이 개입하는 민감도를 설정합니다</small>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="new-prompt">시나리오 프롬프트 <span class="required">*</span></label>
+          <textarea
+            id="new-prompt"
+            name="prompt"
+            rows="4"
+            required
+            minlength="10"
+            maxlength="10000"
+            placeholder="시나리오 맥락을 설명하세요"
+          ></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="new-problem-situation">문제 상황 (학습자에게 노출되는 문제 텍스트)</label>
+          <textarea
+            id="new-problem-situation"
+            name="problem_situation"
+            rows="4"
+            maxlength="5000"
+            placeholder="예) 민수는 밀가루 반죽을 만들고 있습니다. 먼저 그릇에 3/4컵의 밀가루를 붓고 3/6컵을 더 부었습니다. 민수가 사용한 밀가루의 총 양은 1컵보다 많은가요? 적은가요?"
+          ></textarea>
+          <small class="form-help">예비교사에게 학습 상황 탭에 그대로 표시됩니다. 시스템 프롬프트(내부용)와 달리 외부에 노출됩니다.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="new-greeting-message">인사말 (채팅 시작 시 멘토 안내 메시지)</label>
+          <textarea
+            id="new-greeting-message"
+            name="greeting_message"
+            rows="4"
+            maxlength="5000"
+            placeholder="예) 선생님, 안녕하세요! 먼저 지수가 문제를 해결하는 과정을 영상으로 확인해 주세요. 영상을 보신 후, 지수와 대화를 나누며 지수의 생각을 탐색해 주세요. 대화를 마치시면 대화 종료 및 분석버튼을 눌러주세요."
+          ></textarea>
+          <small class="form-help">채팅 진입 시 최상단에 멘토 스타일 메시지로 노출됩니다. 비워두면 표시되지 않습니다.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="new-profile">학생 프로필 <span class="required">*</span></label>
+          <textarea
+            id="new-profile"
+            name="student_profile"
+            rows="3"
+            required
+            minlength="3"
+            maxlength="5000"
+            placeholder="학생의 특성을 설명하세요"
+          ></textarea>
+        </div>
+
+        <!-- Group Assignment -->
+        {% if groups %}
+        <div class="form-group">
+          <label>접근 그룹</label>
+          <div class="checkbox-group">
+            {% for group in groups %}
+            <label class="checkbox-label">
+              <input type="checkbox" name="group_ids" value="{{ group.id }}" />
+              {{ group.name }}
+            </label>
+            {% endfor %}
+          </div>
+          <small class="form-help">선택한 그룹의 사용자만 이 시나리오에 접근할 수 있습니다</small>
+        </div>
+        {% endif %}
+
+        <!-- Video Settings (Collapsible) -->
+        <details class="advanced-settings">
+          <summary>영상 설정</summary>
+          <div class="settings-content">
+            <div class="form-group">
+              <label for="new-video-url">영상 URL</label>
+              <input
+                type="url"
+                id="new-video-url"
+                name="video_url"
+                maxlength="500"
+                placeholder="https://www.youtube.com/..."
+              />
+              <small class="form-help">YouTube, Vimeo 등 영상 URL을 입력하세요</small>
+            </div>
+
+            <div class="form-group">
+              <label for="new-video-transcript">영상 대본</label>
+              <textarea
+                id="new-video-transcript"
+                name="video_transcript"
+                rows="4"
+                placeholder="영상에서 나오는 대사/대본을 입력하세요..."
+              ></textarea>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-modal="create-modal">취소</button>
+        <button type="submit" class="btn btn-primary">시나리오 생성</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ========================================
+     EDIT SCENARIO SLIDE PANEL
+     ======================================== -->
+<div class="slide-panel-overlay" id="edit-panel-overlay"></div>
+<aside class="slide-panel" id="edit-panel">
+  <div class="panel-header">
+    <h2>시나리오 수정</h2>
+    <button type="button" class="close-panel-btn" id="close-edit-panel" aria-label="닫기">&times;</button>
+  </div>
+
+  <form id="edit-form" class="panel-form">
+    <input type="hidden" id="edit-scenario-id" name="scenario_id" />
+
+    <div class="panel-body">
+      <div class="form-group">
+        <label for="edit-title">제목 <span class="required">*</span></label>
+        <input
+          type="text"
+          id="edit-title"
+          name="title"
+          required
+          minlength="3"
+          maxlength="200"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="edit-student-name">학생 캐릭터 이름</label>
+        <input
+          type="text"
+          id="edit-student-name"
+          name="student_name"
+          maxlength="50"
+          placeholder="예: 민수"
+        />
+        <small class="form-help">채팅 화면에 표시될 학생봇 이름</small>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-subject">과목</label>
+        <input
+          type="text"
+          id="edit-subject"
+          name="subject"
+          maxlength="100"
+          placeholder="예: 수학, 과학"
+        />
+        <small class="form-help">채팅 화면에 표시될 과목명</small>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-framework">프레임워크 <span class="required">*</span></label>
+        <select id="edit-framework" name="framework_id" required>
+          {% for framework in frameworks %}
+          <option value="{{ framework.id }}">{{ framework.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="edit-student-template">학생봇 템플릿 <span class="required">*</span></label>
+          <select id="edit-student-template" name="student_template_id" required>
+            {% for template in student_templates %}
+            <option value="{{ template.id }}">
+              {{ template.template_name }} (v{{ template.version }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-tutor-template">튜터봇 템플릿</label>
+          <select id="edit-tutor-template" name="tutor_template_id">
+            <option value="">튜터 비활성화</option>
+            {% for template in tutor_templates %}
+            <option value="{{ template.id }}">
+              {{ template.template_name }} (v{{ template.version }})
+            </option>
+            {% endfor %}
+          </select>
+          <small class="form-help">선택하지 않으면 튜터봇이 비활성화됩니다</small>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-tutor-sensitivity">튜터봇 민감도</label>
+          <select id="edit-tutor-sensitivity" name="tutor_sensitivity">
+            <option value="high">높음 (즉시 개입)</option>
+            <option value="medium">보통 (2회 반복 시)</option>
+            <option value="low">낮음 (3회 반복 시)</option>
+          </select>
+          <small class="form-help">튜터봇이 개입하는 민감도를 설정합니다</small>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-prompt">시나리오 프롬프트 <span class="required">*</span></label>
+        <textarea
+          id="edit-prompt"
+          name="prompt"
+          rows="5"
+          required
+          minlength="10"
+          maxlength="10000"
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-problem-situation">문제 상황 (학습자에게 노출되는 문제 텍스트)</label>
+        <textarea
+          id="edit-problem-situation"
+          name="problem_situation"
+          rows="4"
+          maxlength="5000"
+        ></textarea>
+        <small class="form-help">예비교사에게 학습 상황 탭에 그대로 표시됩니다. 시스템 프롬프트(내부용)과 달리 외부에 노출됩니다.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-greeting-message">인사말 (채팅 시작 시 멘토 안내 메시지)</label>
+        <textarea
+          id="edit-greeting-message"
+          name="greeting_message"
+          rows="4"
+          maxlength="5000"
+        ></textarea>
+        <small class="form-help">채팅 진입 시 최상단에 멘토 스타일 메시지로 노출됩니다. 비워두면 표시되지 않습니다.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-profile">학생 프로필 <span class="required">*</span></label>
+        <textarea
+          id="edit-profile"
+          name="student_profile"
+          rows="4"
+          required
+          minlength="3"
+          maxlength="5000"
+        ></textarea>
+      </div>
+
+      <!-- Group Assignment -->
+      {% if groups %}
+      <div class="form-group">
+        <label>접근 그룹</label>
+        <div class="checkbox-group" id="edit-group-checkboxes">
+          {% for group in groups %}
+          <label class="checkbox-label">
+            <input type="checkbox" name="edit_group_ids" value="{{ group.id }}" />
+            {{ group.name }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Video Settings -->
+      <details class="advanced-settings" id="edit-video-settings">
+        <summary>영상 설정</summary>
+        <div class="settings-content">
+          <div class="form-group">
+            <label for="edit-video-url">영상 URL</label>
+            <input
+              type="url"
+              id="edit-video-url"
+              name="video_url"
+              maxlength="500"
+              placeholder="https://www.youtube.com/..."
+            />
+            <small class="form-help">YouTube, Vimeo 등 영상 URL을 입력하세요</small>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-video-transcript">영상 대본</label>
+            <textarea
+              id="edit-video-transcript"
+              name="video_transcript"
+              rows="4"
+              placeholder="영상에서 나오는 대사/대본을 입력하세요..."
+            ></textarea>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel-footer">
+      <button type="button" class="btn btn-secondary" id="cancel-edit">취소</button>
+      <button type="submit" class="btn btn-primary">변경사항 저장</button>
+    </div>
+  </form>
+</aside>
+
+
+<script>
+// ========================================
+// SCENARIOS ADMIN JAVASCRIPT
+// ========================================
+
+// CSRF token helper
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+  return match ? match[1] : '';
+}
+
+// Store scenario data for editing
+const scenariosData = {
+  {% for scenario in scenarios %}
+  "{{ scenario.id }}": {
+    id: {{ scenario.id }},
+    title: "{{ scenario.title|e }}",
+    framework_id: {{ scenario.framework_id }},
+    prompt: `{{ scenario.prompt|replace('\n', '\\n')|replace('\r', '')|e }}`,
+    problem_situation: {{ (scenario.problem_situation or '')|tojson }},
+    greeting_message: {{ (scenario.greeting_message or '')|tojson }},
+    student_profile: `{{ scenario.student_profile|replace('\n', '\\n')|replace('\r', '')|e }}`,
+    student_name: "{{ (scenario.student_name or '')|e }}",
+    subject: "{{ (scenario.subject or '')|e }}",
+    video_url: "{{ scenario.video_url or '' }}",
+    video_transcript: `{{ (scenario.video_transcript|replace('\n', '\\n')|replace('\r', '')|e) if scenario.video_transcript else '' }}`,
+    student_template_id: {{ scenario.student_template_id }},
+    tutor_template_id: {{ scenario.tutor_template_id|default('null', true) }},
+    tutor_sensitivity: "{{ scenario.tutor_sensitivity|default('medium', true)|e }}",
+    group_ids: {{ scenario_group_map.get(scenario.id, [])|tojson }}
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+};
+
+// ========================================
+// MODAL FUNCTIONS
+// ========================================
+function openModal(modalId) {
+  document.getElementById(modalId).classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(modalId) {
+  document.getElementById(modalId).classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+// Open Create Modal
+document.getElementById('open-create-modal').addEventListener('click', () => {
+  openModal('create-modal');
+});
+
+// Empty state button
+const emptyBtn = document.getElementById('open-create-modal-empty');
+if (emptyBtn) {
+  emptyBtn.addEventListener('click', () => openModal('create-modal'));
+}
+
+// Close modal buttons
+document.querySelectorAll('[data-modal]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    closeModal(e.target.dataset.modal);
+  });
+});
+
+// Close modal on overlay click
+document.getElementById('create-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'create-modal') {
+    closeModal('create-modal');
+  }
+});
+
+// ========================================
+// SLIDE PANEL FUNCTIONS
+// ========================================
+const editPanel = document.getElementById('edit-panel');
+const editPanelOverlay = document.getElementById('edit-panel-overlay');
+
+function openEditPanel(scenarioId) {
+  const data = scenariosData[scenarioId];
+  if (!data) return;
+
+  // Populate form
+  document.getElementById('edit-scenario-id').value = data.id;
+  document.getElementById('edit-title').value = data.title;
+  document.getElementById('edit-framework').value = data.framework_id;
+  document.getElementById('edit-prompt').value = data.prompt;
+  document.getElementById('edit-problem-situation').value = data.problem_situation || '';
+  document.getElementById('edit-greeting-message').value = data.greeting_message || '';
+  document.getElementById('edit-profile').value = data.student_profile;
+  document.getElementById('edit-student-name').value = data.student_name || '';
+  document.getElementById('edit-subject').value = data.subject || '';
+  document.getElementById('edit-video-url').value = data.video_url || '';
+  document.getElementById('edit-video-transcript').value = data.video_transcript || '';
+  document.getElementById('edit-student-template').value = data.student_template_id;
+  document.getElementById('edit-tutor-template').value = data.tutor_template_id || '';
+  document.getElementById('edit-tutor-sensitivity').value = data.tutor_sensitivity || 'medium';
+
+  // Set group checkboxes
+  const editGroupCbs = document.querySelectorAll('#edit-group-checkboxes input[type="checkbox"]');
+  editGroupCbs.forEach(cb => {
+    cb.checked = data.group_ids && data.group_ids.includes(parseInt(cb.value));
+  });
+
+  // If any video setting is set, open the video details
+  if (data.video_url || data.video_transcript) {
+    document.getElementById('edit-video-settings').open = true;
+  }
+
+  // Show panel
+  editPanel.classList.add('active');
+  editPanelOverlay.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEditPanel() {
+  editPanel.classList.remove('active');
+  editPanelOverlay.classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+// Edit buttons
+document.querySelectorAll('.edit-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    openEditPanel(btn.dataset.id);
+  });
+});
+
+// Close panel
+document.getElementById('close-edit-panel').addEventListener('click', closeEditPanel);
+document.getElementById('cancel-edit').addEventListener('click', closeEditPanel);
+editPanelOverlay.addEventListener('click', closeEditPanel);
+
+// ========================================
+// FORM SUBMISSIONS
+// ========================================
+
+// Create scenario
+document.getElementById('create-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+
+  const groupCheckboxes = document.querySelectorAll('#create-form input[name="group_ids"]:checked');
+  const groupIds = Array.from(groupCheckboxes).map(cb => parseInt(cb.value));
+
+  const data = {
+    title: formData.get('title'),
+    prompt: formData.get('prompt'),
+    problem_situation: formData.get('problem_situation') || null,
+    greeting_message: formData.get('greeting_message') ?? '',
+    student_profile: formData.get('student_profile'),
+    student_name: formData.get('student_name') || null,
+    subject: formData.get('subject') || null,
+    framework_id: parseInt(formData.get('framework_id')),
+    video_url: formData.get('video_url') || null,
+    video_transcript: formData.get('video_transcript') || null,
+    student_template_id: parseInt(formData.get('student_template_id')),
+    tutor_template_id: formData.get('tutor_template_id') ? parseInt(formData.get('tutor_template_id')) : null,
+    tutor_sensitivity: formData.get('tutor_sensitivity') || 'medium',
+    group_ids: groupIds.length > 0 ? groupIds : null
+  };
+
+  try {
+    const response = await fetch('/admin/scenarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      body: JSON.stringify(data),
+    });
+
+    if (response.ok) {
+      alert('시나리오가 성공적으로 생성되었습니다!');
+      window.location.reload();
+    } else {
+      const error = await response.json();
+      alert(`오류: ${error.detail}`);
+    }
+  } catch (err) {
+    alert('시나리오 생성에 실패했습니다');
+  }
+});
+
+// Edit scenario
+document.getElementById('edit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('edit-scenario-id').value;
+  const formData = new FormData(e.target);
+
+  const editGroupCbs = document.querySelectorAll('#edit-group-checkboxes input[type="checkbox"]:checked');
+  const editGroupIds = Array.from(editGroupCbs).map(cb => parseInt(cb.value));
+
+  const data = {
+    title: formData.get('title'),
+    prompt: formData.get('prompt'),
+    problem_situation: formData.get('problem_situation') || null,
+    greeting_message: formData.get('greeting_message') ?? '',
+    student_profile: formData.get('student_profile'),
+    student_name: formData.get('student_name') || null,
+    subject: formData.get('subject') || null,
+    framework_id: parseInt(formData.get('framework_id')),
+    video_url: formData.get('video_url') || null,
+    video_transcript: formData.get('video_transcript') || null,
+    student_template_id: parseInt(formData.get('student_template_id')),
+    tutor_template_id: formData.get('tutor_template_id') ? parseInt(formData.get('tutor_template_id')) : null,
+    tutor_sensitivity: formData.get('tutor_sensitivity') || 'medium',
+    group_ids: editGroupIds
+  };
+
+  try {
+    const response = await fetch(`/admin/scenarios/${id}/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      body: JSON.stringify(data),
+    });
+
+    if (response.ok) {
+      alert('시나리오가 성공적으로 업데이트되었습니다!');
+      window.location.reload();
+    } else {
+      const error = await response.json();
+      alert(`오류: ${error.detail}`);
+    }
+  } catch (err) {
+    alert('시나리오 업데이트에 실패했습니다');
+  }
+});
+
+// ========================================
+// STATUS TOGGLE
+// ========================================
+document.querySelectorAll('.status-toggle').forEach(toggle => {
+  toggle.addEventListener('change', async (e) => {
+    const id = e.target.dataset.id;
+    const isActive = e.target.checked ? 1 : 0;
+    const card = e.target.closest('.scenario-card');
+    const badge = e.target.closest('.status-badge');
+    const badgeText = badge.querySelector('.badge-text');
+
+    try {
+      const response = await fetch(`/admin/scenarios/${id}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+        body: JSON.stringify({ is_active: isActive }),
+      });
+
+      if (response.ok) {
+        if (isActive) {
+          card.classList.remove('inactive');
+          badge.classList.add('active');
+          badgeText.textContent = '활성';
+        } else {
+          card.classList.add('inactive');
+          badge.classList.remove('active');
+          badgeText.textContent = '비활성';
+        }
+      } else {
+        const error = await response.json();
+        alert(`오류: ${error.detail}`);
+        e.target.checked = !e.target.checked;
+      }
+    } catch (err) {
+      alert('상태 업데이트에 실패했습니다');
+      e.target.checked = !e.target.checked;
+    }
+  });
+});
+
+// ========================================
+// DELETE SCENARIO
+// ========================================
+document.querySelectorAll('.delete-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.id;
+    const title = btn.dataset.title;
+    const sessionCount = parseInt(btn.dataset.sessionCount || '0');
+
+    let confirmMessage;
+    if (sessionCount > 0) {
+      confirmMessage =
+        `"${title}" 시나리오를 삭제하시겠습니까?\n\n` +
+        `이 시나리오에는 ${sessionCount}개의 세션이 있습니다.\n` +
+        `삭제하면 모든 관련 세션도 함께 삭제됩니다.`;
+    } else {
+      confirmMessage = `"${title}" 시나리오를 삭제하시겠습니까?`;
+    }
+
+    if (!window.confirm(confirmMessage)) return;
+
+    btn.disabled = true;
+    btn.textContent = '삭제 중...';
+
+    try {
+      const response = await fetch(`/admin/scenarios/${id}/delete`, {
+        method: 'POST',
+        headers: { 'x-csrf-token': getCsrfToken() }
+      });
+
+      if (response.ok) {
+        alert('시나리오가 성공적으로 삭제되었습니다!');
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        alert(`오류: ${error.detail}`);
+        btn.disabled = false;
+        btn.textContent = '삭제';
+      }
+    } catch (err) {
+      alert('시나리오 삭제에 실패했습니다');
+      btn.disabled = false;
+      btn.textContent = '삭제';
+    }
+  });
+});
+
+// ========================================
+// SEARCH AND FILTER
+// ========================================
+const searchInput = document.getElementById('search-input');
+const filterFramework = document.getElementById('filter-framework');
+const filterStatus = document.getElementById('filter-status');
+const scenariosGrid = document.getElementById('scenarios-grid');
+
+function filterScenarios() {
+  if (!scenariosGrid) return;
+
+  const searchTerm = searchInput.value.toLowerCase();
+  const frameworkId = filterFramework.value;
+  const status = filterStatus.value;
+
+  const cards = scenariosGrid.querySelectorAll('.scenario-card');
+
+  cards.forEach(card => {
+    const title = card.dataset.title.toLowerCase();
+    const cardFrameworkId = card.dataset.frameworkId;
+    const isInactive = card.classList.contains('inactive');
+
+    let show = true;
+
+    // Search filter
+    if (searchTerm && !title.includes(searchTerm)) {
+      show = false;
+    }
+
+    // Framework filter
+    if (frameworkId && cardFrameworkId !== frameworkId) {
+      show = false;
+    }
+
+    // Status filter
+    if (status === 'active' && isInactive) {
+      show = false;
+    }
+    if (status === 'inactive' && !isInactive) {
+      show = false;
+    }
+
+    card.style.display = show ? '' : 'none';
+  });
+}
+
+searchInput.addEventListener('input', filterScenarios);
+filterFramework.addEventListener('change', filterScenarios);
+filterStatus.addEventListener('change', filterScenarios);
+
+// ========================================
+// KEYBOARD SHORTCUTS
+// ========================================
+document.addEventListener('keydown', (e) => {
+  // Escape to close modals/panels
+  if (e.key === 'Escape') {
+    closeModal('create-modal');
+    closeEditPanel();
+  }
+});
+</script>
+{% endblock %}

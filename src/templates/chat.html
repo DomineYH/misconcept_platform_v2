@@ -1,0 +1,210 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ scenario.title }} - 대화{% endblock %}
+
+{% block content %}
+<!-- Mobile Tab Navigation -->
+<div class="mobile-tabs">
+  <button class="mobile-tab" data-panel="scenario">상황 정보</button>
+  <button class="mobile-tab active" data-panel="chat">대화</button>
+</div>
+
+<div class="split-layout">
+  <!-- Left Panel: Scenario Information -->
+  <aside class="scenario-panel panel-hidden" id="scenario-panel">
+    <button type="button"
+            class="panel-toggle"
+            id="scenario-panel-toggle"
+            aria-expanded="true"
+            aria-controls="scenario-panel"
+            aria-label="정보 패널 접기/펼치기"
+            title="정보 패널 접기/펼치기 (Ctrl+B)">
+      <svg class="panel-toggle-icon" xmlns="http://www.w3.org/2000/svg"
+           width="18" height="18" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    </button>
+    <div class="scenario-header">
+      <h1>{{ scenario.title }}</h1>
+      <div class="header-actions">
+        <button id="end-session-btn" class="btn-primary" data-state="active" aria-busy="false">
+          대화 종료 후 분석 보기
+        </button>
+        <button id="return-to-scenarios-btn" class="btn-secondary" disabled>
+          나가기
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="info-tabs">
+      <button class="info-tab active" data-tab="guide">챗봇 활용<br>방법</button>
+      <button class="info-tab" data-tab="profile">학생 정보</button>
+      <button class="info-tab" data-tab="situation">문제 상황</button>
+      <button class="info-tab" data-tab="video">영상</button>
+    </div>
+
+    <!-- Tab Content Container -->
+    <div class="tab-content">
+      <!-- Chatbot Usage Guide Tab -->
+      <div class="tab-pane active" id="tab-guide">
+        <section class="info-section">
+          <div class="guide-content">
+            <p>
+              문제 상황과 영상을 본 후
+              <strong>{{ scenario.student_name or '학생' }}</strong>의
+              오개념을 해결해 봅시다.
+            </p>
+            {% if scenario.subject %}
+            <p>
+              대화가 끝나면 <strong>대화 종료 후 분석 보기</strong>를 클릭해 보세요.
+              대화가 학생의 <strong>{{ scenario.subject }}</strong>적 사고를
+              이끌어내기에 적절했는지 피드백을 받아봅시다.
+            </p>
+            {% else %}
+            <p>
+              대화가 끝나면 <strong>대화 종료 후 분석 보기</strong>를 클릭해 보세요.
+              대화가 학생의 사고를 이끌어내기에 적절했는지
+              피드백을 받아봅시다.
+            </p>
+            {% endif %}
+          </div>
+        </section>
+      </div>
+
+      <!-- Student Profile Tab -->
+      <div class="tab-pane" id="tab-profile">
+        {% if scenario.student_profile %}
+        <section class="info-section">
+          <p>{{ scenario.student_profile }}</p>
+        </section>
+        {% else %}
+        <section class="info-section">
+          <p class="text-muted">학생 정보가 없습니다.</p>
+        </section>
+        {% endif %}
+      </div>
+
+      <!-- Learning Situation Tab -->
+      <div class="tab-pane" id="tab-situation">
+        <section class="info-section">
+          <div class="scenario-prompt">
+            {% if scenario.problem_situation %}
+            {{ scenario.problem_situation }}
+            {% else %}
+            <span class="text-muted">문제 상황이 아직 등록되지 않았습니다. 관리자에게 문의하세요.</span>
+            {% endif %}
+          </div>
+        </section>
+      </div>
+
+      <!-- Video Tab -->
+      <div class="tab-pane" id="tab-video">
+        <section class="info-section">
+          {% if scenario.video_url %}
+          <div class="video-player-container" id="video-player-wrapper">
+            <iframe
+              id="video-iframe"
+              frameborder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen>
+            </iframe>
+          </div>
+          {% else %}
+          <div class="video-player-placeholder">
+            <p class="text-muted">등록된 영상이 없습니다</p>
+          </div>
+          {% endif %}
+        </section>
+        <section class="info-section">
+          <h4>영상 대본</h4>
+          {% if scenario.video_transcript %}
+          <div class="video-transcript-content">{{ scenario.video_transcript }}</div>
+          {% else %}
+          <div class="video-transcript-placeholder">
+            <p class="text-muted">등록된 대본이 없습니다</p>
+          </div>
+          {% endif %}
+        </section>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- Right Panel: Chat Interface -->
+  <section class="chat-panel" id="chat-panel">
+    <!-- Session status banner (hidden by default) -->
+    <div id="session-status" style="display: none;">
+      <span id="session-status-text">이 대화는 종료되었습니다.</span>
+      <button id="session-login-btn" class="btn-secondary"
+        style="display:none; margin-left: 0.75rem;">
+        로그인으로 이동
+      </button>
+    </div>
+
+    <div class="chat-wrapper">
+      <!-- Hidden input for tracking last message ID -->
+      <input type="hidden" name="since" value="0" id="last-message-id">
+      <!-- Flag to track if conversation has started -->
+      <input type="hidden" id="polling-enabled" value="false">
+
+      <!-- Messages container -->
+      <div id="messages-container" class="messages-container"
+        hx-get="/sessions/{{ session_id }}/messages/updates"
+        hx-trigger="none" hx-swap="beforeend" hx-include="#last-message-id">
+        {% if scenario.greeting_message %}
+        <div class="message message-mentor greeting-message">
+          <div class="avatar mentor">멘</div>
+          <div class="message-content-wrapper">
+            <div class="message-sender">멘토</div>
+            <div class="message-bubble">{{ scenario.greeting_message }}</div>
+          </div>
+        </div>
+        {% endif %}
+        {% for message in messages %}
+        {% include 'partials/message.html' %}
+        {% endfor %}
+      </div>
+
+      <!-- Teacher input form -->
+      <form id="teacher-form" class="teacher-form"
+        hx-post="/sessions/{{ session_id }}/messages"
+        hx-target="#messages-container" hx-swap="beforeend">
+        <div class="input-group">
+          <textarea name="content" id="teacher-input" rows="1"
+            placeholder="메시지를 입력하세요..." required maxlength="5000"
+            oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
+          <button type="submit" class="btn-icon-primary"
+            hx-disable-element="self" title="전송" aria-label="메시지 전송">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+        <div id="loading-indicator" class="htmx-indicator"
+          style="display: none;"></div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<!-- Analysis Modal Overlay -->
+<div id="analysis-modal-overlay" class="modal-overlay hidden">
+  <div id="analysis-modal-container" class="modal-container modal-xl">
+    <!-- Modal content loaded via HTMX -->
+  </div>
+</div>
+
+<script id="chat-config" type="application/json">{{ {
+  'sessionId': session_id,
+  'studentName': student_name or 'S',
+  'videoUrl': scenario.video_url,
+  'ended': session_ended|default(false)
+}|tojson }}</script>
+<script src="/static/js/chat.js"></script>
+{% endblock %}

@@ -1,0 +1,410 @@
+{% extends "layout.html" %}
+
+{% block title %}프롬프트 템플릿 - 관리자{% endblock %}
+
+{% block content %}
+<div class="container">
+  <header class="page-header-admin">
+    <div class="header-content">
+      <h1>프롬프트 템플릿 관리</h1>
+      <p class="subtitle">학생봇 및 튜터봇 시스템 프롬프트 관리</p>
+    </div>
+    <button class="btn btn-primary" id="open-create-modal">
+      + 새 템플릿
+    </button>
+  </header>
+
+  <section class="filter-bar">
+    <div class="filter-buttons">
+      <button class="btn filter-btn active" data-filter="all">
+        전체 ({{ prompts|length }})
+      </button>
+      <button class="btn filter-btn" data-filter="student">학생봇</button>
+      <button class="btn filter-btn" data-filter="tutor">튜터봇</button>
+    </div>
+  </section>
+
+  <section class="prompts-grid-container">
+    <h2 class="section-title">
+      템플릿 목록
+      <span class="count-badge" id="visible-count">{{ prompts|length }}개</span>
+    </h2>
+
+    {% if prompts %}
+    <div class="scenarios-grid" id="prompts-grid">
+      {% for p in prompts %}
+      <div class="scenario-card prompt-card" data-type="{{ p.bot_type }}">
+        <div class="card-body">
+          <h3 class="card-title">{{ p.template_name }}</h3>
+          <span class="version-badge">v{{ p.version }}</span>
+
+          <div class="card-meta">
+            <span class="meta-tag">
+              {% if p.bot_type == 'student' %}학생봇{% else %}튜터봇{% endif %}
+            </span>
+            <span class="meta-tag">{{ p.created_at.strftime('%Y-%m-%d') }}</span>
+          </div>
+
+          <div class="code-preview-container">
+            <pre class="code-preview">{{ p.template_text[:300] }}{% if p.template_text|length > 300 %}...{% endif %}</pre>
+          </div>
+        </div>
+
+        <div class="card-actions">
+          <button
+            type="button"
+            class="btn btn-sm btn-secondary edit-btn"
+            data-id="{{ p.id }}"
+            data-name="{{ p.template_name|e }}"
+            data-text="{{ p.template_text|e }}"
+          >
+            수정
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-danger delete-btn"
+            data-id="{{ p.id }}"
+          >
+            삭제
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <h3 class="empty-state-title">프롬프트 템플릿이 없습니다</h3>
+      <p>등록된 프롬프트 템플릿이 없습니다.</p>
+      <button class="btn btn-primary" id="open-create-modal-empty">
+        + 첫 번째 템플릿 만들기
+      </button>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<div class="modal-overlay" id="create-modal">
+  <div class="modal-container modal-lg">
+    <div class="modal-header">
+      <h2>새 템플릿 생성</h2>
+      <button type="button" class="close-modal-btn" data-modal="create-modal">&times;</button>
+    </div>
+    <form id="create-form" class="modal-form">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-bot-type">봇 유형 <span class="required">*</span></label>
+            <select id="new-bot-type" required>
+              <option value="student">학생봇</option>
+              <option value="tutor">튜터봇</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="new-name">템플릿 이름 <span class="required">*</span></label>
+            <input type="text" id="new-name" required minlength="3" maxlength="100" placeholder="예: 기본 학생 페르소나" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="new-text">프롬프트 텍스트 <span class="required">*</span></label>
+          <textarea
+            id="new-text"
+            rows="12"
+            required
+            minlength="10"
+            maxlength="10000"
+            class="code-editor"
+            placeholder="시스템 프롬프트를 입력하세요..."
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-modal="create-modal">취소</button>
+        <button type="submit" class="btn btn-primary">템플릿 생성</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal-container modal-lg">
+    <div class="modal-header">
+      <h2>템플릿 수정</h2>
+      <button type="button" class="close-modal-btn" data-modal="edit-modal">&times;</button>
+    </div>
+    <form id="edit-form" class="modal-form">
+      <input type="hidden" id="edit-id" />
+      <div class="modal-body">
+        <p class="form-warning">내용을 수정하면 버전은 유지됩니다. 중요한 변경은 새 템플릿 생성을 권장합니다.</p>
+
+        <div class="form-group">
+          <label for="edit-name">템플릿 이름 <span class="required">*</span></label>
+          <input type="text" id="edit-name" required minlength="3" maxlength="100" />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-text">프롬프트 텍스트 <span class="required">*</span></label>
+          <textarea id="edit-text" rows="12" required class="code-editor"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-modal="edit-modal">취소</button>
+        <button type="submit" class="btn btn-primary">변경사항 저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .filter-buttons {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .filter-btn {
+    background: var(--color-white);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-medium);
+  }
+
+  .filter-btn:hover {
+    background: var(--color-gray-50);
+  }
+
+  .filter-btn.active {
+    background: var(--color-black);
+    color: var(--color-white);
+    border-color: var(--color-black);
+  }
+
+  .version-badge {
+    display: inline-block;
+    background: var(--color-gray-100);
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    margin-left: 0.5rem;
+    vertical-align: middle;
+  }
+
+  .code-preview-container {
+    margin-top: 1rem;
+    background: var(--color-gray-900);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    max-height: 150px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .code-preview-container::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(transparent, var(--color-gray-900));
+  }
+
+  .code-preview {
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--color-gray-300);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+
+  .code-editor {
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .form-warning {
+    font-size: 0.9rem;
+    color: var(--color-warning-text);
+    background: var(--color-warning-bg);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1.5rem;
+    border-left: 3px solid var(--color-warning);
+  }
+
+  .prompt-card .card-title {
+    display: inline;
+  }
+</style>
+
+<script>
+// Default template texts from backend
+const DEFAULT_TEMPLATES = {
+  student: {{ default_student_text|tojson }},
+  tutor: {{ default_tutor_text|tojson }}
+};
+
+// CSRF token helper
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+  return match ? match[1] : '';
+}
+
+function openModal(modalId) {
+  document.getElementById(modalId).classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(modalId) {
+  document.getElementById(modalId).classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('open-create-modal').addEventListener('click', () => {
+  openModal('create-modal');
+  const botType = document.getElementById('new-bot-type').value;
+  document.getElementById('new-text').value = DEFAULT_TEMPLATES[botType] || '';
+});
+
+const emptyBtn = document.getElementById('open-create-modal-empty');
+if (emptyBtn) {
+  emptyBtn.addEventListener('click', () => {
+    openModal('create-modal');
+    const botType = document.getElementById('new-bot-type').value;
+    document.getElementById('new-text').value = DEFAULT_TEMPLATES[botType] || '';
+  });
+}
+
+// Auto-fill default template on bot type change
+document.getElementById('new-bot-type').addEventListener('change', (e) => {
+  const tmpl = DEFAULT_TEMPLATES[e.target.value] || '';
+  document.getElementById('new-text').value = tmpl;
+});
+
+document.querySelectorAll('[data-modal]').forEach(btn => {
+  btn.addEventListener('click', (e) => closeModal(e.target.dataset.modal));
+});
+
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal-overlay')) {
+      closeModal(e.target.id);
+    }
+  });
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const filter = btn.dataset.filter;
+    let visibleCount = 0;
+
+    document.querySelectorAll('.prompt-card').forEach(card => {
+      const show = filter === 'all' || card.dataset.type === filter;
+      card.style.display = show ? '' : 'none';
+      if (show) visibleCount++;
+    });
+
+    document.getElementById('visible-count').textContent = visibleCount + '개';
+  });
+});
+
+document.getElementById('create-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = {
+    bot_type: document.getElementById('new-bot-type').value,
+    template_name: document.getElementById('new-name').value,
+    template_text: document.getElementById('new-text').value,
+  };
+
+  try {
+    const res = await fetch('/admin/prompts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      body: JSON.stringify(data),
+    });
+
+    if (res.ok) {
+      alert('템플릿이 생성되었습니다!');
+      location.reload();
+    } else {
+      const err = await res.json();
+      alert(`오류: ${err.detail}`);
+    }
+  } catch {
+    alert('템플릿 생성에 실패했습니다');
+  }
+});
+
+document.querySelectorAll('.edit-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('edit-id').value = btn.dataset.id;
+    document.getElementById('edit-name').value = btn.dataset.name;
+    document.getElementById('edit-text').value = btn.dataset.text;
+    openModal('edit-modal');
+  });
+});
+
+document.getElementById('edit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('edit-id').value;
+  const data = {
+    template_name: document.getElementById('edit-name').value,
+    template_text: document.getElementById('edit-text').value
+  };
+
+  try {
+    const res = await fetch(`/admin/prompts/${id}/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+      body: JSON.stringify(data),
+    });
+
+    if (res.ok) {
+      alert('템플릿이 수정되었습니다!');
+      location.reload();
+    } else {
+      const err = await res.json();
+      alert(`오류: ${err.detail}`);
+    }
+  } catch {
+    alert('템플릿 수정에 실패했습니다');
+  }
+});
+
+document.querySelectorAll('.delete-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (!confirm('이 템플릿을 삭제하시겠습니까?')) return;
+
+    try {
+      const res = await fetch(`/admin/prompts/${btn.dataset.id}/delete`, {
+        method: 'POST',
+        headers: { 'x-csrf-token': getCsrfToken() }
+      });
+      if (res.ok) {
+        alert('템플릿이 삭제되었습니다!');
+        location.reload();
+      } else {
+        const err = await res.json();
+        alert(`오류: ${err.detail}`);
+      }
+    } catch {
+      alert('삭제에 실패했습니다');
+    }
+  });
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeModal('create-modal');
+    closeModal('edit-modal');
+  }
+});
+</script>
+{% endblock %}

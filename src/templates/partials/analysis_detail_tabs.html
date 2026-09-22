@@ -1,0 +1,141 @@
+{# Issue #33 — "상세 분석" 탭 공유 partial.
+
+   Inputs (template context):
+   - messages: list of {role, content, created_at, label, grade, level}
+   - questions: list of {content, label, grade, confidence, reasoning}
+   - framework_label_criteria: dict {label_name: criteria_text}
+   - session_id: int
+#}
+<button type="button"
+        class="btn-modal-secondary analysis-detail-toggle"
+        aria-expanded="false"
+        aria-controls="analysis-detail-panel"
+        data-session-id="{{ session_id }}"
+        onclick="toggleAnalysisDetail(this)">
+    상세 분석
+</button>
+
+<div id="analysis-detail-panel" hidden>
+    <section class="analysis-section">
+        <h3>질문 유형 분포</h3>
+        {% include "partials/analysis_bar.html" %}
+    </section>
+
+    <div role="tablist" class="analysis-tabs" aria-label="상세 분석 탭">
+        <button type="button" role="tab" id="tab-coach"
+                aria-controls="panel-coach" aria-selected="true" tabindex="0">
+            대화코칭
+        </button>
+        <button type="button" role="tab" id="tab-strong"
+                aria-controls="panel-strong" aria-selected="false" tabindex="-1">
+            우수한 점
+        </button>
+        <button type="button" role="tab" id="tab-improve"
+                aria-controls="panel-improve" aria-selected="false" tabindex="-1">
+            개선할 점
+        </button>
+    </div>
+
+    <section role="tabpanel" id="panel-coach" aria-labelledby="tab-coach"
+             class="analysis-tab-panel">
+        {% if messages %}
+        <ol class="coach-msg-list">
+            {% for m in messages %}
+            <li class="coach-msg coach-msg--{{ m.role }}
+                {%- if m.role == 'teacher' %}
+                    {%- if m.level == 'high' %} coach-msg--high
+                    {%- elif m.level == 'low' %} coach-msg--low
+                    {%- else %} coach-msg--none{% endif %}
+                {%- endif %}">
+                <div class="coach-msg__head">
+                    <span class="coach-msg__role">
+                        {%- if m.role == 'teacher' %}선생님
+                        {%- elif m.role == 'student' %}학생
+                        {%- elif m.role == 'tutor' %}멘토
+                        {%- else %}{{ m.role }}{% endif -%}
+                    </span>
+                    {% if m.role == 'teacher' and m.level == 'high' %}
+                    <span class="coach-msg__tag tag--good">잘 한 대화</span>
+                    {% elif m.role == 'teacher' and m.level == 'low' %}
+                    <span class="coach-msg__tag tag--bad">놓친 순간</span>
+                    {% endif %}
+                </div>
+                <p class="coach-msg__content">{{ m.content }}</p>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <p class="empty-state">대화 내역이 없습니다.</p>
+        {% endif %}
+    </section>
+
+    <section role="tabpanel" id="panel-strong" aria-labelledby="tab-strong"
+             class="analysis-tab-panel" hidden>
+        {% set high_qs = [] %}
+        {% for q in questions %}
+            {% if q.grade == '우수' %}{% set _ = high_qs.append(q) %}{% endif %}
+        {% endfor %}
+        {% if high_qs %}
+        <div class="strong-card-list">
+            {% for q in high_qs %}
+            <article class="strong-card">
+                <p class="strong-card__q">{{ q.content }}</p>
+                <p class="strong-card__label">
+                    <strong>[{{ q.label }}]</strong>
+                    {% if framework_label_criteria and framework_label_criteria.get(q.label) %}
+                    <span class="strong-card__criteria">
+                        {{ framework_label_criteria.get(q.label) }}
+                    </span>
+                    {% endif %}
+                </p>
+                {% if q.reasoning and q.reasoning.summary %}
+                <p class="strong-card__reason">{{ q.reasoning.summary }}</p>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-state">우수한 질문이 없습니다.</p>
+        {% endif %}
+    </section>
+
+    <section role="tabpanel" id="panel-improve" aria-labelledby="tab-improve"
+             class="analysis-tab-panel" hidden>
+        {% set low_qs = [] %}
+        {% for q in questions %}
+            {% if q.grade == '개선' %}{% set _ = low_qs.append(q) %}{% endif %}
+        {% endfor %}
+        {% if low_qs %}
+        <div class="improve-card-list">
+            {% for q in low_qs %}
+            <article class="improve-card">
+                <p class="improve-card__q">{{ q.content }}</p>
+                <p class="improve-card__label">
+                    <strong>[{{ q.label }}]</strong>
+                    {% if framework_label_criteria and framework_label_criteria.get(q.label) %}
+                    <span class="improve-card__criteria">
+                        {{ framework_label_criteria.get(q.label) }}
+                    </span>
+                    {% endif %}
+                </p>
+                {% if q.reasoning and q.reasoning.summary %}
+                <p class="improve-card__why">{{ q.reasoning.summary }}</p>
+                {% endif %}
+                {% if q.reasoning and q.reasoning.improved_sentence %}
+                <p class="improve-card__rewrite">
+                    <strong>개선한 문장:</strong>
+                    {{ q.reasoning.improved_sentence }}
+                </p>
+                {% else %}
+                <p class="improve-card__rewrite improve-card__rewrite--missing">
+                    개선한 문장은 분석 재실행 후 표시됩니다.
+                </p>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-state">개선할 점이 없습니다.</p>
+        {% endif %}
+    </section>
+</div>

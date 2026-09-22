@@ -1,0 +1,38 @@
+<div class="session-detail">
+  <div class="session-info">
+    <dl>
+      <dt>세션 ID</dt>
+      <dd>{{ session.id }}</dd>
+      <dt>시나리오</dt>
+      <dd>{{ session.scenario.title if session.scenario else '-' }}</dd>
+      <dt>교사</dt>
+      <dd>
+        {% if session.teacher %}
+          {{ session.teacher.nickname }} ({{ session.teacher.username }})
+        {% else %}
+          -
+        {% endif %}
+      </dd>
+      <dt>시작 시간</dt>
+      <dd>{{ session.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+      <dt>종료 시간</dt>
+      <dd>
+        {% if session.ended_at %}
+          {{ session.ended_at.strftime('%Y-%m-%d %H:%M:%S') }}
+        {% else %}
+          -
+        {% endif %}
+      </dd>
+      <dt>상태</dt>
+      <dd>
+        {% if session.deleted_at %}
+          <span class="badge badge-danger">삭제됨</span>
+        {% elif session.ended_at %}
+          <span class="badge badge-success">완료</span>
+        {% else %}
+          <span class="badge badge-warning">진행중</span>
+        {% endif %}
+      </dd>
+    </dl>
+  </div>
+</div>

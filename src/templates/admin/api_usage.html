@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+
+{% block title %}API 사용량 - 관리자{% endblock %}
+
+{% block content %}
+<div class="container">
+  <header class="page-header">
+    <h1>API 사용량</h1>
+    <p class="subtitle">OpenAI API 호출 비용 및 토큰 사용량</p>
+  </header>
+
+  <div class="summary-card">
+    <h3>총 예상 비용</h3>
+    <p class="total-cost">${{ total_cost }}</p>
+  </div>
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>시간</th>
+          <th>Bot 유형</th>
+          <th>모델</th>
+          <th>총 토큰</th>
+          <th>비용($)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+          <td>{{ log.bot_type }}</td>
+          <td>{{ log.model }}</td>
+          <td>{{ log.total_tokens }}</td>
+          <td>${{ "%.4f"|format(log.cost) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .summary-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+  .total-cost {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #059669;
+    margin: 0.5rem 0 0 0;
+  }
+</style>
+{% endblock %}

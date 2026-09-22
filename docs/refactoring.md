@@ -162,3 +162,12 @@ Tests use fake responses and the real SDK over httpx.MockTransport, without
 API credentials or outbound network. They verify response contracts, model/
 reasoning/token settings, transient/permanent attempt counts, tutor side effects,
 owned/injected lifetimes, and greeting/classification/synthesis usage logs.
+
+## Final integration check
+
+The real ASGI HTTP routes are exercised with signed test session cookies:
+unauthenticated redirect, foreign-owner denial, teacher denial on admin actions,
+failed → successful analysis, ended-session message rejection, and admin modal
+rendering. Test sockets are blocked. The final Python suite contains 37 passing
+tests; browser checks above run separately with intercepted LLM/API responses.
+No live API calls, real database upgrades, deployment or PR merge were performed.

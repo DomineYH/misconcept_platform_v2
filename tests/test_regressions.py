@@ -65,3 +65,49 @@ def test_application_and_templates_compile():
     assert "/sessions/{session_id}/analyze" in app.openapi()["paths"]
     for name in templates.env.list_templates():
         templates.env.get_template(name)
+
+
+async def test_http_permissions_retry_and_ended_message_guard(data, monkeypatch):
+    import base64
+    import json
+    import httpx
+    from itsdangerous import TimestampSigner
+    from src.main import app
+    from src.config import config
+    from src.api.dependencies import get_db_session
+    from src.services import analysis_pipeline
+
+    async def database():
+        yield data.db
+
+    def cookie(user):
+        payload = base64.b64encode(json.dumps({'user_id': user.id}).encode())
+        return TimestampSigner(config.SESSION_SECRET).sign(payload).decode()
+
+    sid = data.session.id
+    await analysis_pipeline.create_fallback_summary(sid, ['A', 'B'], data.db)
+    fake = AsyncMock(return_value=({'A': 1}, [], {'brief_feedback': ['HTTP success']}, 'ok', 'test', 'hash', []))
+    monkeypatch.setattr(analysis_pipeline, 'run_llm_pipeline', fake)
+    app.dependency_overrides[get_db_session] = database
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            assert (await client.get(f'/sessions/{sid}/analysis')).status_code == 303
+            client.cookies.set('session_id', cookie(data.other))
+            assert (await client.post(f'/sessions/{sid}/analyze')).status_code == 403
+            assert (await client.post(f'/admin/sessions/{sid}/analyze_regenerate')).status_code == 403
+            client.cookies.clear()
+            client.cookies.set('session_id', cookie(data.owner))
+            result = await client.post(f'/sessions/{sid}/analyze')
+            assert result.status_code == 200
+            assert result.json()['feedback_status'] == 'ok'
+            assert (await client.post(f'/sessions/{sid}/messages', data={'content': 'late'})).status_code == 400
+            assert fake.await_count == 1
+            normal = await client.get(f'/sessions/{sid}/analysis')
+            assert normal.json()['feedback'] == 'HTTP success'
+            client.cookies.clear()
+            client.cookies.set('session_id', cookie(data.admin))
+            modal = await client.get(f'/admin/sessions/{sid}/analysis_modal')
+            assert modal.status_code == 200
+            assert 'HTTP success' in modal.text
+    finally:
+        app.dependency_overrides.clear()

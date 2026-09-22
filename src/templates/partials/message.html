@@ -1,0 +1,29 @@
+<div class="message message-{{ message.role }}" data-message-id="{{ message.id }}">
+  <div class="avatar {{ message.role }}">
+    {% if message.role == 'teacher' %}
+    T
+    {% elif message.role == 'student' %}
+    {{ student_name or 'S' }}
+    {% elif message.role == 'tutor' %}
+    튜터
+    {% endif %}
+  </div>
+
+  <div class="message-content-wrapper">
+    {% if message.role == 'student' and student_name %}
+    <div class="message-sender">{{ student_name }}</div>
+    {% elif message.role == 'tutor' %}
+    <div class="message-sender">튜터</div>
+    {% endif %}
+    <div class="message-bubble">
+      {% if message.role in ('student', 'tutor') %}
+      {{ message.content|md }}
+      {% else %}
+      {{ message.content }}
+      {% endif %}
+    </div>
+    <div class="message-meta">
+      <span class="timestamp">{{ message.created_at.strftime('%H:%M') if message.created_at else '' }}</span>
+    </div>
+  </div>
+</div>

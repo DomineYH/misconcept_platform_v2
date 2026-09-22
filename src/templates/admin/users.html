@@ -1,0 +1,698 @@
+{% extends "layout.html" %}
+
+{% block title %}사용자 관리 - 관리자{% endblock %}
+
+{% block content %}
+<div class="container">
+  <header class="page-header-admin">
+    <div class="header-content">
+      <h1>사용자 관리</h1>
+      <p class="subtitle">사용자 생성, 수정 및 삭제</p>
+    </div>
+    <div class="header-actions" style="display:flex;gap:8px;">
+      <a href="/admin/users/bulk/template" class="btn btn-secondary" download>
+        CSV 양식 다운로드
+      </a>
+      <button type="button" class="btn btn-primary" id="open-bulk-modal">
+        일괄 추가
+      </button>
+      <button type="button" class="btn btn-primary" id="open-create-modal">
+        + 새 사용자
+      </button>
+    </div>
+  </header>
+
+  <!-- Filter Bar -->
+  <section class="filter-bar">
+    <div class="search-box">
+      <input type="text" id="search-input" placeholder="사용자 검색..." class="search-input" />
+    </div>
+    <div class="filter-group">
+      <select id="filter-role" class="filter-select">
+        <option value="">모든 역할</option>
+        <option value="admin">관리자</option>
+        <option value="teacher">교사</option>
+      </select>
+      <select id="filter-group" class="filter-select">
+        <option value="">모든 그룹</option>
+        {% for group in groups %}
+        <option value="{{ group.id }}">{{ group.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </section>
+
+  <!-- Users Table -->
+  <div class="table-container">
+    <table class="data-table" id="users-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>사용자 ID</th>
+          <th>닉네임</th>
+          <th>역할</th>
+          <th>그룹</th>
+          <th>생성일</th>
+          <th>작업</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr data-user-id="{{ u.id }}" data-username="{{ u.username }}" data-role="{{ u.role }}" data-group-id="{{ u.group_id or '' }}">
+          <td>{{ u.id }}</td>
+          <td>{{ u.username }}</td>
+          <td>{{ u.nickname }}</td>
+          <td>
+            {% if u.role == 'admin' %}
+            <span class="badge badge-danger">관리자</span>
+            {% else %}
+            <span class="badge badge-info">교사</span>
+            {% endif %}
+          </td>
+          <td>{{ u.group.name if u.group else '-' }}</td>
+          <td>{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '-' }}</td>
+          <td>
+            <button type="button" class="btn btn-sm btn-secondary edit-btn" data-id="{{ u.id }}">수정</button>
+            <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="{{ u.id }}" data-username="{{ u.username }}">삭제</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align:center;padding:2rem;">사용자가 없습니다.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- BULK UPLOAD MODAL -->
+<div class="modal-overlay" id="bulk-modal">
+  <div class="modal-container" style="max-width:900px;width:95%;">
+    <div class="modal-header">
+      <h2 id="bulk-modal-title">일괄 사용자 추가</h2>
+      <button type="button" class="close-modal-btn" onclick="closeBulkModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="bulk-modal-body">
+      <!-- Step 1: Upload -->
+      <div id="bulk-step-upload">
+        <div style="border:2px dashed var(--border-color,#4b5563);border-radius:12px;padding:40px 20px;text-align:center;">
+          <p style="font-size:1.1rem;margin-bottom:8px;">CSV 파일을 선택하세요</p>
+          <p style="color:var(--text-muted,#9ca3af);font-size:0.85rem;margin-bottom:16px;">양식: username, nickname, role(선택), group(선택)</p>
+          <input type="file" id="bulk-file-input" accept=".csv" style="display:none;" />
+          <button type="button" class="btn btn-primary" onclick="document.getElementById('bulk-file-input').click()">파일 선택</button>
+          <p id="bulk-file-name" style="margin-top:12px;color:var(--text-muted,#9ca3af);font-size:0.85rem;"></p>
+        </div>
+        <p style="color:var(--text-muted,#9ca3af);font-size:0.8rem;margin-top:12px;text-align:center;">* 기본 비밀번호: 00000000</p>
+        <p id="bulk-upload-error" style="color:#ef4444;text-align:center;margin-top:8px;display:none;"></p>
+      </div>
+
+      <!-- Step 2: Preview -->
+      <div id="bulk-step-preview" style="display:none;">
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px;background:var(--bg-secondary,#1e293b);border-radius:8px;">
+          <span style="color:var(--text-muted,#9ca3af);font-size:0.85rem;white-space:nowrap;">일괄 지정:</span>
+          <select id="bulk-assign-role" class="filter-select" style="min-width:100px;">
+            <option value="">역할 선택...</option>
+            <option value="teacher">교사</option>
+            <option value="admin">관리자</option>
+          </select>
+          <select id="bulk-assign-group" class="filter-select" style="min-width:140px;">
+            <option value="">그룹 선택...</option>
+          </select>
+          <button type="button" class="btn btn-sm btn-primary" onclick="applyBulkAssign()">적용</button>
+        </div>
+        <div class="table-container" style="max-height:400px;overflow-y:auto;">
+          <table class="data-table" id="bulk-preview-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>사용자 ID</th>
+                <th>닉네임</th>
+                <th>역할</th>
+                <th>그룹</th>
+                <th>상태</th>
+                <th>작업</th>
+              </tr>
+            </thead>
+            <tbody id="bulk-preview-body"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="addBulkRow()" style="margin-top:8px;width:100%;border-style:dashed;">+ 사용자 추가</button>
+      </div>
+
+      <!-- Step 3: Result -->
+      <div id="bulk-step-result" style="display:none;">
+        <div style="display:flex;gap:16px;margin-bottom:20px;">
+          <div style="flex:1;background:rgba(34,197,94,0.1);border:1px solid #166534;border-radius:8px;padding:16px;text-align:center;">
+            <div id="bulk-success-count" style="font-size:1.8rem;font-weight:bold;color:#22c55e;">0</div>
+            <div style="font-size:0.85rem;color:#86efac;">성공</div>
+          </div>
+          <div style="flex:1;background:rgba(239,68,68,0.1);border:1px solid #991b1b;border-radius:8px;padding:16px;text-align:center;">
+            <div id="bulk-fail-count" style="font-size:1.8rem;font-weight:bold;color:#ef4444;">0</div>
+            <div style="font-size:0.85rem;color:#fca5a5;">실패</div>
+          </div>
+        </div>
+        <div id="bulk-failure-list" style="display:none;">
+          <h4 style="color:#fca5a5;font-size:0.85rem;margin-bottom:8px;">실패 목록</h4>
+          <table class="data-table">
+            <thead>
+              <tr><th>사용자 ID</th><th>닉네임</th><th>실패 사유</th></tr>
+            </thead>
+            <tbody id="bulk-failure-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" id="bulk-modal-footer">
+      <div id="bulk-summary" style="font-size:0.85rem;"></div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-secondary" onclick="closeBulkModal()">취소</button>
+        <button type="button" class="btn btn-primary" id="bulk-register-btn" style="display:none;" onclick="submitBulkRegister()">등록</button>
+        <button type="button" class="btn btn-primary" id="bulk-close-btn" style="display:none;" onclick="closeBulkModal();window.location.reload();">닫기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE USER MODAL -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <h2>새 사용자 생성</h2>
+      <button type="button" class="close-modal-btn" data-modal="create-modal">&times;</button>
+    </div>
+    <form id="create-form" class="modal-form">
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="new-username">사용자 ID <span class="required">*</span></label>
+          <input type="text" id="new-username" name="username" required minlength="3" maxlength="50" pattern="[a-zA-Z0-9_]+" placeholder="영문/숫자/언더스코어" />
+        </div>
+        <div class="form-group">
+          <label for="new-password">비밀번호 <span class="required">*</span></label>
+          <input type="password" id="new-password" name="password" required minlength="4" maxlength="128" />
+        </div>
+        <div class="form-group">
+          <label for="new-nickname">닉네임 <span class="required">*</span></label>
+          <input type="text" id="new-nickname" name="nickname" required minlength="2" maxlength="30" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-role">역할</label>
+            <select id="new-role" name="role">
+              <option value="teacher">교사</option>
+              <option value="admin">관리자</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="new-group">그룹</label>
+            <select id="new-group" name="group_id">
+              <option value="">그룹 없음</option>
+              {% for group in groups %}
+              <option value="{{ group.id }}">{{ group.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-modal="create-modal">취소</button>
+        <button type="submit" class="btn btn-primary">사용자 생성</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- EDIT USER SLIDE PANEL -->
+<div class="slide-panel-overlay" id="edit-panel-overlay"></div>
+<aside class="slide-panel" id="edit-panel">
+  <div class="panel-header">
+    <h2>사용자 수정</h2>
+    <button type="button" class="close-panel-btn" id="close-edit-panel">&times;</button>
+  </div>
+  <form id="edit-form" class="panel-form">
+    <input type="hidden" id="edit-user-id" name="user_id" />
+    <div class="panel-body">
+      <div class="form-group">
+        <label>사용자 ID</label>
+        <input type="text" id="edit-username-display" disabled class="disabled-input" />
+      </div>
+      <div class="form-group">
+        <label for="edit-nickname">닉네임</label>
+        <input type="text" id="edit-nickname" name="nickname" minlength="2" maxlength="30" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="edit-role">역할</label>
+          <select id="edit-role" name="role">
+            <option value="teacher">교사</option>
+            <option value="admin">관리자</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-group">그룹</label>
+          <select id="edit-group" name="group_id">
+            <option value="0">그룹 없음</option>
+            {% for group in groups %}
+            <option value="{{ group.id }}">{{ group.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <details class="advanced-settings">
+        <summary>비밀번호 재설정</summary>
+        <div class="settings-content">
+          <div class="form-group">
+            <label for="edit-password">새 비밀번호</label>
+            <input type="password" id="edit-password" name="password" minlength="4" maxlength="128" placeholder="입력하면 비밀번호가 변경됩니다" />
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="panel-footer">
+      <button type="button" class="btn btn-secondary" id="cancel-edit">취소</button>
+      <button type="submit" class="btn btn-primary">변경사항 저장</button>
+    </div>
+  </form>
+</aside>
+
+<script>
+// CSRF token helper
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+  return match ? match[1] : '';
+}
+
+const usersData = {
+  {% for u in users %}
+  "{{ u.id }}": {
+    id: {{ u.id }},
+    username: "{{ u.username|e }}",
+    nickname: "{{ u.nickname|e }}",
+    role: "{{ u.role }}",
+    group_id: {{ u.group_id|default('null', true) }}
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+};
+
+// Modal
+function openModal(id) {
+  document.getElementById(id).classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('open-create-modal').addEventListener('click', () => openModal('create-modal'));
+document.querySelectorAll('[data-modal]').forEach(btn => {
+  btn.addEventListener('click', e => closeModal(e.target.dataset.modal));
+});
+document.getElementById('create-modal').addEventListener('click', e => {
+  if (e.target.id === 'create-modal') closeModal('create-modal');
+});
+
+// Slide Panel
+const editPanel = document.getElementById('edit-panel');
+const editOverlay = document.getElementById('edit-panel-overlay');
+
+function openEditPanel(userId) {
+  const data = usersData[userId];
+  if (!data) return;
+  document.getElementById('edit-user-id').value = data.id;
+  document.getElementById('edit-username-display').value = data.username;
+  document.getElementById('edit-nickname').value = data.nickname;
+  document.getElementById('edit-role').value = data.role;
+  document.getElementById('edit-group').value = data.group_id || '0';
+  document.getElementById('edit-password').value = '';
+  editPanel.classList.add('active');
+  editOverlay.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+function closeEditPanel() {
+  editPanel.classList.remove('active');
+  editOverlay.classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+document.querySelectorAll('.edit-btn').forEach(btn => {
+  btn.addEventListener('click', () => openEditPanel(btn.dataset.id));
+});
+document.getElementById('close-edit-panel').addEventListener('click', closeEditPanel);
+document.getElementById('cancel-edit').addEventListener('click', closeEditPanel);
+editOverlay.addEventListener('click', closeEditPanel);
+
+// Create
+document.getElementById('create-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const data = {
+    username: fd.get('username'),
+    password: fd.get('password'),
+    nickname: fd.get('nickname'),
+    role: fd.get('role'),
+    group_id: fd.get('group_id') ? parseInt(fd.get('group_id'), 10) : null
+  };
+  try {
+    const res = await fetch('/admin/users', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()},
+      body: JSON.stringify(data)
+    });
+    if (res.ok) {
+      alert('사용자가 생성되었습니다!');
+      window.location.reload();
+    } else {
+      const err = await res.json();
+      alert('오류: ' + err.detail);
+    }
+  } catch (err) { alert('사용자 생성에 실패했습니다'); }
+});
+
+// Edit
+document.getElementById('edit-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = document.getElementById('edit-user-id').value;
+  const fd = new FormData(e.target);
+  const data = {
+    nickname: fd.get('nickname'),
+    role: fd.get('role'),
+    group_id: parseInt(fd.get('group_id'), 10) || 0
+  };
+  const pw = fd.get('password');
+  if (pw) data.password = pw;
+  try {
+    const res = await fetch(`/admin/users/${id}/update`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()},
+      body: JSON.stringify(data)
+    });
+    if (res.ok) {
+      alert('사용자가 업데이트되었습니다!');
+      window.location.reload();
+    } else {
+      const err = await res.json();
+      alert('오류: ' + err.detail);
+    }
+  } catch (err) { alert('사용자 업데이트에 실패했습니다'); }
+});
+
+// Delete
+document.querySelectorAll('.delete-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.id;
+    const username = btn.dataset.username;
+    if (!confirm(`"${username}" 사용자를 삭제하시겠습니까?`)) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/admin/users/${id}/delete`, {
+        method: 'POST',
+        headers: {'x-csrf-token': getCsrfToken()}
+      });
+      if (res.ok) {
+        alert('사용자가 삭제되었습니다!');
+        window.location.reload();
+      } else {
+        const err = await res.json();
+        alert('오류: ' + err.detail);
+        btn.disabled = false;
+      }
+    } catch (err) {
+      alert('사용자 삭제에 실패했습니다');
+      btn.disabled = false;
+    }
+  });
+});
+
+// Search & Filter
+const searchInput = document.getElementById('search-input');
+const filterRole = document.getElementById('filter-role');
+const filterGroup = document.getElementById('filter-group');
+
+function filterUsers() {
+  const search = searchInput.value.toLowerCase();
+  const role = filterRole.value;
+  const groupId = filterGroup.value;
+  document.querySelectorAll('#users-table tbody tr[data-user-id]').forEach(row => {
+    const username = row.dataset.username.toLowerCase();
+    const rowRole = row.dataset.role;
+    const rowGroup = row.dataset.groupId;
+    let show = true;
+    if (search && !username.includes(search) && !row.children[2].textContent.toLowerCase().includes(search)) show = false;
+    if (role && rowRole !== role) show = false;
+    if (groupId && rowGroup !== groupId) show = false;
+    row.style.display = show ? '' : 'none';
+  });
+}
+searchInput.addEventListener('input', filterUsers);
+filterRole.addEventListener('change', filterUsers);
+filterGroup.addEventListener('change', filterUsers);
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeModal('create-modal'); closeEditPanel(); }
+});
+
+  // ===== BULK UPLOAD =====
+  let bulkPreviewData = [];
+  let bulkGroups = [];
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  document.getElementById('open-bulk-modal').addEventListener('click', () => {
+    resetBulkModal();
+    openModal('bulk-modal');
+  });
+
+  document.getElementById('bulk-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('bulk-file-name').textContent = file.name;
+    document.getElementById('bulk-upload-error').style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/admin/users/bulk/preview', {
+        method: 'POST',
+        headers: { 'x-csrf-token': getCsrfToken() },
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        const errEl = document.getElementById('bulk-upload-error');
+        errEl.textContent = err.detail || '파일 처리 중 오류가 발생했습니다.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const data = await res.json();
+      bulkPreviewData = data.rows;
+      bulkGroups = data.groups;
+      showBulkPreview();
+    } catch (err) {
+      const errEl = document.getElementById('bulk-upload-error');
+      errEl.textContent = '서버 연결에 실패했습니다.';
+      errEl.style.display = 'block';
+    }
+  });
+
+  function resetBulkModal() {
+    bulkPreviewData = [];
+    bulkGroups = [];
+    document.getElementById('bulk-file-input').value = '';
+    document.getElementById('bulk-file-name').textContent = '';
+    document.getElementById('bulk-upload-error').style.display = 'none';
+    document.getElementById('bulk-step-upload').style.display = '';
+    document.getElementById('bulk-step-preview').style.display = 'none';
+    document.getElementById('bulk-step-result').style.display = 'none';
+    document.getElementById('bulk-register-btn').style.display = 'none';
+    document.getElementById('bulk-close-btn').style.display = 'none';
+    document.getElementById('bulk-summary').innerHTML = '';
+    document.getElementById('bulk-modal-title').textContent = '일괄 사용자 추가';
+  }
+
+  function closeBulkModal() {
+    closeModal('bulk-modal');
+  }
+
+  function groupOptions(selectedId) {
+    let html = '<option value="">그룹 없음</option>';
+    bulkGroups.forEach(g => {
+      const sel = g.id === selectedId ? ' selected' : '';
+      html += `<option value="${g.id}"${sel}>${g.name}</option>`;
+    });
+    return html;
+  }
+
+  function showBulkPreview() {
+    document.getElementById('bulk-step-upload').style.display = 'none';
+    document.getElementById('bulk-step-preview').style.display = '';
+    document.getElementById('bulk-register-btn').style.display = '';
+    document.getElementById('bulk-modal-title').textContent = '일괄 사용자 추가 — 미리보기';
+
+    const assignGroup = document.getElementById('bulk-assign-group');
+    assignGroup.innerHTML = '<option value="">그룹 선택...</option>';
+    bulkGroups.forEach(g => {
+      assignGroup.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+    });
+
+    renderPreviewTable();
+  }
+
+  function renderPreviewTable() {
+    const tbody = document.getElementById('bulk-preview-body');
+    tbody.innerHTML = '';
+
+    let validCount = 0, errorCount = 0;
+    bulkPreviewData.forEach((row, idx) => {
+      const hasErr = row.errors && row.errors.length > 0;
+      if (hasErr) errorCount++; else validCount++;
+
+      const tr = document.createElement('tr');
+      if (hasErr) tr.style.background = 'rgba(239,68,68,0.1)';
+      tr.innerHTML = `
+        <td>${idx + 1}</td>
+        <td><input type="text" value="${escHtml(row.username)}" class="bulk-input" data-idx="${idx}" data-field="username" style="width:120px;"></td>
+        <td><input type="text" value="${escHtml(row.nickname)}" class="bulk-input" data-idx="${idx}" data-field="nickname" style="width:100px;"></td>
+        <td>
+          <select class="filter-select bulk-select" data-idx="${idx}" data-field="role">
+            <option value="teacher"${row.role==='teacher'?' selected':''}>교사</option>
+            <option value="admin"${row.role==='admin'?' selected':''}>관리자</option>
+          </select>
+        </td>
+        <td>
+          <select class="filter-select bulk-select" data-idx="${idx}" data-field="group_id">
+            ${groupOptions(row.group_id)}
+          </select>
+        </td>
+        <td>${hasErr
+          ? '<span style="color:#ef4444;font-size:0.8rem;">⚠ ' + escHtml(row.errors.join(', ')) + '</span>'
+          : '<span style="color:#22c55e;font-size:0.8rem;">✓ 정상</span>'
+        }</td>
+        <td><button type="button" class="btn btn-sm btn-danger" onclick="removeBulkRow(${idx})">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('bulk-summary').innerHTML =
+      `<span style="color:#22c55e;">정상 ${validCount}명</span> | ` +
+      `<span style="color:#ef4444;">에러 ${errorCount}명</span> | ` +
+      `<span>총 ${bulkPreviewData.length}명</span>`;
+    document.getElementById('bulk-register-btn').textContent = `등록 (${validCount}명)`;
+
+    tbody.querySelectorAll('.bulk-input, .bulk-select').forEach(el => {
+      el.addEventListener('change', (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        const field = e.target.dataset.field;
+        if (field === 'group_id') {
+          const val = e.target.value;
+          bulkPreviewData[idx].group_id = val ? parseInt(val) : null;
+          const grp = bulkGroups.find(g => g.id === parseInt(val));
+          bulkPreviewData[idx].group_name = grp ? grp.name : null;
+        } else {
+          bulkPreviewData[idx][field] = e.target.value;
+        }
+        bulkPreviewData[idx].errors = [];
+        renderPreviewTable();
+      });
+    });
+  }
+
+  function removeBulkRow(idx) {
+    bulkPreviewData.splice(idx, 1);
+    renderPreviewTable();
+  }
+
+  function addBulkRow() {
+    bulkPreviewData.push({
+      row_num: bulkPreviewData.length + 1,
+      username: '',
+      nickname: '',
+      role: 'teacher',
+      group_name: null,
+      group_id: null,
+      errors: [],
+    });
+    renderPreviewTable();
+  }
+
+  function applyBulkAssign() {
+    const role = document.getElementById('bulk-assign-role').value;
+    const groupId = document.getElementById('bulk-assign-group').value;
+
+    bulkPreviewData.forEach(row => {
+      if (role) row.role = role;
+      if (groupId) {
+        row.group_id = parseInt(groupId);
+        const grp = bulkGroups.find(g => g.id === parseInt(groupId));
+        row.group_name = grp ? grp.name : null;
+      }
+    });
+    renderPreviewTable();
+  }
+
+  async function submitBulkRegister() {
+    const validUsers = bulkPreviewData
+      .filter(r => !r.errors || r.errors.length === 0)
+      .filter(r => r.username && r.nickname)
+      .map(r => ({
+        username: r.username,
+        nickname: r.nickname,
+        role: r.role || 'teacher',
+        group_id: r.group_id || null,
+      }));
+
+    if (validUsers.length === 0) {
+      alert('등록할 유효한 사용자가 없습니다.');
+      return;
+    }
+
+    document.getElementById('bulk-register-btn').disabled = true;
+
+    try {
+      const res = await fetch('/admin/users/bulk/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': getCsrfToken(),
+        },
+        body: JSON.stringify({ users: validUsers }),
+      });
+
+      const data = await res.json();
+      showBulkResult(data);
+    } catch (err) {
+      alert('등록 중 오류가 발생했습니다.');
+      document.getElementById('bulk-register-btn').disabled = false;
+    }
+  }
+
+  function showBulkResult(data) {
+    document.getElementById('bulk-step-preview').style.display = 'none';
+    document.getElementById('bulk-step-result').style.display = '';
+    document.getElementById('bulk-register-btn').style.display = 'none';
+    document.getElementById('bulk-close-btn').style.display = '';
+    document.getElementById('bulk-summary').innerHTML = '';
+    document.getElementById('bulk-modal-title').textContent = '일괄 사용자 추가 — 결과';
+
+    document.getElementById('bulk-success-count').textContent = data.success_count;
+    document.getElementById('bulk-fail-count').textContent = data.fail_count;
+
+    if (data.failures && data.failures.length > 0) {
+      document.getElementById('bulk-failure-list').style.display = '';
+      const tbody = document.getElementById('bulk-failure-body');
+      tbody.innerHTML = '';
+      data.failures.forEach(f => {
+        tbody.innerHTML += `<tr style="background:rgba(239,68,68,0.1);">
+          <td>${escHtml(f.username)}</td><td>${escHtml(f.nickname)}</td>
+          <td style="color:#fca5a5;">${escHtml(f.reason)}</td>
+        </tr>`;
+      });
+    }
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,65 @@
+<!-- Analysis Detail Modal Content (Admin) -->
+<div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-center p-4 border-b">
+        <h3 class="text-lg font-semibold">분석 상세 (ID: {{ analysis.id }})</h3>
+        <button onclick="closeDetailModal()" class="text-gray-500 hover:text-gray-700 text-xl" aria-label="닫기">&times;</button>
+    </div>
+
+    <!-- Body -->
+    <div class="p-4 space-y-4">
+        <!-- Question Content -->
+        <div>
+            <h4 class="font-medium text-gray-700 mb-1">질문</h4>
+            <p class="bg-gray-50 p-3 rounded text-gray-800">{{ analysis.content }}</p>
+        </div>
+
+        <!-- Classification -->
+        <div class="flex gap-6">
+            <div>
+                <h4 class="font-medium text-gray-700 mb-1">분류</h4>
+                <span class="px-3 py-1 rounded-full text-sm font-medium
+                    {% if analysis.label == 'Pressing' %}bg-green-100 text-green-800
+                    {% elif analysis.label == 'Linking' %}bg-blue-100 text-blue-800
+                    {% elif analysis.label == 'Directing' %}bg-yellow-100 text-yellow-800
+                    {% elif analysis.label == 'Recall' %}bg-red-100 text-red-800
+                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                    {{ analysis.label }}
+                </span>
+            </div>
+            <div>
+                <h4 class="font-medium text-gray-700 mb-1">신뢰도</h4>
+                <span class="text-gray-800">{{ "%.0f"|format((analysis.confidence or 0) * 100) }}%</span>
+            </div>
+        </div>
+
+        <!-- Detailed Reasoning -->
+        {% if analysis.reasoning %}
+        <div>
+            <h4 class="font-medium text-gray-700 mb-2">상세 분석</h4>
+
+            <div class="analysis-box bg-gray-50 p-3 rounded mb-3">
+                <p><strong class="text-gray-700">요약:</strong>
+                   <span class="text-gray-600">{{ analysis.reasoning.summary }}</span></p>
+                {% if analysis.reasoning.improved_sentence %}
+                <p class="mt-2"><strong class="text-gray-700">개선한 문장:</strong>
+                   <span class="text-gray-600">{{ analysis.reasoning.improved_sentence }}</span></p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Metadata -->
+        <div class="text-sm text-gray-500 pt-3 border-t">
+            <p>세션 ID: {{ analysis.session_id }} | 시나리오: {{ analysis.scenario_title }}</p>
+            <p>분석 시간: {{ analysis.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="p-4 border-t flex justify-end">
+        <button onclick="closeDetailModal()" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition">
+            닫기
+        </button>
+    </div>
+</div>

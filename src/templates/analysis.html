@@ -1,0 +1,100 @@
+{% extends "layout.html" %}
+
+{% block title %}세션 분석{% endblock %}
+
+{% block content %}
+<div class="analysis-container">
+    <div class="analysis-header">
+        <h1>세션 분석 리포트</h1>
+        <p>세션 종료 시간: {{ session_ended_at }}</p>
+    </div>
+
+    {% set feedback_status = feedback_status | default('legacy') %}
+
+    {# ── Wedge: feedback hero + stat grid + toggle ── #}
+    <div class="analysis-wedge" data-session-id="{{ session_id }}">
+        {# Brief feedback box #}
+        {% if feedback_status in ('ok', 'degraded') %}
+        {% if feedback_sections and feedback_sections.brief_feedback %}
+        <div class="analysis-brief-feedback">
+            {% for paragraph in feedback_sections.brief_feedback %}
+            <p>{{ paragraph }}</p>
+            {% endfor %}
+            {% if feedback_status == 'degraded' %}
+            <p class="analysis-degraded-note">일부 피드백 항목이 생성되지 않았어요</p>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% elif feedback_status == 'failed' %}
+        <div class="analysis-feedback">
+            <p>{{ feedback if feedback else '분석 피드백을 생성할 수 없습니다.' }}</p>
+        </div>
+        {% else %}
+        <div class="analysis-feedback">
+            <p>{{ feedback }}</p>
+        </div>
+        {% endif %}
+
+        {# Stat grid #}
+        {% if stats is defined and stats %}
+        <dl class="analysis-stat-grid">
+            {# 대화 시간 #}
+            <div class="analysis-stat-card"
+                 aria-label="대화 시간 {% if stats.duration_seconds is defined and stats.duration_seconds is not none %}{{ (stats.duration_seconds // 60) | int }}분 {{ (stats.duration_seconds % 60) | int }}초{% else %}계산 불가{% endif %}">
+                <dd class="analysis-stat-value">
+                    {% if stats.duration_seconds is defined and stats.duration_seconds is not none %}
+                    <span class="analysis-stat-num">{{ (stats.duration_seconds // 60) | int }}</span><span class="analysis-stat-unit">분</span>
+                    <span class="analysis-stat-num">{{ (stats.duration_seconds % 60) | int }}</span><span class="analysis-stat-unit">초</span>
+                    {% else %}
+                    <span style="font-size: var(--font-size-lg); color: var(--color-text-tertiary);">계산 불가</span>
+                    {% endif %}
+                </dd>
+                <dt class="analysis-stat-label">대화 시간</dt>
+            </div>
+
+            {# 선생님 질문 #}
+            <div class="analysis-stat-card"
+                 aria-label="선생님 질문 {{ stats.teacher_question_count | default(0) }}개">
+                <dd class="analysis-stat-value">
+                    <span class="analysis-stat-num">{{ stats.teacher_question_count | default(0) }}</span><span class="analysis-stat-unit">개</span>
+                </dd>
+                <dt class="analysis-stat-label">선생님 질문</dt>
+            </div>
+
+            {# 학생 응답 #}
+            <div class="analysis-stat-card"
+                 aria-label="학생 응답 {{ stats.student_response_count | default(0) }}회">
+                <dd class="analysis-stat-value">
+                    <span class="analysis-stat-num">{{ stats.student_response_count | default(0) }}</span><span class="analysis-stat-unit">회</span>
+                </dd>
+                <dt class="analysis-stat-label">학생 응답</dt>
+            </div>
+
+            {# 멘토 개입 #}
+            <div class="analysis-stat-card"
+                 aria-label="멘토 개입 {{ stats.tutor_intervention_count | default(0) }}회">
+                <dd class="analysis-stat-value">
+                    <span class="analysis-stat-num">{{ stats.tutor_intervention_count | default(0) }}</span><span class="analysis-stat-unit">회</span>
+                </dd>
+                <dt class="analysis-stat-label">멘토 개입</dt>
+            </div>
+        </dl>
+        {% endif %}
+
+    </div>
+
+    {# ── Detail panel (3 tabs): shared partial ── #}
+    {% if feedback_status != 'failed' %}
+    {% include "partials/analysis_detail_tabs.html" %}
+    {% endif %}
+
+    <div class="analysis-actions">
+        <a href="/sessions/{{ session_id }}/export.csv" class="btn btn-primary">
+            CSV 다운로드
+        </a>
+        <a href="/scenarios" class="btn btn-secondary">
+            시나리오로 돌아가기
+        </a>
+    </div>
+</div>
+{% endblock %}

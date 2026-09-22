@@ -1,0 +1,408 @@
+{% extends "layout.html" %}
+
+{% block title %}소개 관리 - 관리자{% endblock %}
+
+{% block content %}
+<div class="container">
+  <header class="page-header-admin">
+    <div class="header-content">
+      <h1>소개 관리</h1>
+      <p class="subtitle">개발자 및 관리자 정보 등록·수정</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn btn-primary"
+              id="open-create-modal">
+        + 새 등록
+      </button>
+    </div>
+  </header>
+
+  <!-- Contributors Table -->
+  <div class="table-container">
+    <table class="data-table" id="contributors-table">
+      <thead>
+        <tr>
+          <th>순서</th>
+          <th>이름</th>
+          <th>소속</th>
+          <th>연락처</th>
+          <th>이력</th>
+          <th>작업</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in contributors %}
+        <tr data-id="{{ c.id }}">
+          <td>{{ c.sort_order }}</td>
+          <td>{{ c.name }}</td>
+          <td>{{ c.affiliation }}</td>
+          <td>
+            {% if c.phone %}
+            <div>{{ c.phone }}</div>
+            {% endif %}
+            {% if c.email %}
+            <div>
+              <a href="mailto:{{ c.email }}">{{ c.email }}</a>
+            </div>
+            {% endif %}
+            {% if not c.phone and not c.email %}
+            -
+            {% endif %}
+          </td>
+          <td class="bio-cell">{{ c.bio }}</td>
+          <td>
+            <script type="application/json"
+                    class="contributor-data">
+              {{ {"id": c.id, "name": c.name, "affiliation": c.affiliation, "bio": c.bio, "phone": c.phone, "email": c.email, "sort_order": c.sort_order} | tojson }}
+            </script>
+            <button type="button"
+                    class="btn btn-sm btn-secondary edit-btn"
+                    data-id="{{ c.id }}">
+              수정
+            </button>
+            <button type="button" class="btn btn-sm btn-danger delete-btn"
+                    data-id="{{ c.id }}"
+                    data-name="{{ c.name }}">
+              삭제
+            </button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="empty-state">
+            등록된 정보가 없습니다.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create Modal -->
+<div id="create-modal" class="modal" role="dialog"
+     aria-modal="true" aria-labelledby="create-modal-title"
+     style="display:none;">
+  <div class="modal-backdrop" id="create-modal-backdrop"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="create-modal-title">새 등록자 추가</h2>
+      <button type="button" class="modal-close"
+              aria-label="닫기" id="close-create-modal">×</button>
+    </div>
+    <form id="create-form" class="modal-form">
+      <div class="form-group">
+        <label for="create-name">
+          이름 <span class="required">*</span>
+        </label>
+        <input type="text" id="create-name" name="name"
+               required maxlength="100"
+               class="form-input" />
+      </div>
+      <div class="form-group">
+        <label for="create-affiliation">
+          소속 <span class="required">*</span>
+        </label>
+        <input type="text" id="create-affiliation"
+               name="affiliation" required maxlength="200"
+               class="form-input" />
+      </div>
+      <div class="form-group">
+        <label for="create-bio">
+          이력 <span class="required">*</span>
+        </label>
+        <textarea id="create-bio" name="bio"
+                  required maxlength="2000" rows="5"
+                  class="form-input"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="create-phone">전화번호 (선택)</label>
+        <input type="tel" id="create-phone" name="phone"
+               maxlength="50" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label for="create-email">이메일 (선택)</label>
+        <input type="email" id="create-email" name="email"
+               maxlength="200" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label for="create-sort-order">표시 순서</label>
+        <input type="number" id="create-sort-order"
+               name="sort_order" value="0" min="0"
+               class="form-input" />
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary"
+                id="cancel-create">취소</button>
+        <button type="submit" class="btn btn-primary">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="modal" role="dialog"
+     aria-modal="true" aria-labelledby="edit-modal-title"
+     style="display:none;">
+  <div class="modal-backdrop" id="edit-modal-backdrop"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="edit-modal-title">등록자 수정</h2>
+      <button type="button" class="modal-close"
+              aria-label="닫기" id="close-edit-modal">×</button>
+    </div>
+    <form id="edit-form" class="modal-form">
+      <input type="hidden" id="edit-id" />
+      <div class="form-group">
+        <label for="edit-name">
+          이름 <span class="required">*</span>
+        </label>
+        <input type="text" id="edit-name" name="name"
+               required maxlength="100" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label for="edit-affiliation">
+          소속 <span class="required">*</span>
+        </label>
+        <input type="text" id="edit-affiliation"
+               name="affiliation" required maxlength="200"
+               class="form-input" />
+      </div>
+      <div class="form-group">
+        <label for="edit-bio">
+          이력 <span class="required">*</span>
+        </label>
+        <textarea id="edit-bio" name="bio"
+                  required maxlength="2000" rows="5"
+                  class="form-input"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="edit-phone">전화번호 (선택)</label>
+        <input type="tel" id="edit-phone" name="phone"
+               maxlength="50" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label for="edit-email">이메일 (선택)</label>
+        <input type="email" id="edit-email" name="email"
+               maxlength="200" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label for="edit-sort-order">표시 순서</label>
+        <input type="number" id="edit-sort-order"
+               name="sort_order" min="0" class="form-input" />
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary"
+                id="cancel-edit">취소</button>
+        <button type="submit" class="btn btn-primary">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div id="delete-modal" class="modal" role="dialog"
+     aria-modal="true" aria-labelledby="delete-modal-title"
+     style="display:none;">
+  <div class="modal-backdrop" id="delete-modal-backdrop"></div>
+  <div class="modal-content modal-sm">
+    <div class="modal-header">
+      <h2 id="delete-modal-title">삭제 확인</h2>
+      <button type="button" class="modal-close"
+              aria-label="닫기" id="close-delete-modal">×</button>
+    </div>
+    <div class="modal-body">
+      <p id="delete-confirm-msg"></p>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary"
+              id="cancel-delete">취소</button>
+      <button type="button" class="btn btn-danger"
+              id="confirm-delete">삭제</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  function getCsrf() {
+    var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+    return m ? m[1] : '';
+  }
+
+  function reloadPage() {
+    window.location.reload();
+  }
+
+  // ── Create Modal ──────────────────────────────────────────
+  var createModal = document.getElementById('create-modal');
+  document.getElementById('open-create-modal').addEventListener(
+    'click', function () {
+      document.getElementById('create-form').reset();
+      createModal.style.display = 'flex';
+    }
+  );
+  function closeCreate() { createModal.style.display = 'none'; }
+  document.getElementById('close-create-modal')
+    .addEventListener('click', closeCreate);
+  document.getElementById('cancel-create')
+    .addEventListener('click', closeCreate);
+  document.getElementById('create-modal-backdrop')
+    .addEventListener('click', closeCreate);
+
+  document.getElementById('create-form').addEventListener(
+    'submit', function (e) {
+      e.preventDefault();
+      var fd = new FormData(e.target);
+      var payload = {
+        name: fd.get('name'),
+        affiliation: fd.get('affiliation'),
+        bio: fd.get('bio'),
+        phone: fd.get('phone') || null,
+        email: fd.get('email') || null,
+        sort_order: parseInt(fd.get('sort_order') || '0', 10)
+      };
+      fetch('/admin/about', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': getCsrf()
+        },
+        body: JSON.stringify(payload)
+      }).then(function (r) {
+        if (!r.ok) {
+          return r.json().then(function (j) {
+            showToast(j.detail || '저장 실패', 'error');
+          });
+        }
+        showToast('등록되었습니다.', 'success');
+        reloadPage();
+      }).catch(function () {
+        showToast('네트워크 오류', 'error');
+      });
+    }
+  );
+
+  // ── Edit Modal ────────────────────────────────────────────
+  var editModal = document.getElementById('edit-modal');
+  function closeEdit() { editModal.style.display = 'none'; }
+  document.getElementById('close-edit-modal')
+    .addEventListener('click', closeEdit);
+  document.getElementById('cancel-edit')
+    .addEventListener('click', closeEdit);
+  document.getElementById('edit-modal-backdrop')
+    .addEventListener('click', closeEdit);
+
+  document.querySelectorAll('.edit-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var jsonEl = btn.closest('tr')
+        .querySelector('.contributor-data');
+      var c = JSON.parse(jsonEl.textContent);
+      document.getElementById('edit-id').value = c.id;
+      document.getElementById('edit-name').value = c.name;
+      document.getElementById('edit-affiliation').value =
+        c.affiliation;
+      document.getElementById('edit-bio').value = c.bio;
+      document.getElementById('edit-phone').value =
+        c.phone || '';
+      document.getElementById('edit-email').value =
+        c.email || '';
+      document.getElementById('edit-sort-order').value =
+        c.sort_order;
+      editModal.style.display = 'flex';
+    });
+  });
+
+  document.getElementById('edit-form').addEventListener(
+    'submit', function (e) {
+      e.preventDefault();
+      var id = document.getElementById('edit-id').value;
+      var fd = new FormData(e.target);
+      var payload = {
+        name: fd.get('name'),
+        affiliation: fd.get('affiliation'),
+        bio: fd.get('bio'),
+        phone: fd.get('phone') || '',
+        email: fd.get('email') || '',
+        sort_order: parseInt(fd.get('sort_order') || '0', 10)
+      };
+      fetch('/admin/about/' + id + '/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': getCsrf()
+        },
+        body: JSON.stringify(payload)
+      }).then(function (r) {
+        if (!r.ok) {
+          return r.json().then(function (j) {
+            showToast(j.detail || '저장 실패', 'error');
+          });
+        }
+        showToast('수정되었습니다.', 'success');
+        reloadPage();
+      }).catch(function () {
+        showToast('네트워크 오류', 'error');
+      });
+    }
+  );
+
+  // ── Delete Modal ──────────────────────────────────────────
+  var deleteModal = document.getElementById('delete-modal');
+  var pendingDeleteId = null;
+
+  function closeDelete() {
+    deleteModal.style.display = 'none';
+    pendingDeleteId = null;
+  }
+  document.getElementById('close-delete-modal')
+    .addEventListener('click', closeDelete);
+  document.getElementById('cancel-delete')
+    .addEventListener('click', closeDelete);
+  document.getElementById('delete-modal-backdrop')
+    .addEventListener('click', closeDelete);
+
+  document.querySelectorAll('.delete-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      pendingDeleteId = btn.dataset.id;
+      var msg = document.getElementById('delete-confirm-msg');
+      msg.textContent =
+        '"' + btn.dataset.name + '" 항목을 삭제하시겠습니까?';
+      deleteModal.style.display = 'flex';
+    });
+  });
+
+  document.getElementById('confirm-delete').addEventListener(
+    'click', function () {
+      if (!pendingDeleteId) return;
+      fetch('/admin/about/' + pendingDeleteId + '/delete', {
+        method: 'POST',
+        headers: { 'x-csrf-token': getCsrf() }
+      }).then(function (r) {
+        if (!r.ok) {
+          return r.json().then(function (j) {
+            showToast(j.detail || '삭제 실패', 'error');
+          });
+        }
+        showToast('삭제되었습니다.', 'success');
+        reloadPage();
+      }).catch(function () {
+        showToast('네트워크 오류', 'error');
+      });
+      closeDelete();
+    }
+  );
+}());
+</script>
+
+<style>
+  .bio-cell {
+    max-width: 300px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .required { color: var(--color-danger); }
+</style>
+{% endblock %}

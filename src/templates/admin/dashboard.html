@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+
+{% block title %}관리자 대시보드 - 오개념 교정 대화 시뮬레이터{% endblock %}
+
+{% block content %}
+<div class="container">
+  <header class="page-header">
+    <h1>관리자 대시보드</h1>
+  </header>
+
+  <section class="quick-actions">
+    <div class="action-buttons-grid">
+      <a href="/admin/scenarios" class="action-card">
+        <span class="action-title">시나리오 관리</span>
+        <span class="action-desc">대화 시나리오 생성 및 편집</span>
+      </a>
+      <a href="/admin/frameworks" class="action-card">
+        <span class="action-title">프레임워크 관리</span>
+        <span class="action-desc">분석 프레임워크 구성</span>
+      </a>
+      <a href="/admin/prompts-page" class="action-card">
+        <span class="action-title">프롬프트 템플릿</span>
+        <span class="action-desc">LLM 프롬프트 관리</span>
+      </a>
+      <a href="/admin/user-conversations" class="action-card">
+        <span class="action-title">사용자 대화 관리</span>
+        <span class="action-desc">사용자별 대화 다운로드</span>
+      </a>
+      <a href="/admin/users" class="action-card">
+        <span class="action-title">사용자 관리</span>
+        <span class="action-desc">사용자 생성, 수정 및 삭제</span>
+      </a>
+      <a href="/admin/groups" class="action-card">
+        <span class="action-title">그룹 관리</span>
+        <span class="action-desc">사용자 그룹 및 시나리오 접근 관리</span>
+      </a>
+      <a href="/admin/about" class="action-card">
+        <span class="action-title">소개 관리</span>
+        <span class="action-desc">개발자 및 관리자 정보 등록·수정</span>
+      </a>
+    </div>
+  </section>
+</div>
+{% endblock %}

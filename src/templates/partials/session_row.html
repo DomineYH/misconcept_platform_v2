@@ -1,0 +1,65 @@
+<tr class="{% if session.ended_at %}ended{% else %}active{% endif %}">
+  <td style="text-align:center;">
+    {% if session.ended_at %}
+    <input type="checkbox" class="session-checkbox"
+           value="{{ session.id }}"
+           aria-label="세션 {{ session.id }} 선택">
+    {% else %}
+    <input type="checkbox" disabled
+           aria-label="진행중 세션 다운로드 불가">
+    {% endif %}
+  </td>
+  <td>{{ session.id }}</td>
+  <td>{{ session.scenario.title if session.scenario else '-' }}</td>
+  <td>
+    {% if session.teacher %}
+    {{ session.teacher.nickname }}
+    <small>({{ session.teacher.username }})</small>
+    {% else %}
+    -
+    {% endif %}
+  </td>
+  <td>{{ session.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+  <td>
+    {% if session.ended_at %}
+      {{ session.ended_at.strftime('%Y-%m-%d %H:%M') }}
+    {% else %}
+      -
+    {% endif %}
+  </td>
+  <td>
+    {% if session.ended_at %}
+      <span class="badge badge-success">완료</span>
+    {% else %}
+      <span class="badge badge-warning">진행중</span>
+    {% endif %}
+  </td>
+  <td class="action-cell">
+    {% if not session.ended_at %}
+    <button type="button"
+      hx-post="/admin/sessions/{{ session.id }}/end"
+      hx-confirm="세션을 종료하고 분석하시겠습니까?"
+      hx-target="closest tr"
+      hx-swap="outerHTML"
+      hx-indicator="#loading-{{ session.id }}"
+      class="btn btn-sm btn-warning">
+      <span class="htmx-indicator" id="loading-{{ session.id }}"><span class="spinner spinner-sm"></span></span>
+      <span class="btn-text">종료</span>
+    </button>
+    {% else %}
+    <a href="/admin/sessions/{{ session.id }}/download"
+      class="btn btn-sm btn-success">CSV</a>
+    {% if session.summary %}
+    <button type="button"
+      class="btn btn-sm btn-info view-analysis-btn"
+      data-session-id="{{ session.id }}">분석결과</button>
+    {% endif %}
+    {% endif %}
+    <button type="button"
+      hx-post="/admin/sessions/{{ session.id }}/delete"
+      hx-confirm="세션을 삭제하시겠습니까? (복구 불가)"
+      hx-target="closest tr"
+      hx-swap="delete"
+      class="btn btn-sm btn-danger">삭제</button>
+  </td>
+</tr>

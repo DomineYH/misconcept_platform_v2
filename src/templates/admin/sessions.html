@@ -1,0 +1,180 @@
+{% extends "layout.html" %}
+
+{% block title %}대화 세션 관리 - 관리자{% endblock %}
+
+{% block content %}
+<div class="container">
+  <header class="page-header">
+    <h1>대화 세션 관리</h1>
+    <p class="subtitle">세션 조회, 종료, 삭제</p>
+  </header>
+
+  <div class="filters" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;">
+    <form method="get" class="filter-form" id="filter-form" style="display:flex;align-items:center;gap:0.5rem;margin:0;">
+      <select name="teacher_id" onchange="submitFilters()">
+        <option value="">모든 교사</option>
+        {% for teacher in teachers %}
+        <option value="{{ teacher.id }}"
+          {% if current_teacher_id == teacher.id %}selected{% endif %}>
+          {{ teacher.nickname }} ({{ teacher.username }})
+        </option>
+        {% endfor %}
+      </select>
+
+      <div class="date-range-box">
+        <input type="date" name="date_from" value="{{ current_date_from }}"
+          onchange="submitFilters()" />
+        <span class="date-range-sep">~</span>
+        <input type="date" name="date_to" value="{{ current_date_to }}"
+          onchange="submitFilters()" />
+      </div>
+    </form>
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-left:auto;">
+      <a id="btn-download-all" class="btn btn-sm btn-success"
+         href="/admin/sessions/export{% if current_teacher_id or current_date_from or current_date_to %}?{% endif %}{% if current_teacher_id %}teacher_id={{ current_teacher_id }}&{% endif %}{% if current_date_from %}date_from={{ current_date_from }}&{% endif %}{% if current_date_to %}date_to={{ current_date_to }}{% endif %}"
+         style="text-decoration:none;">전체 다운로드</a>
+      <button id="btn-download-selected" class="btn btn-sm btn-primary"
+         disabled>선택 다운로드</button>
+      <span id="selected-count" aria-live="polite"
+         style="font-size:0.85rem;color:var(--color-text-muted,#888);">0개 선택됨</span>
+    </div>
+  </div>
+
+  <link rel="stylesheet" href="/static/css/sessions.css">
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:2.5rem;text-align:center;">
+            <input type="checkbox" id="select-all"
+                   aria-label="모든 세션 선택">
+          </th>
+          <th>ID</th>
+          <th>시나리오</th>
+          <th>교사</th>
+          <th>시작 시간</th>
+          <th>종료 시간</th>
+          <th>상태</th>
+          <th>작업</th>
+        </tr>
+      </thead>
+      <tbody id="sessions-tbody">
+        {% for session in sessions %}
+        <tr class="{% if session.ended_at %}ended{% else %}active{% endif %}">
+          <td style="text-align:center;">
+            {% if session.ended_at %}
+            <input type="checkbox" class="session-checkbox"
+                   value="{{ session.id }}"
+                   aria-label="세션 {{ session.id }} 선택">
+            {% else %}
+            <input type="checkbox" disabled
+                   aria-label="진행중 세션 다운로드 불가">
+            {% endif %}
+          </td>
+          <td>{{ session.id }}</td>
+          <td>{{ session.scenario.title if session.scenario else '-' }}</td>
+          <td>
+            {% if session.teacher %}
+            {{ session.teacher.nickname }}
+            <small>({{ session.teacher.username }})</small>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+          <td>{{ session.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>
+            {% if session.ended_at %}
+              {{ session.ended_at.strftime('%Y-%m-%d %H:%M') }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>
+            {% if session.ended_at %}
+              <span class="badge badge-success">완료</span>
+            {% else %}
+              <span class="badge badge-warning">진행중</span>
+            {% endif %}
+          </td>
+          <td class="action-cell">
+            {% if not session.ended_at %}
+            <button type="button"
+              hx-post="/admin/sessions/{{ session.id }}/end"
+              hx-confirm="세션을 종료하고 분석하시겠습니까?"
+              hx-target="closest tr"
+              hx-swap="outerHTML"
+              hx-indicator="#loading-{{ session.id }}"
+              class="btn btn-sm btn-warning">
+              <span class="htmx-indicator" id="loading-{{ session.id }}"><span class="spinner spinner-sm"></span></span>
+              <span class="btn-text">종료</span>
+            </button>
+            {% else %}
+            <a href="/admin/sessions/{{ session.id }}/download"
+              class="btn btn-sm btn-success">CSV</a>
+            {% if session.summary %}
+            <button type="button"
+              class="btn btn-sm btn-info view-analysis-btn"
+              data-session-id="{{ session.id }}">분석결과</button>
+            {% endif %}
+            {% endif %}
+            <button type="button"
+              hx-post="/admin/sessions/{{ session.id }}/delete"
+              hx-confirm="세션을 삭제하시겠습니까? (복구 불가)"
+              hx-target="closest tr"
+              hx-swap="delete"
+              class="btn btn-sm btn-danger">삭제</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align: center; padding: 2rem;">
+            세션이 없습니다.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    <span class="pagination-info">총 {{ total_count }}개 중 {{ current_page }}/{{ total_pages }} 페이지</span>
+    <div class="pagination-buttons">
+      {% if current_page > 1 %}
+      <a href="?page=1{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
+         class="btn btn-sm btn-secondary">처음</a>
+      <a href="?page={{ current_page - 1 }}{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
+         class="btn btn-sm btn-secondary">이전</a>
+      {% endif %}
+
+      {% for p in range(1, total_pages + 1) %}
+        {% if p == current_page %}
+        <span class="btn btn-sm btn-primary">{{ p }}</span>
+        {% elif p >= current_page - 2 and p <= current_page + 2 %}
+        <a href="?page={{ p }}{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
+           class="btn btn-sm btn-secondary">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if current_page < total_pages %}
+      <a href="?page={{ current_page + 1 }}{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
+         class="btn btn-sm btn-secondary">다음</a>
+      <a href="?page={{ total_pages }}{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
+         class="btn btn-sm btn-secondary">마지막</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Analysis Modal -->
+<div id="analysis-modal" class="modal-overlay hidden">
+  <div class="modal-container modal-lg">
+    <div class="modal-body" id="analysis-modal-body">
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/sessions.js"></script>
+{% endblock %}

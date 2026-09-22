@@ -1,0 +1,60 @@
+{% extends "layout.html" %}
+
+{% block title %}로그인 - 오개념 교정 대화 시뮬레이터{% endblock %}
+
+{% block content %}
+<div class="login-container">
+  <div class="login-card">
+    <h1>오개념 교정 대화 시뮬레이터</h1>
+    <p class="subtitle">교사 연수 플랫폼</p>
+
+    {% if error %}
+    <div class="alert alert-danger">
+      {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/login" class="login-form">
+      <div class="form-group">
+        <label for="username">사용자 ID</label>
+        <input
+          type="text"
+          id="username"
+          name="username"
+          placeholder="사용자 ID 입력"
+          required
+          minlength="3"
+          maxlength="50"
+          pattern="[a-zA-Z0-9_]+"
+          title="영문, 숫자, 언더스코어만 사용 가능"
+          autocomplete="username"
+        />
+        <small>3-50자, 영문/숫자/언더스코어만 사용</small>
+      </div>
+
+      <div class="form-group">
+        <label for="password">비밀번호</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          placeholder="비밀번호 입력"
+          required
+          minlength="8"
+          maxlength="128"
+          autocomplete="current-password"
+        />
+      </div>
+
+      <button type="submit" class="btn-primary">로그인</button>
+    </form>
+
+    <div class="info-box">
+      <p>
+        <strong>참고:</strong> 관리자가 발급한 ID와 비밀번호로
+        로그인하세요. 계정이 없는 경우 관리자에게 문의하세요.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

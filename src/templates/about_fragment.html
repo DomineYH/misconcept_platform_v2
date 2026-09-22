@@ -1,0 +1,107 @@
+<div class="modal-header">
+  <h2>About</h2>
+  <button type="button" class="modal-close"
+          aria-label="닫기" onclick="closeAboutModal()">×</button>
+</div>
+<div class="modal-body">
+  {% if contributors %}
+  <div class="contributors-grid">
+    {% for c in contributors %}
+    <article class="contributor-card">
+      <div class="contributor-name">{{ c.name }}</div>
+      <div class="contributor-affiliation">{{ c.affiliation }}</div>
+
+      {% if c.phone or c.email %}
+      <div class="contributor-contact">
+        {% if c.phone %}
+        <span class="contact-item">
+          <span class="contact-label">전화</span>
+          {{ c.phone }}
+        </span>
+        {% endif %}
+        {% if c.email %}
+        <span class="contact-item">
+          <span class="contact-label">이메일</span>
+          <a href="mailto:{{ c.email }}">{{ c.email }}</a>
+        </span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="contributor-bio">{{ c.bio }}</div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state-page">
+    <p>등록된 정보가 없습니다.</p>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .contributors-grid {
+    display: grid;
+    gap: var(--spacing-xl);
+    margin-top: var(--spacing-md);
+    grid-template-columns: repeat(
+      auto-fill, minmax(280px, 1fr)
+    );
+  }
+  .contributor-card {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-xl);
+    box-shadow: var(--shadow-sm);
+  }
+  .contributor-name {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-xs);
+  }
+  .contributor-affiliation {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-md);
+    font-weight: 500;
+  }
+  .contributor-contact {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
+  .contact-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+  .contact-label {
+    font-weight: 600;
+    color: var(--color-text-tertiary);
+    min-width: 3rem;
+  }
+  .contributor-contact a {
+    color: var(--color-text-secondary);
+    text-decoration: underline;
+  }
+  .contributor-bio {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.7;
+    border-top: 1px solid var(--color-border-light);
+    padding-top: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+  }
+  .empty-state-page {
+    text-align: center;
+    padding: var(--spacing-2xl);
+    color: var(--color-text-secondary);
+  }
+</style>

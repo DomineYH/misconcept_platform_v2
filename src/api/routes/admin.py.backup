@@ -1,0 +1,297 @@
+"""Admin routes for scenario and framework management (T076-T080)."""
+from typing import Optional
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    status,
+)
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field, validator
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.api.dependencies import get_current_user, get_db_session
+from src.models.user import User
+from src.models.scenario import Scenario
+from src.models.session import Session
+from src.models.analysis_framework import AnalysisFramework
+
+router = APIRouter()
+templates = Jinja2Templates(directory="src/templates")
+
+
+# Pydantic schemas for request/response
+class ScenarioCreate(BaseModel):
+    """Schema for creating a scenario."""
+
+    title: str = Field(..., min_length=3, max_length=200)
+    prompt: str = Field(..., min_length=10, max_length=10000)
+    student_profile: str = Field(..., min_length=3, max_length=5000)
+    framework_id: int
+
+    @validator("title")
+    def title_not_empty(cls, v):
+        """Ensure title is not just whitespace."""
+        if not v.strip():
+            raise ValueError("Title cannot be empty")
+        return v.strip()
+
+    @validator("prompt")
+    def prompt_not_empty(cls, v):
+        """Ensure prompt is not just whitespace."""
+        if not v.strip():
+            raise ValueError("Prompt cannot be empty")
+        return v.strip()
+
+
+class ScenarioUpdate(BaseModel):
+    """Schema for updating a scenario."""
+
+    title: Optional[str] = Field(None, min_length=3, max_length=200)
+    prompt: Optional[str] = Field(None, min_length=10, max_length=10000)
+    student_profile: Optional[str] = Field(None, min_length=3, max_length=5000)
+    framework_id: Optional[int] = None
+    is_active: Optional[int] = Field(None, ge=0, le=1)
+
+
+class ScenarioResponse(BaseModel):
+    """Schema for scenario response."""
+
+    id: int
+    title: str
+    prompt: str
+    student_profile: str
+    framework_id: int
+    is_active: int
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_dashboard(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    GET /admin - Admin dashboard with aggregate statistics (T076).
+
+    Shows:
+    - Total scenarios count
+    - Active scenarios count
+    - Total sessions count
+    - Average session duration
+    """
+    # Check admin role
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+    # Count scenarios
+    total_scenarios_query = select(func.count(Scenario.id))
+    total_scenarios = await db.scalar(total_scenarios_query)
+
+    active_scenarios_query = select(func.count(Scenario.id)).where(
+        Scenario.is_active == 1
+    )
+    active_scenarios = await db.scalar(active_scenarios_query)
+
+    # Count sessions
+    total_sessions_query = select(func.count(Session.id))
+    total_sessions = await db.scalar(total_sessions_query)
+
+    # Calculate average session duration (in minutes)
+    duration_query = select(
+        func.avg(
+            func.julianday(Session.ended_at)
+            - func.julianday(Session.started_at)
+        )
+        * 24
+        * 60
+    ).where(Session.ended_at.isnot(None))
+    avg_duration = await db.scalar(duration_query) or 0
+
+    return templates.TemplateResponse(
+        "admin/dashboard.html",
+        {
+            "request": request,
+            "user": user,
+            "total_scenarios": total_scenarios or 0,
+            "active_scenarios": active_scenarios or 0,
+            "total_sessions": total_sessions or 0,
+            "avg_duration": round(avg_duration, 1),
+        },
+    )
+
+
+@router.get("/admin/scenarios", response_class=HTMLResponse)
+async def list_all_scenarios(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    GET /admin/scenarios - List all scenarios (active and inactive) (T077).
+
+    Shows all scenarios with edit/toggle controls.
+    """
+    # Check admin role
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+    query = (
+        select(Scenario)
+        .join(AnalysisFramework)
+        .order_by(Scenario.id.desc())
+    )
+    result = await db.execute(query)
+    scenarios = result.scalars().all()
+
+    # Load frameworks for dropdown
+    frameworks_query = select(AnalysisFramework).order_by(
+        AnalysisFramework.name
+    )
+    frameworks_result = await db.execute(frameworks_query)
+    frameworks = frameworks_result.scalars().all()
+
+    return templates.TemplateResponse(
+        "admin/scenarios.html",
+        {
+            "request": request,
+            "user": user,
+            "scenarios": scenarios,
+            "frameworks": frameworks,
+        },
+    )
+
+
+@router.post(
+    "/admin/scenarios",
+    response_model=ScenarioResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_scenario(
+    scenario_data: ScenarioCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    POST /admin/scenarios - Create new scenario (T078).
+
+    Validation:
+    - title: 3-200 chars
+    - prompt: 10-10000 chars
+    - student_profile: 3-5000 chars
+    - framework_id: must exist
+    """
+    # Check admin role
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+    # Verify framework exists
+    framework = await db.get(AnalysisFramework, scenario_data.framework_id)
+    if not framework:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Framework not found",
+        )
+
+    # Create scenario
+    scenario = Scenario(
+        title=scenario_data.title,
+        prompt=scenario_data.prompt,
+        student_profile=scenario_data.student_profile,
+        framework_id=scenario_data.framework_id,
+        is_active=1,  # Active by default
+    )
+
+    db.add(scenario)
+    await db.commit()
+    await db.refresh(scenario)
+
+    return scenario
+
+
+@router.put("/admin/scenarios/{scenario_id}", response_model=ScenarioResponse)
+async def update_scenario(
+    scenario_id: int,
+    scenario_data: ScenarioUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    PUT /admin/scenarios/{id} - Update scenario or toggle active status (T079).
+
+    Can update:
+    - title, prompt, student_profile, framework_id
+    - is_active (0 or 1)
+
+    Authorization check (T080):
+    - Cannot modify scenarios with active sessions (ended_at IS NULL)
+    """
+    # Check admin role
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+    # Get scenario
+    scenario = await db.get(Scenario, scenario_id)
+    if not scenario:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scenario not found",
+        )
+
+    # Check for active sessions (T080)
+    active_sessions_query = (
+        select(func.count(Session.id))
+        .where(Session.scenario_id == scenario_id)
+        .where(Session.ended_at.is_(None))
+    )
+    active_sessions_count = await db.scalar(active_sessions_query)
+
+    if active_sessions_count and active_sessions_count > 0:
+        # Only allow toggling is_active for scenarios with active sessions
+        if scenario_data.dict(exclude_unset=True).keys() != {"is_active"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot modify scenario with active sessions. "
+                "Only status toggle allowed.",
+            )
+
+    # Update fields
+    if scenario_data.title is not None:
+        scenario.title = scenario_data.title.strip()
+    if scenario_data.prompt is not None:
+        scenario.prompt = scenario_data.prompt.strip()
+    if scenario_data.student_profile is not None:
+        scenario.student_profile = scenario_data.student_profile.strip()
+    if scenario_data.framework_id is not None:
+        # Verify framework exists
+        framework = await db.get(
+            AnalysisFramework, scenario_data.framework_id
+        )
+        if not framework:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Framework not found",
+            )
+        scenario.framework_id = scenario_data.framework_id
+    if scenario_data.is_active is not None:
+        scenario.is_active = scenario_data.is_active
+
+    await db.commit()
+    await db.refresh(scenario)
+
+    return scenario

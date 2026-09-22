@@ -1,0 +1,59 @@
+[project]
+name = "misconcept-platform"
+version = "0.1.0"
+description = "Misconception Dialogue Simulator for Teacher Training"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "jinja2>=3.1.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.6",
+    "openai>=1.68.0",
+    "httpx>=0.25.0",
+    "aiosqlite>=0.19.0",
+    "itsdangerous>=2.1.0",
+    "tenacity>=8.2.0",
+    "slowapi>=0.1.9",
+    "python-json-logger>=2.0.0",
+    "bcrypt>=4.0.0",
+    "starlette-csrf>=3.0.0",
+    "markdown>=3.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.11.0",
+    "ruff>=0.1.6",
+    "pre-commit>=3.6.0",
+]
+
+[tool.black]
+line-length = 80
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 80
+select = ["E", "F", "I", "N", "W"]
+ignore = []
+
+[tool.ruff.per-file-ignores]
+"tests/test_admin_*_host_compat.py" = ["E402"]
+"tests/test_admin_users_page.py" = ["E402"]
+"tests/test_scenario_*.py" = ["E402"]
+"tests/conftest.py" = ["E402"]
+"evals/issue-28/**" = ["N999"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

@@ -1,0 +1,38 @@
+/* Sessions page filter bar styles */
+.filters {
+  flex-wrap: nowrap !important;
+}
+.filters .filter-form {
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.filters .filter-form select {
+  width: auto;
+  min-width: 0;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+.date-range-box {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+  background: var(--color-bg, #fff);
+}
+.date-range-box input[type="date"] {
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0.3rem 0.25rem;
+  font-size: 0.85rem;
+}
+.date-range-sep {
+  color: var(--color-text-muted, #888);
+  padding: 0 0.25rem;
+  user-select: none;
+}

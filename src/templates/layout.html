@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+  <title>
+    {% block title %}
+    오개념 교정 대화 시뮬레이터
+    {% endblock %}
+  </title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/analysis-toggle.js"></script>
+  <script>
+    // Auto-inject CSRF token into all HTMX requests
+    document.addEventListener('htmx:configRequest', function(e) {
+      var match = document.cookie.match(
+        /(?:^|;\s*)csrftoken=([^;]*)/
+      );
+      if (match) {
+        e.detail.headers['x-csrf-token'] = match[1];
+      }
+    });
+  </script>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">본문으로 건너뛰기</a>
+  <header>
+    <nav>
+      <h1>오개념 교정 대화 시뮬레이터</h1>
+      <button class="hamburger" aria-label="메뉴" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <ul class="nav-menu">
+        {% if user %}
+        <li><span class="nav-username">{{ user.nickname }}</span></li>
+        <li><a href="/scenarios">시나리오</a></li>
+        {% endif %}
+        <li>
+          <button type="button" class="btn-nav-about"
+                  id="open-about-modal">about</button>
+        </li>
+        {% if user and user.role == 'admin' %}
+        <li><a href="/admin">관리자</a></li>
+        {% endif %}
+        {% if user %}
+        <li>
+          <button type="button" class="btn-logout"
+                  onclick="doLogout()">로그아웃</button>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    {% block content %}
+    <!-- Page-specific content goes here -->
+    {% endblock %}
+  </main>
+
+  <footer>
+    <p>
+      오개념 교정 대화 시뮬레이터 v0.1.0 |
+      교육 연구 도구
+    </p>
+  </footer>
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    function showToast(message, type = 'info', duration = 4000) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.role = 'alert';
+
+      const iconMap = {
+        success: '✓',
+        error: '✕',
+        warning: '⚠',
+        info: 'ℹ'
+      };
+
+      // Create toast structure using DOM methods to prevent XSS
+      const iconDiv = document.createElement('div');
+      iconDiv.className = 'toast-icon';
+      iconDiv.textContent = iconMap[type] || 'ℹ';
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'toast-content';
+      contentDiv.textContent = message;
+
+      const closeButton = document.createElement('button');
+      closeButton.className = 'toast-close';
+      closeButton.setAttribute('aria-label', 'Close');
+      closeButton.textContent = '×';
+      closeButton.onclick = function() { this.parentElement.remove(); };
+
+      toast.appendChild(iconDiv);
+      toast.appendChild(contentDiv);
+      toast.appendChild(closeButton);
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.animation = 'toastSlideOut 0.3s forwards';
+        toast.addEventListener('animationend', () => {
+          if (toast.parentElement) {
+            toast.remove();
+          }
+        });
+      }, duration);
+
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const toasts = document.querySelectorAll('.toast');
+        toasts.forEach(t => t.remove());
+      }
+    });
+
+    function doLogout() {
+      var match = document.cookie.match(
+        /(?:^|;\s*)csrftoken=([^;]*)/
+      );
+      var headers = {};
+      if (match) {
+        headers['x-csrf-token'] = match[1];
+      }
+      fetch('/logout', {
+        method: 'POST',
+        headers: headers,
+        credentials: 'same-origin'
+      }).then(function() {
+        window.location.href = '/login';
+      }).catch(function() {
+        window.location.href = '/login';
+      });
+    }
+
+    const hamburger = document.querySelector('.hamburger');
+    const navMenu = document.querySelector('.nav-menu');
+
+    if (hamburger && navMenu) {
+      hamburger.addEventListener('click', () => {
+        navMenu.classList.toggle('active');
+        const expanded = hamburger.getAttribute('aria-expanded') === 'true';
+        hamburger.setAttribute('aria-expanded', !expanded);
+      });
+    }
+
+    // About modal
+    var aboutLoaded = false;
+    function openAboutModal() {
+      var overlay = document.getElementById('about-modal-overlay');
+      overlay.classList.add('active');
+      document.body.style.overflow = 'hidden';
+      if (!aboutLoaded) {
+        fetch('/about/content')
+          .then(function(r) {
+            if (!r.ok) throw new Error(r.status);
+            return r.text();
+          })
+          .then(function(html) {
+            document.getElementById('about-modal-container')
+              .innerHTML = html;
+            aboutLoaded = true;
+          })
+          .catch(function() {
+            closeAboutModal();
+          });
+      }
+    }
+    function closeAboutModal() {
+      var overlay = document.getElementById('about-modal-overlay');
+      overlay.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+    document.getElementById('open-about-modal')
+      .addEventListener('click', openAboutModal);
+    document.getElementById('about-modal-overlay')
+      .addEventListener('click', function(e) {
+        if (e.target === this) closeAboutModal();
+      });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        var overlay = document.getElementById(
+          'about-modal-overlay'
+        );
+        if (overlay.classList.contains('active')) {
+          closeAboutModal();
+        }
+      }
+    });
+  </script>
+
+  <!-- About Modal -->
+  <div id="about-modal-overlay" class="modal-overlay"
+       role="dialog" aria-modal="true"
+       aria-label="About">
+    <div id="about-modal-container"
+         class="modal-container modal-xl">
+    </div>
+  </div>
+</body>
+</html>

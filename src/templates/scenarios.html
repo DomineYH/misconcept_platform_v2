@@ -1,0 +1,37 @@
+{% extends "layout.html" %}
+
+{% block title %}시나리오 - 오개념 교정 대화 시뮬레이터{% endblock %}
+
+{% block content %}
+<div class="scenarios-container">
+  <header class="page-header">
+    <h1>시나리오 선택</h1>
+  </header>
+
+  <div class="scenarios-grid">
+    {% if scenarios %}
+    {% for scenario in scenarios %}
+    <div class="scenario-card">
+      <h3 class="scenario-title">{{ scenario.title }}</h3>
+      <p class="scenario-description">
+        {% if scenario.problem_situation %}
+        {{ scenario.problem_situation[:100] }}{% if scenario.problem_situation|length > 100 %}...{% endif %}
+        {% else %}
+        <span class="text-muted">문제 상황 미등록</span>
+        {% endif %}
+      </p>
+      <a href="/scenarios/{{ scenario.id }}" class="btn-primary">
+        대화 시작
+      </a>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">
+      <h3 class="empty-state-title">시나리오가 없습니다</h3>
+      <p>활성화된 시나리오가 없습니다.</p>
+      <p>시나리오 생성을 위해 관리자에게 문의하세요.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

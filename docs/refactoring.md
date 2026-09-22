@@ -93,3 +93,19 @@ All result writers use one BEGIN IMMEDIATE window: recheck latest persisted
 state, preserve better results, delete old question/summary/report rows,
 insert replacements and commit. Late fallback/concurrent retries cannot
 replace a completed success. LLM calls remain outside the writer lock.
+
+## #5: shared result assembly and admin operations
+
+Both analysis viewers call analysis_results.load_analysis_response; user
+ownership/end checks and admin dependencies stay at the route boundary.
+Scenario/framework update/delete routes call their existing operations modules.
+The scenario service now matches the live router (the previously unused copy
+differed): omitted and explicit-null fields preserve values; empty optional
+problem/greeting/name/subject strings clear them; tutor -1 disables, null
+preserves; group null preserves and [] clears. Problem/greeting fields remain
+supported. Framework category_name distinguishes omitted from explicit null.
+
+Active scenario references still block framework deletion. Scenario deletion
+is soft and retains session data; deleting a framework with only soft-deleted
+scenarios retains the previous cascading cleanup behavior. The unused admin
+backup was removed after preserving it in baseline commit 8b22614.

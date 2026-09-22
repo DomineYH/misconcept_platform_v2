@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,11 +15,7 @@ from src.api.routes.session_helpers import load_session, mark_session_ended
 from src.config import config
 from src.models import (
     AnalysisFramework,
-    Message,
-    QuestionAnalysis,
     Scenario,
-    SessionFeedbackReport,
-    SessionSummary,
     UiEvent,
     User,
 )
@@ -28,10 +24,8 @@ from src.services.analysis_pipeline import (
     handle_analysis_failure,
     handle_duplicate_session_state,
 )
-from src.services.analysis_results import analysis_status, load_summary, summary_response
+from src.services.analysis_results import analysis_status, load_summary, summary_response, load_analysis_response
 from src.services.export import CSVExporter
-from src.utils.analysis_helpers import parse_reasoning
-from src.utils.session_feedback import load_feedback_sections
 
 logger = logging.getLogger(__name__)
 
@@ -128,135 +122,10 @@ async def get_analysis(
             detail="Session must be ended before viewing analysis",
         )
 
-    summary_result = await db.execute(
-        select(SessionSummary).where(SessionSummary.session_id == session_id)
-    )
-    summary = summary_result.scalar_one_or_none()
-
-    if not summary:
+    analysis_data = await load_analysis_response(session_id, db)
+    if analysis_data is None:
         raise HTTPException(status_code=404, detail="Analysis not found")
-
-    # Compute feedback_status from SessionFeedbackReport
-    report_result = await db.execute(
-        select(SessionFeedbackReport).where(
-            SessionFeedbackReport.session_id == session_id
-        )
-    )
-    feedback_report = report_result.scalar_one_or_none()
-    feedback_status = analysis_status(summary, feedback_report)
-
-    # Load feedback_sections
-    feedback_sections = await load_feedback_sections(session_id, db)
-
-    # Compute stats via aggregate query
-    stats_result = await db.execute(
-        select(Message.role, func.count())
-        .where(Message.session_id == session_id)
-        .group_by(Message.role)
-    )
-    role_counts = dict(stats_result.all())
-
-    duration_seconds = None
-    if session.ended_at and session.started_at:
-        duration_seconds = int(
-            (session.ended_at - session.started_at).total_seconds()
-        )
-
-    stats = {
-        "duration_seconds": duration_seconds,
-        "teacher_question_count": role_counts.get("teacher", 0),
-        "student_response_count": role_counts.get("student", 0),
-        "tutor_intervention_count": session.tutor_intervention_count,
-    }
-
-    teacher_rows_result = await db.execute(
-        select(Message, QuestionAnalysis)
-        .outerjoin(
-            QuestionAnalysis,
-            Message.id == QuestionAnalysis.message_id,
-        )
-        .where(Message.session_id == session_id)
-        .where(Message.role == "teacher")
-        .order_by(Message.created_at)
-    )
-    teacher_rows = teacher_rows_result.all()
-
-    questions = []
-    teacher_label_by_msg_id: dict[int, tuple[str | None, str | None]] = {}
-    for msg, analysis in teacher_rows:
-        reasoning = None
-        if analysis and analysis.meta_json:
-            reasoning = parse_reasoning(analysis.meta_json)
-        label = analysis.label if analysis else None
-        grade = analysis.grade if analysis else None
-        teacher_label_by_msg_id[msg.id] = (label, grade)
-        questions.append(
-            {
-                "content": msg.content,
-                "label": label or "Unclassified",
-                "grade": grade,
-                "confidence": analysis.confidence if analysis else None,
-                "reasoning": reasoning,
-                "created_at": msg.created_at.isoformat(),
-            }
-        )
-
-    # Compute grade counts for group summary
-    grade_counts = {"우수": 0, "개선": 0}
-    for q in questions:
-        g = q.get("grade")
-        if g in grade_counts:
-            grade_counts[g] += 1
-
-    # Load framework only for the criteria map (used by 우수/개선 cards).
-    # Issue #33: `level` is now derived from the persisted `grade` so that
-    # historical sessions stay consistent if an admin later edits a label's
-    # level. grade → level mapping is the single source of truth.
-    framework_label_criteria: dict[str, str] = {}
-    scenario = await db.get(Scenario, session.scenario_id)
-    if scenario and scenario.framework_id:
-        framework = await db.get(AnalysisFramework, scenario.framework_id)
-        if framework:
-            framework_label_criteria = dict(framework.label_criteria_map)
-
-    grade_to_level = {"우수": "high", "개선": "low"}
-
-    # Build all-message timeline with teacher level annotations.
-    all_messages_result = await db.execute(
-        select(Message)
-        .where(Message.session_id == session_id)
-        .order_by(Message.created_at)
-    )
-    messages_payload = []
-    for m in all_messages_result.scalars().all():
-        label = grade = level = None
-        if m.role == "teacher" and m.id in teacher_label_by_msg_id:
-            label, grade = teacher_label_by_msg_id[m.id]
-            level = grade_to_level.get(grade)
-        messages_payload.append(
-            {
-                "role": m.role,
-                "content": m.content,
-                "created_at": m.created_at.isoformat(),
-                "label": label,
-                "grade": grade,
-                "level": level,
-            }
-        )
-
-    return {
-        "distribution": summary.distribution,
-        "feedback": summary.feedback,
-        "feedback_status": feedback_status,
-        "retryable": feedback_status == "failed",
-        "feedback_sections": feedback_sections,
-        "stats": stats,
-        "questions": questions,
-        "messages": messages_payload,
-        "framework_label_criteria": framework_label_criteria,
-        "grade_counts": grade_counts,
-        "session_ended_at": session.ended_at.isoformat(),
-    }
+    return analysis_data
 
 
 @router.get("/sessions/{session_id}/analysis_page", response_class=HTMLResponse)

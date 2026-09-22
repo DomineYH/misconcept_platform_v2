@@ -12,7 +12,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -22,154 +22,18 @@ from src.config import config
 from src.models import (
     AnalysisFramework,
     Message,
-    QuestionAnalysis,
-    SessionFeedbackReport,
-    SessionSummary,
 )
 from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.user import User
 from src.services.analysis_pipeline import analyze_session, run_llm_pipeline
-from src.services.analysis_results import analysis_status, save_analysis
-from src.utils.analysis_helpers import parse_reasoning
-from src.utils.session_feedback import (
-    load_feedback_sections,
-)
+from src.services.analysis_results import load_analysis_response as _load_analysis_response, save_analysis
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 
-async def _load_analysis_response(
-    session_id: int,
-    db: AsyncSession,
-) -> dict | None:
-    """Load the current persisted analysis in response/modal shape."""
-    summary_result = await db.execute(
-        select(SessionSummary).where(SessionSummary.session_id == session_id)
-    )
-    summary = summary_result.scalar_one_or_none()
-    if summary is None:
-        return None
-
-    report_result = await db.execute(
-        select(SessionFeedbackReport).where(
-            SessionFeedbackReport.session_id == session_id
-        )
-    )
-    feedback_report = report_result.scalar_one_or_none()
-    feedback_status = analysis_status(summary, feedback_report)
-    feedback_sections = await load_feedback_sections(session_id, db)
-
-    session_result = await db.execute(
-        select(Session).where(Session.id == session_id)
-    )
-    session = session_result.scalar_one()
-
-    stats_result = await db.execute(
-        select(Message.role, func.count())
-        .where(Message.session_id == session_id)
-        .group_by(Message.role)
-    )
-    role_counts = dict(stats_result.all())
-
-    duration_seconds = None
-    if session.ended_at and session.started_at:
-        duration_seconds = int(
-            (session.ended_at - session.started_at).total_seconds()
-        )
-
-    teacher_rows_result = await db.execute(
-        select(Message, QuestionAnalysis)
-        .outerjoin(
-            QuestionAnalysis,
-            Message.id == QuestionAnalysis.message_id,
-        )
-        .where(Message.session_id == session_id)
-        .where(Message.role == "teacher")
-        .order_by(Message.created_at)
-    )
-    teacher_rows = teacher_rows_result.all()
-
-    questions = []
-    teacher_label_by_msg_id: dict[int, tuple[str | None, str | None]] = {}
-    for msg, analysis in teacher_rows:
-        reasoning = None
-        if analysis and analysis.meta_json:
-            reasoning = parse_reasoning(analysis.meta_json)
-        label = analysis.label if analysis else None
-        grade = analysis.grade if analysis else None
-        teacher_label_by_msg_id[msg.id] = (label, grade)
-        questions.append(
-            {
-                "content": msg.content,
-                "label": label or "Unclassified",
-                "grade": grade,
-                "confidence": analysis.confidence if analysis else None,
-                "reasoning": reasoning,
-                "created_at": msg.created_at.isoformat(),
-            }
-        )
-
-    # Compute grade counts for group summary
-    grade_counts = {"우수": 0, "개선": 0}
-    for q in questions:
-        g = q.get("grade")
-        if g in grade_counts:
-            grade_counts[g] += 1
-
-    # Issue #33: derive level from persisted grade (not framework lookup) so
-    # historical sessions stay consistent across framework edits.
-    framework_label_criteria: dict[str, str] = {}
-    scenario = await db.get(Scenario, session.scenario_id)
-    if scenario and scenario.framework_id:
-        framework = await db.get(AnalysisFramework, scenario.framework_id)
-        if framework:
-            framework_label_criteria = dict(framework.label_criteria_map)
-
-    grade_to_level = {"우수": "high", "개선": "low"}
-
-    all_messages_result = await db.execute(
-        select(Message)
-        .where(Message.session_id == session_id)
-        .order_by(Message.created_at)
-    )
-    messages_payload = []
-    for m in all_messages_result.scalars().all():
-        label = grade = level = None
-        if m.role == "teacher" and m.id in teacher_label_by_msg_id:
-            label, grade = teacher_label_by_msg_id[m.id]
-            level = grade_to_level.get(grade)
-        messages_payload.append(
-            {
-                "role": m.role,
-                "content": m.content,
-                "created_at": m.created_at.isoformat(),
-                "label": label,
-                "grade": grade,
-                "level": level,
-            }
-        )
-
-    return {
-        "distribution": summary.distribution,
-        "feedback": summary.feedback,
-        "feedback_status": feedback_status,
-        "retryable": feedback_status == "failed",
-        "feedback_sections": feedback_sections,
-        "stats": {
-            "duration_seconds": duration_seconds,
-            "teacher_question_count": role_counts.get("teacher", 0),
-            "student_response_count": role_counts.get("student", 0),
-            "tutor_intervention_count": session.tutor_intervention_count,
-        },
-        "questions": questions,
-        "messages": messages_payload,
-        "framework_label_criteria": framework_label_criteria,
-        "grade_counts": grade_counts,
-        "session_ended_at": session.ended_at.isoformat(),
-    }
 
 
 @router.post(

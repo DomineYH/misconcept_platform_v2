@@ -650,7 +650,7 @@
       } else {
         const error = await safeReadJson(response);
         console.error('Failed to close session:', error);
-        alert(`세션 종료 실패: ${error.detail || '알 수 없는 오류'}. 계속 이동하시겠습니까?`);
+        alert(`세션 종료 실패: ${error.detail || error.feedback || '알 수 없는 오류'}. 계속 이동하시겠습니까?`);
         window.location.href = url;
       }
     } catch (error) {
@@ -739,7 +739,7 @@
 
         if (!endResponse.ok) {
           const error = await safeReadJson(endResponse);
-          alert(`세션 종료 실패: ${error.detail || '알 수 없는 오류'}`);
+          alert(`세션 종료 실패: ${error.detail || error.feedback || '알 수 없는 오류'}`);
           btn.dataset.state = 'active';
           btn.textContent = '대화 종료 후 분석 보기';
           btn.disabled = false;
@@ -782,7 +782,8 @@
         headers: getCsrfHeaders()
       });
 
-      if (analyzeResponse.ok) {
+      const analysisResult = await safeReadJson(analyzeResponse);
+      if (analyzeResponse.ok && !analysisResult.retryable) {
         const overlay = document.getElementById('analysis-modal-overlay');
         htmx.ajax('GET', `/sessions/${window.currentSessionId}/analysis_modal`,
           { target: '#analysis-modal-container', swap: 'innerHTML' })
@@ -813,8 +814,8 @@
             if (returnBtn) returnBtn.disabled = false;
           });
       } else {
-        const error = await safeReadJson(analyzeResponse);
-        alert(`분석 실패: ${error.detail || '알 수 없는 오류'}`);
+        const error = analysisResult;
+        alert(`분석 실패: ${error.detail || error.feedback || '알 수 없는 오류'}`);
         btn.dataset.state = 'ready-to-analyze';
         btn.textContent = '분석 보기';
         btn.disabled = false;

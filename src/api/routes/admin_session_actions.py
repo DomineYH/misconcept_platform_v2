@@ -1,8 +1,6 @@
 """Admin session action routes."""
 
-import json
 import logging
-from datetime import datetime, timezone
 
 from fastapi import (
     APIRouter,
@@ -14,8 +12,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import delete as sql_delete
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -33,46 +30,15 @@ from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.user import User
 from src.services.analysis_pipeline import analyze_session, run_llm_pipeline
+from src.services.analysis_results import analysis_status, save_analysis
 from src.utils.analysis_helpers import parse_reasoning
 from src.utils.session_feedback import (
-    derive_plain_feedback,
     load_feedback_sections,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
-
-
-async def _load_existing_report_status(
-    session_id: int,
-    db: AsyncSession,
-) -> str | None:
-    """Return the persisted feedback_report status, or None if no row exists."""
-    result = await db.execute(
-        select(SessionFeedbackReport.status).where(
-            SessionFeedbackReport.session_id == session_id
-        )
-    )
-    return result.scalar_one_or_none()
-
-
-async def _begin_regeneration_write_lock(db: AsyncSession) -> None:
-    """Start the SQLite replacement window with an EXCLUSIVE lock.
-
-    Regeneration performs the LLM work before touching the database, then
-    deletes/re-inserts the one-to-one analysis rows. SQLite's default
-    deferred transactions do not reserve the writer slot until the first
-    write, so use BEGIN EXCLUSIVE for that short replacement window.
-    """
-    bind = db.get_bind()
-    if bind.dialect.name != "sqlite":
-        return
-
-    if db.in_transaction():
-        await db.rollback()
-
-    await db.execute(text("BEGIN EXCLUSIVE"))
 
 
 async def _load_analysis_response(
@@ -93,7 +59,7 @@ async def _load_analysis_response(
         )
     )
     feedback_report = report_result.scalar_one_or_none()
-    feedback_status = feedback_report.status if feedback_report else "legacy"
+    feedback_status = analysis_status(summary, feedback_report)
     feedback_sections = await load_feedback_sections(session_id, db)
 
     session_result = await db.execute(
@@ -190,6 +156,7 @@ async def _load_analysis_response(
         "distribution": summary.distribution,
         "feedback": summary.feedback,
         "feedback_status": feedback_status,
+        "retryable": feedback_status == "failed",
         "feedback_sections": feedback_sections,
         "stats": {
             "duration_seconds": duration_seconds,
@@ -479,87 +446,12 @@ async def regenerate_analysis(
             detail="Analysis regeneration failed",
         )
 
-    feedback = (
-        derive_plain_feedback(payload)
-        if synthesis_status != "failed"
-        else (
-            "분석에 실패했습니다. "
-            "잠시 후 다시 시도하거나 관리자에게 문의하세요."
-        )
+    saved = await save_analysis(
+        session_id,
+        (distribution, question_analyses, payload, synthesis_status,
+         synth_model, synth_hash, api_usage_logs),
+        db, regenerate=True,
     )
-
-    if synthesis_status == "failed":
-        preserved = await _load_analysis_response(session_id, db)
-        if preserved is not None:
-            logger.warning(
-                "Regeneration synthesis failed for session %d; "
-                "preserving existing analysis",
-                session_id,
-            )
-            preserved["regeneration_status"] = "synthesis_failed_preserved"
-            return preserved
-
-    if synthesis_status == "degraded":
-        existing_status = await _load_existing_report_status(session_id, db)
-        if existing_status == "ok":
-            preserved = await _load_analysis_response(session_id, db)
-            if preserved is not None:
-                logger.warning(
-                    "Regeneration produced degraded payload for session %d "
-                    "but existing report is ok; preserving existing analysis",
-                    session_id,
-                )
-                preserved["regeneration_status"] = "degraded_skipped_preserved"
-                return preserved
-
-    await _begin_regeneration_write_lock(db)
-
-    # Delete old data inside the locked replacement window.
-    msg_ids_subquery = select(Message.id).where(
-        Message.session_id == session_id
-    )
-    await db.execute(
-        sql_delete(QuestionAnalysis).where(
-            QuestionAnalysis.message_id.in_(msg_ids_subquery)
-        )
-    )
-    await db.execute(
-        sql_delete(SessionFeedbackReport).where(
-            SessionFeedbackReport.session_id == session_id
-        )
-    )
-    await db.execute(
-        sql_delete(SessionSummary).where(
-            SessionSummary.session_id == session_id
-        )
-    )
-
-    # Insert new data
-    for qa in question_analyses:
-        db.add(qa)
-
-    db.add(
-        SessionFeedbackReport(
-            session_id=session_id,
-            version=1,
-            model=synth_model,
-            prompt_hash=synth_hash,
-            status=synthesis_status,
-            payload_json=json.dumps(payload, ensure_ascii=False),
-        )
-    )
-
-    db.add(
-        SessionSummary(
-            session_id=session_id,
-            distribution_json=json.dumps(distribution),
-            feedback=feedback,
-        )
-    )
-    for log_entry in api_usage_logs:
-        db.add(log_entry)
-
-    await db.commit()
 
     analysis_data = await _load_analysis_response(session_id, db)
     if analysis_data is None:
@@ -567,5 +459,5 @@ async def regenerate_analysis(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Analysis regeneration failed",
         )
-    analysis_data["regeneration_status"] = "replaced"
+    analysis_data["regeneration_status"] = saved["regeneration_status"]
     return analysis_data

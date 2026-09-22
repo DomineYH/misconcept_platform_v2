@@ -73,3 +73,23 @@ The refactoring run does not upgrade the real database.
 The file-backed SQLite WAL regression performs an independent write during the
 admin analysis wait, verifies ended_at is already visible, and injects both
 LLM and constraint errors. Partial analyses and failed replacements roll back.
+
+## #4: analysis result policy
+
+| Stored state | User analyze request | Admin regeneration |
+| --- | --- | --- |
+| ok | Reuse | Replace with ok only |
+| degraded | Reuse (usable partial report) | Replace with ok/degraded |
+| failed | Run pipeline again | Retry; failed output preserves prior rows |
+| legacy, no report | Reuse | Treat as good; preserve on failed/degraded output |
+| legacy fallback, no report | Retry | Retry |
+
+Only pre-status legacy rows use the exact historical fallback sentence to
+recognize failure. All new failures store a report with status=failed and
+return feedback_status, retryable=true and error=analysis_failed. The chat
+keeps the retry action available on that response even when HTTP is 200.
+
+All result writers use one BEGIN IMMEDIATE window: recheck latest persisted
+state, preserve better results, delete old question/summary/report rows,
+insert replacements and commit. Late fallback/concurrent retries cannot
+replace a completed success. LLM calls remain outside the writer lock.

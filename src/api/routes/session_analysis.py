@@ -28,6 +28,7 @@ from src.services.analysis_pipeline import (
     handle_analysis_failure,
     handle_duplicate_session_state,
 )
+from src.services.analysis_results import analysis_status, load_summary, summary_response
 from src.services.export import CSVExporter
 from src.utils.analysis_helpers import parse_reasoning
 from src.utils.session_feedback import load_feedback_sections
@@ -78,17 +79,9 @@ async def analyze_session_endpoint(
             detail="Session must be ended before analysis",
         )
 
-    # Check for existing summary
-    existing_summary_result = await db.execute(
-        select(SessionSummary).where(SessionSummary.session_id == session_id)
-    )
-    existing_summary = existing_summary_result.scalar_one_or_none()
-
-    if existing_summary:
-        return {
-            "distribution": existing_summary.distribution,
-            "feedback": existing_summary.feedback,
-        }
+    existing_summary, existing_report = await load_summary(session_id, db)
+    if existing_summary and analysis_status(existing_summary, existing_report) != "failed":
+        return summary_response(existing_summary, existing_report)
 
     # Load scenario and framework
     scenario_result = await db.execute(
@@ -150,7 +143,7 @@ async def get_analysis(
         )
     )
     feedback_report = report_result.scalar_one_or_none()
-    feedback_status = feedback_report.status if feedback_report else "legacy"
+    feedback_status = analysis_status(summary, feedback_report)
 
     # Load feedback_sections
     feedback_sections = await load_feedback_sections(session_id, db)
@@ -255,6 +248,7 @@ async def get_analysis(
         "distribution": summary.distribution,
         "feedback": summary.feedback,
         "feedback_status": feedback_status,
+        "retryable": feedback_status == "failed",
         "feedback_sections": feedback_sections,
         "stats": stats,
         "questions": questions,

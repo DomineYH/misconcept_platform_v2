@@ -24,13 +24,11 @@ from src.models import (
     QuestionAnalysis,
     Scenario,
     Session,
-    SessionFeedbackReport,
-    SessionSummary,
     calculate_cost,
 )
 from src.services.analyzer import Analyzer
+from src.services.analysis_results import load_summary, save_analysis, summary_response
 from src.services.session_synthesizer import FAILED_PAYLOAD, SessionSynthesizer
-from src.utils.session_feedback import derive_plain_feedback
 
 logger = logging.getLogger(__name__)
 
@@ -72,54 +70,10 @@ async def analyze_session(
 
     await db.commit()  # Inputs stay loaded (expire_on_commit=False); no lock across LLM.
 
-    # Run all LLM calls first (no DB writes)
-    (
-        distribution,
-        question_analyses,
-        payload,
-        synthesis_status,
-        synth_model,
-        synth_hash,
-        api_usage_logs,
-    ) = await run_llm_pipeline(
+    result = await run_llm_pipeline(
         session_id, all_messages, teacher_messages, scenario, framework
     )
-
-    # Derive plain feedback sentence
-    feedback = (
-        derive_plain_feedback(payload)
-        if synthesis_status != "failed"
-        else FALLBACK_FEEDBACK
-    )
-
-    # ATOMIC TRANSACTION — add all rows in memory, then one commit
-    for qa in question_analyses:
-        db.add(qa)
-
-    db.add(
-        SessionFeedbackReport(
-            session_id=session_id,
-            version=1,
-            model=synth_model,
-            prompt_hash=synth_hash,
-            status=synthesis_status,
-            payload_json=json.dumps(payload, ensure_ascii=False),
-        )
-    )
-
-    db.add(
-        SessionSummary(
-            session_id=session_id,
-            distribution_json=json.dumps(distribution),
-            feedback=feedback,
-        )
-    )
-    for log_entry in api_usage_logs:
-        db.add(log_entry)
-
-    await db.commit()
-
-    return {"distribution": distribution, "feedback": feedback}
+    return await save_analysis(session_id, result, db)
 
 
 async def run_llm_pipeline(
@@ -366,21 +320,10 @@ async def handle_duplicate_session_state(
     logger.warning(
         f"Session {session_id}: duplicate session state detected: {error}"
     )
-    summary_result = await db.execute(
-        select(SessionSummary).where(SessionSummary.session_id == session_id)
-    )
-    summary = summary_result.scalar_one_or_none()
+    summary, report = await load_summary(session_id, db)
     if summary:
-        return {
-            "distribution": summary.distribution,
-            "feedback": summary.feedback,
-        }
-
-    return await create_fallback_summary(
-        session_id,
-        label_names,
-        db,
-    )
+        return summary_response(summary, report)
+    return await create_fallback_summary(session_id, label_names, db)
 
 
 # Backward-compatible alias for existing imports
@@ -411,32 +354,9 @@ async def create_fallback_summary(
     db: AsyncSession,
 ) -> dict[str, Any]:
     """Create fallback summary when analysis fails."""
-    fallback_distribution = {label: 0 for label in label_names}
-
-    try:
-        summary = SessionSummary(
-            session_id=session_id,
-            distribution_json=json.dumps(fallback_distribution),
-            feedback=FALLBACK_FEEDBACK,
-        )
-        db.add(summary)
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        summary_result = await db.execute(
-            select(SessionSummary).where(
-                SessionSummary.session_id == session_id
-            )
-        )
-        summary = summary_result.scalar_one_or_none()
-        if summary:
-            return {
-                "distribution": summary.distribution,
-                "feedback": summary.feedback,
-            }
-
-    return {
-        "distribution": fallback_distribution,
-        "feedback": FALLBACK_FEEDBACK,
-        "error": "analysis_failed",
-    }
+    return await save_analysis(
+        session_id,
+        ({label: 0 for label in label_names}, [], dict(FAILED_PAYLOAD),
+         "failed", "unknown", "unknown", []),
+        db,
+    )

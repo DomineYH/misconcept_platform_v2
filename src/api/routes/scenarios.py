@@ -145,6 +145,7 @@ async def get_scenario_detail(
             "user": user,
             "scenario": scenario,
             "session_id": session.id,
+            "session_ended": session.ended_at is not None,
             "messages": existing_messages,
             "student_name": scenario.student_name,
         },

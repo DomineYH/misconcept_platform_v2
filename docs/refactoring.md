@@ -109,3 +109,31 @@ Active scenario references still block framework deletion. Scenario deletion
 is soft and retains session data; deleting a framework with only soft-deleted
 scenarios retains the previous cascading cleanup behavior. The unused admin
 backup was removed after preserving it in baseline commit 8b22614.
+
+## #6: chat extraction and browser verification
+
+The extraction and state changes are separate commits. Jinja sends a tojson
+configuration block; chat.js initializes once and retains HTMX and plain JS.
+Composer/analysis controls share state updates. Poll and POST responses remove
+duplicates by server ID in either arrival order; cursor advances after DOM swap.
+Auth expiry preserves the in-flight draft and cannot restart polling. The
+existing About overlay was moved before its event binding to fix a page-load
+null-element error exposed by the browser check.
+
+Repeat with a Playwright Page and the isolated fixture server:
+
+```sh
+uv run --frozen python tests/browser_server.py
+# In a Playwright script (Playwright is a test tool, no app dependency):
+# import checkChat from './tests/browser_chat.mjs';
+# await page.goto('http://127.0.0.1:8765/chat');
+# console.log(await checkChat(page));
+```
+
+Chromium checks use the real Jinja layout, CSS, HTMX and chat.js, with HTTP
+responses intercepted: 1280px desktop / 390px mobile panels, Ctrl+B,
+Enter/Shift+Enter, duplicate script loading, held POST crossed with polling,
+late duplicate poll, restored input after HTTP 500, end → failed analysis →
+retry → modal, Escape/button close, ended reload, auth expiry during POST and
+polling, draft restoration/login navigation, CSRF on HTMX/fetch. Expected
+500/401 responses are injected; uncaught page errors must be zero.

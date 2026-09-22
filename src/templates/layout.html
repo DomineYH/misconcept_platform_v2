@@ -70,6 +70,15 @@
   </footer>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
+  <!-- About Modal -->
+  <div id="about-modal-overlay" class="modal-overlay"
+       role="dialog" aria-modal="true"
+       aria-label="About">
+    <div id="about-modal-container"
+         class="modal-container modal-xl">
+    </div>
+  </div>
+
   <script>
     function showToast(message, type = 'info', duration = 4000) {
       const container = document.getElementById('toast-container');
@@ -197,13 +206,5 @@
     });
   </script>
 
-  <!-- About Modal -->
-  <div id="about-modal-overlay" class="modal-overlay"
-       role="dialog" aria-modal="true"
-       aria-label="About">
-    <div id="about-modal-container"
-         class="modal-container modal-xl">
-    </div>
-  </div>
 </body>
 </html>

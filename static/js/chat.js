@@ -1,3 +1,7 @@
+(() => {
+  const root = document.getElementById('chat-config');
+  if (!root || root.dataset.initialized) return;
+  root.dataset.initialized = 'true';
 const chatConfig = JSON.parse(document.getElementById("chat-config").textContent);
 // Enable HTMX debug logging for development
   console.log('Chat initialized. Session ID:', chatConfig.sessionId);
@@ -7,9 +11,38 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   window.currentSessionId = chatConfig.sessionId;
   window.studentDisplayName = chatConfig.studentName;
   let authExpiredHandled = false;
+  let messageSending = false;
+  let chatClosed = Boolean(chatConfig.ended);
   let lastSentContent = '';
   let pollingAuthFailCount = 0;
   const MAX_POLLING_AUTH_FAILS = 3;
+
+  function syncComposer() {
+    const disabled = authExpiredHandled || chatClosed || messageSending;
+    document.getElementById('teacher-input').disabled = disabled;
+    document.querySelector('#teacher-form button[type="submit"]').disabled = disabled;
+    const endBtn = document.getElementById('end-session-btn');
+    endBtn.disabled = authExpiredHandled || messageSending || ['ending', 'analyzing'].includes(endBtn.dataset.state);
+  }
+
+  function setAnalysisState(state) {
+    const btn = document.getElementById('end-session-btn');
+    const busy = ['ending', 'analyzing'].includes(state);
+    btn.dataset.state = state;
+    btn.textContent = {
+      active: '대화 종료 후 분석 보기', ending: '분석 준비 중...',
+      analyzing: '분석 중...', 'ready-to-analyze': '분석 보기', done: '분석 다시 보기'
+    }[state];
+    btn.setAttribute('aria-busy', String(busy));
+    document.getElementById('return-to-scenarios-btn').disabled = authExpiredHandled || busy || state === 'active';
+    syncComposer();
+  }
+
+  function finishSending() {
+    messageSending = false;
+    syncComposer();
+    enablePolling();
+  }
 
   // ========================================
   // YouTube URL Conversion
@@ -234,6 +267,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // Polling Functions
   // ========================================
   function enablePolling() {
+    if (authExpiredHandled || chatClosed || messageSending) return;
     const pollingFlag = document.getElementById('polling-enabled');
     if (pollingFlag && pollingFlag.value === 'true') {
       console.log('📡 Polling already enabled');
@@ -266,7 +300,8 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   function lockChatUI(message, options = {}) {
     const showLoginButton = options.showLoginButton === true;
 
-    console.log('Locking chat UI');
+    chatClosed = true;
+    syncComposer();
 
     const textarea = document.getElementById('teacher-input');
     const submitBtn = document.querySelector('#teacher-form button[type="submit"]');
@@ -378,6 +413,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     authExpiredHandled = true;
 
     console.warn('Session expired detected from:', source);
+    restoreInputOnError();
     saveDraftMessage();
     lockChatUI('로그인이 만료되었습니다. 다시 로그인해주세요.', {
       showLoginButton: true
@@ -464,7 +500,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // ========================================
   // Modal Functions
   // ========================================
-  function closeAnalysisModal() {
+  window.closeAnalysisModal = function closeAnalysisModal() {
     const overlay = document.getElementById('analysis-modal-overlay');
     overlay.classList.add('hidden');
     overlay.classList.remove('flex');
@@ -473,13 +509,13 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
   document.getElementById('analysis-modal-overlay').addEventListener('click', function(e) {
     if (e.target.id === 'analysis-modal-overlay') {
-      closeAnalysisModal();
+      window.closeAnalysisModal();
     }
   });
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-      closeAnalysisModal();
+      window.closeAnalysisModal();
     }
   });
 
@@ -496,7 +532,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     const state = btn.dataset.state;
 
     // Guard against double submission
-    if (state === 'ending' || state === 'analyzing') {
+    if (authExpiredHandled || messageSending || state === 'ending' || state === 'analyzing') {
       return;
     }
 
@@ -523,10 +559,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
     // Phase 1: End session (skip if already ended)
     if (!skipEnd) {
-      btn.dataset.state = 'ending';
-      btn.disabled = true;
-      btn.setAttribute('aria-busy', 'true');
-      btn.textContent = '분석 준비 중...';
+      setAnalysisState('ending');
       lockChatUI('세션 종료 중...');
 
       try {
@@ -538,10 +571,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         if (!endResponse.ok) {
           const error = await safeReadJson(endResponse);
           alert(`세션 종료 실패: ${error.detail || error.feedback || '알 수 없는 오류'}`);
-          btn.dataset.state = 'active';
-          btn.textContent = '대화 종료 후 분석 보기';
-          btn.disabled = false;
-          btn.setAttribute('aria-busy', 'false');
+          setAnalysisState('active');
           window.location.reload();
           return;
         }
@@ -561,18 +591,14 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         }
         console.error('Failed to end session:', error);
         alert('세션 종료에 실패했습니다');
-        btn.dataset.state = 'active';
-        btn.textContent = '대화 종료 후 분석 보기';
-        btn.disabled = false;
-        btn.setAttribute('aria-busy', 'false');
+        setAnalysisState('active');
         window.location.reload();
         return;
       }
     }
 
     // Phase 2: Analyze
-    btn.dataset.state = 'analyzing';
-    btn.textContent = '분석 중...';
+    setAnalysisState('analyzing');
 
     try {
       const analyzeResponse = await fetchWithAuthGuard(`/sessions/${window.currentSessionId}/analyze`, {
@@ -589,13 +615,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
             overlay.classList.remove('hidden');
             overlay.classList.add('flex');
 
-            btn.dataset.state = 'done';
-            btn.textContent = '분석 다시 보기';
-            btn.disabled = false;
-            btn.setAttribute('aria-busy', 'false');
-
-            const returnBtn = document.getElementById('return-to-scenarios-btn');
-            if (returnBtn) returnBtn.disabled = false;
+            setAnalysisState('done');
           })
           .catch((err) => {
             console.error('Analysis modal load failed', err);
@@ -603,24 +623,12 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
               return;
             }
             alert('분석 결과를 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.');
-            btn.dataset.state = 'ready-to-analyze';
-            btn.textContent = '분석 보기';
-            btn.disabled = false;
-            btn.setAttribute('aria-busy', 'false');
-
-            const returnBtn = document.getElementById('return-to-scenarios-btn');
-            if (returnBtn) returnBtn.disabled = false;
+            setAnalysisState('ready-to-analyze');
           });
       } else {
         const error = analysisResult;
         alert(`분석 실패: ${error.detail || error.feedback || '알 수 없는 오류'}`);
-        btn.dataset.state = 'ready-to-analyze';
-        btn.textContent = '분석 보기';
-        btn.disabled = false;
-        btn.setAttribute('aria-busy', 'false');
-
-        const returnBtn = document.getElementById('return-to-scenarios-btn');
-        if (returnBtn) returnBtn.disabled = false;
+        setAnalysisState('ready-to-analyze');
       }
     } catch (error) {
       if (error && error.code === 'AUTH_EXPIRED') {
@@ -628,13 +636,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       }
       console.error('Failed to analyze session:', error);
       alert('분석에 실패했습니다');
-      btn.dataset.state = 'ready-to-analyze';
-      btn.textContent = '분석 보기';
-      btn.disabled = false;
-      btn.setAttribute('aria-busy', 'false');
-
-      const returnBtn = document.getElementById('return-to-scenarios-btn');
-      if (returnBtn) returnBtn.disabled = false;
+      setAnalysisState('ready-to-analyze');
     }
   });
 
@@ -712,7 +714,12 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
     const input = document.getElementById('teacher-input');
     const content = input.value.trim();
-    if (!content) return;
+    if (!content || authExpiredHandled || chatClosed || messageSending) {
+      event.preventDefault();
+      return;
+    }
+    messageSending = true;
+    syncComposer();
 
     lastSentContent = content;
     const container = document.getElementById(
@@ -772,41 +779,17 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     container.scrollTop = container.scrollHeight;
   });
 
-  // Handle messagesAdded event from HX-Trigger header
-  document.body.addEventListener('messagesAdded', (event) => {
-    const detail = event.detail || {};
-    if (detail.lastId) {
-      document.getElementById('last-message-id').value =
-        detail.lastId;
-    }
-  });
-
-  // Remove temp elements before server response is swapped in
-  // and deduplicate messages already present from polling
+  // POST and polling can arrive in either order. Keep each server ID once.
   htmx.on('htmx:beforeSwap', (event) => {
-    if (event.detail.target.id !== 'messages-container') return;
+    if (event.detail.target.id !== 'messages-container' || !event.detail.shouldSwap) return;
     removeTempElements();
-
-    // POST response: remove duplicates already added by polling
-    const path = event.detail.requestConfig?.path || '';
-    if (!path.includes('/messages/updates')) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(
-        event.detail.serverResponse, 'text/html'
-      );
-      const incomingIds = new Set(
-        Array.from(
-          doc.querySelectorAll('[data-message-id]')
-        ).map(el => el.dataset.messageId)
-      );
-      document.querySelectorAll(
-        '#messages-container .message[data-message-id]'
-      ).forEach(el => {
-        if (incomingIds.has(el.dataset.messageId)) {
-          el.remove();
-        }
-      });
-    }
+    const doc = new DOMParser().parseFromString(event.detail.serverResponse, 'text/html');
+    const present = new Set(Array.from(document.querySelectorAll('#messages-container [data-message-id]'), el => el.dataset.messageId));
+    doc.querySelectorAll('[data-message-id]').forEach(el => {
+      if (present.has(el.dataset.messageId)) el.remove();
+      else present.add(el.dataset.messageId);
+    });
+    event.detail.serverResponse = doc.body.innerHTML;
   });
 
   // ========================================
@@ -827,6 +810,10 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         console.debug(`  Message ${idx}: ID=${msgId}, role=${role}, content="${content}..."`);
       });
 
+      const container = document.getElementById('messages-container');
+      Array.from(container.querySelectorAll('.message[data-message-id]'))
+        .sort((a, b) => Number(a.dataset.messageId) - Number(b.dataset.messageId))
+        .forEach(message => container.appendChild(message));
       const lastId = getLastMessageId();
 
       if (lastId > 0) {
@@ -841,7 +828,6 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         console.warn('No valid message IDs found after swap!');
       }
 
-      const container = document.getElementById('messages-container');
       if (container) {
         container.scrollTop = container.scrollHeight;
         console.debug('Scrolled to bottom');
@@ -853,12 +839,16 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
   document.body.addEventListener('htmx:afterRequest', (event) => {
     // Clear input after successful message send
-    if (event.detail.successful && event.detail.elt.id === 'teacher-form') {
+    if (!authExpiredHandled && event.detail.successful && event.detail.elt.id === 'teacher-form') {
       document.getElementById('teacher-input').value = '';
       document.getElementById('teacher-input').style.height = '';
       clearDraftMessage();
       lastSentContent = '';
-      enablePolling();
+      finishSending();
+    }
+
+    if (event.detail.elt.id === 'teacher-form') {
+      finishSending();
     }
 
     // Reset polling auth fail counter on any successful polling response
@@ -870,11 +860,11 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
   // Enter key to send message (Shift+Enter for new line)
   document.getElementById('teacher-input').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
       const form = document.getElementById('teacher-form');
       const input = document.getElementById('teacher-input');
-      if (input.value.trim()) {
+      if (input.value.trim() && !messageSending && !chatClosed && !authExpiredHandled) {
         htmx.trigger(form, 'submit');
       }
     }
@@ -909,10 +899,10 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     // Clean up temp elements and restore input on error
     if (!isPolling) {
       restoreInputOnError();
-      enablePolling();
+      finishSending();
     }
 
-    if (event.detail.target.id === 'teacher-form') {
+    if (event.detail.elt.id === 'teacher-form') {
       console.error('Message send failed:', {
         status: xhr.status,
         statusText: xhr.statusText,
@@ -929,6 +919,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
           if (errorData.detail.includes('already ended') || errorData.detail.includes('종료')) {
             lockChatUI('이 대화는 이미 종료되었습니다.');
+            setAnalysisState('ready-to-analyze');
             errorMsg = '이 세션은 이미 종료되었습니다. 새 세션을 시작해주세요.';
           }
         }
@@ -949,10 +940,12 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
   document.body.addEventListener('htmx:sendError', (event) => {
     // Clean up temp elements on network error
-    restoreInputOnError();
-    enablePolling();
+    if (event.detail.elt.id === 'teacher-form') {
+      restoreInputOnError();
+      finishSending();
+    }
 
-    if (event.detail.target.id === 'teacher-form') {
+    if (event.detail.elt.id === 'teacher-form') {
       console.error('Network error:', {
         error: event.detail.error,
         path: event.detail.pathInfo.requestPath,
@@ -971,6 +964,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       '/messages/updates'
     )) {
       restoreInputOnError();
+      finishSending();
       alert('요청 시간이 초과되었습니다. 다시 시도해주세요.');
     }
   });
@@ -1007,25 +1001,21 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // ========================================
   // Initialization
   // ========================================
-  document.addEventListener('DOMContentLoaded', () => {
+  function initializeChat() {
     restoreDraftMessage();
-
     const lastId = getLastMessageId();
-    if (lastId > 0) {
-      document.getElementById('last-message-id').value = lastId;
-      enablePolling();
-      console.log(`Page loaded with ${document.querySelectorAll('.message').length} messages. Polling enabled.`);
+    document.getElementById('last-message-id').value = lastId;
+    if (chatClosed) {
+      lockChatUI('이 대화는 종료되었습니다.');
+      setAnalysisState('ready-to-analyze');
     } else {
-      console.log('Page loaded with no messages. Polling disabled until first message.');
+      setAnalysisState('active');
+      if (lastId > 0) enablePolling();
     }
-
-    // Snapshot: if session already ended on page load, update button state
-    const sessionStatusBanner = document.getElementById('session-status');
-    if (sessionStatusBanner && sessionStatusBanner.style.display !== 'none') {
-      const btn = document.getElementById('end-session-btn');
-      if (btn) {
-        btn.dataset.state = 'ready-to-analyze';
-        btn.textContent = '분석 보기';
-      }
-    }
-  });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeChat, { once: true });
+  } else {
+    initializeChat();
+  }
+})();

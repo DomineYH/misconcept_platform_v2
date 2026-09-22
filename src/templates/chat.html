@@ -203,7 +203,8 @@
 <script id="chat-config" type="application/json">{{ {
   'sessionId': session_id,
   'studentName': student_name or 'S',
-  'videoUrl': scenario.video_url
+  'videoUrl': scenario.video_url,
+  'ended': session_ended|default(false)
 }|tojson }}</script>
 <script src="/static/js/chat.js"></script>
 {% endblock %}

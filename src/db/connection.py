@@ -55,12 +55,11 @@ Base = declarative_base()
 
 
 async def init_db():
-    """Initialize database. Skip create_all in production."""
+    """Development boot uses the official installer; production upgrades explicitly."""
     if config.is_production:
-        logger.info("Production mode: skipping create_all")
         return
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    from src.db.migrations.migrate import run_all_migrations
+    await run_all_migrations()
 
 
 async def close_db():

@@ -1,154 +1,134 @@
-"""Database migration runner script."""
+"""Official SQLite install/upgrade entry point; historical SQL stays immutable."""
 
 import asyncio
-import os
+import sqlite3
 from pathlib import Path
+
 from sqlalchemy import text
 
 from src.db.connection import engine
 
-
-async def ensure_migrations_table():
-    """Create the migration tracking table if it doesn't exist."""
-    async with engine.begin() as conn:
-        await conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS _migrations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                filename TEXT NOT NULL UNIQUE,
-                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """))
+BASELINE = "023_schema_baseline"
+DIRECTORY = Path(__file__).parent
 
 
-async def is_migration_applied(migration_filename: str) -> bool:
-    """Check if a migration has already been applied.
-
-    Args:
-        migration_filename: Name of migration file
-
-    Returns:
-        True if migration has been applied, False otherwise
-    """
-    async with engine.begin() as conn:
-        result = await conn.execute(
-            text("SELECT 1 FROM _migrations WHERE filename = :filename"),
-            {"filename": migration_filename}
-        )
-        return result.fetchone() is not None
+def statements(sql):
+    """Split complete SQLite statements, including quoted semicolons/triggers."""
+    pending = ""
+    for char in sql:
+        pending += char
+        if char == ";" and sqlite3.complete_statement(pending):
+            yield pending
+            pending = ""
+    if pending.strip() and any(
+        line.strip() and not line.lstrip().startswith("--")
+        for line in pending.splitlines()
+    ):
+        raise ValueError("Migration ends with an incomplete SQL statement")
 
 
-async def record_migration(migration_filename: str):
-    """Record that a migration has been applied.
+async def _history(conn):
+    await conn.exec_driver_sql("""CREATE TABLE IF NOT EXISTS _migrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        filename TEXT NOT NULL UNIQUE,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
 
-    Args:
-        migration_filename: Name of migration file
-    """
-    async with engine.begin() as conn:
-        await conn.execute(
-            text("INSERT INTO _migrations (filename) VALUES (:filename)"),
-            {"filename": migration_filename}
-        )
+
+async def _applied(conn, filename):
+    return (await conn.execute(
+        text("SELECT 1 FROM _migrations WHERE filename=:name"),
+        {"name": filename},
+    )).scalar() is not None
+
+
+async def _record(conn, filename):
+    await conn.execute(text("INSERT INTO _migrations(filename) VALUES (:name)"),
+                       {"name": filename})
 
 
 async def run_migration(migration_file: Path):
-    """Execute a single migration SQL file.
+    """DDL and history commit together, with an explicit SQLite transaction."""
+    async with engine.connect() as conn:
+        await conn.exec_driver_sql("BEGIN IMMEDIATE")
+        try:
+            await _history(conn)
+            if not await _applied(conn, migration_file.name):
+                for statement in statements(migration_file.read_text()):
+                    await conn.exec_driver_sql(statement)
+                await _record(conn, migration_file.name)
+            await conn.commit()
+        except BaseException:
+            await conn.rollback()
+            raise
 
-    Args:
-        migration_file: Path to SQL migration file
-    """
-    print(f"Running migration: {migration_file.name}")
 
-    # Read SQL file
-    with open(migration_file, 'r', encoding='utf-8') as f:
-        migration_sql = f.read()
-
-    # Execute migration
-    async with engine.begin() as conn:
-        # Split SQL by semicolon and execute each statement.
-        # Skip only chunks where every line is a comment or blank — chunks
-        # that mix leading comments with real SQL must still execute.
-        statements = []
-        for stmt in migration_sql.split(";"):
-            stripped = stmt.strip()
-            if not stripped:
-                continue
-            if all(
-                line.strip().startswith("--") or not line.strip()
-                for line in stripped.split("\n")
-            ):
-                continue
-            statements.append(stripped)
-
-        for i, stmt in enumerate(statements, 1):
-            try:
-                # Skip empty or comment-only statements
-                if not stmt or all(line.strip().startswith("--") or not line.strip()
-                                  for line in stmt.split("\n")):
-                    continue
-
-                await conn.execute(text(stmt))
-                print(f"  Statement {i}/{len(statements)} executed")
-            except Exception as e:
-                print(f"Error executing statement {i}:")
-                print(f"  SQL: {stmt[:100]}...")
-                print(f"  Error: {e}")
-                raise
-
-    # Record successful migration
-    await record_migration(migration_file.name)
-    print(f"✓ Migration {migration_file.name} completed successfully")
+async def _install_baseline():
+    sql = (DIRECTORY / "baseline.sql").read_text()
+    with sqlite3.connect(":memory:") as reference:
+        reference.executescript(sql)
+        tables = {
+            name: [row[1] for row in reference.execute(f'PRAGMA table_info("{name}")')]
+            for (name,) in reference.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+    async with engine.connect() as conn:
+        # Rebuild is required to align NULL, FK actions, CHECKs and indexes.
+        # Disable FKs before BEGIN, then validate every reference before commit.
+        await conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        await conn.commit()
+        try:
+            await conn.exec_driver_sql("BEGIN IMMEDIATE")
+            await _history(conn)
+            if await _applied(conn, BASELINE):
+                await conn.commit()
+                return
+            existing = set((await conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )).scalars())
+            present = existing.intersection(tables)
+            required = set(tables) - {"session_feedback_report", "ui_event"}
+            if present and not required.issubset(present):
+                raise ValueError("Unsupported schema: upgrade a backup to revision 018 first")
+            copied = {}
+            for name in sorted(present):
+                columns = [row[1] for row in (await conn.exec_driver_sql(f'PRAGMA table_info("{name}")'))]
+                missing = set(tables[name]) - set(columns)
+                allowed_missing = {"api_usage_log": {"operation"}, "analysis_framework": {"category_name"}, "question_analysis": {"grade"}}.get(name, set())
+                if set(columns) - set(tables[name]) or missing - allowed_missing:
+                    raise ValueError(f"Unsupported columns in {name}; no changes committed")
+                custom = (await conn.execute(text(
+                    "SELECT name FROM sqlite_master WHERE tbl_name=:name AND type IN ('trigger', 'view')"
+                ), {"name": name})).first()
+                if custom:
+                    raise ValueError(f"Custom schema object on {name}; migrate explicitly")
+                copied[name] = ', '.join(f'"{column}"' for column in columns)
+                await conn.exec_driver_sql(f'CREATE TEMP TABLE "_copy_{name}" AS SELECT * FROM "{name}"')
+            for name in sorted(present):
+                await conn.exec_driver_sql(f'DROP TABLE "{name}"')
+            for statement in statements(sql):
+                await conn.exec_driver_sql(statement)
+            for name, columns in copied.items():
+                await conn.exec_driver_sql(f'INSERT INTO "{name}" ({columns}) SELECT {columns} FROM "_copy_{name}"')
+                await conn.exec_driver_sql(f'DROP TABLE "_copy_{name}"')
+            violations = (await conn.exec_driver_sql("PRAGMA foreign_key_check")).all()
+            if violations:
+                raise ValueError(f"Foreign key violations: {violations}")
+            await _record(conn, BASELINE)
+            await conn.commit()
+        except BaseException:
+            await conn.rollback()
+            raise
+        finally:
+            await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+            await conn.commit()
 
 
 async def run_all_migrations():
-    """Run all migration files in order."""
-    migrations_dir = Path(__file__).parent
-
-    # Ensure tracking table exists
-    await ensure_migrations_table()
-
-    # Get all .sql files sorted by name (001_, 002_, etc.).
-    # Exclude *_down.sql rollback scripts — they are not upgrade migrations.
-    migration_files = sorted(
-        f
-        for f in migrations_dir.glob("*.sql")
-        if not f.name.endswith("_down.sql")
-    )
-
-    if not migration_files:
-        print("No migration files found")
-        return
-
-    # Check which migrations need to be applied
-    pending_migrations = []
-    applied_migrations = []
-
-    for migration_file in migration_files:
-        if await is_migration_applied(migration_file.name):
-            applied_migrations.append(migration_file.name)
-        else:
-            pending_migrations.append(migration_file)
-
-    # Log status
-    print(f"Migration status:")
-    print(f"  Total migrations: {len(migration_files)}")
-    print(f"  Already applied: {len(applied_migrations)}")
-    print(f"  Pending: {len(pending_migrations)}")
-
-    if applied_migrations:
-        print(f"\nAlready applied:")
-        for filename in applied_migrations:
-            print(f"  ✓ {filename}")
-
-    if not pending_migrations:
-        print("\n✓ All migrations are up to date")
-        return
-
-    print(f"\nRunning {len(pending_migrations)} pending migration(s):")
-
-    for migration_file in pending_migrations:
-        await run_migration(migration_file)
-
-    print("\n✓ All pending migrations completed successfully")
+    await _install_baseline()
+    # 001–022 are archived upgrade history, not fresh-install scripts.
+    for path in sorted(DIRECTORY.glob("[0-9]*.sql")):
+        if int(path.name.split("_")[0]) > 23 and not path.name.endswith("_down.sql"):
+            await run_migration(path)
 
 
 if __name__ == "__main__":

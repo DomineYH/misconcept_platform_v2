@@ -168,6 +168,44 @@ owned/injected lifetimes, and greeting/classification/synthesis usage logs.
 The real ASGI HTTP routes are exercised with signed test session cookies:
 unauthenticated redirect, foreign-owner denial, teacher denial on admin actions,
 failed → successful analysis, ended-session message rejection, and admin modal
-rendering. Test sockets are blocked. The final Python suite contains 37 passing
+rendering. Test sockets are blocked. The initial refactoring suite contains 37 passing
 tests; browser checks above run separately with intercepted LLM/API responses.
 No live API calls, real database upgrades, deployment or PR merge were performed.
+
+## PR review follow-up: seed compatibility and reasoning settings
+
+Plan:
+
+1. Reproduce seeding failure on fresh and legacy temporary databases.
+2. Make raw seed INSERTs supply the baseline's required timestamps and tutor
+   sensitivity; remove writes to the obsolete chatbot configuration table.
+3. Include the reasoning validator fix and tests in the PR, retaining earlier
+   models' `minimal` value and rejecting unknown values.
+4. Run regression tests, repeat the seed CLI, verify login/app startup, and
+   review the final commit and remote CI before judging merge readiness.
+
+The seed regression checks both fresh installation and legacy upgrades,
+framework/scenario/template references, administrator password verification,
+foreign-key integrity, and repeated seeding without changing existing rows
+or passwords. Legacy chatbot configuration rows remain untouched; fresh
+databases do not create that obsolete table. SQL defaults in the frozen
+baseline are unchanged; the seed writer now supplies the required values.
+
+The shared reasoning validator accepts `xhigh` and `max` for all three settings.
+The GPT-5.6 values are `none`, `low`, `medium`, `high`, `xhigh`, and `max`, as
+documented in the [official model page](https://developers.openai.com/api/docs/models/gpt-5.6-sol).
+The validator accepts the union of supported API values, including `minimal`
+for older models; the selected model still determines which subset is valid.
+Tests cover environment values, the reported `max/xhigh/xhigh` dotenv input,
+and invalid values. Model defaults, prompts, and token limits are unchanged.
+
+Follow-up validation completed:
+
+- `uv run --frozen python -m pytest -q`: **50 passed**.
+- The actual `python -m src.db.seed` command succeeded twice on a temporary DB.
+- Uvicorn started with `TESTING=false` and `max/xhigh/xhigh`; HTTP checks passed
+  for seeded administrator login, scenario listing, and the scenario chat page.
+- Standards and issue/spec reviews found no remaining blocking findings.
+
+These checks used temporary databases and synthetic credentials, with no live
+LLM calls or changes to the local application database.

@@ -8,7 +8,9 @@ Requires Python 3.11+ and uv. Install the locked runtime and test dependencies:
 ```sh
 uv sync --frozen --extra dev --python 3.12
 cp .env.example .env
-# Set OPENAI_API_KEY and SESSION_SECRET (generate with: openssl rand -hex 32).
+# Set OPENAI_API_KEY, SESSION_SECRET (openssl rand -hex 32),
+# and ADMIN_DEFAULT_PASSWORD in .env before seeding a new development DB.
+uv run --frozen python -m src.db.seed
 uv run --frozen uvicorn src.main:app --reload
 ```
 

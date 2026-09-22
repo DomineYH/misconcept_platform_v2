@@ -214,8 +214,8 @@ async def seed_database():
             text(
                 """
                 INSERT INTO analysis_framework
-                (name, description, labels_json)
-                VALUES (:name, :desc, :labels)
+                (name, description, labels_json, created_at)
+                VALUES (:name, :desc, :labels, CURRENT_TIMESTAMP)
                 """
             ),
             {
@@ -250,7 +250,8 @@ async def seed_database():
                     is_active, framework_id, created_by,
                     student_template_id,
                     chat_model, chat_temperature,
-                    tutor_intervention_threshold
+                    tutor_intervention_threshold,
+                    tutor_sensitivity, created_at
                 )
                 VALUES (
                     :title, :prompt, :profile,
@@ -258,7 +259,8 @@ async def seed_database():
                     :active, :fid, :created,
                     :student_tid,
                     :chat_model, :chat_temp,
-                    :tutor_threshold
+                    :tutor_threshold,
+                    'medium', CURRENT_TIMESTAMP
                 )
                 """
             ),
@@ -288,65 +290,6 @@ async def seed_database():
             },
         )
 
-        # Seed default chatbot configuration
-        chatbot_configs = [
-            {
-                "key": "student_bot.model",
-                "value": "gpt-5-mini",
-                "type": "string",
-                "desc": "StudentBot LLM model",
-            },
-            {
-                "key": "student_bot.temperature",
-                "value": "0.7",
-                "type": "float",
-                "desc": "StudentBot response creativity",
-            },
-            {
-                "key": "student_bot.max_tokens",
-                "value": "150",
-                "type": "int",
-                "desc": "StudentBot response length limit",
-            },
-            {
-                "key": "tutor_bot.model",
-                "value": "gpt-5-mini",
-                "type": "string",
-                "desc": "TutorBot LLM model",
-            },
-            {
-                "key": "tutor_bot.temperature",
-                "value": "0.3",
-                "type": "float",
-                "desc": "TutorBot response consistency",
-            },
-            {
-                "key": "tutor_bot.max_tokens",
-                "value": "100",
-                "type": "int",
-                "desc": "TutorBot response length limit",
-            },
-            {
-                "key": "tutor_bot.intervention_threshold",
-                "value": "3",
-                "type": "int",
-                "desc": "Interventions per 10 questions",
-            },
-        ]
-
-        for cfg in chatbot_configs:
-            await session.execute(
-                text(
-                    """
-                    INSERT INTO chatbot_config
-                    (config_key, config_value,
-                     config_type, description)
-                    VALUES (:key, :value, :type, :desc)
-                    """
-                ),
-                cfg,
-            )
-
         await session.commit()
         print("Database seeded with default data successfully")
 
@@ -370,9 +313,9 @@ async def _seed_prompt_templates(session, admin_id):
             """
             INSERT INTO prompt_template
             (bot_type, template_name, template_text,
-             version, updated_by)
+             version, updated_by, created_at, updated_at)
             VALUES (:bot_type, :name, :text,
-                    :version, :updated_by)
+                    :version, :updated_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """
         ),
         {
@@ -410,9 +353,9 @@ async def _seed_prompt_templates(session, admin_id):
             """
             INSERT INTO prompt_template
             (bot_type, template_name, template_text,
-             version, updated_by)
+             version, updated_by, created_at, updated_at)
             VALUES (:bot_type, :name, :text,
-                    :version, :updated_by)
+                    :version, :updated_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """
         ),
         {

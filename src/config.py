@@ -27,7 +27,8 @@ class Config(BaseSettings):
     DIALOGUE_ANALYSIS_MODEL: str = "gpt-5.2"
 
     # ===== GPT-5 Reasoning Effort Configuration =====
-    # Valid values: minimal, low, medium, high
+    # GPT-5.6: none, low, medium, high, xhigh, max.
+    # Earlier models may also support minimal; supported values vary by model.
     ANALYSIS_REASONING: str = "high"
     STUDENT_REASONING: str = "medium"
     TUTOR_REASONING: str = "low"
@@ -134,9 +135,11 @@ class Config(BaseSettings):
     @classmethod
     def validate_reasoning(cls, v, info):
         """Validate reasoning effort values."""
-        # GPT-5: minimal, low, medium, high
-        # GPT-5.1: none, low, medium, high
-        valid_reasoning = ["none", "minimal", "low", "medium", "high"]
+        # Union of API values; each model supports a subset.
+        # https://developers.openai.com/api/docs/guides/reasoning
+        valid_reasoning = [
+            "none", "minimal", "low", "medium", "high", "xhigh", "max"
+        ]
         if v not in valid_reasoning:
             raise ValueError(
                 f"{info.field_name} must be one of {valid_reasoning}, "

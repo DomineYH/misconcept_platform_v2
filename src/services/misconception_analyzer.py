@@ -8,7 +8,7 @@ from openai import APIConnectionError, APIError, RateLimitError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import config
-from src.services.base import OpenAIBaseService, openai_retry
+from src.services.base import OpenAIBaseService
 from src.utils.openai_helpers import extract_response_text
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,8 @@ class MisconceptionAnalyzer(OpenAIBaseService):
         db_session: AsyncSession,
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
+        *,
+        client=None,
     ):
         """Initialize MisconceptionAnalyzer.
 
@@ -31,14 +33,13 @@ class MisconceptionAnalyzer(OpenAIBaseService):
             reasoning_effort: Override reasoning effort (minimal, low,
                 medium, high)
         """
-        super().__init__()
+        super().__init__(client=client)
         self.db_session = db_session
         self.model = model or config.ANALYSIS_MODEL
         self.reasoning_effort = (
             reasoning_effort or config.ANALYSIS_REASONING
         )
 
-    @openai_retry
     async def analyze_student_response(
         self,
         student_message: str,
@@ -84,7 +85,7 @@ class MisconceptionAnalyzer(OpenAIBaseService):
             # OpenAI Responses API 호출 (GPT-5 with reasoning)
             # Note: GPT-5 reasoning consumes tokens from max_output_tokens
             # 500 = ~200 reasoning + ~300 actual output
-            response = await self.client.responses.create(
+            response = await self.create_response(
                 model=self.model,
                 input=input_messages,
                 max_output_tokens=500,

@@ -23,19 +23,26 @@ class SessionManager:
 
     CONTEXT_WINDOW_TURNS: int = 20  # Max messages in conversation history
 
-    def __init__(self, db_session: AsyncSession, session_id: int):
+    def __init__(self, db_session: AsyncSession, session_id: int, *, client=None):
         """Initialize SessionManager for specific session.
 
         Args:
             db_session: Database session
             session_id: Dialogue session ID
         """
+        self.client = client
         self.db = db_session
         self.session_id = session_id
         self.student_bot = None
         self.tutor_bot = None  # Initialized conditionally in initialize()
         self.misconception_analyzer = None  # Initialized in initialize()
         self.scenario = None  # Store scenario for analyzer
+
+    async def close(self):
+        """Request owner closes all clients, including partial initialization."""
+        for service in (self.student_bot, self.tutor_bot, self.misconception_analyzer):
+            if service is not None:
+                await service.close()
 
     async def initialize(self) -> None:
         """Load session and initialize StudentBot with scenario."""
@@ -60,6 +67,7 @@ class SessionManager:
 
         # Initialize StudentBot with scenario context and configuration
         self.student_bot = StudentBot(
+            client=self.client,
             scenario_prompt=scenario.prompt,
             scenario_title=scenario.title,
             student_profile=scenario.student_profile or "Grade 5 student",
@@ -73,6 +81,7 @@ class SessionManager:
         # Conditionally initialize TutorBot based on scenario setting
         if bot_config["tutor_enabled"] and scenario.tutor_template_id:
             self.tutor_bot = TutorBot(
+                client=self.client,
                 db_session=self.db,
                 template_id=scenario.tutor_template_id,
                 scenario_title=scenario.title,
@@ -93,6 +102,7 @@ class SessionManager:
 
         # Initialize MisconceptionAnalyzer for tracking student responses
         self.misconception_analyzer = MisconceptionAnalyzer(
+            client=self.client,
             db_session=self.db,
             model=config.ANALYSIS_MODEL,  # Use analysis model
             reasoning_effort="low",  # Low effort for consistent analysis

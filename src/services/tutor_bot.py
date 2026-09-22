@@ -9,7 +9,7 @@ from openai import APIConnectionError, APIError, RateLimitError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import config
-from src.services.base import OpenAIBaseService, openai_retry
+from src.services.base import OpenAIBaseService
 from src.services.dialogue_analysis import (
     SENSITIVITY_PRESETS,
     check_low_leverage_patterns,
@@ -40,6 +40,8 @@ class TutorBot(OpenAIBaseService):
         initial_intervention_count: int = 0,
         initial_question_count: int = 0,
         sensitivity: str = "medium",
+        *,
+        client=None,
     ):
         """Initialize TutorBot with scenario context and optional config.
 
@@ -57,7 +59,7 @@ class TutorBot(OpenAIBaseService):
             initial_question_count: Restored count from prior session
             sensitivity: Tutor sensitivity level (high/medium/low)
         """
-        super().__init__()
+        super().__init__(client=client)
         self.db_session = db_session
         self.template_id = template_id
         self.model = model or config.ANALYSIS_MODEL
@@ -98,7 +100,6 @@ class TutorBot(OpenAIBaseService):
 
         return False
 
-    @openai_retry
     async def analyze_conversation_with_llm(
         self, pairs: list[tuple[str, str]]
     ) -> dict:
@@ -129,7 +130,7 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
 "reason": "판단 근거"}}"""
 
         try:
-            response = await self.client.responses.create(
+            response = await self.create_response(
                 model=config.DIALOGUE_ANALYSIS_MODEL,
                 input=[{"role": "user", "content": analysis_prompt}],
                 max_output_tokens=200,
@@ -228,7 +229,6 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
 
         return False, None
 
-    @openai_retry
     async def generate_feedback(
         self,
         teacher_question: str,
@@ -277,7 +277,7 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
                 },
             ]
 
-            response = await self.client.responses.create(
+            response = await self.create_response(
                 model=self.model,
                 input=input_messages,
                 max_output_tokens=self.max_tokens,

@@ -110,7 +110,10 @@ async def send_message(
     student_name = scenario.student_name if scenario else None
 
     manager = SessionManager(db, session_id)
-    new_messages = await manager.process_teacher_message(content)
+    try:
+        new_messages = await manager.process_teacher_message(content)
+    finally:
+        await manager.close()
 
     rendered_messages = []
     for message in new_messages:

@@ -9,13 +9,8 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from openai import APIConnectionError, APIError, AsyncOpenAI, RateLimitError
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from openai import APIConnectionError, APIError, RateLimitError
+from src.services.base import OpenAIBaseService
 
 from src.config import config
 from src.models.analysis_framework import AnalysisFramework
@@ -26,7 +21,7 @@ from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 logger = logging.getLogger(__name__)
 
 
-class Analyzer:
+class Analyzer(OpenAIBaseService):
     """
     Question classification service using OpenAI Responses API.
 
@@ -38,9 +33,9 @@ class Analyzer:
         temperature: Deprecated (Responses API uses fixed temperature)
     """
 
-    def __init__(self):
+    def __init__(self, *, client=None):
         """Initialize analyzer with OpenAI client."""
-        self.client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+        super().__init__(client=client)
         self.model = config.ANALYSIS_MODEL or "gpt-5"
         self.reasoning_effort = config.ANALYSIS_REASONING
         # Load cached prompt templates (T111 optimization)
@@ -73,13 +68,6 @@ class Analyzer:
             "improved_sentence": None,
         }
 
-    @retry(
-        retry=retry_if_exception_type(
-            (APIConnectionError, APIError, RateLimitError)
-        ),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-    )
     async def classify_question(
         self,
         question: str,
@@ -158,7 +146,7 @@ class Analyzer:
             # Build input (user role)
             input_messages = [{"role": "user", "content": prompt}]
 
-            response = await self.client.responses.create(
+            response = await self.create_response(
                 model=self.model,
                 input=input_messages,
                 max_output_tokens=1500,  # Increased for structured reasoning
@@ -261,13 +249,6 @@ class Analyzer:
                 )
         return results
 
-    @retry(
-        retry=retry_if_exception_type(
-            (APIConnectionError, APIError, RateLimitError)
-        ),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-    )
     async def detect_greetings(
         self, messages: list[str]
     ) -> list[Dict[str, Any]]:
@@ -287,6 +268,7 @@ class Analyzer:
                  "reason": "Conceptual question"}
             ]
         """
+        self.last_greeting_usage = None
         if not messages:
             self.last_greeting_usage = None
             return []
@@ -298,7 +280,7 @@ class Analyzer:
         prompt = self.greeting_template.format(messages=formatted_messages)
 
         try:
-            response = await self.client.responses.create(
+            response = await self.create_response(
                 model=self.model,
                 input=[{"role": "user", "content": prompt}],
                 max_output_tokens=500,

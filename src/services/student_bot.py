@@ -7,7 +7,7 @@ from openai import APIConnectionError, APIError, RateLimitError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import config
-from src.services.base import OpenAIBaseService, openai_retry
+from src.services.base import OpenAIBaseService
 from src.services.prompt_manager import PromptManager
 from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 
@@ -34,6 +34,8 @@ class StudentBot(OpenAIBaseService):
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
         max_tokens: Optional[int] = None,
+        *,
+        client=None,
     ):
         """Initialize StudentBot with scenario context and optional config.
 
@@ -48,7 +50,7 @@ class StudentBot(OpenAIBaseService):
                 medium, high)
             max_tokens: Override default max tokens (50-500)
         """
-        super().__init__()
+        super().__init__(client=client)
         self.db_session = db_session
         self.template_id = template_id
         self.model = model or config.CHAT_MODEL
@@ -60,7 +62,6 @@ class StudentBot(OpenAIBaseService):
         self.scenario_title = scenario_title
         self.student_profile = student_profile
 
-    @openai_retry
     async def generate_response(
         self, teacher_message: str, conversation_history: list[dict]
     ) -> tuple[str, Optional[dict]]:
@@ -114,7 +115,7 @@ class StudentBot(OpenAIBaseService):
             input_messages.append({"role": "user", "content": teacher_message})
 
             # OpenAI Responses API 호출 (GPT-5 with reasoning)
-            response = await self.client.responses.create(
+            response = await self.create_response(
                 model=self.model,
                 input=input_messages,
                 max_output_tokens=self.max_tokens,

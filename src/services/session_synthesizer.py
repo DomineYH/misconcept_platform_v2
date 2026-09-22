@@ -13,13 +13,8 @@ import json
 import logging
 from typing import Any, Optional
 
-from openai import APIConnectionError, APIError, AsyncOpenAI, RateLimitError
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from openai import APIConnectionError, APIError, RateLimitError
+from src.services.base import OpenAIBaseService
 
 from src.config import config
 from src.utils.cache import load_prompt_template
@@ -46,7 +41,7 @@ def prompt_hash(template_content: str) -> str:
     return hashlib.sha256(template_content.encode("utf-8")).hexdigest()
 
 
-class SessionSynthesizer:
+class SessionSynthesizer(OpenAIBaseService):
     """Synthesize structured coaching feedback for a session.
 
     Usage::
@@ -62,21 +57,14 @@ class SessionSynthesizer:
         )
     """
 
-    def __init__(self) -> None:
-        self.client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+    def __init__(self, *, client=None) -> None:
+        super().__init__(client=client)
         self.model = config.ANALYSIS_MODEL or "gpt-5"
         self.reasoning_effort = config.ANALYSIS_REASONING
         self._template = load_prompt_template("session_synthesis_prompt.txt")
         self._hash = prompt_hash(self._template)
         self.last_usage: dict[str, int] | None = None
 
-    @retry(
-        retry=retry_if_exception_type(
-            (APIConnectionError, APIError, RateLimitError)
-        ),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-    )
     async def synthesize(
         self,
         messages: list[dict[str, Any]],
@@ -119,8 +107,9 @@ class SessionSynthesizer:
             dialogue_transcript=dialogue,
         )
 
+        self.last_usage = None
         try:
-            response = await self.client.responses.create(
+            response = await self.create_response(
                 model=self.model,
                 input=[{"role": "user", "content": prompt}],
                 max_output_tokens=2500,
@@ -130,7 +119,6 @@ class SessionSynthesizer:
             content = extract_response_text(response)
             payload = json.loads(content)
         except (json.JSONDecodeError, ValueError) as e:
-            self.last_usage = None
             logger.error(
                 "Synthesis JSON parse failed: %s",
                 e,

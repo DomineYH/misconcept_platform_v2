@@ -137,3 +137,28 @@ late duplicate poll, restored input after HTTP 500, end → failed analysis →
 retry → modal, Escape/button close, ended reload, auth expiry during POST and
 polling, draft restoration/login navigation, CSRF on HTMX/fetch. Expected
 500/401 responses are injected; uncaught page errors must be zero.
+
+## #7: LLM policy and ownership
+
+The locked OpenAI Python SDK is 2.7.1. Its installed _constants.py defaults to
+two SDK retries; _base_client.py retries connection failures and HTTP
+408/409/429/5xx. Application-created clients now set max_retries=0. The one
+shared create_response call retries those transient errors up to three total
+attempts (2s/4s backoff), then re-raises the original exception. HTTP 400/401/403/
+422, local input errors, and response parsing/validation errors do not retry.
+Retries wrap only HTTP, so tutor state and prompt work are not repeated.
+Existing greeting/tutor fallback handling runs after attempts are exhausted.
+
+Services accept client= for tests; injected real SDK clients must also set
+max_retries=0 and are closed by the caller. Services own default-created clients
+and expose async context management. The analysis pipeline uses AsyncExitStack
+for its analyzer/synthesizer, including exceptions; the message route closes
+all SessionManager bots in finally, including partial initialization/failure.
+Model names, reasoning efforts, token limits and prompt files are unchanged.
+Usage from a received synthesis response is retained even when its JSON fails.
+The existing response-parser compatibility branches remain intact.
+
+Tests use fake responses and the real SDK over httpx.MockTransport, without
+API credentials or outbound network. They verify response contracts, model/
+reasoning/token settings, transient/permanent attempt counts, tutor side effects,
+owned/injected lifetimes, and greeting/classification/synthesis usage logs.

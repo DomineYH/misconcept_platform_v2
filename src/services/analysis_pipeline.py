@@ -70,6 +70,8 @@ async def analyze_session(
     all_messages = all_messages_result.scalars().all()
     teacher_messages = [m for m in all_messages if m.role == "teacher"]
 
+    await db.commit()  # Inputs stay loaded (expire_on_commit=False); no lock across LLM.
+
     # Run all LLM calls first (no DB writes)
     (
         distribution,
@@ -349,7 +351,7 @@ async def _filter_greetings(
 
 async def handle_duplicate_session_state(
     session_id: int,
-    framework: AnalysisFramework,
+    framework: AnalysisFramework | list[str],
     db: AsyncSession,
     error: IntegrityError,
 ) -> dict[str, Any]:
@@ -359,7 +361,7 @@ async def handle_duplicate_session_state(
     on IntegrityError. Returns unified response shape.
     """
     # Capture label names before rollback expires ORM attributes.
-    label_names = list(framework.label_names)
+    label_names = list(framework) if isinstance(framework, list) else list(framework.label_names)
     await db.rollback()
     logger.warning(
         f"Session {session_id}: duplicate session state detected: {error}"
@@ -387,13 +389,13 @@ handle_duplicate_summary = handle_duplicate_session_state
 
 async def handle_analysis_failure(
     session_id: int,
-    framework: AnalysisFramework,
+    framework: AnalysisFramework | list[str],
     db: AsyncSession,
     error: Exception,
 ) -> dict[str, Any]:
     """Handle analysis pipeline failure with fallback."""
     # Capture label names before rollback expires ORM attributes
-    label_names = list(framework.label_names)
+    label_names = list(framework) if isinstance(framework, list) else list(framework.label_names)
     await db.rollback()
     logger.error(
         f"Session {session_id}: analysis pipeline failed: {error}",

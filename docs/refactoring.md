@@ -54,3 +54,22 @@ rows and history together. Retain the untouched backup; to restore, stop all
 writers, use the backup API from backup into the destination (do not replace
 just a live DB file while WAL/SHM sidecars exist), then restart the old code.
 The refactoring run does not upgrade the real database.
+
+## #3: transaction ownership
+
+- User close/end and admin end commit ended_at through mark_session_ended.
+  Analysis failure never reopens a session.
+- Message processing commits the teacher row before StudentBot for polling;
+  all remaining bot/usage writes occur after external calls and are committed
+  by the request dependency. A bot failure rolls those back, retaining teacher.
+- Initial analysis and regeneration load inputs, commit the read transaction,
+  call LLMs, then persist the result in one short commit. Regeneration reserves
+  SQLite's writer only for delete/insert replacement, never during LLM waits.
+- Request dependency owns final commit/rollback for ordinary CRUD and handles
+  propagated persistence errors. The admin end route catches analysis errors,
+  so it explicitly rolls back and eagerly reloads every template relationship.
+  User analysis captures label names before a failed flush can expire ORM state.
+
+The file-backed SQLite WAL regression performs an independent write during the
+admin analysis wait, verifies ended_at is already visible, and injects both
+LLM and constraint errors. Partial analyses and failed replacements roll back.

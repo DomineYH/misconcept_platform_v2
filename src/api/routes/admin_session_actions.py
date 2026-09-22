@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
+from src.api.routes.session_helpers import mark_session_ended
 from src.config import config
 from src.models import (
     AnalysisFramework,
@@ -238,8 +239,7 @@ async def end_session(
             detail="Session already ended",
         )
 
-    session.ended_at = datetime.now(timezone.utc)
-    await db.flush()
+    await mark_session_ended(session, db)
 
     # Trigger analysis
     try:
@@ -263,10 +263,13 @@ async def end_session(
                     db,
                 )
     except Exception as e:
+        await db.rollback()
         logger.warning(f"Analysis failed for session {session_id}: {e}")
 
-    # Reload with summary
-    await db.refresh(session, ["summary"])
+    # Rollback expires scalar and relationship attributes; reload all render inputs.
+    session = (await db.execute(
+        query.options(joinedload(Session.summary)).execution_options(populate_existing=True)
+    )).scalar_one()
 
     return templates.TemplateResponse(
         "partials/session_row.html",
@@ -447,6 +450,8 @@ async def regenerate_analysis(
     )
     all_messages = all_messages_result.scalars().all()
     teacher_messages = [m for m in all_messages if m.role == "teacher"]
+
+    await db.commit()  # Release the read transaction before external calls.
 
     # Run LLM pipeline (no DB writes) — synthesize FIRST
     try:

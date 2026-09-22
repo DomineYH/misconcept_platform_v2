@@ -107,16 +107,17 @@ async def analyze_session_endpoint(
     if not framework:
         raise HTTPException(status_code=404, detail="Framework not found")
 
+    label_names = list(framework.label_names)
     try:
         return await analyze_session(
             session_id, session, scenario, framework, db
         )
     except IntegrityError as e:
         return await handle_duplicate_session_state(
-            session_id, framework, db, e
+            session_id, label_names, db, e
         )
     except Exception as e:
-        return await handle_analysis_failure(session_id, framework, db, e)
+        return await handle_analysis_failure(session_id, label_names, db, e)
 
 
 @router.get("/sessions/{session_id}/analysis")

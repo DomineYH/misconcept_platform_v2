@@ -10,8 +10,9 @@
 비밀 없는 JSON 객체. A7은 `models_available: true`, `probes_available: true`,
 `probe_roles: ["student", "mentor", "analysis"]`,
 DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 없고 역할
-기본값은 모두 null이다. OpenAI만 `catalog.available: true`이며 나머지 목록과
-그 제공자의 역할 시험 버튼은 비활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
+기본값은 모두 null이다. A8/A9에서 OpenAI·Anthropic·Google 모두
+`catalog.available: true`이며 역할 시험은 해당 모델의 기능 정의와 현재
+연결 상태에 따라 활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
 연결 API 상태 조회는 `Cache-Control: no-store`이며 관리자 인증이 없으면
 401, 교사면 403이다. 마스터 키 오류도 조회를 막지 않는다.
 
@@ -36,7 +37,8 @@ DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 �
   반환한다. 성공을 클라이언트가 목록 등록에서 추측하지 않는다.
   `probe_budgets[role]`은 min(역할 상한, 저장된 출력 상한, 모델 기능 상한)이다.
   역할 상한은 student=1024, mentor=1500, analysis=2500이다.
-  기능 정의/옵션이 유효하지 않으면 빈 객체이며 시험 버튼도 비활성화한다.
+  기능 정의가 없으면 빈 객체이며 시험 버튼도 비활성화한다. 해당 역할의
+  상한에서 옵션 조합이 유효하지 않으면 그 역할의 예산만 생략한다.
   후속 `probe_budgets[role]`도 해당 역할 계약과 모델 기본값/기능 한도에
   맞춘 호출별 서버 계산 값이어야 한다.
 - `settings`: `settings_version`, `defaults`, `limits`, `timeouts`.
@@ -344,8 +346,8 @@ classification/synthesis만 최대 1회**다. 일시 연결 오류/408/409/일�
 1초다. 남은 시간에 대기가 들어가지 않으면 재시도하지 않는다. backoff 때 슬롯을
 반환하고 현재 한도/연결/검증을 다시 승인하며 슬롯 재획득 거부는 대기하지 않는다.
 
-`execute_call`의 이벤트를 `aclosing`으로 소비한다. 현재 SDK dispatch는 OpenAI만 지원하며 다른 제공자의 키를 OpenAI로 전송하지
-않고 원장/SDK 시작 전에 차단한다(A8/A9가 별도 어댑터를 연결한다). 일반 호출은 정확한
+`execute_call`의 이벤트를 `aclosing`으로 소비한다. SDK dispatch는 제공자별 어댑터를 사용한다. OpenAI·Anthropic·Google을 지원하며
+미지원 제공자는 원장/SDK 시작 전에 차단한다. 일반 호출은 정확한
 model_config_id/config_version/역할 성공으로 승인하고 요청 모델·제공자·역할을
 승인 정보와 대조한다. 종료 이벤트 뒤에는 원장 최종화가 끝나 있다. 동일 logical
 invocation의 재시도 행은 invocation_id를 공유하고 attempt_no=1,2를 가진다.
@@ -427,6 +429,87 @@ SDK 생성 전에 configuration_unavailable로 거부하며 JSON 프롬프트로
 refused/output_limit은 제공자 종료 상태에서 구분하며 usage는 실패해도 보존한다.
 상태의 역할 계약 버전은 ROLE_CONTRACT_VERSIONS에서 읽는다. 새 교육 동작이나
 출력 계약을 도입하는 후속 티켓은 버전을 올려 기존 증거를 stale로 만들어야 한다.
+
+
+## A8 Claude 연결·시험 계약
+
+`anthropic==1.12.1`의 HTTPX2 전송을 사용한다. `call_execution.sdk_events`에서
+요청 제공자에 따라 `anthropic_catalog` 또는 `anthropic_generation`을 선택하며
+기존 admission/deadline/취소/각 시도 원장을 공유한다. SDK 재시도는 0회다.
+읽기 화면과 키·모델 저장은 외부 호출을 만들지 않는다. 제공자 키는 해당 SDK에만
+전달하며, 클라이언트는 호출마다 생성하고 종료한다.
+
+Models API의 모든 페이지를 읽은 성공 목록만 기존 24시간 캐시에 반영한다.
+허용 필드는 model_id/display_name/created_at/lifecycle/max_input_tokens/max_tokens,
+capabilities의 structured_outputs.supported, thinking.supported/types의
+adaptive/disabled/enabled.supported, effort.supported/low/medium/high/max.supported다.
+누락 필드는 unknown이며 SDK에 추가된 임의 필드는 공개하지 않는다. 페이지·타입·
+중복 ID·자격 증명 포함 메타데이터 오류는 실패하고 이전 캐시를 보존한다.
+늦은 이전 키 결과는 현재 캐시를 덮어쓰지 않는다.
+[Models API 근거](https://platform.claude.com/docs/en/api/models/list).
+
+기능 정의 `anthropic-2026-10-09-v1`은 정확 ID `claude-sonnet-4-6` 하나에만
+적용한다. text/stream/structured, 입력 1,000,000·출력 128,000 토큰이다.
+목록의 명시적 미지원·더 작은 한도·retired가 정의와 충돌하면 시험과 새 사용을
+차단한다. 누락 메타데이터는 정의를 부정하지 않는다. 다른 ID·접두어·추측한
+스냅샷은 기능 정의 필요 상태다.
+[모델 근거](https://platform.claude.com/docs/en/models/sonnet-4-6/overview).
+
+저장 옵션은 max_output_tokens(1~128000), temperature(0~1),
+thinking.type(disabled/adaptive/enabled), enabled의 budget_tokens(1024 이상,
+최대 출력보다 작음), output_config.effort(low/medium/high/max)만 허용한다.
+thinking 사용 시 temperature는 1 또는 미지정이다. 수동 enabled는 공식 지원이지만
+deprecated 방식이다. max_output_tokens만 Messages의 max_tokens로 전달하며
+thinking과 effort는 각각의 네이티브 값으로 유지한다. 모든 옵션 조합은 저장과
+실행 전 검사한다. 시험 상한(student 1024/mentor 1500/analysis 2500)을 적용한
+뒤에도 조합을 다시 검사한다. 따라서 수동 thinking 예산 1024에서는 학생 시험을
+차단하지만 멘토·분석의 유효 시험 상한은 표시한다. 공유 화면의 fields,
+probe_budgets, capabilities.metadata_conflict를 그대로 사용한다.
+[Messages](https://platform.claude.com/docs/en/api/messages/create),
+[thinking 조합](https://platform.claude.com/docs/en/claude_api_primer),
+[수동 예산](https://platform.claude.com/cookbook/extended-thinking-extended-thinking),
+[effort](https://platform.claude.com/docs/en/build-with-claude/effort).
+
+구조화 호출은 output_config.format={type:json_schema,schema:...}를 사용한다.
+기존 닫힌 Pydantic 스키마에 SDK transform_schema를 적용하고 지원하지 않는 수치·
+길이 제약은 서버 검증으로 유지한다. 재귀·외부/미해결 참조·복합 enum은 SDK 생성
+전에 차단한다. 서버의 기존 s1-v1 타입·레이블·ID·역할·인용 검증을 그대로 실행한다.
+실패 JSON이나 thinking/signature는 공개 상태·본문·원장에 저장하지 않는다.
+[구조화 출력 근거](https://platform.claude.com/docs/en/build-with-claude/structured-outputs).
+
+스트림은 text만 공개하고 첫 비어 있지 않은 text에서 TTFT를 기록한다. thinking,
+redacted_thinking, signature는 본문·TTFT가 아니다. message_delta.usage는 누적값을
+대체하며 합산하지 않는다. message_stop과 정상 end_turn/stop_sequence가 있어야
+성공한다. refusal, max_tokens, model_context_window_exceeded는 각각
+refused/output_limit/context_limit이며 pause_turn/tool_use/예상 밖 종료·EOF는 실패다.
+HTTP 200 SSE error도 실패이고 관측 사용량은 보존한다.
+[스트리밍](https://platform.claude.com/docs/en/build-with-claude/streaming),
+[종료 사유](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons),
+[입력 초과](https://platform.claude.com/docs/en/build-with-claude/context-windows).
+
+HTTP authentication/permission/model_unavailable/rate_limited/transient와 timeout을
+안전한 코드로 변환한다. billing_error/402 및 공식 spend-cap details.error_code=
+enforced_spend_limit_reached, 명시적 사용 한도 초과는 quota로 분류하여 재시도하지
+않는다. 오류 본문·SDK 예외 문자열을 공개·로그하지 않는다.
+[오류](https://platform.claude.com/docs/en/api/errors),
+[지출 한도](https://platform.claude.com/docs/en/api/rate-limits).
+
+입력은 관측된 input_tokens(uncached)+cache_read_input_tokens+
+cache_creation_input_tokens 세 값이 모두 있어야 합산한다. output_tokens는 thinking을
+이미 포함한 과금 총량이다. thinking_tokens는 부분값이며 다시 더하지 않는다.
+미관측 값은 NULL, 관측 0은 0이다. raw 허용목록은 이 네 네이티브 수치와
+thinking_tokens, ephemeral_5m_input_tokens/ephemeral_1h_input_tokens, 알려진
+service_tier(standard/priority/batch), inference_geo(global/us)뿐이다. usage_complete는
+입력 세 구성·출력·thinking 부분값을 모두 확인한 경우다.
+
+정확 Sonnet 4.6·standard·global과 모든 과금 구성값이 확인된 경우만 비용을
+기록한다. 2026-10-09 공식 USD/백만 토큰 단가는 uncached 3, cache read 0.30,
+5분 write 3.75, 1시간 write 6, inclusive output 15다. 쓰기가 있으면 TTL별 구성 합이
+write와 같아야 한다. 지역/등급/TTL/모델/필수 수치가 미확인이면 비용·단가 날짜·
+근거는 NULL이다. 숫자 fixture(uncached 10/read 3/write 5분 1+1시간 1/output 8,
+그중 thinking 5)는 입력 15, 총량 23, USD 0.00016065다. 과거 행을 재계산하지 않는다.
+[공식 단가](https://platform.claude.com/docs/en/about-claude/pricing).
+위 모든 근거 확인일은 2026-10-09다. 대시보드 집계는 A10 범위다.
 
 ## A13 mentor lesson execution contract
 

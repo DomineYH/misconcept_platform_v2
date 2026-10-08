@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import httpx2 as httpx
 import pytest
 from lesson_fixtures import install_connection
-from openai import APIConnectionError, AsyncOpenAI
+from openai import AsyncOpenAI
 from tenacity import wait_none
 from test_analysis_invocations import analysis_transport
 from test_student_probe import response_body

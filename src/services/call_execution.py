@@ -17,12 +17,25 @@ from src.services.invocation_types import CallEvent, InvocationError
 
 
 async def sdk_events(permit, request, kind, deadline):
-    if permit.provider == "google":
-        from src.services import google_catalog as catalog
-        from src.services import google_generation as generation
-    else:
-        catalog, generation = openai_catalog, openai_generation
+    generation = openai_generation
+    if permit.provider == "anthropic" and kind != "catalog":
+        from src.services import anthropic_generation
+
+        generation = anthropic_generation
+    elif permit.provider == "google" and kind != "catalog":
+        from src.services import google_generation
+
+        generation = google_generation
     if kind == "catalog":
+        catalog = openai_catalog
+        if permit.provider == "anthropic":
+            from src.services import anthropic_catalog
+
+            catalog = anthropic_catalog
+        elif permit.provider == "google":
+            from src.services import google_catalog
+
+            catalog = google_catalog
         try:
             models = await catalog.list_models(
                 permit.secret,
@@ -31,7 +44,7 @@ async def sdk_events(permit, request, kind, deadline):
                 deadline=deadline,
             )
             yield CallEvent("completed", models=models)
-        except openai_catalog.CatalogError as error:
+        except (openai_catalog.CatalogError, InvocationError) as error:
             yield CallEvent("error", error_code=error.code)
     elif kind == "stream":
         async with aclosing(
@@ -104,7 +117,7 @@ async def execute_call(
     wait_ms = None
     try:
         if (
-            permit.provider not in ("openai", "google")
+            permit.provider not in ("openai", "anthropic", "google")
             or permit not in registered_calls
             or permit.task is not asyncio.current_task()
         ):

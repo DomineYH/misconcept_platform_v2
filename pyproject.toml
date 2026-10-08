@@ -26,6 +26,7 @@ dependencies = [
     "cryptography==50.0.2",
     "limits==5.6.0",
     "google-genai==2.29.0",
+    "anthropic==1.12.1",
 ]
 
 [project.optional-dependencies]

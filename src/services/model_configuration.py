@@ -45,16 +45,14 @@ def public_model(model, connection):
             model.model_id, connection
         )
     budgets = {}
-    if definition and connection.provider in ("openai", "google"):
-        try:
-            budgets = {
-                role: probe_options(connection.provider, model, role)[
+    if definition and connection.provider in ("openai", "anthropic", "google"):
+        for role in ROLES:
+            try:
+                budgets[role] = probe_options(connection.provider, model, role)[
                     "max_output_tokens"
                 ]
-                for role in ROLES
-            }
-        except ValueError:
-            pass
+            except ValueError:
+                pass
     return dict(
         id=model.id,
         provider=connection.provider,

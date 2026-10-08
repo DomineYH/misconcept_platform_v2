@@ -10,8 +10,9 @@
 비밀 없는 JSON 객체. A7은 `models_available: true`, `probes_available: true`,
 `probe_roles: ["student", "mentor", "analysis"]`,
 DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 없고 역할
-기본값은 모두 null이다. OpenAI만 `catalog.available: true`이며 나머지 목록과
-그 제공자의 역할 시험 버튼은 비활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
+기본값은 모두 null이다. A8/A9에서 OpenAI·Anthropic·Google 모두
+`catalog.available: true`이며 역할 시험은 해당 모델의 기능 정의와 현재
+연결 상태에 따라 활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
 연결 API 상태 조회는 `Cache-Control: no-store`이며 관리자 인증이 없으면
 401, 교사면 403이다. 마스터 키 오류도 조회를 막지 않는다.
 
@@ -36,7 +37,8 @@ DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 �
   반환한다. 성공을 클라이언트가 목록 등록에서 추측하지 않는다.
   `probe_budgets[role]`은 min(역할 상한, 저장된 출력 상한, 모델 기능 상한)이다.
   역할 상한은 student=1024, mentor=1500, analysis=2500이다.
-  기능 정의/옵션이 유효하지 않으면 빈 객체이며 시험 버튼도 비활성화한다.
+  기능 정의가 없으면 빈 객체이며 시험 버튼도 비활성화한다. 해당 역할의
+  상한에서 옵션 조합이 유효하지 않으면 그 역할의 예산만 생략한다.
   후속 `probe_budgets[role]`도 해당 역할 계약과 모델 기본값/기능 한도에
   맞춘 호출별 서버 계산 값이어야 한다.
 - `settings`: `settings_version`, `defaults`, `limits`, `timeouts`.

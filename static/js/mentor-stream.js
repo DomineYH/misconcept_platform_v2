@@ -180,6 +180,10 @@ export function mountMentorStream(ui) {
           ui.end();
         } else if (response.status === 401) {
           ui.expire();
+        } else if (response.status === 503 && data.code === 'configuration_unavailable') {
+          finish(turn, 'failed', '관리자에게 AI 연결과 멘토 모델 검증을 요청해주세요.', true);
+        } else if (response.status === 429 && data.code === 'call_limit_reached') {
+          finish(turn, 'failed', 'AI 호출이 많습니다. 잠시 후 멘토를 다시 요청해주세요.', true);
         } else {
           finish(turn, 'failed', '멘토 요청을 처리하지 못했습니다.', ![400, 401, 403, 404, 422].includes(response.status));
         }

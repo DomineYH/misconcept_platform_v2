@@ -62,9 +62,9 @@ async def test_sensitivity_cap_and_question_reset_keep_legacy_policy(
     ) == counts
 
 
-@pytest.mark.parametrize("semantic", ["intervene", "fallback"])
+@pytest.mark.parametrize("semantic", ["intervene", "fallback", "invalid_json"])
 async def test_semantic_judgment_and_fallback_preserve_policy(
-    data, client, mentor, semantic
+    data, client, mentor, semantic, caplog
 ):
     from types import SimpleNamespace
     from uuid import uuid4
@@ -90,6 +90,8 @@ async def test_semantic_judgment_and_fallback_preserve_policy(
                     request=httpx.Request("POST", "https://example.test"),
                     body=None,
                 )
+            if semantic == "invalid_json":
+                return SimpleNamespace(output_text="not JSON", usage=None)
             return SimpleNamespace(
                 output_text='{"is_repetitive":true,"reason":"Semantic loop"}',
                 usage=None,
@@ -103,8 +105,34 @@ async def test_semantic_judgment_and_fallback_preserve_policy(
     expected = "message" if semantic == "intervene" else "no_intervention"
     assert frames(result)[-1][1]["result_kind"] == expected
     assert len(calls) == (2 if semantic == "intervene" else 1)
-    assert "SECRET" not in result.text
+    assert "SECRET" not in result.text + caplog.text
     assert calls[0]["max_output_tokens"] == 200
+    from sqlalchemy import select
+
+    from src.models import ApiUsageLog
+
+    async with data.factory() as db:
+        attempts = (
+            await db.scalars(
+                select(ApiUsageLog)
+                .where(ApiUsageLog.role == "mentor")
+                .order_by(ApiUsageLog.id)
+            )
+        ).all()
+        assert [a.operation for a in attempts] == (
+            ["mentor_judgment", "mentor"]
+            if semantic == "intervene"
+            else ["mentor_judgment"]
+        )
+        assert attempts[0].status == (
+            "completed" if semantic == "intervene" else "failed"
+        )
+        if semantic == "invalid_json":
+            assert attempts[0].error_code == "invalid_json"
+        assert all(
+            a.input_tokens is None and a.attempt_no == 1 for a in attempts
+        )
+        assert all(a.run_id == frames(result)[0][1]["run_id"] for a in attempts)
 
 
 async def test_newer_accepted_mentor_makes_failed_old_turn_obsolete(

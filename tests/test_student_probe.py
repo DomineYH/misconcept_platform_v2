@@ -50,7 +50,9 @@ def sse(kind, **values):
     return f"event: {kind}\ndata: {json.dumps(dict(type=kind, **values))}\n\n".encode()
 
 
-def sdk_transport(monkeypatch, handler, *, budget=1024, key=KEY):
+def sdk_transport(
+    monkeypatch, handler, *, budget=1024, key=KEY, model="gpt-5-mini"
+):
     from src.services import openai_generation
 
     clients, calls = [], []
@@ -60,10 +62,7 @@ def sdk_transport(monkeypatch, handler, *, budget=1024, key=KEY):
         assert request.method == "POST" and request.url.path == "/v1/responses"
         body = json.loads(request.content)
         calls.append(body)
-        assert (
-            body["model"] == "gpt-5-mini"
-            and body["max_output_tokens"] == budget
-        )
+        assert body["model"] == model and body["max_output_tokens"] == budget
         assert body["store"] is False
         return await handler(request, body)
 

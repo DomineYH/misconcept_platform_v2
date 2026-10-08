@@ -14,6 +14,7 @@ export default async function checkMentorRecovery(page) {
     window.fetch = async (url, options = {}) => {
       if (url.endsWith('/turns/stream')) {
         const request = JSON.parse(options.body);
+        fixture.studentRequest = request;
         const common = {turn_id:'turn-1', run_id:'student-1', turn_index:1};
         const events = [
           ['run.accepted', {...common, seq:0, request_id:request.request_id,
@@ -21,13 +22,14 @@ export default async function checkMentorRecovery(page) {
           ['output.completed', {...common, seq:1, status:'completed',
             message:{id:11, role:'student', content:'Stored student'}}]
         ];
+        if (fixture.mode === 'studentRecovery') events.pop();
         return new Response(events.map(([type, data]) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`).join(''),
           {headers:{'Content-Type':'text/event-stream'}});
       }
       if (url.endsWith('/mentor/stream')) {
         const request = JSON.parse(options.body);
         fixture.posts.push(request);
-        if (fixture.mode === 'replay' || fixture.mode === 'resend') {
+        if (['replay', 'resend', 'studentRecovery'].includes(fixture.mode)) {
           return new Response(JSON.stringify(snapshot(request.request_id)),
             {headers:{'Content-Type':'application/json'}});
         }
@@ -40,6 +42,12 @@ export default async function checkMentorRecovery(page) {
       }
       if (url.startsWith('/runs/') || url.includes('/runs?request_id=')) {
         fixture.reads.push(url);
+        if (url === '/runs/student-1') return new Response(JSON.stringify({
+          run_id:'student-1', turn_id:'turn-1', turn_index:1, operation:'student',
+          request_id:fixture.studentRequest.request_id, teacher_message_id:10,
+          status:'completed', result_kind:'message',
+          message:{id:11, role:'student', content:'Stored student'}
+        }), {headers:{'Content-Type':'application/json'}});
         if (fixture.mode === 'missing') return new Response('{}', {status:404, headers:{'Content-Type':'application/json'}});
         return new Response(JSON.stringify(snapshot(fixture.posts[0]?.request_id || 'restored-key')),
           {headers:{'Content-Type':'application/json'}});
@@ -63,6 +71,13 @@ export default async function checkMentorRecovery(page) {
   await send();
   await slot.getByText('멘토 미개입', {exact:true}).waitFor({timeout:3000});
   assert(await page.evaluate(() => mentorRecovery.posts.length === 1 && mentorRecovery.reads.length === 0), 'JSON replay reuses the completed result');
+
+  await load('studentRecovery');
+  await send();
+  await slot.getByText('멘토 미개입', {exact:true}).waitFor({timeout:3000});
+  assert(await page.evaluate(() => mentorRecovery.posts.length === 1 &&
+    JSON.stringify(mentorRecovery.reads) === '["/runs/student-1"]'),
+    'a recovered durable student completion also starts its independent mentor');
 
   for (const mode of ['eof', 'lost']) {
     await load(mode);
@@ -112,6 +127,6 @@ export default async function checkMentorRecovery(page) {
   await page.waitForFunction(() => !document.querySelector('#teacher-input').disabled);
   assert(await page.evaluate(() => mentorRecovery.posts.length === 0), 'disabled mentor makes zero mentor/judgment requests');
   assert(errors.length === 0, `page errors: ${errors}`);
-  return {checks:['JSON replay', 'EOF and missed acceptance recovery', 'same-key explicit resend', 'nested busy error',
+  return {checks:['JSON replay', 'recovered student completion starts mentor', 'EOF and missed acceptance recovery', 'same-key explicit resend', 'nested busy error',
     'bounded recovery without composer lock', 'refresh recovery without generation', 'disabled mentor makes zero calls'], pageErrors:errors};
 }

@@ -4,12 +4,15 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
     String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,27 +32,31 @@ class ApiUsageLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     # Foreign key to session
-    session_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("session.id"), nullable=False
+    session_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("session.id"), nullable=True
     )
 
     # Bot identification
-    bot_type: Mapped[str] = mapped_column(
-        String(20), nullable=False
+    bot_type: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
     )  # 'student' or 'tutor'
 
     # Model information
-    model: Mapped[str] = mapped_column(
-        String(50), nullable=False
+    model: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
     )  # e.g., 'gpt-4o', 'gpt-4o-mini'
 
     # Token usage
-    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
-    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
-    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Cost tracking (USD)
-    estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    estimated_cost_usd: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
 
     # Timestamp (timezone-aware UTC)
     timestamp: Mapped[datetime] = mapped_column(
@@ -64,6 +71,34 @@ class ApiUsageLog(Base):
         String(32), nullable=True, default=None
     )
 
+    # Nullable metadata distinguishes legacy rows from invocation attempts.
+    invocation_id: Mapped[str | None] = mapped_column(Text)
+    request_id: Mapped[str | None] = mapped_column(Text)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("generation_run.id"))
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL")
+    )
+    attempt_no: Mapped[int | None] = mapped_column(Integer)
+    provider: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str | None] = mapped_column(Text)
+    probe_step: Mapped[str | None] = mapped_column(Text)
+    credential_revision: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str | None] = mapped_column(Text)
+    error_code: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    first_output_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    retry_wait_ms: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_read_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_write_tokens: Mapped[int | None] = mapped_column(Integer)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
+    raw_usage_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
+    pricing_as_of: Mapped[str | None] = mapped_column(Text)
+    pricing_source: Mapped[str | None] = mapped_column(Text)
+    usage_complete: Mapped[bool | None] = mapped_column()
+
     # Relationship to session
     session: Mapped["Session"] = relationship(  # noqa: F821
         "Session", back_populates="api_usage_logs"
@@ -71,6 +106,7 @@ class ApiUsageLog(Base):
 
     # Indexes for query optimization
     __table_args__ = (
+        UniqueConstraint("invocation_id", "attempt_no"),
         Index("ix_api_usage_session_id", "session_id"),
         Index("ix_api_usage_timestamp", "timestamp"),
         Index("ix_api_usage_bot_type", "bot_type"),
@@ -84,7 +120,7 @@ class ApiUsageLog(Base):
             f"bot={self.bot_type}, "
             f"model={self.model}, "
             f"tokens={self.total_tokens}, "
-            f"cost=${self.estimated_cost_usd:.6f})>"
+            f"cost={self.estimated_cost_usd})>"
         )
 
 

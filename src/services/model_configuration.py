@@ -8,6 +8,7 @@ from src.api.schemas.ai_settings import CallLimits, CallTimeouts
 from src.models.model_config import ROLES, AppSetting, ModelConfig
 from src.services.model_capabilities import capabilities, metadata_conflict
 from src.services.model_verification import effective_roles, model_available
+from src.services.student_probe_contract import probe_options
 
 
 def settings_values(setting):
@@ -43,6 +44,14 @@ def public_model(model, connection):
         definition["metadata_conflict"] = metadata_conflict(
             model.model_id, connection
         )
+    budgets = {}
+    if definition and connection.provider == "openai":
+        try:
+            budgets["student"] = probe_options(connection.provider, model)[
+                "max_output_tokens"
+            ]
+        except ValueError:
+            pass
     return dict(
         id=model.id,
         provider=connection.provider,
@@ -53,7 +62,7 @@ def public_model(model, connection):
         capabilities=definition,
         default_options=model.default_options_json,
         verification_state=effective_roles(model, connection),
-        probe_budgets={},
+        probe_budgets=budgets,
     )
 
 
@@ -95,6 +104,7 @@ async def configuration_state(db, connections):
             public_model(m, by_id[m.provider_connection_id]) for m in models
         ],
         models_available=True,
-        probes_available=False,
+        probes_available=True,
+        probe_roles=["student"],
         settings=settings,
     )

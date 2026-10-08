@@ -31,6 +31,30 @@ async def test_missing_db_connection_blocks_before_creating_a_turn(
     ).status_code == 204
 
 
+async def test_missing_student_template_rejects_without_a_turn_or_attempt(
+    data, client, student
+):
+    from sqlalchemy import select
+
+    from src.models import ApiUsageLog, GenerationRun, Message
+
+    data.scenario.student_template_id = None
+    await data.db.commit()
+    login(client, data.owner)
+    response = await client.post(
+        f"/sessions/{data.session.id}/turns/stream",
+        json={"request_id": str(uuid4()), "content": "Why?"},
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "configuration_unavailable"
+    assert "관리자" in response.json()["detail"]["message"]
+    assert "Prompt template" not in response.text
+    student.responses.create.assert_not_awaited()
+    async with data.factory() as db:
+        for model in (Message, GenerationRun, ApiUsageLog):
+            assert (await db.scalars(select(model))).all() == []
+
+
 async def test_student_uses_db_key_exact_options_and_one_linked_attempt(
     data, client, scenario_payload, monkeypatch
 ):

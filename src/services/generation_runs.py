@@ -170,6 +170,12 @@ async def _reserve_student(factory, session_id, user, request):
                     "max_output_tokens": config.STUDENT_MAX_TOKENS,
                 },
             )
+            try:
+                template = await PromptManager.get_template_text_by_id(
+                    db, scenario.student_template_id
+                )
+            except (ValueError, KeyError):
+                raise InvocationError("configuration_unavailable") from None
         except InvocationError:
             raise HTTPException(
                 503,
@@ -208,9 +214,6 @@ async def _reserve_student(factory, session_id, user, request):
             )
             db.add(teacher)
             await db.flush()
-        template = await PromptManager.get_template_text_by_id(
-            db, scenario.student_template_id
-        )
         history = await load_completed_turns(
             db, session_id, before_turn_index=teacher.turn_index
         )

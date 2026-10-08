@@ -186,6 +186,7 @@ async def load_analysis_response(
                 "role": m.role,
                 "content": m.content,
                 "created_at": m.created_at.isoformat(),
+                "turn_index": m.turn_index,
                 "label": label,
                 "grade": grade,
                 "level": level,

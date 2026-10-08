@@ -107,6 +107,35 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 .encode()
             )
+            if "admin_history" in query:
+                history = [
+                    dict(role=role, content=content, turn_index=turn_index)
+                    for role, content, turn_index in [
+                        ("tutor", "Legacy coaching", None),
+                        ("teacher", "First question", 1),
+                        ("student", "First answer", 1),
+                        ("teacher", "Second question", 2),
+                        ("student", "Second answer", 2),
+                        ("tutor", "Late coaching <script>unsafe()</script>", 1),
+                    ]
+                ]
+                modal = templates.get_template(
+                    "partials/analysis_modal.html"
+                ).render(
+                    is_admin=True,
+                    session_id=1,
+                    feedback="Preserved feedback",
+                    messages=history,
+                    questions=[],
+                    distribution={},
+                    framework_label_criteria={},
+                )
+                body = body.replace(
+                    b"</body>",
+                    b'<div id="history-fixture">'
+                    + modal.encode()
+                    + b"</div></body>",
+                )
             if "stream" in parse_qs(path.query, keep_blank_values=True):
                 script = (
                     b'<script type="module">import {mountStudentStream} '

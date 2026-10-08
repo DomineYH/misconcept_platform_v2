@@ -117,7 +117,7 @@ async def test_student_route_receives_n_completed_pairs_and_current_once(
         {"role": "user", "content": "Current question"},
     ]
     assert student.responses.create.await_count == 1
-    history = await client.get(f"/sessions/{data.session.id}/messages/updates")
+    history = await client.get(f"/scenarios/{data.scenario.id}")
     assert history.status_code == 200
     assert history.text.count("data-message-id=") == 183
     assert "Teacher 1" in history.text and "Student 1" in history.text

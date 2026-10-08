@@ -84,6 +84,7 @@ async def preview_bulk_upload(
 )
 async def register_bulk_users_endpoint(
     data: BulkRegisterRequest,
+    response: Response,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -93,6 +94,7 @@ async def register_bulk_users_endpoint(
     )
 
     result = await register_bulk_users(data.users, db)
+    response.headers["Cache-Control"] = "no-store"
     return result
 
 

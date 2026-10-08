@@ -3,12 +3,14 @@
 import csv
 import io
 import re
+import secrets
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.user import (
+    BulkCredential,
     BulkFailure,
     BulkPreviewResponse,
     BulkPreviewRow,
@@ -20,7 +22,6 @@ from src.models.user_group import UserGroup
 
 MAX_FILE_SIZE = 1024 * 1024  # 1MB
 MAX_ROWS = 100
-DEFAULT_PASSWORD = "00000000"
 REQUIRED_COLUMNS = {"username", "nickname"}
 USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
 COLUMN_ALIASES: dict[str, str] = {
@@ -225,6 +226,7 @@ async def register_bulk_users(
 
     success_count = 0
     failures: list[BulkFailure] = []
+    credentials: list[BulkCredential] = []
 
     for entry in users:
         if entry.username in existing:
@@ -278,14 +280,21 @@ async def register_bulk_users(
             role=entry.role,
             group_id=entry.group_id,
         )
-        new_user.set_password(DEFAULT_PASSWORD)
-        db.add(new_user)
-
+        initial_password = secrets.token_hex(16)
+        new_user.set_password(initial_password)
         try:
             async with db.begin_nested():
+                db.add(new_user)
                 await db.flush()
             existing.add(entry.username)
             success_count += 1
+            credentials.append(
+                BulkCredential(
+                    username=entry.username,
+                    nickname=entry.nickname,
+                    initial_password=initial_password,
+                )
+            )
         except IntegrityError:
             failures.append(
                 BulkFailure(
@@ -299,4 +308,5 @@ async def register_bulk_users(
         success_count=success_count,
         fail_count=len(failures),
         failures=failures,
+        credentials=credentials,
     )

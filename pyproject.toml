@@ -41,10 +41,13 @@ target-version = ['py311']
 
 [tool.ruff]
 line-length = 80
-select = ["E", "F", "I", "N", "W"]
-ignore = []
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+# Black owns line length (line-length 80).
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
 "tests/test_admin_*_host_compat.py" = ["E402"]
 "tests/test_admin_users_page.py" = ["E402"]
 "tests/test_scenario_*.py" = ["E402"]

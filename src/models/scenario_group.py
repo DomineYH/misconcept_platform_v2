@@ -1,6 +1,7 @@
 """ScenarioGroup join table for scenario-group access control."""
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     DateTime,
@@ -12,6 +13,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.connection import Base
+
+if TYPE_CHECKING:
+    from src.models.scenario import Scenario
+    from src.models.user_group import UserGroup
 
 
 class ScenarioGroup(Base):

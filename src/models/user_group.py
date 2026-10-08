@@ -1,11 +1,16 @@
 """UserGroup model for organizing users into groups."""
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.connection import Base
+
+if TYPE_CHECKING:
+    from src.models.scenario_group import ScenarioGroup
+    from src.models.user import User
 
 
 class UserGroup(Base):

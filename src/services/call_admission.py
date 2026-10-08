@@ -133,8 +133,10 @@ async def admit_call(
                     if probe is None:
                         raise InvocationError("configuration_unavailable")
                     model = await db.get(ModelConfig, probe.model_config_id)
-                    if model is None or not current_probe(
-                        probe, model, connection
+                    if (
+                        model is None
+                        or model.provider_connection_id != connection_id
+                        or not current_probe(probe, model, connection)
                     ):
                         raise InvocationError("configuration_unavailable")
                 elif model_config_id is not None:

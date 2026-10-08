@@ -8,7 +8,12 @@ from test_openai_invocations import install
 from test_student_probe import response_body
 
 from src.services import openai_generation
-from src.services.invocation_types import StructuredRequest, TextRequest
+from src.services.invocation_types import (
+    InvocationError,
+    StructuredRequest,
+    TextRequest,
+)
+from src.services.role_probe_contract import probe_steps
 
 
 class Judgment(BaseModel):
@@ -16,6 +21,11 @@ class Judgment(BaseModel):
     is_repetitive: bool
     is_inappropriate: bool
     reason: str
+
+
+def test_unknown_probe_role_fails_closed():
+    with pytest.raises(InvocationError, match="configuration_unavailable"):
+        probe_steps("openai", "gpt-5-mini", "greeting", {}, "request")
 
 
 def request(schema=Judgment):

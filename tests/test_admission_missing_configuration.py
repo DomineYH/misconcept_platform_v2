@@ -12,6 +12,7 @@ from test_student_probe import prepare, response_body, sdk_transport
 
 from src.services.call_admission import admit_call, readmit_call, recheck_call
 from src.services.invocation_types import InvocationError
+from src.services.probe_execution import stop_probes
 from src.services.probe_lifecycle import cancel_reserved_probe
 
 api = probe_api
@@ -77,3 +78,45 @@ async def test_readmission_keeps_probe_binding_and_checks_missing_row(
         if permit:
             permit.release()
         release.set()
+
+
+async def test_probe_admission_rejects_a_different_model_connection(
+    data, api, monkeypatch
+):
+    body = await prepare(api)
+    opened = asyncio.Event()
+
+    async def upstream(request, payload):
+        opened.set()
+        await asyncio.Event().wait()
+
+    clients, calls = sdk_transport(monkeypatch, upstream)
+    assert (await write(api, "models/1/probes", **body)).status_code == 202
+    permit = None
+    try:
+        async with asyncio.timeout(5):
+            await opened.wait()
+        async with data.engine.begin() as db:
+            probe_id = (
+                await db.execute(text("SELECT id FROM model_probe"))
+            ).scalar_one()
+            # Simulate inconsistent stored association while keeping all target versions equal.
+            await db.execute(
+                text(
+                    "UPDATE model_config SET provider_connection_id=2 WHERE id=1"
+                )
+            )
+        with pytest.raises(InvocationError, match="configuration_unavailable"):
+            permit = await admit_call(
+                data.factory,
+                connection_id=1,
+                owner_id=data.admin.id,
+                operation="probe",
+                role="student",
+                probe_id=probe_id,
+            )
+    finally:
+        if permit:
+            permit.release()
+        await stop_probes()
+    assert len(calls) == 1 and all(client.is_closed() for client in clients)

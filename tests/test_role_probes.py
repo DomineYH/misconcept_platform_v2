@@ -104,6 +104,11 @@ async def test_analysis_probe_validates_existing_classification_and_synthesis(
         schema = payload["text"]["format"]
         assert schema["type"] == "json_schema" and schema["strict"] is True
         assert schema["schema"]["additionalProperties"] is False
+        if len(calls) == 2:
+            assert json.loads(payload["input"][0]["content"]) == [
+                {"id": 100, "role": "teacher", "content": "Why?"},
+                {"id": 101, "role": "student", "content": "그냥 덧셈이니까요."},
+            ]
         return httpx2.Response(
             200,
             json=response_body(
@@ -153,6 +158,10 @@ async def test_analysis_probe_validates_existing_classification_and_synthesis(
         ("analysis", 1, "summary_empty", "empty_response"),
         ("analysis", 2, "id", "invalid_reference"),
         ("analysis", 2, "quote", "invalid_reference"),
+        ("analysis", 2, "quote_empty", "invalid_reference"),
+        ("analysis", 2, "quote_whitespace", "invalid_reference"),
+        ("analysis", 2, "student_quote_empty", "invalid_reference"),
+        ("analysis", 2, "student_quote_whitespace", "invalid_reference"),
         ("analysis", 2, "role", "invalid_reference"),
         ("analysis", 2, "improvement_id", "invalid_reference"),
         ("analysis", 2, "coaching_role", "invalid_reference"),
@@ -204,6 +213,14 @@ async def test_role_failure_stops_bundle_and_records_safe_error(
             value["strengths"][0]["message_id"] = 999
         if mode == "quote":
             value["strengths"][0]["quote"] = "PRIVATE-OUTPUT"
+        if mode in {"quote_empty", "quote_whitespace"}:
+            value["strengths"][0]["quote"] = (
+                "" if mode == "quote_empty" else " "
+            )
+        if mode in {"student_quote_empty", "student_quote_whitespace"}:
+            value["improvements"][0]["student_quote"] = (
+                "" if mode == "student_quote_empty" else " "
+            )
         if mode == "role":
             value["strengths"][0]["message_id"] = 101
         if mode == "improvement_id":

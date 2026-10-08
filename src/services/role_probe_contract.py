@@ -1,6 +1,12 @@
 """Fixed synthetic role inputs, independent of classroom data and legacy calls."""
 
-from src.services.invocation_types import StructuredRequest, TextRequest
+import json
+
+from src.services.invocation_types import (
+    InvocationError,
+    StructuredRequest,
+    TextRequest,
+)
 from src.services.role_output_contracts import (
     InterventionJudgment,
     QuestionClassification,
@@ -32,6 +38,9 @@ def probe_options(provider, model, role):
 
 
 def probe_steps(provider, model_id, role, options, request_id):
+    if role not in OUTPUT_BUDGETS:
+        raise InvocationError("configuration_unavailable")
+
     def request(instruction, content, schema=None, context=None):
         values = (
             provider,
@@ -79,7 +88,7 @@ def probe_steps(provider, model_id, role, options, request_id):
                     "대화를 종합해 교사에게 한국어 코칭을 제공하세요. brief_feedback은 문장당 70자, "
                     "alternative_question은 60자 이내입니다. message_id와 role은 대화와 일치해야 하고 "
                     "quote는 해당 발화의 원문이어야 합니다. 최소 하나의 구체적 강점 또는 개선점을 포함하세요.",
-                    str(ANALYSIS_MESSAGES),
+                    json.dumps(ANALYSIS_MESSAGES, ensure_ascii=False),
                     SessionSynthesis,
                     {"messages": ANALYSIS_MESSAGES},
                 ),

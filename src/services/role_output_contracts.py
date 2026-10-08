@@ -59,7 +59,7 @@ class QuestionClassification(RoleOutput):
 
 class Strength(RoleOutput):
     message_id: int
-    quote: str = Field(min_length=1)
+    quote: str
     reason: str = Field(min_length=1)
 
 

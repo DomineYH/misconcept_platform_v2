@@ -62,5 +62,18 @@ export default async function checkAIProbes(page) {
   data.models[0].verification_state.analysis = {status:'failed', error_code:'invalid_reference'};
   await page.reload();
   await model.getByText('레이블·발화 참조 또는 인용이 유효하지 않습니다.', {exact:false}).waitFor();
+  for (const [code, guidance] of Object.entries({
+    transient:'제공자에 일시적인 문제가 발생했습니다. 잠시 후 다시 시험하세요.',
+    timeout_connect:'제공자 연결 시간이 초과되었습니다. 연결 상태를 확인하세요.',
+    timeout_first_output:'첫 응답 대기 시간이 초과되었습니다. 시간 제한을 확인하세요.',
+    timeout_total:'전체 호출 시간이 초과되었습니다. 시간 제한을 확인하세요.',
+    call_limit_reached:'동시 호출 한도에 도달했습니다. 진행 중인 호출이 끝난 후 다시 시험하세요.'
+  })) {
+    data.models[0].verification_state.analysis = {status:'failed', error_code:code};
+    await page.reload();
+    const row = model.locator('.ai-actions').filter({hasText:'사후 분석: 실패'});
+    await row.getByText(guidance, {exact:true}).waitFor();
+    assert(!(await row.innerText()).includes('응답 형식'), `${code} is not a format failure`);
+  }
   return {pageErrors:[]};
 }

@@ -45,39 +45,6 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   }
 
   // ========================================
-  // YouTube URL Conversion
-  // ========================================
-  function convertToEmbedUrl(url) {
-    if (!url) return '';
-
-    // YouTube live URL
-    let match = url.match(/youtube\.com\/live\/([^?&]+)/);
-    if (match) return `https://www.youtube.com/embed/${match[1]}`;
-
-    // YouTube watch URL
-    match = url.match(/youtube\.com\/watch\?v=([^&]+)/);
-    if (match) return `https://www.youtube.com/embed/${match[1]}`;
-
-    // YouTube short URL
-    match = url.match(/youtu\.be\/([^?&]+)/);
-    if (match) return `https://www.youtube.com/embed/${match[1]}`;
-
-    // Already embed URL or other format
-    return url;
-  }
-
-  // Initialize video player if video URL exists
-  if (chatConfig.videoUrl) {
-  const videoIframe = document.getElementById('video-iframe');
-  if (videoIframe) {
-    const originalUrl = chatConfig.videoUrl;
-    const embedUrl = convertToEmbedUrl(originalUrl);
-    videoIframe.src = embedUrl;
-    console.log('Video player initialized:', embedUrl);
-  }
-  }
-
-  // ========================================
   // Mobile Tab Switching
   // ========================================
   document.querySelectorAll('.mobile-tab').forEach(tab => {
@@ -136,26 +103,6 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     return window.innerWidth > 768;
   }
 
-  function pauseScenarioVideo() {
-    const iframe = document.getElementById('video-iframe');
-    if (!iframe) return;
-    const currentSrc = iframe.getAttribute('src');
-    if (currentSrc) {
-      iframe.dataset.savedSrc = currentSrc;
-      iframe.setAttribute('src', '');
-    }
-  }
-
-  function resumeScenarioVideo() {
-    const iframe = document.getElementById('video-iframe');
-    if (!iframe) return;
-    const savedSrc = iframe.dataset.savedSrc;
-    if (savedSrc && !iframe.getAttribute('src')) {
-      iframe.setAttribute('src', savedSrc);
-      delete iframe.dataset.savedSrc;
-    }
-  }
-
   function applyScenarioPanelCollapsed(collapsed) {
     const panel = document.getElementById('scenario-panel');
     const toggle = document.getElementById('scenario-panel-toggle');
@@ -165,12 +112,10 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       panel.setAttribute('data-collapsed', 'true');
       toggle.setAttribute('aria-expanded', 'false');
       toggle.setAttribute('aria-label', '정보 패널 펼치기');
-      pauseScenarioVideo();
     } else {
       panel.removeAttribute('data-collapsed');
       toggle.setAttribute('aria-expanded', 'true');
       toggle.setAttribute('aria-label', '정보 패널 접기');
-      resumeScenarioVideo();
     }
   }
 

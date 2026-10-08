@@ -1,8 +1,10 @@
-"""Exact OpenAI definitions, checked against official sources on 2026-10-09."""
+"""Exact provider definitions, checked against official sources on 2026-10-09."""
 
 import unicodedata
 from copy import deepcopy
 from datetime import date
+
+from src.services import google_capabilities
 
 DEFINITION_VERSION = "openai-2026-10-09-v1"
 MODEL_PAGES = "https://developers.openai.com/api/docs/models/"
@@ -22,22 +24,28 @@ SNAPSHOTS = {
 }
 
 
-def normalize_model_id(value):
+def normalize_model_id(value, provider=None):
     value = value.strip()
     if not value or any(unicodedata.category(c) == "Cc" for c in value):
         raise ValueError("invalid_model_id")
     value.encode("utf-8")
+    if provider == "google" and value.startswith("models/"):
+        return normalize_model_id(value.removeprefix("models/"))
     return value
 
 
 def metadata_conflict(model_id, connection):
     for item in connection.catalog_models_json:
+        if connection.provider == "google" and item.get("model_id") == model_id:
+            return google_capabilities.metadata_conflict(model_id, item)
         if item.get("model_id") == model_id and item.get("shutdown_date"):
             return date.fromisoformat(item["shutdown_date"]) <= date.today()
     return False
 
 
 def capabilities(provider, model_id):
+    if provider == "google":
+        return google_capabilities.capabilities(model_id)
     name = SNAPSHOTS.get(model_id, model_id)
     if provider != "openai" or name not in DEFINITIONS:
         return None
@@ -85,6 +93,8 @@ def capabilities(provider, model_id):
 
 
 def validate_model_and_options(provider, model_id, options):
+    if provider == "google":
+        return google_capabilities.validate_options(model_id, options)
     definition = capabilities(provider, model_id)
     if definition is None:
         raise ValueError("capability_definition_required")

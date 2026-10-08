@@ -7,6 +7,7 @@ from pydantic import (
     Field,
     StrictBool,
     StrictInt,
+    ValidationInfo,
     field_validator,
 )
 from sqlalchemy import select, update
@@ -37,8 +38,8 @@ class ModelRegistration(BaseModel):
 
     @field_validator("model_id")
     @classmethod
-    def valid_id(cls, value):
-        return normalize_model_id(value)
+    def valid_id(cls, value, info: ValidationInfo):
+        return normalize_model_id(value, provider=info.data.get("provider"))
 
     @field_validator("display_name")
     @classmethod

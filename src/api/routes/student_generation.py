@@ -1,10 +1,9 @@
 """Authenticated student generation and persisted run lookup."""
 
-import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -14,7 +13,7 @@ from src.api.routes.session_helpers import load_session
 from src.api.routes.session_messages import limiter
 from src.models import GenerationRun, User
 from src.services.generation_runs import reserve_student, snapshot
-from src.services.student_stream import stream_student
+from src.services.student_stream import StudentStreamingResponse
 
 router = APIRouter(tags=["Sessions"])
 
@@ -49,14 +48,7 @@ async def student_turn(
     accepted, kwargs = await reserve_student(factory, session_id, user, body)
     if kwargs is None:
         return JSONResponse(accepted)
-    return StreamingResponse(
-        stream_student(factory, accepted, kwargs, time.monotonic()),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-store, no-transform",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return StudentStreamingResponse(factory, accepted, kwargs)
 
 
 @router.get("/runs/{run_id}")

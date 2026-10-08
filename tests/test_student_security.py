@@ -175,3 +175,48 @@ async def test_student_uses_existing_settings_without_mentor_or_classifier(
         run = (await reader.scalars(select(GenerationRun))).one()
         assert run.first_output_at is not None
         assert run.started_at <= run.first_output_at <= run.finished_at
+
+
+async def test_recovery_returns_only_public_fields_and_saved_message(
+    data, client, student
+):
+    login(client, data.owner)
+    payload = {
+        "request_id": str(uuid4()),
+        "content": "Recover without accepted",
+    }
+    path = f"/sessions/{data.session.id}"
+    response = await client.post(f"{path}/turns/stream", json=payload)
+    message = frames(response)[-1][1]["message"]
+    lookup = f"{path}/runs?request_id={payload['request_id']}"
+    snapshot = (await client.get(lookup)).json()
+    run_path = f"/runs/{snapshot['run_id']}"
+    assert snapshot == (await client.get(run_path)).json()
+    assert set(snapshot) == {
+        "run_id",
+        "request_id",
+        "session_id",
+        "turn_id",
+        "turn_index",
+        "operation",
+        "status",
+        "teacher_message_id",
+        "result_kind",
+        "message",
+        "partial_text",
+        "error_code",
+        "retryable",
+    }
+    assert snapshot["message"] == message
+    assert snapshot["status"] == "completed"
+    assert snapshot["retryable"] is False
+    assert (await client.get(f"/runs/{uuid4()}")).status_code == 404
+    assert (
+        await client.get(f"{path}/runs", params={"request_id": str(uuid4())})
+    ).status_code == 404
+    client.cookies.clear()
+    for url in (lookup, run_path):
+        denied = await client.get(url)
+        assert denied.status_code == 401
+        assert denied.json()["code"] == "AUTH_EXPIRED"
+    assert student.responses.create.await_count == 1

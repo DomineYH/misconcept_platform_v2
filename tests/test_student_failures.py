@@ -207,15 +207,20 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
 
 
 @pytest.mark.parametrize(
-    "slow_close,disconnect_when",
+    "slow_close,disconnect_when,cleanup_db",
     [
-        (False, "delta"),
-        (True, "delta"),
-        (False, "open"),
+        (False, "delta", None),
+        (True, "delta", None),
+        ("stream", "delta", None),
+        (False, "open", None),
+        (False, "accepted", None),
+        (False, "headers", None),
+        (False, "completed", None),
+        (False, "delta", "busy"),
     ],
 )
 async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
-    data, client, student, monkeypatch, slow_close, disconnect_when
+    data, client, student, monkeypatch, slow_close, disconnect_when, cleanup_db
 ):
     import asyncio
     import json
@@ -228,7 +233,8 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
         from src.services import student_stream
 
         monkeypatch.setattr(student_stream, "CLEANUP_SECONDS", 0.5)
-        student.close.side_effect = asyncio.Event().wait
+        if slow_close is True:
+            student.close.side_effect = asyncio.Event().wait
     login(client, data.owner)
     gate = asyncio.Event()
     student.stream = FakeStream(
@@ -239,6 +245,26 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
             gate,
         ]
     )
+    if disconnect_when == "completed":
+        gate.set()
+        student.stream.events.append(
+            event(
+                "response.completed",
+                response=SimpleNamespace(
+                    status="completed",
+                    output_text="Saved before frame loss",
+                    output=[],
+                    usage=None,
+                ),
+            )
+        )
+    if slow_close == "stream":
+
+        async def close():
+            student.stream.closed = True
+            await asyncio.Event().wait()
+
+        student.stream.close = close
     student.responses.create.return_value = student.stream
     payload = {"request_id": str(uuid4()), "content": "Keep after disconnect"}
     disconnect = asyncio.Event()
@@ -251,6 +277,23 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
         student.responses.create.side_effect = create
     requested = False
     received = []
+    writer = None
+    if cleanup_db == "busy":
+        from sqlalchemy import event as sql_event
+        from sqlalchemy import text
+
+        from src.services import student_stream
+
+        monkeypatch.setattr(student_stream, "CLEANUP_SECONDS", 0.05)
+
+        def short_busy_timeout(connection, record, proxy):
+            cursor = connection.cursor()
+            cursor.execute("PRAGMA busy_timeout=200")
+            cursor.close()
+
+        sql_event.listen(
+            data.engine.sync_engine, "checkout", short_busy_timeout
+        )
 
     async def receive():
         nonlocal requested
@@ -262,13 +305,39 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
                 "more_body": False,
             }
         await disconnect.wait()
+        if disconnect_when == "delta":
+            await student.stream.read_started.wait()
         return {"type": "http.disconnect"}
 
     async def send(message):
+        nonlocal writer
+        if (
+            disconnect_when == "headers"
+            and message["type"] == "http.response.start"
+        ):
+            disconnect.set()
+            await asyncio.Event().wait()
         if message["type"] == "http.response.body":
+            if (
+                disconnect_when == "accepted"
+                and b"run.accepted" in message.get("body", b"")
+            ):
+                disconnect.set()
+                await asyncio.Event().wait()
+            if (
+                disconnect_when == "completed"
+                and b"output.completed" in message.get("body", b"")
+            ):
+                disconnect.set()
+                # Lose the frame after its DB commit.
+                await asyncio.Event().wait()
             received.append(message.get("body", b""))
             if b"output.delta" in message.get("body", b""):
-                disconnect.set()
+                if cleanup_db == "busy":
+                    writer = await data.engine.connect()
+                    await writer.execute(text("BEGIN IMMEDIATE"))
+                if disconnect_when == "delta":
+                    disconnect.set()
 
     scope = {
         "type": "http",
@@ -287,23 +356,65 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
         "client": ("127.0.0.1", 9000),
         "server": ("test", 80),
     }
-    await asyncio.wait_for(app(scope, receive, send), 5)
+    try:
+        await asyncio.wait_for(app(scope, receive, send), 5)
+    finally:
+        if writer is not None:
+            await writer.rollback()
+            await writer.close()
+        if cleanup_db == "busy":
+            sql_event.remove(
+                data.engine.sync_engine, "checkout", short_busy_timeout
+            )
     assert b"output.completed" not in b"".join(received)
-    assert student.stream.closed
-    student.close.assert_awaited_once()
+    assert student.stream.closed == (
+        disconnect_when not in {"headers", "accepted"}
+    )
+    if disconnect_when == "delta":
+        assert student.stream.read_cancelled
+    if disconnect_when in {"headers", "accepted"}:
+        student.close.assert_not_awaited()
+    else:
+        student.close.assert_awaited_once()
     state = await client.get(
         f"/sessions/{data.session.id}/runs",
         params={"request_id": payload["request_id"]},
     )
-    assert state.json()["status"] == "interrupted"
-    assert state.json()["partial_text"] == (
-        "Partial before disconnect" if disconnect_when == "delta" else None
+    assert state.json()["status"] == (
+        "completed"
+        if disconnect_when == "completed"
+        else "running" if cleanup_db else "interrupted"
     )
-    assert state.json()["message"] is None
+    assert state.json()["partial_text"] == (
+        "Partial before disconnect"
+        if disconnect_when == "delta" and not cleanup_db
+        else None
+    )
+    if disconnect_when == "completed":
+        assert state.json()["message"]["content"] == "Saved before frame loss"
+        assert (
+            await client.post(f"/sessions/{data.session.id}/close")
+        ).status_code == 200
+        assert (
+            await client.get(f"/runs/{state.json()['run_id']}")
+        ).json() == state.json()
+        replay = await client.post(
+            f"/sessions/{data.session.id}/turns/stream", json=payload
+        )
+        assert replay.json() == state.json()
+    else:
+        assert state.json()["message"] is None
     updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
     assert "Keep after disconnect" in updates.text
-    assert updates.text.count("data-message-id=") == 1
-    assert student.responses.create.await_count == 1
+    assert updates.text.count("data-message-id=") == (
+        2 if disconnect_when == "completed" else 1
+    )
+    exported = await client.get(f"/sessions/{data.session.id}/export.csv")
+    assert exported.status_code == 200
+    assert "Partial before disconnect" not in exported.text
+    assert student.responses.create.await_count == (
+        0 if disconnect_when in {"headers", "accepted"} else 1
+    )
 
 
 async def test_transient_creation_error_has_no_automatic_retry(
@@ -325,3 +436,45 @@ async def test_transient_creation_error_has_no_automatic_retry(
     assert "Private connection error" not in result.text
     assert student.responses.create.await_count == 1
     student.close.assert_awaited_once()
+
+
+async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
+    data, client, student
+):
+    import json
+
+    login(client, data.owner)
+    student.stream.events = [
+        event("response.output_text.delta", delta="UNSAVED PARTIAL OUTPUT"),
+        RuntimeError("Upstream interrupted"),
+    ]
+    path = f"/sessions/{data.session.id}"
+    result = await client.post(
+        f"{path}/turns/stream",
+        json={
+            "request_id": str(uuid4()),
+            "content": "Preserved teacher question",
+        },
+    )
+    assert frames(result)[-1][0] == "run.failed"
+    exported = await client.get(f"{path}/export.csv")
+    assert exported.status_code == 200
+    assert "Preserved teacher question" in exported.text
+    assert "UNSAVED PARTIAL OUTPUT" not in exported.text
+    assert (await client.post(f"{path}/end")).status_code == 200
+    inputs = []
+
+    async def analysis_response(**kwargs):
+        inputs.append(kwargs["input"])
+        raise ValueError("Fake analysis failure")
+
+    student.responses.create.side_effect = analysis_response
+    analyzed = await client.post(f"{path}/analyze")
+    assert analyzed.status_code == 200
+    assert analyzed.json()["feedback_status"] == "failed"
+    assert (
+        len(inputs) >= 2
+    )  # Greeting/classification and synthesis see real inputs.
+    encoded = json.dumps(inputs)
+    assert "Preserved teacher question" in encoded
+    assert "UNSAVED PARTIAL OUTPUT" not in encoded

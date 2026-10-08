@@ -25,6 +25,8 @@ class FakeStream:
     def __init__(self, events):
         self.events = events
         self.closed = False
+        self.read_started = asyncio.Event()
+        self.read_cancelled = False
 
     def __aiter__(self):
         return self.iterate()
@@ -34,7 +36,12 @@ class FakeStream:
             if isinstance(item, Exception):
                 raise item
             if isinstance(item, asyncio.Event):
-                await item.wait()
+                self.read_started.set()
+                try:
+                    await item.wait()
+                except asyncio.CancelledError:
+                    self.read_cancelled = True
+                    raise
             else:
                 yield item
 

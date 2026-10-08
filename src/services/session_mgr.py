@@ -3,12 +3,12 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.routes.session_helpers import mark_session_ended
 from src.config import config
 from src.models import ApiUsageLog, Message, Scenario, Session, calculate_cost
 from src.services.misconception_analyzer import MisconceptionAnalyzer
@@ -351,8 +351,7 @@ class SessionManager:
         )
         session = result.scalar_one()
 
-        session.ended_at = datetime.now(timezone.utc)
-        # Dependency auto-commits
+        await mark_session_ended(session, self.db, force=True)
 
 
 # TODO: Task 3.1.2/3.1.3 - API Usage Logging Tests

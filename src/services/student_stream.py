@@ -8,8 +8,10 @@ from contextlib import suppress
 from datetime import datetime, timezone
 
 import anyio
+from starlette.responses import StreamingResponse
 
 from src.services.base import OpenAIBaseService
+from src.services.generation_lifecycle import active_runs
 from src.services.generation_runs import finish_student
 from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 
@@ -25,7 +27,43 @@ class StudentStreamError(Exception):
         self.code = code
 
 
-async def stream_student(factory, accepted, kwargs, started):
+class StudentStreamingResponse(StreamingResponse):
+    def __init__(self, factory, accepted, kwargs):
+        self.factory, self.run_id = factory, accepted["run_id"]
+        cancelled = active_runs[self.run_id] = asyncio.Event()
+        super().__init__(
+            stream_student(
+                factory, accepted, kwargs, time.monotonic(), cancelled
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store, no-transform",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            # Disconnect during ASGI send can leave the generator suspended.
+            with anyio.CancelScope(shield=True):
+                with anyio.move_on_after(CLEANUP_SECONDS):
+                    await self.body_iterator.aclose()
+                    if active_runs.pop(self.run_id, None) is not None:
+                        # Response headers can fail before the generator starts.
+                        try:
+                            await finish_student(
+                                self.factory,
+                                self.run_id,
+                                status="interrupted",
+                                error_code="disconnected",
+                            )
+                        except Exception:
+                            logger.exception("Unable to record unsent student")
+
+
+async def stream_student(factory, accepted, kwargs, started, cancelled):
     seq = 0
     partial = ""
     first_output_at = None
@@ -33,6 +71,7 @@ async def stream_student(factory, accepted, kwargs, started):
     service = stream = task = opening = None
     terminal = False
     last_sent = started
+    cancellation = asyncio.create_task(cancelled.wait())
 
     def frame(kind, **data):
         nonlocal seq, last_sent
@@ -86,6 +125,8 @@ async def stream_student(factory, accepted, kwargs, started):
             operation="student",
             status="running",
         )
+        if cancelled.is_set():
+            raise StudentStreamError("session_ended")
         service = OpenAIBaseService()
         # Bypass the non-streaming application's retry decorator deliberately.
         task = opening = asyncio.create_task(
@@ -107,8 +148,12 @@ async def stream_student(factory, accepted, kwargs, started):
                 yield ": ping\n\n"
                 continue
             done, _ = await asyncio.wait(
-                {task}, timeout=min(idle_remaining, remaining)
+                {task, cancellation},
+                timeout=min(idle_remaining, remaining),
+                return_when=asyncio.FIRST_COMPLETED,
             )
+            if cancellation in done:
+                raise StudentStreamError("session_ended")
             if not done:
                 if time.monotonic() >= deadline:
                     raise StudentStreamError(code)
@@ -172,7 +217,9 @@ async def stream_student(factory, accepted, kwargs, started):
         )
         try:
             result = await finish(
-                "failed", partial_text=partial or None, error_code=code
+                "cancelled" if code == "session_ended" else "failed",
+                partial_text=partial or None,
+                error_code=code,
             )
             terminal = True
             yield terminal_frame(result)
@@ -186,29 +233,46 @@ async def stream_student(factory, accepted, kwargs, started):
                 retryable=True,
             )
     finally:
+        active_runs.pop(accepted["run_id"], None)
+        cancellation.cancel()
+
+        async def close_upstream():
+            nonlocal stream
+            with suppress(asyncio.CancelledError):
+                await cancellation
+            if task is not None:
+                with suppress(asyncio.CancelledError, Exception):
+                    await task
+            if stream is None and opening is not None and opening.done():
+                with suppress(asyncio.CancelledError, Exception):
+                    stream = opening.result()
+            if stream is not None:
+                with suppress(Exception):
+                    await stream.close()
+
+        async def close_client():
+            if service is not None:
+                with suppress(Exception):
+                    await service.close()
+
+        async def interrupt():
+            try:
+                await finish(
+                    "interrupted",
+                    partial_text=partial or None,
+                    error_code="disconnected",
+                )
+            except Exception:
+                logger.exception("Unable to record interrupted student")
+
         # Starlette disconnect cancels its AnyIO scope; shield bounded cleanup.
         with anyio.CancelScope(shield=True):
             with anyio.move_on_after(CLEANUP_SECONDS):
                 if task is not None:
                     task.cancel()
-                if not terminal:
-                    try:
-                        await finish(
-                            "interrupted",
-                            partial_text=partial or None,
-                            error_code="disconnected",
-                        )
-                    except Exception:
-                        logger.exception("Unable to record interrupted student")
-                if task is not None:
-                    with suppress(asyncio.CancelledError, Exception):
-                        await task
-                if stream is None and opening is not None and opening.done():
-                    with suppress(asyncio.CancelledError, Exception):
-                        stream = opening.result()
-                if stream is not None:
-                    with suppress(Exception):
-                        await stream.close()
-                if service is not None:
-                    with suppress(Exception):
-                        await service.close()
+                # A stalled DB must not prevent SDK close (or vice versa).
+                async with anyio.create_task_group() as cleanup:
+                    cleanup.start_soon(close_upstream)
+                    cleanup.start_soon(close_client)
+                    if not terminal:
+                        cleanup.start_soon(interrupt)

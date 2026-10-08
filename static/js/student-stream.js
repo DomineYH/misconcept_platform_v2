@@ -12,6 +12,7 @@ export function mountStudentStream(ui) {
   const draftKey = `chat-draft-${ui.sessionId}`;
   let pending, teacher, student, status, actions, retry;
   let lookupBusy = false;
+  let forbidden = false;
   let recoveryTimer, recoveryStartedAt, recoveryStep;
   let leftPage = false, lifetime = new AbortController();
   ui.stopPolling();
@@ -151,8 +152,20 @@ export function mountStudentStream(ui) {
     sync();
   }
 
+  function deny() {
+    forbidden = true;
+    clearTimeout(recoveryTimer);
+    pending.status = 'forbidden';
+    pending.retryable = false;
+    status.textContent = '이 실행을 조회하거나 재시도할 권한이 없습니다. 응답 미완료·대화 기록에 미포함';
+    actions.hidden = true;
+    if (!input.value) input.value = pending.content;
+    persist();
+    sync();
+  }
+
   async function recover(reset = true) {
-    if (!pending || ui.isLocked() || lookupBusy || leftPage) return;
+    if (!pending || ui.isLocked() || lookupBusy || leftPage || forbidden) return;
     if (reset) {
       clearTimeout(recoveryTimer);
       recoveryStartedAt = Date.now();
@@ -169,6 +182,7 @@ export function mountStudentStream(ui) {
       const response = await ui.fetch(url, {signal:lifetime.signal});
       if (pending !== attempt || leftPage) return;
       if (response.status === 401) expire();
+      else if (response.status === 403) deny();
       else if (response.status === 404) {
         pending.status = 'unknown';
         pending.retryable = true;
@@ -202,7 +216,7 @@ export function mountStudentStream(ui) {
   }
 
   async function send(isRetry = false) {
-    if (ui.isLocked() || leftPage) return;
+    if (ui.isLocked() || leftPage || forbidden) return;
     if (isRetry) {
       if (!pending?.retryable || !['failed', 'interrupted', 'unknown'].includes(pending.status)) return;
       const resend = pending.status === 'unknown';
@@ -236,6 +250,15 @@ export function mountStudentStream(ui) {
       }
       if (response.status === 401) {
         expire();
+        return;
+      }
+      if (response.status === 403) {
+        deny();
+        return;
+      }
+      if (response.status === 400 && (await response.clone().json()).detail === 'Session already ended') {
+        event('run.cancelled', {run_id:pending.run_id, status:'cancelled', code:'session_ended',
+          message:'대화가 종료되었습니다.', retryable:false});
         return;
       }
       if (response.ok && response.headers.get('Content-Type')?.includes('application/json')) {

@@ -42,7 +42,7 @@ Restore both before using stored credentials; the database alone cannot recover
 provider keys. No automatic master-key creation, web rotation or key ring exists.
 Python memory clearing of plaintext is not guaranteed.
 
-This is the A8/A9 management and A12/A13 lesson transition stage. Explicit OpenAI,
+This is the A8/A9 management and A12–A14 lesson transition stage. Explicit OpenAI,
 Claude and Gemini catalog refresh uses the saved
 DB key and the non-generating Models API, with no retries and a default 30-second
 deadline. Successful lists are cached for 24 hours; failures preserve the list.
@@ -66,7 +66,7 @@ for ordinary calls globally and per provider. Capacity refusals return 429 witho
 a queue. Each administrator can run one probe bundle. Disable/delete immediately
 block admission and request cancellation of every active credential revision.
 Limits and absolute deadlines are read for new calls; reducing limits preserves
-existing calls. Only future ordinary classification/synthesis calls may retry once;
+existing calls. Ordinary classification/synthesis calls may retry once;
 backoff returns capacity and reacquires it under the current limits. This service
 requires one asynchronous worker in one app instance. Student lesson calls now
 require an enabled, student-verified DB registration
@@ -81,8 +81,9 @@ semantic judgment also use DB credentials, exact mentor-verified model IDs and
 shared admission with zero retries. Their existing sensitivity, counters and local
 fallback remain unchanged; local no-intervention decisions make no provider call.
 Judgment attempts are recorded separately as `mentor_judgment`, including failures
-without usage. Post-session analysis continues using its previous configuration
-until A14.
+without usage. Post-session analysis also uses DB registrations and common
+invocations while preserving its configured OpenAI model IDs and existing
+normalization. Greeting detection has no retries.
 Do not treat this stage as the final production cutover.
 
 Encryption uses the exactly pinned [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/)

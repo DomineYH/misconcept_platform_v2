@@ -18,23 +18,15 @@ class Contributor(Base):
 
     # Required fields
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    affiliation: Mapped[str] = mapped_column(
-        String(200), nullable=False
-    )
+    affiliation: Mapped[str] = mapped_column(String(200), nullable=False)
     bio: Mapped[str] = mapped_column(String(2000), nullable=False)
 
     # Optional contact fields
-    phone: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True
-    )
-    email: Mapped[Optional[str]] = mapped_column(
-        String(200), nullable=True
-    )
+    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     # Display ordering
-    sort_order: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

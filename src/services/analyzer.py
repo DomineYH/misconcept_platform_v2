@@ -10,11 +10,11 @@ import logging
 from typing import Any, Dict, Optional
 
 from openai import APIConnectionError, APIError, RateLimitError
-from src.services.base import OpenAIBaseService
 
 from src.config import config
 from src.models.analysis_framework import AnalysisFramework
 from src.prompts.example_templates import generate_examples
+from src.services.base import OpenAIBaseService
 from src.utils.cache import load_prompt_template
 from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 

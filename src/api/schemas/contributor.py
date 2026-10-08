@@ -21,9 +21,7 @@ class ContributorUpdate(BaseModel):
     """Schema for updating a contributor."""
 
     name: Optional[str] = Field(None, min_length=1, max_length=100)
-    affiliation: Optional[str] = Field(
-        None, min_length=1, max_length=200
-    )
+    affiliation: Optional[str] = Field(None, min_length=1, max_length=200)
     bio: Optional[str] = Field(None, min_length=1, max_length=2000)
     phone: Optional[str] = Field(None, max_length=50)
     email: Optional[str] = Field(None, max_length=200)

@@ -1,4 +1,5 @@
 """QuestionAnalysis model for teacher message classification (T055)."""
+
 from typing import Optional
 
 from sqlalchemy import (
@@ -39,19 +40,13 @@ class QuestionAnalysis(Base):
     )
 
     # Classification label (e.g., "high_leverage", "medium_leverage")
-    label: Mapped[str] = mapped_column(
-        String(50), nullable=False, index=True
-    )
+    label: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
 
     # Grade from framework label level (우수/개선)
-    grade: Mapped[Optional[str]] = mapped_column(
-        String(10), nullable=True
-    )
+    grade: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
 
     # Confidence score (0.0-1.0) - optional
-    confidence: Mapped[Optional[float]] = mapped_column(
-        Float, nullable=True
-    )
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Metadata JSON (evidence, rationale) - optional
     meta_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

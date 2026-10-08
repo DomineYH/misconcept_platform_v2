@@ -138,7 +138,13 @@ class Config(BaseSettings):
         # Union of API values; each model supports a subset.
         # https://developers.openai.com/api/docs/guides/reasoning
         valid_reasoning = [
-            "none", "minimal", "low", "medium", "high", "xhigh", "max"
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
         ]
         if v not in valid_reasoning:
             raise ValueError(

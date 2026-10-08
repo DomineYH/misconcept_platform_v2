@@ -41,9 +41,7 @@ class PromptManager:
         """
         try:
             result = await db.execute(
-                select(PromptTemplate).where(
-                    PromptTemplate.id == template_id
-                )
+                select(PromptTemplate).where(PromptTemplate.id == template_id)
             )
             template = result.scalar_one_or_none()
 
@@ -220,16 +218,15 @@ class PromptManager:
             template.template_name = template_name
         if template_text:
             template.template_text = template_text
-        
+
         template.updated_at = datetime.now(timezone.utc)
         if updated_by:
             template.updated_by = updated_by
-            
+
         await db.flush()
 
         logger.info(
-            f"Updated prompt: {template.bot_type} "
-            f"v{template.version}"
+            f"Updated prompt: {template.bot_type} " f"v{template.version}"
         )
 
         return template
@@ -243,9 +240,7 @@ class PromptManager:
             prompt_id: 삭제할 프롬프트 ID
         """
         result = await db.execute(
-            select(PromptTemplate).where(
-                PromptTemplate.id == prompt_id
-            )
+            select(PromptTemplate).where(PromptTemplate.id == prompt_id)
         )
         template = result.scalar_one()
 
@@ -255,7 +250,4 @@ class PromptManager:
         await db.delete(template)
         await db.flush()
 
-        logger.info(
-            f"Deleted prompt: {bot_type} v{version}"
-        )
-
+        logger.info(f"Deleted prompt: {bot_type} v{version}")

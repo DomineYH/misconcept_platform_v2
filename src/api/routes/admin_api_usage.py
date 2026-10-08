@@ -1,12 +1,13 @@
 """Admin API usage routes."""
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select, desc, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
-from src.models.user import User
 from src.models.api_usage import ApiUsageLog
+from src.models.user import User
 
 router = APIRouter()
 
@@ -20,9 +21,7 @@ async def api_usage_dashboard(
     """Admin dashboard for API usage stats."""
 
     # Get recent logs
-    query = (
-        select(ApiUsageLog).order_by(desc(ApiUsageLog.timestamp)).limit(100)
-    )
+    query = select(ApiUsageLog).order_by(desc(ApiUsageLog.timestamp)).limit(100)
     result = await db.execute(query)
     logs = result.scalars().all()
 
@@ -39,4 +38,3 @@ async def api_usage_dashboard(
             "total_cost": round(total_cost, 4),
         },
     )
-

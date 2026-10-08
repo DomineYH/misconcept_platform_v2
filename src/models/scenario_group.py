@@ -1,4 +1,5 @@
 """ScenarioGroup join table for scenario-group access control."""
+
 from datetime import datetime, timezone
 
 from sqlalchemy import (
@@ -45,9 +46,7 @@ class ScenarioGroup(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "scenario_id", "group_id", name="uq_scenario_group"
-        ),
+        UniqueConstraint("scenario_id", "group_id", name="uq_scenario_group"),
     )
 
     def __repr__(self) -> str:

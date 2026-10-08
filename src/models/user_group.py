@@ -1,4 +1,5 @@
 """UserGroup model for organizing users into groups."""
+
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Integer, String, Text, text
@@ -13,12 +14,8 @@ class UserGroup(Base):
     __tablename__ = "user_group"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False
-    )
-    description: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
@@ -27,9 +24,7 @@ class UserGroup(Base):
     )
 
     # Relationships
-    users: Mapped[list["User"]] = relationship(
-        "User", back_populates="group"
-    )
+    users: Mapped[list["User"]] = relationship("User", back_populates="group")
     scenario_groups: Mapped[list["ScenarioGroup"]] = relationship(
         "ScenarioGroup", back_populates="group"
     )

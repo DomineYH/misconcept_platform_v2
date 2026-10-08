@@ -1,23 +1,18 @@
 """Group Pydantic schemas for admin API."""
+
 from datetime import datetime
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class GroupCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
-    description: str | None = Field(
-        None, max_length=500
-    )
+    description: str | None = Field(None, max_length=500)
 
 
 class GroupUpdate(BaseModel):
-    name: str | None = Field(
-        None, min_length=2, max_length=100
-    )
-    description: str | None = Field(
-        None, max_length=500
-    )
+    name: str | None = Field(None, min_length=2, max_length=100)
+    description: str | None = Field(None, max_length=500)
 
 
 class AdminGroupResponse(BaseModel):

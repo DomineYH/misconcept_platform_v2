@@ -239,7 +239,8 @@ async def auth_required_handler(
     Other HTMX requests keep existing HX-Redirect behavior.
     """
     if request.url.path.startswith("/runs/") or (
-        request.url.path.startswith("/sessions/") and (
+        request.url.path.startswith("/sessions/")
+        and (
             "/turns/" in request.url.path or request.url.path.endswith("/runs")
         )
     ):

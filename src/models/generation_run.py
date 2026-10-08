@@ -50,7 +50,7 @@ class GenerationRun(Base):
             "owner_id", "session_id", "request_id", name="uq_run_request"
         ),
         CheckConstraint("operation IN ('student','mentor')"),
-        CheckConstraint("provider = 'openai'"),
+        CheckConstraint("provider IN ('openai','anthropic','google')"),
         CheckConstraint(
             "status IN ('running','completed','failed',"
             "'cancelled','interrupted')"

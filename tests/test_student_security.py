@@ -124,7 +124,6 @@ async def test_student_uses_existing_settings_without_mentor_or_classifier(
 
     from src.config import config
     from src.models import ApiUsageLog, GenerationRun, PromptTemplate
-    from src.services import base
 
     tutor = PromptTemplate(
         bot_type="tutor",
@@ -134,27 +133,26 @@ async def test_student_uses_existing_settings_without_mentor_or_classifier(
     data.db.add(tutor)
     await data.db.flush()
     data.scenario.tutor_template_id = tutor.id
-    data.scenario.chat_model = "scenario-model"
+    data.scenario.chat_model = "gpt-5-mini-2025-08-07"
+    student.model.model_id = "gpt-5-mini-2025-08-07"
     await data.db.commit()
     monkeypatch.setattr(config, "STUDENT_REASONING", "low")
     monkeypatch.setattr(config, "STUDENT_MAX_TOKENS", 1234)
-    created = []
-
-    def sdk(**kwargs):
-        created.append(kwargs)
-        return student
-
-    monkeypatch.setattr(base, "AsyncOpenAI", sdk)
     login(client, data.owner)
     response = await client.post(
         f"/sessions/{data.session.id}/turns/stream",
         json={"request_id": str(uuid4()), "content": "Current question"},
     )
     assert frames(response)[-1][0] == "output.completed"
-    assert created == [{"api_key": "test-only", "max_retries": 0}]
+    from lesson_fixtures import LESSON_KEY
+
+    assert len(student.sdk_options) == 1
+    assert student.sdk_options[0]["api_key"] == LESSON_KEY
+    assert student.sdk_options[0]["max_retries"] == 0
+    assert student.sdk_options[0]["timeout"].connect == 5
     assert student.responses.create.await_count == 1
     kwargs = student.responses.create.call_args.kwargs
-    assert kwargs["model"] == "scenario-model"
+    assert kwargs["model"] == "gpt-5-mini-2025-08-07"
     assert kwargs["reasoning"] == {"effort": "low"}
     assert kwargs["max_output_tokens"] == 1234
     assert kwargs["input"][-1] == {
@@ -162,14 +160,16 @@ async def test_student_uses_existing_settings_without_mentor_or_classifier(
         "content": "Current question",
     }
     assert sum(m["content"] == "Current question" for m in kwargs["input"]) == 1
-    assert kwargs["input"][0]["role"] == "developer"
-    assert "Test misconception" in kwargs["input"][1]["content"]
+    assert "Test misconception" in kwargs["instructions"]
+    from src.services.student_bot import BASE_STUDENT_PROMPT
+
+    assert kwargs["instructions"].startswith(BASE_STUDENT_PROMPT + "\n\n")
     async with data.factory() as reader:
         usage = (await reader.scalars(select(ApiUsageLog))).one()
         assert (
-            usage.bot_type,
-            usage.prompt_tokens,
-            usage.completion_tokens,
+            usage.role,
+            usage.input_tokens,
+            usage.output_tokens,
             usage.total_tokens,
         ) == ("student", 10, 2, 12)
         run = (await reader.scalars(select(GenerationRun))).one()

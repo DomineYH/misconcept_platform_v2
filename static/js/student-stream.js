@@ -267,8 +267,8 @@ export function mountStudentStream(ui) {
           pending.status = 'unknown';
           pending.retryable = true;
           status.textContent = detail.code === 'configuration_unavailable' ?
-            '관리자에게 AI 연결과 학생 모델 검증을 요청해주세요. 질문은 아직 저장되지 않았습니다.' :
-            '호출 한도에 도달했습니다. 잠시 후 같은 요청을 다시 전송해주세요. 질문은 아직 저장되지 않았습니다.';
+            '관리자에게 AI 연결과 학생 모델 검증을 요청해주세요. 요청은 아직 수락되지 않았습니다.' :
+            '호출 한도에 도달했습니다. 잠시 후 같은 요청을 다시 전송해주세요. 요청은 아직 수락되지 않았습니다.';
           retry.textContent = '같은 요청 다시 전송';
           retry.disabled = false;
           actions.hidden = false;

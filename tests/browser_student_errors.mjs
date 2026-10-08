@@ -51,6 +51,7 @@ export default async function checkStudentErrors(page) {
     assert(await page.locator('[data-message-id]').count() === 0, `${mode}: no unsaved answer marked completed`);
     assert(await page.evaluate(() => JSON.parse(sessionStorage.getItem('chat-run-1')).content) === `보존할 질문 ${mode}`, `${mode}: original tab draft retained`);
     if (mode === 'configuration' || mode === 'capacity') {
+      assert((await page.locator('.student-run-status').innerText()).includes('요청은 아직 수락되지 않았습니다'), `${mode}: guidance describes request admission, including retries of stored questions`);
       const retry = page.getByRole('button', {name:'같은 요청 다시 전송', exact:true});
       assert(await retry.isEnabled(), `${mode}: explicit retry available`);
       const requestId = fixture.request.request_id;

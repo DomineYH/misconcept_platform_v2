@@ -135,7 +135,17 @@ class RuntimeReasoning(RuntimeOutput):
     improved_sentence: str | None = None
 
 
-class RuntimeClassification(RuntimeOutput):
+class RuntimeAnalysisOutput(RuntimeOutput):
+    @model_validator(mode="after")
+    def legacy_semantics(self, info: ValidationInfo):
+        context = info.context or {}
+        if normalize := context.get("normalize"):
+            # Execute legacy semantics before the common boundary finalizes usage.
+            context["normalized"] = normalize(self.model_dump())
+        return self
+
+
+class RuntimeClassification(RuntimeAnalysisOutput):
     label: str
     confidence: float | str
     reasoning: RuntimeReasoning | str | None = None
@@ -172,7 +182,7 @@ class RuntimeCoaching(RuntimeOutput):
     note: str | None = None
 
 
-class RuntimeSynthesis(RuntimeOutput):
+class RuntimeSynthesis(RuntimeAnalysisOutput):
     brief_feedback: list[str | None] | None = None
     strengths: list[RuntimeStrength | None] | None = None
     improvements: list[RuntimeImprovement | None] | None = None

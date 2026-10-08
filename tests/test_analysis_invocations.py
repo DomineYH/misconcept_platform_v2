@@ -117,6 +117,49 @@ async def test_analysis_uses_db_key_and_ledger_and_preserves_degraded(
     assert all(r.owner_id == data.owner.id and r.run_id is None for r in rows)
 
 
+@pytest.mark.parametrize(
+    "operation,feedback_status,error_code",
+    [
+        ("synthesis", "failed", "empty_response"),
+        ("classification", "degraded", "invalid_output"),
+    ],
+)
+async def test_semantically_failed_result_is_a_failed_ledger_attempt(
+    data, api, monkeypatch, operation, feedback_status, error_code
+):
+    await prepare_analysis(data, monkeypatch)
+
+    async def upstream(request, body):
+        value = result_for(body)
+        if (
+            operation == "synthesis"
+            and body["text"]["format"]["name"] == "RuntimeSynthesis"
+        ):
+            value["brief_feedback"] = []
+        if (
+            operation == "classification"
+            and body["text"]["format"]["name"] == "RuntimeClassification"
+        ):
+            value["confidence"] = "invalid-number"
+        return httpx2.Response(
+            200, json=response_body(json.dumps(value), USAGE)
+        )
+
+    clients, calls = analysis_transport(monkeypatch, upstream)
+    response = await api.post(
+        f"/sessions/{data.session.id}/analyze",
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
+    )
+    assert response.json()["feedback_status"] == feedback_status
+    async with data.factory() as db:
+        row = await db.scalar(
+            select(ApiUsageLog).where(ApiUsageLog.operation == operation)
+        )
+    assert row.status == "failed" and row.error_code == error_code
+    assert row.total_tokens == 15 and row.attempt_no == 1
+    assert len(calls) == 3 and all(c.is_closed() for c in clients)
+
+
 async def test_runtime_preserves_repairs_and_nullable_degraded_feedback(
     data, api, monkeypatch
 ):

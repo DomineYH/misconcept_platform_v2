@@ -103,23 +103,25 @@ class SessionSynthesizer(AnalysisCaller):
             dialogue_transcript=dialogue,
         )
 
+        status = None
+
+        def normalize(payload):
+            nonlocal status
+            payload["version"] = 1
+            payload, status = self._validate(payload, messages)
+            if status == "failed":
+                raise InvocationError("empty_response")
+            return payload
+
         self.last_usage = None
         try:
             payload, self.last_usage = await self.structured(
-                prompt, RuntimeSynthesis, "synthesis", 2500
+                prompt, RuntimeSynthesis, "synthesis", 2500, normalize=normalize
             )
         except InvocationError as e:
             logger.error("Synthesis invocation failed: %s", e.code)
             return dict(FAILED_PAYLOAD), "failed"
 
-        if not isinstance(payload, dict):
-            logger.error(
-                "Synthesis JSON parse failed: payload must be an object"
-            )
-            return dict(FAILED_PAYLOAD), "failed"
-
-        payload["version"] = 1
-        payload, status = self._validate(payload, messages)
         return payload, status
 
     def _format_dialogue(self, messages: list[dict[str, Any]]) -> str:

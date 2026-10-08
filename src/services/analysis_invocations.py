@@ -22,7 +22,9 @@ class AnalysisCaller:
         self.model = config.ANALYSIS_MODEL or "gpt-5"
         self.reasoning_effort = config.ANALYSIS_REASONING
 
-    async def structured(self, prompt, schema, operation, max_tokens):
+    async def structured(
+        self, prompt, schema, operation, max_tokens, *, normalize=None
+    ):
         # Each parallel call gets its own short-lived DB session.
         async with self.factory() as db:
             connection, model, options = await resolve_lesson_model(
@@ -34,6 +36,7 @@ class AnalysisCaller:
                     "reasoning": {"effort": self.reasoning_effort},
                 },
             )
+        validation = {"normalize": normalize} if normalize else {}
         request = StructuredRequest(
             "openai",
             self.model,
@@ -43,6 +46,7 @@ class AnalysisCaller:
             options,
             self.request_id,
             schema,
+            validation,
         )
         permit = await admit_call(
             self.factory,
@@ -84,4 +88,7 @@ class AnalysisCaller:
                     raise asyncio.CancelledError
                 if event.type != "completed":
                     raise InvocationError(event.error_code)
-                return event.structured, legacy_usage
+                return (
+                    validation.get("normalized", event.structured),
+                    legacy_usage,
+                )

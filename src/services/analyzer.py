@@ -28,7 +28,6 @@ class Analyzer(AnalysisCaller):
         # Load cached prompt templates (T111 optimization)
         self.prompt_template = load_prompt_template("analysis_prompt.txt")
         self.greeting_template = load_prompt_template("greeting_detection.txt")
-        self.last_greeting_usage: dict[str, int] | None = None
 
     def _normalize_reasoning(self, reasoning: Any) -> dict:
         """
@@ -125,11 +124,7 @@ class Analyzer(AnalysisCaller):
             context=context or "No prior context",
         )
 
-        try:
-            result, api_usage = await self.structured(
-                prompt, RuntimeClassification, "classification", 1500
-            )
-
+        def normalize(result):
             # Validate response structure
             if not all(k in result for k in ["label", "confidence"]):
                 raise ValueError(
@@ -156,6 +151,16 @@ class Analyzer(AnalysisCaller):
             # Normalize reasoning to structured format
             result["reasoning"] = self._normalize_reasoning(
                 result.get("reasoning", "")
+            )
+            return result
+
+        try:
+            result, api_usage = await self.structured(
+                prompt,
+                RuntimeClassification,
+                "classification",
+                1500,
+                normalize=normalize,
             )
             if api_usage is not None:
                 result["_api_usage"] = api_usage
@@ -234,9 +239,7 @@ class Analyzer(AnalysisCaller):
                  "reason": "Conceptual question"}
             ]
         """
-        self.last_greeting_usage = None
         if not messages:
-            self.last_greeting_usage = None
             return []
 
         # Format messages for prompt
@@ -246,7 +249,7 @@ class Analyzer(AnalysisCaller):
         prompt = self.greeting_template.format(messages=formatted_messages)
 
         try:
-            payload, self.last_greeting_usage = await self.structured(
+            payload, _ = await self.structured(
                 prompt, RuntimeGreetings, "greeting", 500
             )
             results = payload["results"]
@@ -272,7 +275,6 @@ class Analyzer(AnalysisCaller):
 
         except Exception as e:
             logger.warning("Greeting detection failed: %s", e)
-            self.last_greeting_usage = None
             # Return safe defaults (assume no greetings)
             return [
                 {"index": i, "is_greeting": False, "reason": "Detection failed"}

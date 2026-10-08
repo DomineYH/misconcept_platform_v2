@@ -106,7 +106,12 @@ async def test_key_save_replace_and_safe_state(data, api, caplog):
         "google",
     ]
     assert all(p["status"] == "unconfigured" for p in initial["providers"])
-    assert initial["models"] == [] and initial["settings"] is None
+    assert initial["models"] == []
+    assert initial["settings"]["defaults"] == dict.fromkeys(
+        ["student", "mentor", "analysis"]
+    )
+    assert initial["models_available"] is True
+    assert initial["probes_available"] is False
     response = await post(api, "key", 1, api_key=KEY)
     assert response.status_code == 200
     first = await row(data)

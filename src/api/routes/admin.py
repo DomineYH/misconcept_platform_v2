@@ -11,8 +11,11 @@ from fastapi.responses import HTMLResponse
 
 from src.api.dependencies import get_admin_user, get_current_user, templates
 from src.api.routes.admin_about import router as about_router
+from src.api.routes.admin_ai_settings import router as ai_settings_router
+from src.api.routes.admin_catalog import router as catalog_router
 from src.api.routes.admin_frameworks import router as frameworks_router
 from src.api.routes.admin_groups import router as groups_router
+from src.api.routes.admin_models import router as models_router
 from src.api.routes.admin_providers import router as providers_router
 from src.api.routes.admin_scenarios import router as scenarios_router
 from src.api.routes.admin_sessions import router as sessions_router
@@ -28,6 +31,9 @@ router.include_router(users_router)
 router.include_router(groups_router)
 router.include_router(about_router)
 router.include_router(providers_router)
+router.include_router(models_router)
+router.include_router(ai_settings_router)
+router.include_router(catalog_router)
 
 
 @router.get("/admin/ai", response_class=HTMLResponse)

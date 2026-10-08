@@ -13,7 +13,7 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.6",
-    "openai>=1.68.0",
+    "openai==3.26.0",
     "httpx>=0.25.0",
     "aiosqlite>=0.19.0",
     "itsdangerous>=2.1.0",

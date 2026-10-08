@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -39,6 +40,9 @@ class ProviderConnection(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    catalog_models_json: Mapped[list] = mapped_column(JSON, default=list)
+    catalog_fetched_at: Mapped[datetime | None] = mapped_column(DateTime)
+    catalog_credential_revision: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (
         CheckConstraint("provider IN ('openai','anthropic','google')"),

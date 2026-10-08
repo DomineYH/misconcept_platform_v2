@@ -420,7 +420,7 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
 async def test_transient_creation_error_has_no_automatic_retry(
     data, client, student
 ):
-    import httpx
+    import httpx2 as httpx
     from openai import APIConnectionError
 
     student.responses.create.side_effect = APIConnectionError(

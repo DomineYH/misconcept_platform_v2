@@ -27,6 +27,7 @@ async def check():
             DATABASE_URL=f"sqlite+aiosqlite:///{directory}/live.db",
         )
         import httpx
+        import httpx2
         import uvicorn
         from itsdangerous import TimestampSigner
         from openai import AsyncOpenAI
@@ -92,7 +93,7 @@ async def check():
         release = asyncio.Event()
         calls, owned_clients = [], []
 
-        class Upstream(httpx.AsyncByteStream):
+        class Upstream(httpx2.AsyncByteStream):
             async def __aiter__(self):
                 yield b"event: response.output_text.delta\ndata: " + json.dumps(
                     {
@@ -143,7 +144,7 @@ async def check():
 
         async def upstream(request):
             calls.append(json.loads(request.content))
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 headers={"Content-Type": "text/event-stream"},
                 stream=Upstream(),
@@ -153,8 +154,8 @@ async def check():
             assert kwargs["max_retries"] == 0
             sdk = AsyncOpenAI(
                 **kwargs,
-                http_client=httpx.AsyncClient(
-                    transport=httpx.MockTransport(upstream)
+                http_client=httpx2.AsyncClient(
+                    transport=httpx2.MockTransport(upstream)
                 ),
             )
             owned_clients.append(sdk)

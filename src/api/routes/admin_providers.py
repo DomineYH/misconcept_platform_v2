@@ -1,6 +1,6 @@
 """Administrator-only provider snapshots and encrypted credential writes."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -29,6 +29,10 @@ from src.api.dependencies import (
 from src.config import config
 from src.models.provider_connection import ProviderAuditLog, ProviderConnection
 from src.models.user import User
+from src.services.model_configuration import (
+    configuration_state,
+    connection_impact,
+)
 from src.services.provider_reauthentication import reauthenticate
 from src.services.provider_secrets import (
     ProviderSecretUnavailableError,
@@ -98,6 +102,7 @@ def public_connection(provider, connection):
         try:
             decrypt_key(connection)
             status = "ready"
+            error = connection.error_code
         except ProviderSecretUnavailableError:
             status, error = "decryption_failed", "configuration_unavailable"
     return dict(
@@ -112,10 +117,24 @@ def public_connection(provider, connection):
         error_code=error,
         impact=[],
         catalog={
-            "available": False,
-            "stale": False,
-            "fetched_at": None,
-            "models": [],
+            "available": provider == "openai",
+            "stale": bool(
+                connection
+                and (
+                    not connection.catalog_fetched_at
+                    or connection.catalog_fetched_at.replace(
+                        tzinfo=timezone.utc
+                    )
+                    + timedelta(hours=24)
+                    <= datetime.now(timezone.utc)
+                    or connection.catalog_credential_revision
+                    != connection.credential_revision
+                    or error
+                    or status != "ready"
+                )
+            ),
+            "fetched_at": connection.catalog_fetched_at if connection else None,
+            "models": connection.catalog_models_json if connection else [],
         },
     )
 
@@ -129,16 +148,23 @@ async def provider_state(
         c.provider: c
         for c in (await db.scalars(select(ProviderConnection))).all()
     }
+    configuration = await configuration_state(db, connections)
     return JSONResponse(
         jsonable_encoder(
             {
                 "master_key_available": master_key() is not None,
                 "providers": [
-                    public_connection(p, connections.get(p)) for p in PROVIDERS
+                    {
+                        **public_connection(p, connections.get(p)),
+                        "impact": connection_impact(
+                            p,
+                            configuration["models"],
+                            configuration["settings"],
+                        ),
+                    }
+                    for p in PROVIDERS
                 ],
-                "models": [],
-                "models_available": False,
-                "settings": None,
+                **configuration,
             }
         ),
         headers={"Cache-Control": "no-store"},

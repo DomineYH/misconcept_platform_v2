@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
+import httpx2 as httpx
 import pytest
 from openai import APIConnectionError, AsyncOpenAI
 from tenacity import wait_none

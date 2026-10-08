@@ -63,18 +63,20 @@ export function render(state, actions) {
   const models = node('section', null, {'aria-label':'모델 설정'});
   models.append(node('h2', '모델 설정'));
   if (state.models_available === false) models.append(node('p', '모델 등록·역할 시험은 아직 제공되지 않습니다.'));
+  if (state.probes_available === false) models.append(node('p', '역할 시험은 아직 제공되지 않습니다.'));
   for (const m of state.models) {
     const p = state.providers.find(p => p.provider === m.provider);
     const card = node('article', null, {'data-model':m.id});
     card.append(node('h3', `${m.display_name} · ${providers[m.provider]} / ${m.model_id}`),
       node('p', `${m.enabled ? '활성' : '비활성'} · ${m.capabilities ? '기능 정의 있음' : '기능 정의 필요'}`),
       button('표시명·활성·옵션 수정', () => actions.model(m)));
+    if (m.capabilities?.metadata_conflict) card.append(node('p', '기능 정의·제공자 목록 불일치: 역할 시험과 실행을 사용할 수 없습니다.'));
     for (const [role, label] of Object.entries(roles)) {
       const verification = m.verification_state[role];
       const row = node('div', null, {class:'ai-actions'});
       row.append(node('p', `${label}: ${states[verification.status] || '미검증'}${verification.verified_at ? ` · ${verification.verified_at}` : ''}`));
       if (verification.error_code) row.append(node('p', '역할 응답 형식 시험에 실패했습니다. 설정을 확인한 후 다시 시험하세요.'));
-      row.append(button(`${label} 시험`, () => actions.probe(m, role), !m.capabilities || !state.master_key_available || !p.enabled || p.status !== 'ready' || verification.status === 'verifying'));
+      row.append(button(`${label} 시험`, () => actions.probe(m, role), state.probes_available === false || !m.capabilities || m.capabilities.metadata_conflict || !state.master_key_available || !p.enabled || p.status !== 'ready' || verification.status === 'verifying'));
       if (verification.status === 'verifying') row.append(button(`${label} 진행 조회`, () => actions.poll(verification.probe_request_id)), button(`${label} 시험 취소`, () => actions.cancel(verification.probe_request_id)));
       card.append(row);
     }

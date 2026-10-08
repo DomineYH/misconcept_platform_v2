@@ -86,6 +86,7 @@ async def test_024_preserves_legacy_and_matches_fresh(tmp_path, monkeypatch):
             migrate.BASELINE,
             "024_generation_run.sql",
             "025_provider_connection.sql",
+            "026_model_settings.sql",
         ]
     await engine.dispose()
     await fresh.dispose()

@@ -2,14 +2,15 @@
 
 `GET /admin/ai`는 기존 관리자 인증으로 템플릿만 반환한다. 화면 진입,
 새로고침, 재접속은 제공자를 호출하거나 시험을 시작하지 않는다.
-`static/js/ai-connections.js`가 아래 API를 소비한다. A2는 연결 조회와 키 저장/교체/활성 변경/삭제를 실제 DB에 연결한다. 모델/시험/설정과 SDK 호출은 후속 티켓 범위다. 없는 API는 안전한 설정 불가 안내를 표시한다.
+`static/js/ai-connections.js`가 아래 API를 소비한다. A2는 연결 조회와 키 저장/교체/활성 변경/삭제를 실제 DB에 연결한다. A3는 OpenAI 비생성 목록·모델 등록/편집·singleton 설정을 연결한다. 역할 시험은 A5 이후 범위다. 없는 API는 안전한 설정 불가 안내를 표시한다.
 합성 상태는 `tests/browser_ai_*.mjs`의 Playwright 응답에만 존재한다.
 
 ## 읽기: `GET /admin/ai/state`
 
-비밀 없는 JSON 객체. A2의 아직 제공되지 않은 기능은 `models: []`,
-`models_available: false`, `settings: null`, 각 `catalog.available: false`로
-반환한다. 화면은 해당 작업을 비활성화하고 준비 중 안내를 표시한다.
+비밀 없는 JSON 객체. A3는 `models_available: true`, `probes_available: false`,
+DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 없고 역할
+기본값은 모두 null이다. OpenAI만 `catalog.available: true`이며 나머지 목록과
+역할 시험 버튼은 비활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
 연결 API 상태 조회는 `Cache-Control: no-store`이며 관리자 인증이 없으면
 401, 교사면 403이다. 마스터 키 오류도 조회를 막지 않는다.
 
@@ -32,7 +33,7 @@
   `error_code`, 진행 중이면 `probe_request_id`를 포함한다. 서버는 검증의
   credential/connection/capability/role-contract 버전 유효성을 반영한 상태를
   반환한다. 성공을 클라이언트가 목록 등록에서 추측하지 않는다.
-  `probe_budgets[role]`은 호출별 출력 상한이며 해당 역할 계약과 모델 기본값/
+  A3의 `probe_budgets`는 빈 객체다. 후속 `probe_budgets[role]`은 호출별 출력 상한이며 해당 역할 계약과 모델 기본값/
   기능 한도에 맞춘 서버 계산 값이다.
 - `settings`: `settings_version`, `defaults`, `limits`, `timeouts`.
   `defaults[role]`은 null 또는 `{model_config_id, available}`.
@@ -133,8 +134,88 @@ nonce, UTF-8 JSON 배열 `[provider, connection_id, credential_revision]`
 티켓은 연결/역할/버전 검사를 함께 수행하고 원문 비밀을 요청 범위에서만
 사용해야 한다. Python 메모리의 완전한 영점 삭제를 보장하지 않는다.
 
-A2에는 모델/작성 기본값/DB 키로 시작한 활성 호출 참조가 없으므로 impact는
-빈 배열이다. 해당 저장·호출 티켓이 실제 참조를 이 필드에 채워야 한다.
+A3의 impact는 등록 모델과 현재 역할별 작성 기본값 참조를 표시한다.
+DB 키로 시작한 생성 호출은 아직 없으며 활성 호출 참조는 A6가 추가한다.
 활성 호출 취소는 A6, 기존 수업 호출의 DB 자격 증명 전환은 A12–A15의
 출시 게이트다. 기존 환경 키 호출을 이번 연결 화면의 결과로 오해하지 않는다.
 백업/복구 절차는 README의 Provider connection setup and recovery를 따른다.
+
+## A3 목록·모델·설정 저장 계약
+
+`026_model_settings.sql`은 연결 행에 목록 캐시를 추가하고 `model_config`,
+`app_setting`을 만든다. 이전 연결 ID/암호문/revision과 수업 기록은 보존한다.
+singleton은 id=1, settings_version=1이며 모델은 자동 등록하지 않는다.
+역할 기본값/한도/시간의 초기값은 위 읽기 계약과 같다.
+
+OpenAI 연결 확인과 갱신은 동일한 `providers/openai/catalog` POST다.
+복호화한 DB 키로 요청별 `AsyncOpenAI(max_retries=0)`를 열고 닫는다.
+`list_models`는 SDK 공개 비동기 반복자를 끝까지 소비한다. 고정 SDK 3.26.0의
+Models API는 현재 pagination 없는 `AsyncPage`다. 지원하지 않는 cursor를
+추측해 요청하지 않는다. 응답 읽기/항목 검증이 끝난 뒤 목록 전체를 한 번에
+커밋한다. 실패·취소·revision/connection_version 충돌은 기존 목록을 덮어쓰지
+않는다. 현재 버전의 실패는 안전한 오류와 verified_at=null을 저장하며 기존
+목록/갱신 시각/등록 모델/역할 상태는 보존한다. 목록 누락도 모델을 삭제하지 않는다.
+연결 비활성·키 교체/삭제는 늦은 결과를 409로 차단한다.
+
+캐시는 `model_id`, `created`, `owned_by`, nullable `shutdown_date`만 보관한다.
+[공식 Models 목록 API](https://developers.openai.com/api/reference/resources/models/methods/list)는
+출력 토큰/temperature/스트리밍 제한을 제공하지 않으므로 목록 ID나 prefix로
+기능을 추론하지 않는다. 명시된 shutdown_date가 지났으면
+`capabilities.metadata_conflict=true`를 표시해 활성화/새 기본값/후속 시험·실행을
+차단한다. 목록이 없다는 사실은 불일치가 아니다.
+
+성공한 비생성 확인은 connection_version을 올리지 않는다. 따라서 목록 갱신은
+유효 역할 검증을 무효화하거나 실패를 성공으로 복원하지 않는다. TTL은 24시간이며
+캐시 revision이 현재 키와 다르거나 확인 실패/복호화 실패이면 참고 목록으로
+표시한다. 외부 대기 동안 DB 트랜잭션을 유지하지 않는다. 시작 시 읽은
+connect/model_list_total 설정을 HTTPX2 connect timeout/전체 asyncio deadline에
+적용하며 진행 중 변경은 다음 조회부터 적용한다. SDK 원문 오류/디버그 헤더는
+공개 응답이나 로그에 넣지 않는다.
+
+모델 등록은 `model_id` trim 후 빈 값/제어문자/잘못된 UTF-8을 거부한다.
+연결+ID 중복은 409, ID/capabilities/verification_state 편집 시도는 422다.
+표시명/활성/옵션 수정은 모델 config_version CAS로 충돌을 409로 반환한다.
+정의 없는 모델은 빈 옵션으로 비활성 표시명 수정만 가능하다. 활성화는 현재
+연결의 유효 역할 성공 하나 이상을 요구한다. 지원 범위 안 옵션 변경은 정적
+검증만 요구하며 역할 성공을 새로 만들지 않는다. 모델 삭제 경로는 없다.
+
+`validate_model_and_options(provider, model_id, options)`는 후속 어댑터가 재사용할
+정적 검증 경계다. 정의 없는 ID는 빈 옵션이라도 차단한다. 반환 값은 입력의
+유효 옵션을 보존하며 잘못된 필드/타입/범위/조합은 ValueError다. HTTP에서는
+안전한 422로 바꾼다. 등록/비활성 표시명 수정만 이 실행 검사를 생략한다.
+
+`effective_roles`는 저장된 구조와 credential_revision, connection_version,
+capability_definition_version, role_contract_version을 검사한다. 버전 불일치는
+stale이며 연결 재활성화로 복원되지 않는다. `ROLE_CONTRACT_VERSIONS`의 초기값은
+역할별 s1-v1이다. A5/A7이 실제 시험 계약을 정하고 변경 시 올린다.
+새 기본값은 활성 모델/연결과 지정한 역할의 현재 성공을 요구한다.
+기존 사용 불가 참조는 보존하며 다른 설정 수정이나 명시적 null 해제는 허용한다.
+singleton 설정은 settings_version CAS, 엄격한 정수/필드, 관리자 예약 여유와
+첫 본문≤전체 시간을 검증한다. 별도 비밀번호 확인은 없다.
+
+### OpenAI 기능 표
+
+확인일 **2026-10-09**, 정의 버전 **openai-2026-10-09-v1**.
+서버 코드 `src/services/model_capabilities.py`가 원본이며 등록/편집 시 DB
+capabilities_json에 스냅샷을 저장한다. 읽기는 현재 정의를 반환하고 이전 정의
+버전으로 얻은 역할 성공은 stale로 처리한다. 클라이언트가 표를 제출할 수 없다.
+
+| 정확한 ID와 공식 snapshot | 텍스트/스트리밍/구조화 | max_output_tokens | reasoning.effort | temperature |
+| --- | --- | --- | --- | --- |
+| gpt-5-mini, gpt-5-mini-2025-08-07 | 모두 지원 | 1–128000 정수 | minimal/low/medium/high, 생략 기본 medium | 미지원 |
+| gpt-5.2, gpt-5.2-2025-12-11 | 모두 지원 | 1–128000 정수 | none/low/medium/high/xhigh, 생략 기본 none | 0–2 숫자, effort=none일 때만 |
+
+모델 기능/최대 출력/정확 snapshot은
+[GPT-5 Mini 모델 문서](https://developers.openai.com/api/docs/models/gpt-5-mini),
+[GPT-5.2 모델 문서](https://developers.openai.com/api/docs/models/gpt-5.2)를 따른다.
+Mini effort는 [GPT-5 가이드의 기존 모델 절](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5),
+sampling 조합은 [GPT-5.4 가이드의 parameter compatibility 절](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.4)을 따른다.
+temperature 0–2 범위는 고정 공식 SDK의 Responses 요청 정의에도 명시돼 있다.
+top_p/logprobs/verbosity/thinking 및 다른 모델 변형은 이번 허용 표에 없다.
+미확인 모델/옵션은 추측하지 않고 차단한다. Mini 공식 페이지의 Deprecated
+표시는 접근 보장이 아니며, 기존 모델을 다른 ID로 자동 대체하지 않는다.
+
+A3의 생성 시험은 API/버튼 모두 사용할 수 없고 `probe_budgets={}`다.
+호출 슬롯·시도 원장·취소를 목록에도 붙이는 작업은 A5/A6가 맡는다.
+기존 학생/멘토/분석 SDK 전송 테스트만 HTTPX2로 바꾸며 FastAPI와 Google용
+HTTPX는 유지한다. 이번 단계로 기존 수업의 DB 연결 전환을 승인하지 않는다.

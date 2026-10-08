@@ -134,7 +134,7 @@ const actions = {
     });
     field(f, 'display_name', '표시명', m.display_name, {type:'text', required:''});
     const enabled = field(f, 'enabled', '모델 활성', String(m.enabled), {}, [['false','비활성'],['true','활성']]);
-    enabled.disabled = !m.enabled && !Object.values(m.verification_state).some(v => v.status === 'succeeded');
+    enabled.disabled = !m.enabled && (!m.capabilities || m.capabilities.metadata_conflict || !Object.values(m.verification_state).some(v => v.status === 'succeeded'));
     f.append(node('p', '모델 ID는 등록 후 변경할 수 없습니다. 모델 비활성화는 신규 호출만 막습니다. 지원 옵션 변경은 서버에서 조합과 범위를 검증합니다.'));
     if (!m.capabilities) f.append(node('p', '기능 정의 필요: 옵션 편집과 역할 시험을 사용할 수 없습니다.'));
     for (const definition of m.capabilities?.fields || []) {
@@ -197,7 +197,7 @@ const actions = {
       const choices = [['', '기본값 없음']];
       for (const m of state.models) {
         const p = state.providers.find(p => p.provider === m.provider);
-        if (p.enabled && p.status === 'ready' && state.master_key_available && m.enabled && m.capabilities && m.verification_state[role].status === 'succeeded') choices.push([m.id, `${providers[m.provider]} / ${m.display_name}`]);
+        if (p.enabled && p.status === 'ready' && state.master_key_available && m.enabled && m.capabilities && !m.capabilities.metadata_conflict && m.verification_state[role].status === 'succeeded') choices.push([m.id, `${providers[m.provider]} / ${m.display_name}`]);
       }
       const unavailable = current && !choices.some(([id]) => id === current.model_config_id);
       if (unavailable) choices.push([current.model_config_id, `기본 모델 사용 불가 (${current.model_config_id})`]);

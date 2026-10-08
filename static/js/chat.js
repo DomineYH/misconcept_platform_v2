@@ -19,8 +19,10 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
   function syncComposer() {
     const disabled = authExpiredHandled || chatClosed || messageSending;
-    document.getElementById('teacher-input').disabled = disabled;
-    document.querySelector('#teacher-form button[type="submit"]').disabled = disabled;
+    if (!document.getElementById('teacher-form').dataset.studentStream || authExpiredHandled || chatClosed) {
+      document.getElementById('teacher-input').disabled = disabled;
+      document.querySelector('#teacher-form button[type="submit"]').disabled = disabled;
+    }
     const endBtn = document.getElementById('end-session-btn');
     endBtn.disabled = authExpiredHandled || messageSending || ['ending', 'analyzing'].includes(endBtn.dataset.state);
   }
@@ -267,7 +269,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // Polling Functions
   // ========================================
   function enablePolling() {
-    if (authExpiredHandled || chatClosed || messageSending) return;
+    if (authExpiredHandled || chatClosed || messageSending || document.getElementById('teacher-form').dataset.studentStream) return;
     const pollingFlag = document.getElementById('polling-enabled');
     if (pollingFlag && pollingFlag.value === 'true') {
       console.log('📡 Polling already enabled');
@@ -346,6 +348,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   }
 
   function saveDraftMessage() {
+    if (document.getElementById('teacher-form').dataset.studentStream) return;
     const key = getDraftStorageKey();
     const input = document.getElementById('teacher-input');
     if (!key || !input) return;
@@ -359,6 +362,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   }
 
   function restoreDraftMessage() {
+    if (document.getElementById('teacher-form').dataset.studentStream) return;
     const key = getDraftStorageKey();
     const input = document.getElementById('teacher-input');
     if (!key || !input) return;
@@ -1013,6 +1017,20 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       if (lastId > 0) enablePolling();
     }
   }
+  // The stream UI mounts separately; the legacy product transport stays in place until A4.
+  window.chatUI = {
+    sessionId: chatConfig.sessionId,
+    studentName: chatConfig.studentName,
+    fetch: fetchWithAuthGuard,
+    headers: getCsrfHeaders,
+    stopPolling: disablePolling,
+    isLocked: () => authExpiredHandled || chatClosed,
+    expire: () => handleAuthExpired('student-stream'),
+    end: () => {
+      lockChatUI('이 대화는 종료되었습니다.');
+      setAnalysisState('ready-to-analyze');
+    }
+  };
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeChat, { once: true });
   } else {

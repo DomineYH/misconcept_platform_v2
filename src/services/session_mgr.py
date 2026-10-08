@@ -72,7 +72,8 @@ class SessionManager:
 
         # Initialize StudentBot with scenario context and configuration
         self.student_bot = StudentBot(
-            client=self.client,
+            session_id=self.session_id,
+            owner_id=session.teacher_id,
             scenario_prompt=scenario.prompt,
             scenario_title=scenario.title,
             student_profile=scenario.student_profile or "Grade 5 student",
@@ -146,7 +147,7 @@ class SessionManager:
         # 3. Generate student response (must be sequential - needed by others)
         (
             student_content,
-            student_usage,
+            _student_usage,
         ) = await self.student_bot.generate_response(teacher_content, history)
 
         # 3.1. Run MisconceptionAnalyzer and TutorBot in PARALLEL
@@ -187,13 +188,6 @@ class SessionManager:
         self.db.add(student_msg)
         await self.db.flush()
         new_messages.append(student_msg)
-
-        # Log StudentBot API usage
-        await self._log_api_usage(
-            bot_type="student",
-            model=self.student_bot.model,
-            usage_dict=student_usage,
-        )
 
         # 4. Process TutorBot result (from parallel execution)
         if tutor_task_idx is not None:

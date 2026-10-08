@@ -28,6 +28,8 @@ async def start_attempt(
     invocation_id=None,
     attempt_no=1,
     retry_wait_ms=None,
+    run_id=None,
+    session_id=None,
 ):
     async with factory() as db:
         entry = ApiUsageLog(
@@ -45,6 +47,8 @@ async def start_attempt(
             status="running",
             timestamp=now(),
             started_at=now(),
+            run_id=run_id,
+            session_id=session_id,
         )
         db.add(entry)
         try:

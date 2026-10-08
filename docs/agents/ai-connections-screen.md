@@ -342,6 +342,31 @@ interrupted/usage unknown으로 정리한다. 취소 직전 시작 트랜잭션�
 뒤 HTTP/슬롯을 닫는다. 재시작은 verifying/running을 정리할 뿐 재호출하지 않는다.
 기존 수업 경로의 실제 전환은 A12–A14이며 여기서는 모의 일반 호출로 여유를 검증한다.
 
+## A12 lesson execution contract
+
+`src/services/lesson_connections.resolve_lesson_model(db, model_id, role, options)`
+is the temporary S1 resolver for existing lesson settings. It selects only the
+exact registered OpenAI ID, checks enabled/current role verification and validates
+legacy per-call options. It never reads authoring defaults or environment keys.
+A13/A14 should reuse this resolver with their existing role IDs/options.
+
+Student admission occurs under the common execution lock before committing a new
+turn. The reserved `CallPermit` transfers to the response worker; the common
+`execute_call` boundary owns SDK access, deadlines, zero student retries, cleanup
+and attempt finalization. Its optional `run_id`/`session_id` arguments attach real
+lesson runs; nonstream calls without a run use invocation/request IDs and NULL
+run identity. Do not add another usage writer at message finalization.
+
+The run/turn/seq and recovery JSON/SSE fields are unchanged. The attempt ledger
+retains normalized provider errors. Existing browser timeout/empty/output-limit
+codes remain compatible; transient upstream failures use `transient`, and unknown
+or missing terminal output uses `invalid_output`. Configuration refusals are 503,
+capacity refusals are 429, with no committed new turn or attempt. Replays read
+saved results even after connection/configuration changes. Stored greetings remain
+local content; entering/reopening a scenario starts no generation or misconception
+call. Migration 028 widens only the generation provider CHECK and preserves all
+message/attempt references and execution uniqueness constraints.
+
 ## A7 OpenAI 멘토·사후 분석 검증 계약
 
 기존 예약·상태 조회·취소 API에 role=mentor/analysis를 허용한다. UUID 재전송,

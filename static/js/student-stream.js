@@ -261,6 +261,22 @@ export function mountStudentStream(ui) {
           message:'대화가 종료되었습니다.', retryable:false});
         return;
       }
+      if (response.status === 503 || response.status === 429) {
+        const detail = (await response.clone().json()).detail;
+        if (['configuration_unavailable', 'call_limit_reached'].includes(detail?.code)) {
+          pending.status = 'unknown';
+          pending.retryable = true;
+          status.textContent = detail.code === 'configuration_unavailable' ?
+            '관리자에게 AI 연결과 학생 모델 검증을 요청해주세요. 요청은 아직 수락되지 않았습니다.' :
+            '호출 한도에 도달했습니다. 잠시 후 같은 요청을 다시 전송해주세요. 요청은 아직 수락되지 않았습니다.';
+          retry.textContent = '같은 요청 다시 전송';
+          retry.disabled = false;
+          actions.hidden = false;
+          if (!input.value) input.value = pending.content;
+          persist();
+          return;
+        }
+      }
       if (response.ok && response.headers.get('Content-Type')?.includes('application/json')) {
         applySnapshot(await response.json());
         if (pending?.status === 'running') await recover();

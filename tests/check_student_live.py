@@ -24,6 +24,8 @@ async def check():
             TESTING="true",
             OPENAI_API_KEY="test-only",
             SESSION_SECRET="live-test",
+            PROVIDER_SECRET_ENCRYPTION_KEY=base64.b64encode(b"k" * 32).decode(),
+            PROVIDER_SECRET_ENCRYPTION_KEY_VERSION="live-v1",
             DATABASE_URL=f"sqlite+aiosqlite:///{directory}/live.db",
         )
         import httpx
@@ -40,15 +42,20 @@ async def check():
         from src.main import app
         from src.models import (
             AnalysisFramework,
+            ApiUsageLog,
             GenerationRun,
+            ModelConfig,
             PromptTemplate,
+            ProviderConnection,
             Scenario,
             ScenarioGroup,
             Session,
             User,
             UserGroup,
         )
-        from src.services import base
+        from src.services import openai_generation
+        from src.services.model_capabilities import DEFINITION_VERSION
+        from src.services.provider_secrets import encrypt_key
 
         await run_all_migrations()
         async with AsyncSessionLocal() as db:
@@ -80,6 +87,36 @@ async def check():
             )
             db.add_all([owner, scenario])
             await db.flush()
+            connection = await db.scalar(
+                select(ProviderConnection).where(
+                    ProviderConnection.provider == "openai"
+                )
+            )
+            connection.credential_revision = 1
+            connection.encrypted_key, connection.nonce = encrypt_key(
+                connection, "sk-live-db-key", 1
+            )
+            connection.encryption_key_version = "live-v1"
+            connection.masked_hint = "-key"
+            connection.enabled = True
+            db.add(
+                ModelConfig(
+                    provider_connection_id=connection.id,
+                    model_id="gpt-5-mini",
+                    display_name="Live student",
+                    enabled=True,
+                    capability_definition_version=DEFINITION_VERSION,
+                    verification_state={
+                        "student": {
+                            "status": "succeeded",
+                            "credential_revision": 1,
+                            "connection_version": connection.connection_version,
+                            "capability_definition_version": DEFINITION_VERSION,
+                            "role_contract_version": "s1-v1",
+                        }
+                    },
+                )
+            )
             session = Session(teacher_id=owner.id, scenario_id=scenario.id)
             db.add_all(
                 [
@@ -143,6 +180,7 @@ async def check():
                 ).encode() + b"\n\n"
 
         async def upstream(request):
+            assert request.headers["authorization"] == "Bearer sk-live-db-key"
             calls.append(json.loads(request.content))
             return httpx2.Response(
                 200,
@@ -161,7 +199,7 @@ async def check():
             owned_clients.append(sdk)
             return sdk
 
-        base.AsyncOpenAI = client_factory
+        openai_generation.AsyncOpenAI = client_factory
         original_connect = socket.socket.connect
 
         def localhost_only(sock, address):
@@ -264,6 +302,16 @@ async def check():
                 assert all(sdk.is_closed() for sdk in owned_clients)
                 async with AsyncSessionLocal() as db:
                     run = (await db.scalars(select(GenerationRun))).one()
+                    attempt = (await db.scalars(select(ApiUsageLog))).one()
+                    assert (
+                        attempt.run_id == run.id
+                        and attempt.session_id == session_id
+                    )
+                    assert (
+                        attempt.status == "completed"
+                        and attempt.attempt_no == 1
+                    )
+                    assert attempt.request_id == payload["request_id"]
                     assert (
                         run.started_at <= run.first_output_at <= run.finished_at
                     )

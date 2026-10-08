@@ -4,6 +4,8 @@ import unicodedata
 from copy import deepcopy
 from datetime import date
 
+from src.services import anthropic_capabilities
+
 DEFINITION_VERSION = "openai-2026-10-09-v1"
 MODEL_PAGES = "https://developers.openai.com/api/docs/models/"
 PARAMETER_SOURCE = (
@@ -31,6 +33,10 @@ def normalize_model_id(value):
 
 
 def metadata_conflict(model_id, connection):
+    if connection.provider == "anthropic":
+        return anthropic_capabilities.metadata_conflict(
+            model_id, connection.catalog_models_json
+        )
     for item in connection.catalog_models_json:
         if item.get("model_id") == model_id and item.get("shutdown_date"):
             return date.fromisoformat(item["shutdown_date"]) <= date.today()
@@ -38,6 +44,8 @@ def metadata_conflict(model_id, connection):
 
 
 def capabilities(provider, model_id):
+    if provider == "anthropic":
+        return anthropic_capabilities.capabilities(model_id)
     name = SNAPSHOTS.get(model_id, model_id)
     if provider != "openai" or name not in DEFINITIONS:
         return None
@@ -85,6 +93,10 @@ def capabilities(provider, model_id):
 
 
 def validate_model_and_options(provider, model_id, options):
+    if provider == "anthropic":
+        return anthropic_capabilities.validate_model_and_options(
+            model_id, options
+        )
     definition = capabilities(provider, model_id)
     if definition is None:
         raise ValueError("capability_definition_required")

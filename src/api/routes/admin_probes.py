@@ -93,7 +93,7 @@ async def _reserve_probe(model_id, data, user, db):
     connection = await db.get(ProviderConnection, model.provider_connection_id)
     definition = capabilities(connection.provider, model.model_id)
     if (
-        connection.provider != "openai"
+        connection.provider not in ("openai", "anthropic")
         or definition is None
         or metadata_conflict(model.model_id, connection)
     ):

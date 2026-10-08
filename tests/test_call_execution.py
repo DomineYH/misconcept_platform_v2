@@ -264,7 +264,7 @@ async def test_cancel_successful_probe_is_idempotent_noop(
         ).scalar() == 2
 
 
-async def test_unimplemented_provider_never_sends_its_key_to_openai(
+async def test_unknown_provider_never_sends_its_key_to_openai(
     data, api, monkeypatch
 ):
     from test_call_admission import catalog_transport
@@ -293,6 +293,7 @@ async def test_unimplemented_provider_never_sends_its_key_to_openai(
         owner_id=data.admin.id,
         operation="model_list",
     )
+    permit.provider = "unsupported"
     async with aclosing(execute_call(permit, kind="catalog")) as events:
         result = [event async for event in events]
     assert (

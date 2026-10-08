@@ -24,4 +24,4 @@ def probe_options(provider, model, *, output_budget=OUTPUT_BUDGET):
         output_budget,
         options.get("max_output_tokens", definition["max_output_tokens"]),
     )
-    return options
+    return validate_model_and_options(provider, model.model_id, options)

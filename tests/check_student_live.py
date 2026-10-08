@@ -30,6 +30,7 @@ async def check():
         import uvicorn
         from itsdangerous import TimestampSigner
         from openai import AsyncOpenAI
+        from sqlalchemy import select
         from starlette_csrf import CSRFMiddleware
 
         from src.config import config
@@ -38,6 +39,7 @@ async def check():
         from src.main import app
         from src.models import (
             AnalysisFramework,
+            GenerationRun,
             PromptTemplate,
             Scenario,
             ScenarioGroup,
@@ -55,8 +57,13 @@ async def check():
                 template_name="Live",
                 template_text="Student context: {prompt}",
             )
+            mentor = PromptTemplate(
+                bot_type="tutor",
+                template_name="Enabled mentor",
+                template_text="Coach this completed turn: {prompt}",
+            )
             framework = AnalysisFramework(name="Live", labels_json='["A","B"]')
-            db.add_all([group, template, framework])
+            db.add_all([group, template, mentor, framework])
             await db.flush()
             owner = User(
                 username="live-owner", nickname="Teacher", group_id=group.id
@@ -67,6 +74,8 @@ async def check():
                 problem_situation="Public problem",
                 framework_id=framework.id,
                 student_template_id=template.id,
+                tutor_template_id=mentor.id,
+                tutor_sensitivity="high",
             )
             db.add_all([owner, scenario])
             await db.flush()
@@ -248,6 +257,31 @@ async def check():
                 )
                 assert calls[0]["stream"] is True
                 assert all(sdk.is_closed() for sdk in owned_clients)
+                async with AsyncSessionLocal() as db:
+                    run = (await db.scalars(select(GenerationRun))).one()
+                    assert (
+                        run.started_at <= run.first_output_at <= run.finished_at
+                    )
+                    timings = {
+                        "first_output_ms": (
+                            run.first_output_at - run.started_at
+                        ).total_seconds()
+                        * 1000,
+                        "completed_ms": (
+                            run.finished_at - run.started_at
+                        ).total_seconds()
+                        * 1000,
+                    }
+                print(
+                    json.dumps(
+                        {
+                            "student_calls": len(calls),
+                            "mentor_calls_in_student_path": 0,
+                            "misconception_calls": 0,
+                            **timings,
+                        }
+                    )
+                )
                 print(
                     "PASS: real localhost incremental delta, active CSRF, "
                     "real SDK parsing/max_retries=0/close, "

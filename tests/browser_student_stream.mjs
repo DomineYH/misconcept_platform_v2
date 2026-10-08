@@ -4,7 +4,11 @@ export default async function checkStudentStream(page) {
   const assert = (value, message) => { if (!value) throw new Error(message); };
   const errors = [];
   let legacyPosts = 0;
+  let pollRequests = 0;
   page.on('pageerror', error => errors.push(error.message));
+  page.on('request', request => {
+    if (request.url().includes('/messages/updates')) pollRequests++;
+  });
   await page.route('**/sessions/*/messages', route => {
     legacyPosts++;
     return route.fulfill({status:500});
@@ -86,6 +90,8 @@ export default async function checkStudentStream(page) {
   assert(await input.evaluate(el => el === document.activeElement), 'completion restores input focus');
   assert(await page.locator('.message-teacher').count() === 1 && await page.locator('.message-student').count() === 1, 'no duplicate messages');
   assert(await page.locator('#polling-enabled').inputValue() === 'false', 'stream does not enable polling');
+  assert(pollRequests === 0, 'normal completed student sends zero message polls');
+  assert(await page.evaluate(() => streamFixture.gets.length === 0), 'normal completion sends zero recovery polls');
   assert(await page.evaluate(() => streamFixture.posts[0].headers['x-csrf-token']) === 'browser-test-token', 'fetch retains CSRF');
 
   await input.fill('실패할 질문');
@@ -204,6 +210,7 @@ export default async function checkStudentStream(page) {
   assert(await input.inputValue() === '로그인 후 이어 쓸 초안', 'login return restores the exact tab draft');
   assert(await page.evaluate(() => streamFixture.posts.length === 0 && streamFixture.gets.length === 1 && streamFixture.gets[0].includes('/runs?request_id=')), 'login return checks ownership-protected status without automatic generation');
   assert(legacyPosts === 0, 'mounted stream form never also sends a legacy POST');
+  assert(pollRequests === 0, 'stream and recovery send zero legacy message polls');
   assert(errors.length === 0, errors.join('; '));
   return {checks:['incremental UTF-8 text, optimistic reconciliation, completion, keyboard, focus, CSRF, no polling', 'failure, partial exclusion, draft preservation and same-turn retry', 'nonterminal EOF, missing accepted frame, stored completion lookup without regeneration', 'same POST returns existing-run JSON', 'bare API 401 restores draft and preserves request in sessionStorage'], pageErrors:errors};
 }

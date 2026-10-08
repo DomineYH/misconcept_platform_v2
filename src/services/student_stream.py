@@ -10,9 +10,10 @@ from datetime import datetime, timezone
 import anyio
 from starlette.responses import StreamingResponse
 
+from src.models import GenerationRun
 from src.services.base import OpenAIBaseService
 from src.services.generation_lifecycle import active_runs
-from src.services.generation_runs import finish_student
+from src.services.generation_runs import finish_student, snapshot
 from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,14 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
             operation="student",
             status="running",
         )
+        # End can commit between reservation and live-signal registration.
+        async with factory() as db:
+            run = await db.get(GenerationRun, accepted["run_id"])
+            state = await snapshot(db, run) if run.status != "running" else None
+        if state is not None:
+            terminal = True
+            yield terminal_frame(state)
+            return
         if cancelled.is_set():
             raise StudentStreamError("session_ended")
         service = OpenAIBaseService()

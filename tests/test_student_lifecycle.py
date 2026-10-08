@@ -302,3 +302,47 @@ async def test_end_commit_failure_preserves_open_session_and_running_rights(
     finally:
         gate.set()
         await task
+
+
+async def test_end_between_reservation_and_response_start_skips_upstream(
+    data, client, student
+):
+    from src.api.routes.student_generation import StudentRequest
+    from src.services.generation_runs import reserve_student
+    from src.services.student_stream import StudentStreamingResponse
+
+    login(client, data.owner)
+    accepted, kwargs = await reserve_student(
+        data.factory,
+        data.session.id,
+        data.owner,
+        StudentRequest(request_id=str(uuid4()), content="End before handoff"),
+    )
+    assert (
+        await client.post(f"/sessions/{data.session.id}/close")
+    ).status_code == 200
+    # The end committed before a response could register its in-memory signal.
+    response = StudentStreamingResponse(data.factory, accepted, kwargs)
+    received = []
+
+    async def receive():
+        await asyncio.Event().wait()
+
+    async def send(message):
+        if message["type"] == "http.response.body":
+            received.append(message.get("body", b""))
+
+    await asyncio.wait_for(
+        response(
+            {"type": "http", "asgi": {"spec_version": "2.0"}},
+            receive,
+            send,
+        ),
+        3,
+    )
+    assert b"run.cancelled" in b"".join(received)
+    assert b"output.completed" not in b"".join(received)
+    student.responses.create.assert_not_awaited()
+    snapshot = (await client.get(f"/runs/{accepted['run_id']}")).json()
+    assert snapshot["status"] == "cancelled"
+    assert snapshot["message"] is None

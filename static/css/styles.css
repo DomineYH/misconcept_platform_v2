@@ -1005,6 +1005,14 @@ textarea {
   color: var(--color-mentor-text);
 }
 
+.messages-container[data-mentor-stream] {
+  overflow-anchor: none;
+}
+
+.mentor-slot [hidden] {
+  display: none;
+}
+
 .greeting-message .message-sender {
   font-weight: 600;
 }

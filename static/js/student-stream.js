@@ -109,6 +109,7 @@ export function mountStudentStream(ui) {
       sessionStorage.removeItem(storageKey);
       sync();
       if (!ui.isLocked()) input.focus();
+      container.dispatchEvent(new CustomEvent('student:completed', {detail:{row:student, ...data}}));
     } else if (['run.failed', 'run.interrupted', 'run.cancelled'].includes(type)) {
       if (data.run_id !== pending.run_id) return;
       Object.assign(pending, data);

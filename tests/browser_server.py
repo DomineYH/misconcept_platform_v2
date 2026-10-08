@@ -50,6 +50,23 @@ class Handler(BaseHTTPRequestHandler):
                 "/scenarios": "scenarios.html",
                 "/admin/scenarios-page": "admin/scenarios.html",
             }[path.path]
+            messages = []
+            if "mentor_legacy" in query:
+                messages = [
+                    SimpleNamespace(
+                        id=message_id,
+                        role=role,
+                        content=content,
+                        created_at=None,
+                        turn_id=None,
+                    )
+                    for message_id, role, content in [
+                        (7, "teacher", "Legacy teacher"),
+                        (8, "student", "Legacy student"),
+                        (9, "tutor", "Legacy mentor"),
+                        (10, "teacher", "Legacy unanswered teacher"),
+                    ]
+                ]
             body = (
                 templates.get_template(template)
                 .render(
@@ -65,7 +82,7 @@ class Handler(BaseHTTPRequestHandler):
                             else "teacher"
                         ),
                     ),
-                    messages=[],
+                    messages=messages,
                     session_ended="ended" in query,
                     frameworks=[framework],
                     student_templates=[student_template],
@@ -82,6 +99,14 @@ class Handler(BaseHTTPRequestHandler):
                     b'from "/static/js/student-stream.js"; '
                     b"mountStudentStream(window.chatUI);</script>"
                 )
+                if "mentor" in query:
+                    script = script.replace(
+                        b"mountStudentStream(window.chatUI);",
+                        b"import {mountMentorStream} "
+                        b'from "/static/js/mentor-stream.js"; '
+                        b"mountMentorStream(window.chatUI);"
+                        b"mountStudentStream(window.chatUI);",
+                    )
                 body = body.replace(b"</body>", script + b"</body>")
             mime = "text/html; charset=utf-8"
         elif path.path.startswith("/static/"):

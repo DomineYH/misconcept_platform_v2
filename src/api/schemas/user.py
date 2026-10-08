@@ -125,9 +125,18 @@ class BulkFailure(BaseModel):
     reason: str
 
 
+class BulkCredential(BaseModel):
+    """Initial credentials returned only by a successful registration."""
+
+    username: str
+    nickname: str
+    initial_password: str
+
+
 class BulkRegisterResponse(BaseModel):
     """Response from bulk registration endpoint."""
 
     success_count: int
     fail_count: int
     failures: list[BulkFailure]
+    credentials: list[BulkCredential] = Field(default_factory=list)

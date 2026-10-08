@@ -103,7 +103,7 @@
           <button type="button" class="btn btn-primary" onclick="document.getElementById('bulk-file-input').click()">파일 선택</button>
           <p id="bulk-file-name" style="margin-top:12px;color:var(--text-muted,#9ca3af);font-size:0.85rem;"></p>
         </div>
-        <p style="color:var(--text-muted,#9ca3af);font-size:0.8rem;margin-top:12px;text-align:center;">* 기본 비밀번호: 00000000</p>
+        <p style="color:var(--text-muted,#9ca3af);font-size:0.8rem;margin-top:12px;text-align:center;">사용자마다 무작위 초기 비밀번호를 발급합니다.</p>
         <p id="bulk-upload-error" style="color:#ef4444;text-align:center;margin-top:8px;display:none;"></p>
       </div>
 
@@ -150,6 +150,19 @@
           <div style="flex:1;background:rgba(239,68,68,0.1);border:1px solid #991b1b;border-radius:8px;padding:16px;text-align:center;">
             <div id="bulk-fail-count" style="font-size:1.8rem;font-weight:bold;color:#ef4444;">0</div>
             <div style="font-size:0.85rem;color:#fca5a5;">실패</div>
+          </div>
+        </div>
+        <div id="bulk-credential-list" style="display:none;">
+          <p>이 화면을 닫으면 다시 볼 수 없음</p>
+          <p>초기 비밀번호를 복사하거나 CSV로 저장해 사용자에게 전달하세요.</p>
+          <button type="button" class="btn btn-secondary" id="bulk-copy-credentials" onclick="copyBulkCredentials()">자격 증명 복사</button>
+          <button type="button" class="btn btn-secondary" id="bulk-download-credentials" onclick="downloadBulkCredentials()">자격 증명 CSV 다운로드</button>
+          <p id="bulk-credential-status" role="status" aria-live="polite"></p>
+          <div class="table-container" style="max-height:300px;overflow:auto;">
+            <table class="data-table">
+              <thead><tr><th>사용자 ID</th><th>닉네임</th><th>초기 비밀번호</th></tr></thead>
+              <tbody id="bulk-credentials-body"></tbody>
+            </table>
           </div>
         </div>
         <div id="bulk-failure-list" style="display:none;">
@@ -449,17 +462,19 @@ filterRole.addEventListener('change', filterUsers);
 filterGroup.addEventListener('change', filterUsers);
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal('create-modal'); closeEditPanel(); }
+  if (e.key === 'Escape') { closeModal('create-modal'); closeEditPanel(); closeBulkModal(); }
 });
 
   // ===== BULK UPLOAD =====
   let bulkPreviewData = [];
   let bulkGroups = [];
+  let bulkCredentials = [];
+  let bulkRequestId = 0;
 
   function escHtml(s) {
     const d = document.createElement('div');
     d.textContent = s || '';
-    return d.innerHTML;
+    return d.innerHTML.replace(/"/g, '&quot;');
   }
 
   document.getElementById('open-bulk-modal').addEventListener('click', () => {
@@ -501,6 +516,14 @@ document.addEventListener('keydown', e => {
   });
 
   function resetBulkModal() {
+    bulkRequestId++;
+    bulkCredentials = [];
+    document.getElementById('bulk-credentials-body').replaceChildren();
+    document.getElementById('bulk-credential-list').style.display = 'none';
+    document.getElementById('bulk-credential-status').textContent = '';
+    document.getElementById('bulk-failure-body').replaceChildren();
+    document.getElementById('bulk-failure-list').style.display = 'none';
+    document.getElementById('bulk-register-btn').disabled = false;
     bulkPreviewData = [];
     bulkGroups = [];
     document.getElementById('bulk-file-input').value = '';
@@ -517,6 +540,7 @@ document.addEventListener('keydown', e => {
 
   function closeBulkModal() {
     closeModal('bulk-modal');
+    resetBulkModal();
   }
 
   function groupOptions(selectedId) {
@@ -652,6 +676,7 @@ document.addEventListener('keydown', e => {
     }
 
     document.getElementById('bulk-register-btn').disabled = true;
+    const requestId = ++bulkRequestId;
 
     try {
       const res = await fetch('/admin/users/bulk/register', {
@@ -664,8 +689,11 @@ document.addEventListener('keydown', e => {
       });
 
       const data = await res.json();
+      if (requestId !== bulkRequestId) return;
+      if (!res.ok) throw new Error('Registration failed');
       showBulkResult(data);
     } catch (err) {
+      if (requestId !== bulkRequestId) return;
       alert('등록 중 오류가 발생했습니다.');
       document.getElementById('bulk-register-btn').disabled = false;
     }
@@ -681,6 +709,19 @@ document.addEventListener('keydown', e => {
 
     document.getElementById('bulk-success-count').textContent = data.success_count;
     document.getElementById('bulk-fail-count').textContent = data.fail_count;
+    bulkCredentials = data.credentials || [];
+    document.getElementById('bulk-credential-list').style.display = bulkCredentials.length ? '' : 'none';
+    const credentialsBody = document.getElementById('bulk-credentials-body');
+    credentialsBody.replaceChildren();
+    bulkCredentials.forEach(credential => {
+      const row = document.createElement('tr');
+      [credential.username, credential.nickname, credential.initial_password].forEach(value => {
+        const cell = document.createElement('td');
+        cell.textContent = value;
+        row.appendChild(cell);
+      });
+      credentialsBody.appendChild(row);
+    });
 
     if (data.failures && data.failures.length > 0) {
       document.getElementById('bulk-failure-list').style.display = '';
@@ -693,6 +734,37 @@ document.addEventListener('keydown', e => {
         </tr>`;
       });
     }
+  }
+
+  function bulkCredentialsCsv() {
+    const csvCell = value => {
+      // Quoting alone does not prevent spreadsheet formula execution.
+      if (/^\s*[=+\-@]/.test(value)) value = "'" + value;
+      return '"' + value.replace(/"/g, '""') + '"';
+    };
+    return 'username,nickname,initial_password\r\n' + bulkCredentials.map(credential =>
+      [credential.username, credential.nickname, credential.initial_password].map(csvCell).join(',')
+    ).join('\r\n');
+  }
+
+  async function copyBulkCredentials() {
+    if (!bulkCredentials.length) return;
+    try {
+      await navigator.clipboard.writeText(bulkCredentialsCsv());
+      document.getElementById('bulk-credential-status').textContent = '복사했습니다.';
+    } catch (err) {
+      document.getElementById('bulk-credential-status').textContent = '복사할 수 없습니다. CSV로 내려받으세요.';
+    }
+  }
+
+  function downloadBulkCredentials() {
+    if (!bulkCredentials.length) return;
+    const blob = new Blob(['\ufeff' + bulkCredentialsCsv()], {type:'text/csv;charset=utf-8'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'bulk_user_credentials.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
   }
 </script>
 {% endblock %}

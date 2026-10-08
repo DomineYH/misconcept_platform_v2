@@ -4,16 +4,16 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from openai import AsyncOpenAI, APIConnectionError
+from openai import APIConnectionError, AsyncOpenAI
 from tenacity import wait_none
 
-from src.services import base, analysis_pipeline
+from src.models import Message
+from src.services import analysis_pipeline, base
 from src.services.analyzer import Analyzer
+from src.services.prompt_manager import PromptManager
 from src.services.session_synthesizer import SessionSynthesizer
 from src.services.student_bot import StudentBot
 from src.services.tutor_bot import TutorBot
-from src.services.prompt_manager import PromptManager
-from src.models import Message
 
 USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
 
@@ -238,10 +238,12 @@ async def test_pipeline_failure_closes_owned_clients(data, monkeypatch):
 
 
 async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
-    from src.api.routes.session_messages import send_message
     from test_regressions import request
 
+    from src.api.routes.session_messages import send_message
+
     sid = data.session.id
+    data.scenario.problem_situation = "Public problem"
     data.session.ended_at = None
     await data.db.commit()
     created = []
@@ -269,6 +271,8 @@ async def test_owned_client_closes_after_success(monkeypatch):
     fake = client(response('ok'))
     monkeypatch.setattr(base, 'AsyncOpenAI', lambda **kwargs: fake)
     async with base.OpenAIBaseService() as service:
-        assert (await service.create_response(model='gpt-5-mini', input='test')).output_text == 'ok'
+        assert (
+            await service.create_response(model="gpt-5-mini", input="test")
+        ).output_text == "ok"
     await service.close()
     fake.close.assert_awaited_once()

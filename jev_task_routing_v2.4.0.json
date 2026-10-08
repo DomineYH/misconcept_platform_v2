@@ -80,7 +80,7 @@
     },
     "task-verifier": {
       "harness": "agy",
-      "model": "gemini-3.8-flash",
+      "model": "gemini-3.8-flash-high",
       "effort": "high",
       "responsibility": "Under a coordinator review order, independently inspect the fixed current diff and verification evidence against requirements, design and risk conditions. Report PASS, FAIL or BLOCKED findings with evidence to the coordinator; these are review verdicts, not task acceptance or commands to implementer. Run an authorized focused diagnostic only for a concrete unresolved concern. Recheck invalidated scope, not the same full review mechanically.",
       "when": "The coordinator must arrange the existing required independent review for standard/high delivery, emergency, repository rules and high-risk live-system experiments. Use a separate review context; the same model is permitted. Do not allocate a separate final-verifier.",
@@ -88,7 +88,7 @@
     },
     "inspector": {
       "harness": "agy",
-      "model": "gemini-3.8-flash",
+      "model": "gemini-3.8-flash-high",
       "effort": "high",
       "responsibility": "Under a bounded coordinator evidence order, gather repository-specific code, caller/dependency and test facts with source references and actual execution status. Reuse sufficient current findings; mark unknowns explicitly. Do not choose a TDD mode, perform a duplicate code review or start an external research assignment.",
       "when": "Only when the coordinator identifies a material repository evidence gap that current sessions or valid prior evidence cannot cheaply resolve. May run before Jev under a read-only intake order; complexity alone is not a trigger.",
@@ -96,7 +96,7 @@
     },
     "researcher": {
       "harness": "agy",
-      "model": "gemini-3.8-flash",
+      "model": "gemini-3.8-flash-high",
       "effort": "high",
       "responsibility": "Under a coordinator research order, resolve the specific missing external API, dependency or platform fact from relevant official sources. Return the fact, source, limitations and remaining uncertainty to the coordinator. Do not duplicate repository inspection or choose the workflow/testing mode.",
       "when": "Only after the coordinator identifies a necessary external-document gap not covered by current evidence. May run before Jev under a bounded research order; do not research afresh merely because a task mentions an API.",

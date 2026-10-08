@@ -492,3 +492,39 @@ write와 같아야 한다. 지역/등급/TTL/모델/필수 수치가 미확인�
 그중 thinking 5)는 입력 15, 총량 23, USD 0.00016065다. 과거 행을 재계산하지 않는다.
 [공식 단가](https://platform.claude.com/docs/en/about-claude/pricing).
 위 모든 근거 확인일은 2026-10-09다. 대시보드 집계는 A10 범위다.
+
+## A13 mentor lesson execution contract
+
+Mentor coaching keeps `config.ANALYSIS_MODEL`, `TUTOR_REASONING` and
+`TUTOR_MAX_TOKENS`; semantic judgment keeps `config.DIALOGUE_ANALYSIS_MODEL`,
+200 output tokens and no added reasoning option. Both require exact registered
+OpenAI models with current mentor verification through `resolve_lesson_model`.
+Authoring defaults and environment provider keys never replace these selections.
+
+The existing local policy determines whether a provider call is needed. A local
+`no_intervention` result creates no invocation attempt or slot. Otherwise mentor
+reservation validates the potentially used models and reserves the first call
+under the shared execution lock before committing the run/question counter.
+Configuration/capacity refusals return safe 503/429 guidance, with no run, attempt
+or counter change. The first permit transfers to the feedback worker; a subsequent
+coaching call obtains its own current admission. Both calls use `execute_call`
+with real run/session/request IDs, zero retries and the mentor role deadline. The
+final-only SSE, target turn, explicit retry, independent student progression and
+commit-before-completed behavior remain unchanged.
+
+`LessonInterventionJudgment` is the runtime compatibility structure: absent
+booleans default to false, absent reason to an empty string, and legacy nullable
+fields remain accepted. It uses the strict structured transport without applying
+A7's stronger pedagogical judgment validator. Existing local fallback decides
+the result after normalized provider/JSON failures; configuration, capacity,
+cancellation and total deadline failures stop execution. A7's
+`InterventionJudgment` probe contract and `s1-v1` version are unchanged; a valid
+probe judgment also satisfies the runtime structure.
+
+Each actual judgment uses operation `mentor_judgment`; coaching uses `mentor`.
+Each has one invocation/attempt row, including failed/refused/cancelled/timed-out
+calls with unknown usage left NULL. Neither mentor finalization nor SessionManager
+writes a second usage row. No partial or refused coaching is saved as a message.
+Connection revocation cancels the active worker and releases its SDK client/slot;
+session end and disconnect retain the S0 cancellation/late-result rules. Provider
+or storage exception bodies are not logged by the mentor services.

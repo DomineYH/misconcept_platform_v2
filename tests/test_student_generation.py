@@ -123,7 +123,14 @@ async def student(data, scenario_payload, monkeypatch):
 
     async def upstream(request):
         assert request.headers["authorization"] == f"Bearer {LESSON_KEY}"
-        source = await fake.responses.create(**json.loads(request.content))
+        body = json.loads(request.content)
+        source = await fake.responses.create(**body)
+        if not body.get("stream"):
+            from test_student_probe import response_body
+
+            result = response_body(source.output_text)
+            result["usage"] = serializable(source.usage)
+            return httpx2.Response(200, json=result)
         return httpx2.Response(
             200,
             headers={"content-type": "text/event-stream"},

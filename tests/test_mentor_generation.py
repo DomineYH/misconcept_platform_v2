@@ -20,6 +20,9 @@ student = student_fixture
 
 @pytest.fixture
 async def mentor(data, student):
+    from lesson_fixtures import install_mentor_model
+
+    student.mentor_model = await install_mentor_model(data, student.connection)
     template = PromptTemplate(
         bot_type="tutor",
         template_name="Mentor",
@@ -72,6 +75,16 @@ async def test_no_intervention_is_durable_and_replayed(data, client, mentor):
     state = await client.get(f"/runs/{events[0][1]['run_id']}")
     assert state.json()["result_kind"] == "no_intervention"
     assert mentor.responses.create.await_count == 1  # Student only.
+    from sqlalchemy import select
+
+    from src.models import ApiUsageLog
+
+    async with data.factory() as db:
+        assert (
+            await db.scalars(
+                select(ApiUsageLog).where(ApiUsageLog.role == "mentor")
+            )
+        ).all() == []
     await data.db.refresh(data.session)
     assert data.session.tutor_question_count == 1
     assert data.session.tutor_intervention_count == 0
@@ -175,10 +188,10 @@ async def test_slow_mentor_does_not_block_student_and_busy_creates_nothing(
         assert coach.generation_run_id == frames(result)[0][1]["run_id"]
         usage = (
             await reader.scalars(
-                select(ApiUsageLog).where(ApiUsageLog.bot_type == "tutor")
+                select(ApiUsageLog).where(ApiUsageLog.operation == "mentor")
             )
         ).one()
-        assert (usage.prompt_tokens, usage.completion_tokens) == (10, 2)
+        assert (usage.input_tokens, usage.output_tokens) == (10, 2)
 
 
 async def test_failed_feedback_retry_counts_question_once(data, client, mentor):
@@ -218,6 +231,26 @@ async def test_failed_feedback_retry_counts_question_once(data, client, mentor):
         )
         assert duplicate.json()["message"]["content"] == "Recovered coach"
     assert calls == 2
+    from sqlalchemy import select
+
+    from src.models import ApiUsageLog
+
+    async with data.factory() as db:
+        attempts = (
+            await db.scalars(
+                select(ApiUsageLog)
+                .where(ApiUsageLog.operation == "mentor")
+                .order_by(ApiUsageLog.id)
+            )
+        ).all()
+        assert [a.status for a in attempts] == ["failed", "completed"]
+        assert [a.run_id for a in attempts] == [
+            frames(first)[0][1]["run_id"],
+            frames(retry)[0][1]["run_id"],
+        ]
+        assert all(
+            a.input_tokens is None and a.attempt_no == 1 for a in attempts
+        )
 
 
 async def test_chat_mounts_mentor_only_when_scenario_enables_it(

@@ -42,7 +42,7 @@ Restore both before using stored credentials; the database alone cannot recover
 provider keys. No automatic master-key creation, web rotation or key ring exists.
 Python memory clearing of plaintext is not guaranteed.
 
-This is the A8 management and A12 student transition stage. Explicit OpenAI
+This is the A8 management and A12/A13 lesson transition stage. Explicit OpenAI
 and Claude catalog refresh uses the saved
 DB key and the non-generating Models API, with no retries and a default 30-second
 deadline. Successful lists are cached for 24 hours; failures preserve the list.
@@ -76,8 +76,13 @@ greetings; authoring defaults never replace existing selections. Missing keys,
 unreadable credentials or unverified models block new turns with a safe setup
 message while saved history remains readable. Both stream and nonstream student
 calls use common admission, deadlines (default first body 60/total 180 seconds),
-zero retries and one attempt-ledger row per call. Mentor and analysis lesson
-calls continue using their previous configuration until A13/A14.
+zero retries and one attempt-ledger row per call. Mentor coaching and its separate
+semantic judgment also use DB credentials, exact mentor-verified model IDs and
+shared admission with zero retries. Their existing sensitivity, counters and local
+fallback remain unchanged; local no-intervention decisions make no provider call.
+Judgment attempts are recorded separately as `mentor_judgment`, including failures
+without usage. Post-session analysis continues using its previous configuration
+until A14.
 Do not treat this stage as the final production cutover.
 
 Encryption uses the exactly pinned [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/)

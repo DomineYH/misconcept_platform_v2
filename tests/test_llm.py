@@ -145,17 +145,45 @@ async def test_real_sdk_transport_attempt_count_and_owned_close(
     assert owned.is_closed()
 
 
-async def test_retry_success_does_not_repeat_tutor_state(data):
-    error = APIConnectionError(
-        request=httpx.Request("POST", "https://example.test")
+async def test_explicit_tutor_retry_keeps_state_and_one_attempt_per_invocation(
+    data, monkeypatch
+):
+    from lesson_fixtures import (
+        LESSON_KEY,
+        install_connection,
+        install_mentor_model,
     )
-    fake = client(error, response("Feedback"))
-    bot = TutorBot(data.db, 1, client=fake)
-    bot.analyze_conversation = AsyncMock(return_value=(True, "low_leverage"))
-    content, _ = await bot.generate_feedback("Question", "Answer", [])
-    assert content == "Feedback" and bot.intervention_count == 1
-    assert fake.responses.create.await_count == 2
-    bot.analyze_conversation.assert_awaited_once()
+    from test_student_probe import response_body, sdk_transport
+
+    from src.services.invocation_types import InvocationError
+
+    connection, _ = await install_connection(data, monkeypatch)
+    await install_mentor_model(data, connection)
+
+    async def upstream(request, body):
+        if len(calls) == 1:
+            raise httpx.ConnectError(
+                "SECRET connection failure", request=request
+            )
+        return httpx.Response(200, json=response_body("Feedback", USAGE))
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=1500, key=LESSON_KEY, model="gpt-5.2"
+    )
+    async with TutorBot(
+        data.db, 1, sensitivity="high", initial_question_count=1
+    ) as bot:
+        with pytest.raises(InvocationError, match="transient"):
+            await bot.generate_feedback(
+                "Why?", "Answer", [], question_counted=True
+            )
+        assert len(calls) == 1 and bot.intervention_count == 0
+        content, _ = await bot.generate_feedback(
+            "Why?", "Answer", [], question_counted=True
+        )
+        assert content == "Feedback" and bot.intervention_count == 1
+        assert bot.question_count == 1
+    assert len(calls) == 2 and all(sdk.is_closed() for sdk in clients)
 
 
 async def test_classification_and_synthesis_parse_errors_do_not_retry(data):

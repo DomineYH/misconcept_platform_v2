@@ -1,8 +1,6 @@
 """Generation inputs use bounded pairs, independent of storage order."""
 
 from datetime import datetime
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -144,28 +142,35 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
         {"role": "teacher", "content": "Teacher 50"},
         {"role": "student", "content": "Student 50"},
     ]
-    fake = SimpleNamespace(
-        max_retries=0,
-        close=AsyncMock(),
-        responses=SimpleNamespace(
-            create=AsyncMock(
-                return_value=(
-                    SimpleNamespace(
-                        output_text='{"is_repetitive": false, '
-                        '"is_inappropriate": false}',
-                        usage=None,
-                    )
-                )
-            )
-        ),
+    import httpx2
+    from lesson_fixtures import (
+        LESSON_KEY,
+        install_connection,
+        install_mentor_model,
     )
-    async with TutorBot(data.db, 1, client=fake) as mentor:
+    from test_student_probe import response_body, sdk_transport
+
+    connection, _ = await install_connection(data, monkeypatch)
+    await install_mentor_model(data, connection)
+
+    async def upstream(request, body):
+        return httpx2.Response(
+            200,
+            json=response_body(
+                '{"is_repetitive": false, "is_inappropriate": false}'
+            ),
+        )
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=200, key=LESSON_KEY, model="gpt-5.2"
+    )
+    async with TutorBot(data.db, 1) as mentor:
         result = await mentor.generate_feedback(
             context[-2]["content"], context[-1]["content"], context[:-2]
         )
     assert result == (None, None)
-    assert fake.responses.create.await_count == 1
-    prompt = fake.responses.create.call_args.kwargs["input"][0]["content"]
+    assert len(calls) == 1 and all(sdk.is_closed() for sdk in clients)
+    prompt = calls[0]["input"][0]["content"]
     assert "교사: Teacher 48\n학생: Student 48" in prompt
     assert "교사: Teacher 49\n학생: Student 49" in prompt
     assert "교사: Teacher 50\n학생: Student 50" in prompt

@@ -12,21 +12,45 @@ from src.api.routes.session_helpers import (
 )
 from src.config import config
 from src.models import (
-    ApiUsageLog,
+    AppSetting,
     GenerationRun,
     Message,
     Scenario,
     Session,
-    calculate_cost,
 )
 from src.models.scenario_group import ScenarioGroup
+from src.services.call_admission import approve_call, execution_lock
 from src.services.generation_runs import conflict, digest, snapshot
+from src.services.invocation_types import InvocationError
+from src.services.lesson_connections import resolve_lesson_model
+from src.services.model_verification import ROLE_CONTRACT_VERSIONS
 from src.services.prompt_manager import PromptManager
 from src.services.turn_context import load_mentor_context
-from src.services.tutor_bot import advance_question_count
+from src.services.tutor_bot import TutorBot, advance_question_count
 
 
 async def reserve_mentor(factory, session_id, turn_id, user, request_id):
+    async with execution_lock():
+        try:
+            return await _reserve_mentor(
+                factory, session_id, turn_id, user, request_id
+            )
+        except InvocationError as error:
+            raise HTTPException(
+                429 if error.code == "call_limit_reached" else 503,
+                detail={
+                    "code": error.code,
+                    "message": "관리자에게 AI 연결과 멘토 모델 검증을 요청하거나 잠시 후 다시 시도해주세요.",
+                },
+                headers=(
+                    {"Retry-After": "1"}
+                    if error.code == "call_limit_reached"
+                    else None
+                ),
+            ) from None
+
+
+async def _reserve_mentor(factory, session_id, turn_id, user, request_id):
     input_hash = digest(
         {
             "owner": user.id,
@@ -127,9 +151,17 @@ async def reserve_mentor(factory, session_id, turn_id, user, request_id):
             )
             .limit(1)
         )
-        template = await PromptManager.get_template_text_by_id(
-            db, scenario.tutor_template_id
-        )
+        try:
+            template = await PromptManager.get_template_text_by_id(
+                db, scenario.tutor_template_id
+            )
+            template.format(
+                scenario_title=scenario.title,
+                prompt=scenario.prompt,
+                student_profile=scenario.student_profile or "Grade 5 student",
+            )
+        except (ValueError, KeyError):
+            raise InvocationError("configuration_unavailable") from None
         history = await load_mentor_context(db, session_id, turn_id)
         if previous is None:
             (session.tutor_question_count, session.tutor_intervention_count) = (
@@ -151,7 +183,38 @@ async def reserve_mentor(factory, session_id, turn_id, user, request_id):
                 or config.TUTOR_INTERVENTION_THRESHOLD
             ),
             "sensitivity": scenario.tutor_sensitivity,
+            "judgment_model": config.DIALOGUE_ANALYSIS_MODEL,
         }
+        counts = {
+            "initial_question_count": session.tutor_question_count,
+            "initial_intervention_count": session.tutor_intervention_count,
+        }
+        bot = TutorBot(db, **options, **counts)
+        decision, _ = bot.intervention_decision(
+            history[:-2],
+            history[-2]["content"],
+            history[-1]["content"],
+            question_counted=True,
+        )
+        first = None
+        if decision is not False:
+            coaching_options = {
+                "reasoning": {"effort": options["reasoning_effort"]},
+                "max_output_tokens": options["max_tokens"],
+            }
+            connection, model, _ = await resolve_lesson_model(
+                db, options["model"], "mentor", coaching_options
+            )
+            operation = "mentor"
+            if decision is None:
+                connection, model, _ = await resolve_lesson_model(
+                    db,
+                    options["judgment_model"],
+                    "mentor",
+                    {"max_output_tokens": 200},
+                )
+                operation = "mentor_judgment"
+            first = connection, model, operation
         run = GenerationRun(
             id=str(uuid4()),
             owner_id=user.id,
@@ -174,16 +237,44 @@ async def reserve_mentor(factory, session_id, turn_id, user, request_id):
         db.add(run)
         await db.flush()
         accepted = await snapshot(db, run)
+        permit = None
+        if first is not None:
+            connection, model, operation = first
+            setting = await db.get(AppSetting, 1)
+            if setting is None:
+                raise InvocationError("configuration_unavailable")
+            permit = approve_call(
+                factory,
+                connection,
+                setting,
+                owner_id=user.id,
+                operation=operation,
+                role="mentor",
+                admin=False,
+            )
+            permit.model_config_id = model.id
+            permit.config_version = model.config_version
+            permit.model_id = model.model_id
+            permit.capability_version = model.capability_definition_version
+            permit.contract_version = ROLE_CONTRACT_VERSIONS["mentor"]
         execution = {
-            "options": {
-                **options,
-                "initial_question_count": session.tutor_question_count,
-                "initial_intervention_count": session.tutor_intervention_count,
-            },
+            "owner_id": user.id,
+            "options": {**options, **counts},
             "template": template,
             "history": history,
+            "permit": permit,
+            "deadline": (
+                permit.admitted_at + permit.timeouts["mentor_total"]
+                if permit
+                else None
+            ),
         }
-        await db.commit()
+        try:
+            await db.commit()
+        except BaseException:
+            if permit is not None:
+                permit.release()
+            raise
         return accepted, execution
 
 
@@ -193,7 +284,6 @@ async def finish_mentor(
     *,
     status,
     content=None,
-    usage=None,
     error_code=None,
 ):
     async with factory() as db:
@@ -229,20 +319,6 @@ async def finish_mentor(
                 )
                 session.tutor_intervention_count += 1
                 run.first_output_at = run.finished_at
-        if usage:
-            db.add(
-                ApiUsageLog(
-                    session_id=run.session_id,
-                    bot_type="tutor",
-                    model=run.model,
-                    **usage,
-                    estimated_cost_usd=calculate_cost(
-                        run.model,
-                        usage["prompt_tokens"],
-                        usage["completion_tokens"],
-                    ),
-                )
-            )
         await db.flush()
         result = await snapshot(db, run)
         try:

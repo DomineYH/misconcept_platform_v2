@@ -42,7 +42,7 @@ Restore both before using stored credentials; the database alone cannot recover
 provider keys. No automatic master-key creation, web rotation or key ring exists.
 Python memory clearing of plaintext is not guaranteed.
 
-This is the A6 management stage. Explicit OpenAI catalog refresh uses the saved
+This is the A6 management and A12 student transition stage. Explicit OpenAI catalog refresh uses the saved
 DB key and the non-generating Models API, with no retries and a default 30-second
 deadline. Successful lists are cached for 24 hours; failures preserve the list.
 Models can be registered directly, start disabled/unverified, and have immutable
@@ -64,8 +64,15 @@ Limits and absolute deadlines are read for new calls; reducing limits preserves
 existing calls. Only future ordinary classification/synthesis calls may retry once;
 backoff returns capacity and reacquires it under the current limits. This service
 requires one asynchronous worker in one app instance. Mentor/analysis probes
-belong to A7. Existing lesson calls
-continue using their previous configuration until later S1 transition tickets.
+belong to A7. Student lesson calls now require an enabled, student-verified DB registration
+of the exact existing OpenAI model ID. They preserve scenario/config model IDs,
+per-call reasoning/output options, prompts, completed-turn context and stored
+greetings; authoring defaults never replace existing selections. Missing keys,
+unreadable credentials or unverified models block new turns with a safe setup
+message while saved history remains readable. Both stream and nonstream student
+calls use common admission, deadlines (default first body 60/total 180 seconds),
+zero retries and one attempt-ledger row per call. Mentor and analysis lesson
+calls continue using their previous configuration until A13/A14.
 Do not treat this stage as the final production cutover.
 
 Encryption uses the exactly pinned [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/)

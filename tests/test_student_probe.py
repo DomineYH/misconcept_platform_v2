@@ -50,13 +50,13 @@ def sse(kind, **values):
     return f"event: {kind}\ndata: {json.dumps(dict(type=kind, **values))}\n\n".encode()
 
 
-def sdk_transport(monkeypatch, handler, *, budget=1024):
+def sdk_transport(monkeypatch, handler, *, budget=1024, key=KEY):
     from src.services import openai_generation
 
     clients, calls = [], []
 
     async def upstream(request):
-        assert request.headers["authorization"] == f"Bearer {KEY}"
+        assert request.headers["authorization"] == f"Bearer {key}"
         assert request.method == "POST" and request.url.path == "/v1/responses"
         body = json.loads(request.content)
         calls.append(body)

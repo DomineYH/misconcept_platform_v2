@@ -56,17 +56,39 @@ async def _record(conn, filename):
 async def run_migration(migration_file: Path):
     """DDL and history commit together, with an explicit SQLite transaction."""
     async with engine.connect() as conn:
-        await conn.exec_driver_sql("BEGIN IMMEDIATE")
+        rebuild_runs = migration_file.name == "028_generation_providers.sql"
         try:
+            if rebuild_runs:
+                # Dropping a referenced table with FKs enabled would mutate children.
+                await conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+                await conn.commit()
+            await conn.exec_driver_sql("BEGIN IMMEDIATE")
             await _history(conn)
             if not await _applied(conn, migration_file.name):
                 for statement in statements(migration_file.read_text()):
                     await conn.exec_driver_sql(statement)
+                if (
+                    rebuild_runs
+                    and (
+                        await conn.exec_driver_sql("PRAGMA foreign_key_check")
+                    ).all()
+                ):
+                    raise ValueError(
+                        "Foreign key violations during run rebuild"
+                    )
                 await _record(conn, migration_file.name)
             await conn.commit()
         except BaseException:
             await conn.rollback()
+            if rebuild_runs:
+                # A failed commit can leave SQLite ahead of SQLAlchemy's state.
+                # Closing rolls back the native transaction before restoring FKs.
+                await conn.invalidate()
             raise
+        finally:
+            if rebuild_runs:
+                await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+                await conn.commit()
 
 
 async def _install_baseline():

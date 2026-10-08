@@ -76,7 +76,15 @@ async def finalize(permit, entry_id, terminal, usage, first_output_at):
         raise InvocationError("interrupted")
 
 
-async def execute_call(permit, request=None, *, kind="text", probe_step=None):
+async def execute_call(
+    permit,
+    request=None,
+    *,
+    kind="text",
+    probe_step=None,
+    run_id=None,
+    session_id=None,
+):
     """Consume with aclosing; admission is never a queued or reusable token."""
     entry_id = None
     usage = first_output_at = terminal = None
@@ -125,6 +133,8 @@ async def execute_call(permit, request=None, *, kind="text", probe_step=None):
                     invocation_id=invocation_id,
                     attempt_no=attempt,
                     retry_wait_ms=wait_ms,
+                    run_id=run_id,
+                    session_id=session_id,
                 )
             )
             try:

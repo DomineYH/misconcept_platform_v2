@@ -89,7 +89,7 @@ async def test_wal_backup_upgrade_readers_and_restore(
                     row[6:] == (None, None, None) for row in after["message"]
                 )
                 assert after["generation_run"] == []
-                assert len(after["_migrations"]) == 5
+                assert len(after["_migrations"]) == 6
                 assert copy.execute(
                     "SELECT count(*) FROM _migrations "
                     "WHERE filename='025_provider_connection.sql'"

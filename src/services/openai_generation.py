@@ -1,4 +1,4 @@
-"""Request-scoped Responses text/stream adapter; no lesson-path changes."""
+"""Request-scoped Responses text/stream adapter for probes and lesson calls."""
 
 import asyncio
 from contextlib import nullcontext
@@ -165,8 +165,6 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
     owned = deadline is None
     deadline = deadline or CallDeadline(timeouts, request.role)
     first = None
-    displayed = False
-    refused = False
     usage = None
     terminal = None
     try:
@@ -196,14 +194,16 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
                                 if not isinstance(event.delta, str):
                                     raise InvocationError("invalid_output")
                                 if event.delta.strip():
-                                    displayed = True
                                     first.reschedule(None)
                                 yield CallEvent("text_delta", text=event.delta)
                             elif event.type in (
                                 "response.refusal.delta",
                                 "response.refusal.done",
                             ):
-                                refused = True
+                                terminal = CallEvent(
+                                    "refused", usage=usage, error_code="refused"
+                                )
+                                break
                             elif event.type in (
                                 "response.completed",
                                 "response.failed",
@@ -213,21 +213,6 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
                                     result(event.response, usage),
                                     response_received=True,
                                 )
-                                if refused:
-                                    terminal = CallEvent(
-                                        "refused",
-                                        usage=terminal.usage,
-                                        error_code="refused",
-                                    )
-                                elif (
-                                    terminal.type == "completed"
-                                    and not displayed
-                                ):
-                                    terminal = CallEvent(
-                                        "error",
-                                        usage=terminal.usage,
-                                        error_code="empty_response",
-                                    )
                                 usage = terminal.usage
                                 break
                             elif event.type == "error":

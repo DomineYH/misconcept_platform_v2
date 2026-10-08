@@ -46,8 +46,20 @@ def fast_retry(monkeypatch):
     )
 
 
-async def test_student_success_settings_and_input_failure(data):
-    fake = client(response("Student answer"))
+async def test_student_success_settings_and_input_failure(data, monkeypatch):
+    from lesson_fixtures import LESSON_KEY, install_connection
+    from test_student_probe import response_body, sdk_transport
+
+    from src.services.invocation_types import InvocationError
+
+    await install_connection(data, monkeypatch)
+
+    async def upstream(request, body):
+        return httpx.Response(200, json=response_body("Student answer", USAGE))
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=1234, key=LESSON_KEY
+    )
     async with StudentBot(
         "Misconception",
         "Scenario",
@@ -57,7 +69,6 @@ async def test_student_success_settings_and_input_failure(data):
         model="gpt-5-mini",
         reasoning_effort="low",
         max_tokens=1234,
-        client=fake,
     ) as bot:
         content, usage = await bot.generate_response(
             "Why?",
@@ -72,7 +83,7 @@ async def test_student_success_settings_and_input_failure(data):
             "completion_tokens": 5,
             "total_tokens": 15,
         }
-        kwargs = fake.responses.create.call_args.kwargs
+        kwargs = calls[0]
         assert (
             kwargs["model"],
             kwargs["reasoning"],
@@ -86,10 +97,10 @@ async def test_student_success_settings_and_input_failure(data):
         PromptManager.get_template_text_by_id.side_effect = ValueError(
             "Invalid template"
         )
-        with pytest.raises(RuntimeError, match="Invalid template"):
+        with pytest.raises(InvocationError, match="configuration_unavailable"):
             await bot.generate_response("Why?", [])
-        assert fake.responses.create.await_count == 1
-    fake.close.assert_not_awaited()
+        assert len(calls) == 1
+    assert all(sdk.is_closed() for sdk in clients)
 
 
 @pytest.mark.parametrize(
@@ -238,23 +249,25 @@ async def test_pipeline_failure_closes_owned_clients(data, monkeypatch):
 
 
 async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
+    from lesson_fixtures import LESSON_KEY, install_connection
     from test_regressions import request
+    from test_student_probe import sdk_transport
 
     from src.api.routes.student_generation import StudentRequest, student_turn
 
+    await install_connection(data, monkeypatch)
     sid = data.session.id
     data.scenario.problem_situation = "Public problem"
     data.session.ended_at = None
     await data.db.commit()
-    created = []
 
-    def factory(**kwargs):
-        fake = client(ValueError("invalid response"))
-        created.append(fake)
-        return fake
+    async def upstream(request, body):
+        return httpx.Response(500, json={"error": {"code": "server_error"}})
 
-    monkeypatch.setattr(base, "AsyncOpenAI", factory)
-    response = await student_turn(
+    created, calls = sdk_transport(
+        monkeypatch, upstream, budget=1500, key=LESSON_KEY
+    )
+    result = await student_turn(
         request(),
         sid,
         StudentRequest(
@@ -263,12 +276,11 @@ async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
         data.owner,
         data.db,
     )
-    body = "".join([chunk async for chunk in response.body_iterator])
+    body = "".join([chunk async for chunk in result.body_iterator])
     assert "event: run.failed" in body
     assert "event: output.completed" not in body
-    for fake in created:
-        fake.close.assert_awaited_once()
-    assert len(created) == 1  # Student path owns only the student client.
+    assert all(sdk.is_closed() for sdk in created)
+    assert len(created) == len(calls) == 1
 
 
 async def test_injected_sdk_retry_policy_is_explicit():

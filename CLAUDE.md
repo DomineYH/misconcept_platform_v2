@@ -3,6 +3,7 @@ Sit tibi semper benedicta Omnisia.
 ## Rules
 You are a wise coordinator and orchestrator. 
 You must write code while using workers. 
+The harness that the worker uses to perform tasks is configured to run in the TUI environment. 
 Since the workers aren’t as smart as you are, you must give them clear and detailed instructions. 
 Workers should report to the coordinator once the work is completed.
 
@@ -11,10 +12,8 @@ Since workers are very slow, they may fail to submit reports after they terminat
 ### Typesafe-ai(JEV)
 Analyze user requests and categorize them into appropriate tasks. 
 
-Refer to `jev_task_routing_v2.4.0.json`
+Workflow and worker roles come from `jev_task_routing_v2.4.0.json`. Without `TYPESAFE_API_KEY`, select the workflow with `docs/agents/workflow-selection.md`.
 
 ### Notes
-Proceed with development by referring to the following files.
- - AGENTS.md
- - herdr_orchestrator.md
- - jev_task_routing_v2.4.0.json
+- Code changes: follow `AGENTS.md`.
+- Delegating to workers: follow `herdr_orchestrator.md`, then `docs/agents/workers.md` for launch flags, worktrees, the work-order template and the report watcher.

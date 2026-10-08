@@ -22,6 +22,7 @@ from src.api.routes.session_helpers import (
 
 # Import sub-routers to include all session routes
 from src.api.routes.session_messages import router as messages_router
+from src.api.routes.student_generation import router as student_router
 from src.config import config
 from src.models import Session, User
 
@@ -31,6 +32,7 @@ limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 # Include sub-routers
 router.include_router(messages_router)
 router.include_router(analysis_router)
+router.include_router(student_router)
 
 
 class CreateSessionRequest(BaseModel):

@@ -1,17 +1,14 @@
 """Session message handling routes."""
 
-import json
 import logging
 
 from fastapi import (
     APIRouter,
     Depends,
-    Form,
-    HTTPException,
     Query,
     Request,
 )
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -19,11 +16,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
-from src.api.routes.session_helpers import load_session, validate_public_problem
+from src.api.routes.session_helpers import load_session
 from src.config import config
 from src.models import Message, User
 from src.models.scenario import Scenario
-from src.services.session_mgr import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -90,67 +86,14 @@ def _validate_and_render_message(
 async def send_message(
     request: Request,
     session_id: int,
-    content: str = Form(..., min_length=1, max_length=5000),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
-    """Send teacher message and get bot responses."""
-    session = await load_session(session_id, user, db)
-
-    if session.ended_at:
-        raise HTTPException(
-            status_code=400,
-            detail="Session already ended. Cannot send messages.",
-        )
-
-    if not content or len(content) < 1:
-        raise HTTPException(status_code=400, detail="Content cannot be empty")
-
-    scenario = await db.get(Scenario, session.scenario_id)
-    validate_public_problem(scenario)
-    student_name = scenario.student_name if scenario else None
-
-    manager = SessionManager(db, session_id)
-    try:
-        new_messages = await manager.process_teacher_message(content)
-    finally:
-        await manager.close()
-
-    rendered_messages = []
-    for message in new_messages:
-        html = _validate_and_render_message(
-            message, request, templates, student_name
-        )
-        if html:
-            rendered_messages.append(html)
-
-    combined_html = "".join(rendered_messages)
-
-    if not combined_html:
-        logger.error(
-            f"No messages rendered for session {session_id}. "
-            f"Total messages attempted: {len(new_messages)}"
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to render bot responses. Check server logs.",
-        )
-
-    logger.info(
-        f"Rendered {len(rendered_messages)}/{len(new_messages)} messages "
-        f"for session {session_id}"
-    )
-
-    last_id = max(m.id for m in new_messages if m.id)
-    return Response(
-        content=combined_html,
-        media_type="text/html",
-        status_code=200,
-        headers={
-            "HX-Trigger": json.dumps(
-                {"messagesAdded": {"lastId": last_id}}
-            )
-        },
+    """Old tabs must reload; all new writes use durable execution rights."""
+    await load_session(session_id, user, db)
+    return JSONResponse(
+        {"code": "reload_required", "detail": "새로고침 후 다시 전송해주세요."},
+        status_code=410,
     )
 
 

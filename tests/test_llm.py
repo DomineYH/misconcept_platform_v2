@@ -240,7 +240,7 @@ async def test_pipeline_failure_closes_owned_clients(data, monkeypatch):
 async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
     from test_regressions import request
 
-    from src.api.routes.session_messages import send_message
+    from src.api.routes.student_generation import StudentRequest, student_turn
 
     sid = data.session.id
     data.scenario.problem_situation = "Public problem"
@@ -254,11 +254,17 @@ async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
         return fake
 
     monkeypatch.setattr(base, "AsyncOpenAI", factory)
-    with pytest.raises(RuntimeError):
-        await send_message(request(), sid, "Why?", data.owner, data.db)
+    response = await student_turn(
+        request(), sid, StudentRequest(
+            request_id="00000000-0000-0000-0000-000000000001", content="Why?"
+        ), data.owner, data.db,
+    )
+    body = "".join([chunk async for chunk in response.body_iterator])
+    assert "event: run.failed" in body
+    assert "event: output.completed" not in body
     for fake in created:
         fake.close.assert_awaited_once()
-    assert len(created) == 2  # Student and misconception; tutor is disabled.
+    assert len(created) == 1  # Student path owns only the student client.
 
 
 async def test_injected_sdk_retry_policy_is_explicit():

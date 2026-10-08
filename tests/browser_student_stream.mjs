@@ -47,7 +47,7 @@ export default async function checkStudentStream(page) {
     };
   });
   await page.setViewportSize({width:1280, height:900});
-  await page.goto(`${base}/chat?stream`);
+  await page.goto(`${base}/chat`);
   await page.waitForFunction(() => document.querySelector('#teacher-form').dataset.studentStream === 'true', null, {timeout:3000});
   await page.evaluate(async () => {
     const {mountStudentStream} = await import('/static/js/student-stream.js');
@@ -199,7 +199,7 @@ export default async function checkStudentStream(page) {
   await page.route('**/login', route => route.fulfill({contentType:'text/html', body:'<h1>Login fixture</h1>'}));
   await page.locator('#session-login-btn').click();
   await page.waitForURL('**/login');
-  await page.goto(`${base}/chat?stream`);
+  await page.goto(`${base}/chat`);
   await page.getByRole('button', {name:'같은 요청 다시 전송', exact:true}).waitFor({state:'visible', timeout:3000});
   assert(await input.inputValue() === '로그인 후 이어 쓸 초안', 'login return restores the exact tab draft');
   assert(await page.evaluate(() => streamFixture.posts.length === 0 && streamFixture.gets.length === 1 && streamFixture.gets[0].includes('/runs?request_id=')), 'login return checks ownership-protected status without automatic generation');

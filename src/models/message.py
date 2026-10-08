@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +29,12 @@ class Message(Base):
     # Foreign key
     session_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("session.id", ondelete="CASCADE"), nullable=False
+    )
+
+    turn_id: Mapped[str | None] = mapped_column(String(36))
+    turn_index: Mapped[int | None] = mapped_column(Integer)
+    generation_run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("generation_run.id", ondelete="SET NULL")
     )
 
     # Message content
@@ -61,6 +68,33 @@ class Message(Base):
     __table_args__ = (
         CheckConstraint(
             "role IN ('teacher', 'student', 'tutor')", name="ck_message_role"
+        ),
+        Index(
+            "uq_message_turn_role",
+            "session_id",
+            "turn_id",
+            "role",
+            unique=True,
+            sqlite_where=text("turn_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_message_teacher_index",
+            "session_id",
+            "turn_index",
+            unique=True,
+            sqlite_where=text("role = 'teacher' AND turn_index IS NOT NULL"),
+        ),
+        Index(
+            "uq_message_run",
+            "generation_run_id",
+            unique=True,
+            sqlite_where=text("generation_run_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_message_completed_student",
+            "session_id",
+            text("turn_index DESC"),
+            sqlite_where=text("role = 'student' AND turn_id IS NOT NULL"),
         ),
         Index("ix_message_session_created", "session_id", "created_at"),
         Index("ix_message_session_role", "session_id", "role"),

@@ -1,0 +1,306 @@
+"""Provider and persistence failures through the real student HTTP route."""
+
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+from test_scenario_api import login
+from test_student_generation import event, frames
+
+pytest_plugins = ("test_student_generation",)
+
+
+@pytest.mark.parametrize(
+    "mode,code",
+    [
+        ("empty", "empty_output"),
+        ("refusal", "refused"),
+        ("final_refusal", "refused"),
+        ("incomplete", "incomplete_response"),
+        ("failed", "provider_error"),
+        ("error", "provider_error"),
+        ("eof", "incomplete_response"),
+    ],
+)
+async def test_provider_failures_never_become_student_messages(
+    data, client, student, mode, code
+):
+    login(client, data.owner)
+    response = SimpleNamespace(
+        status="completed", output_text=" ", output=[], usage=None
+    )
+    events = [event("response.output_text.delta", delta="Provisional")]
+    if mode == "empty":
+        events.append(event("response.completed", response=response))
+    elif mode == "refusal":
+        events.append(event("response.refusal.delta", delta="Refusal"))
+    elif mode == "final_refusal":
+        response.output_text = "Looks like an answer"
+        response.output = [
+            SimpleNamespace(
+                type="message", content=[SimpleNamespace(type="refusal")]
+            )
+        ]
+        events.append(event("response.completed", response=response))
+    elif mode == "incomplete":
+        response.status = "incomplete"
+        response.output_text = "Incomplete answer"
+        events.append(event("response.incomplete", response=response))
+    elif mode == "failed":
+        events.append(event("response.failed", response=response))
+    elif mode == "error":
+        events.append(event("error", message="private upstream details"))
+    student.stream.events = events
+    payload = {"request_id": str(uuid4()), "content": "Why?"}
+    result = await client.post(
+        f"/sessions/{data.session.id}/turns/stream", json=payload
+    )
+    assert frames(result)[-1][0] == "run.failed"
+    assert frames(result)[-1][1]["code"] == code
+    state = await client.get(
+        f"/sessions/{data.session.id}/runs",
+        params={"request_id": payload["request_id"]},
+    )
+    assert state.json()["message"] is None
+    assert state.json()["partial_text"] == "Provisional"
+    updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
+    assert updates.text.count("data-message-id=") == 1
+    assert "Provisional" not in updates.text
+    assert student.responses.create.await_count == 1
+    assert student.stream.closed
+    student.close.assert_awaited_once()
+
+
+async def test_final_commit_failure_never_emits_completed(
+    data, client, student
+):
+    from sqlalchemy import event as sql_event
+
+    pending_commit = False
+
+    def student_insert(conn, cursor, statement, parameters, context, many):
+        nonlocal pending_commit
+        if (
+            statement.startswith("INSERT INTO message")
+            and "student" in parameters
+        ):
+            pending_commit = True
+
+    def reject_completion(conn):
+        nonlocal pending_commit
+        if pending_commit:
+            pending_commit = False
+            raise RuntimeError("Injected SQLite commit failure")
+
+    sql_event.listen(
+        data.engine.sync_engine, "before_cursor_execute", student_insert
+    )
+    sql_event.listen(data.engine.sync_engine, "commit", reject_completion)
+    login(client, data.owner)
+    payload = {"request_id": str(uuid4()), "content": "Keep this teacher"}
+    try:
+        response = await client.post(
+            f"/sessions/{data.session.id}/turns/stream", json=payload
+        )
+    finally:
+        sql_event.remove(
+            data.engine.sync_engine, "before_cursor_execute", student_insert
+        )
+        sql_event.remove(data.engine.sync_engine, "commit", reject_completion)
+    assert frames(response)[-1][0] == "run.failed"
+    assert frames(response)[-1][1]["code"] == "storage_error"
+    state = await client.get(
+        f"/sessions/{data.session.id}/runs",
+        params={"request_id": payload["request_id"]},
+    )
+    assert state.json()["status"] == "failed"
+    assert state.json()["message"] is None
+    updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
+    assert "Keep this teacher" in updates.text
+    assert updates.text.count("data-message-id=") == 1
+    assert student.responses.create.await_count == 1
+
+
+@pytest.mark.parametrize(
+    "first_delta,code",
+    [
+        (False, "first_output_timeout"),
+        (True, "run_timeout"),
+    ],
+)
+async def test_deadlines_release_execution_without_saving_partial(
+    data, client, student, monkeypatch, first_delta, code
+):
+    import asyncio
+
+    from test_student_generation import FakeStream
+
+    from src.services import student_stream
+
+    monkeypatch.setattr(student_stream, "FIRST_OUTPUT_SECONDS", 0.4)
+    monkeypatch.setattr(student_stream, "RUN_SECONDS", 0.8)
+    monkeypatch.setattr(student_stream, "HEARTBEAT_SECONDS", 0.02)
+    student.stream = FakeStream(
+        (
+            [event("response.output_text.delta", delta="Partial")]
+            if first_delta
+            else []
+        )
+        + [asyncio.Event()]
+    )
+    student.responses.create.return_value = student.stream
+    login(client, data.owner)
+    payload = {"request_id": str(uuid4()), "content": "Waiting question"}
+    response = await client.post(
+        f"/sessions/{data.session.id}/turns/stream", json=payload
+    )
+    assert ": ping\n\n" in response.text
+    assert frames(response)[-1][1]["code"] == code
+    state = await client.get(
+        f"/sessions/{data.session.id}/runs",
+        params={"request_id": payload["request_id"]},
+    )
+    assert state.json()["status"] == "failed"
+    assert state.json()["message"] is None
+    assert state.json()["partial_text"] == ("Partial" if first_delta else None)
+    assert student.stream.closed
+    student.close.assert_awaited_once()
+    assert student.responses.create.await_count == 1
+
+
+async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
+    data, client, student, monkeypatch
+):
+    import asyncio
+
+    from test_student_generation import FakeStream
+
+    from src.services import student_stream
+
+    class ReasoningStream(FakeStream):
+        async def iterate(self):
+            for _ in range(1000):
+                await asyncio.sleep(0.005)
+                yield event(
+                    "response.reasoning_summary_text.delta",
+                    delta="PRIVATE REASONING",
+                )
+
+    monkeypatch.setattr(student_stream, "FIRST_OUTPUT_SECONDS", 0.4)
+    monkeypatch.setattr(student_stream, "HEARTBEAT_SECONDS", 0.02)
+    student.stream = ReasoningStream([])
+    student.responses.create.return_value = student.stream
+    login(client, data.owner)
+    response = await client.post(
+        f"/sessions/{data.session.id}/turns/stream",
+        json={"request_id": str(uuid4()), "content": "Reasoning question"},
+    )
+    assert ": ping\n\n" in response.text
+    assert "PRIVATE REASONING" not in response.text
+    assert frames(response)[-1][1]["code"] == "first_output_timeout"
+    assert student.stream.closed
+
+
+@pytest.mark.parametrize("slow_close", [False, True])
+async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
+    data, client, student, monkeypatch, slow_close
+):
+    import asyncio
+    import json
+
+    from test_student_generation import FakeStream
+
+    from src.main import app
+
+    if slow_close:
+        from src.services import student_stream
+
+        monkeypatch.setattr(student_stream, "CLEANUP_SECONDS", 0.5)
+        student.close.side_effect = asyncio.Event().wait
+    login(client, data.owner)
+    gate = asyncio.Event()
+    student.stream = FakeStream(
+        [
+            event(
+                "response.output_text.delta", delta="Partial before disconnect"
+            ),
+            gate,
+        ]
+    )
+    student.responses.create.return_value = student.stream
+    payload = {"request_id": str(uuid4()), "content": "Keep after disconnect"}
+    disconnect = asyncio.Event()
+    requested = False
+    received = []
+
+    async def receive():
+        nonlocal requested
+        if not requested:
+            requested = True
+            return {
+                "type": "http.request",
+                "body": json.dumps(payload).encode(),
+                "more_body": False,
+            }
+        await disconnect.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        if message["type"] == "http.response.body":
+            received.append(message.get("body", b""))
+            if b"output.delta" in message.get("body", b""):
+                disconnect.set()
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": f"/sessions/{data.session.id}/turns/stream",
+        "raw_path": f"/sessions/{data.session.id}/turns/stream".encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"cookie", f"session_id={client.cookies['session_id']}".encode()),
+        ],
+        "client": ("127.0.0.1", 9000),
+        "server": ("test", 80),
+    }
+    await asyncio.wait_for(app(scope, receive, send), 5)
+    assert b"output.completed" not in b"".join(received)
+    assert student.stream.closed
+    student.close.assert_awaited_once()
+    state = await client.get(
+        f"/sessions/{data.session.id}/runs",
+        params={"request_id": payload["request_id"]},
+    )
+    assert state.json()["status"] == "interrupted"
+    assert state.json()["partial_text"] == "Partial before disconnect"
+    assert state.json()["message"] is None
+    updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
+    assert "Keep after disconnect" in updates.text
+    assert updates.text.count("data-message-id=") == 1
+    assert student.responses.create.await_count == 1
+
+
+async def test_transient_creation_error_has_no_automatic_retry(
+    data, client, student
+):
+    import httpx
+    from openai import APIConnectionError
+
+    student.responses.create.side_effect = APIConnectionError(
+        message="Private connection error",
+        request=httpx.Request("POST", "https://provider.invalid/responses"),
+    )
+    login(client, data.owner)
+    result = await client.post(
+        f"/sessions/{data.session.id}/turns/stream",
+        json={"request_id": str(uuid4()), "content": "Keep on network failure"},
+    )
+    assert frames(result)[-1][1]["code"] == "provider_error"
+    assert "Private connection error" not in result.text
+    assert student.responses.create.await_count == 1
+    student.close.assert_awaited_once()

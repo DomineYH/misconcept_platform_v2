@@ -962,7 +962,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       if (lastId > 0) enablePolling();
     }
   }
-  // The stream UI mounts separately; the legacy product transport stays in place until A4.
+  // Share existing auth and session controls with the student stream.
   window.chatUI = {
     sessionId: chatConfig.sessionId,
     studentName: chatConfig.studentName,

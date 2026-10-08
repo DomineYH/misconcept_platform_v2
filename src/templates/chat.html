@@ -120,9 +120,7 @@
       <input type="hidden" id="polling-enabled" value="false">
 
       <!-- Messages container -->
-      <div id="messages-container" class="messages-container"
-        hx-get="/sessions/{{ session_id }}/messages/updates"
-        hx-trigger="none" hx-swap="beforeend" hx-include="#last-message-id">
+      <div id="messages-container" class="messages-container">
         {% if scenario.greeting_message %}
         <div class="message message-mentor greeting-message">
           <div class="avatar mentor">멘</div>
@@ -138,9 +136,7 @@
       </div>
 
       <!-- Teacher input form -->
-      <form id="teacher-form" class="teacher-form"
-        hx-post="/sessions/{{ session_id }}/messages"
-        hx-target="#messages-container" hx-swap="beforeend">
+      <form id="teacher-form" class="teacher-form">
         <div class="input-group">
           <textarea name="content" id="teacher-input" rows="1"
             placeholder="메시지를 입력하세요..." required maxlength="5000"
@@ -175,4 +171,8 @@
   'ended': session_ended|default(false)
 }|tojson }}</script>
 <script src="/static/js/chat.js"></script>
+<script type="module">
+  import {mountStudentStream} from '/static/js/student-stream.js';
+  mountStudentStream(window.chatUI);
+</script>
 {% endblock %}

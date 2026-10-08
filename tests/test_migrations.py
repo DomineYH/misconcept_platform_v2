@@ -20,6 +20,7 @@ async def schema(conn):
     return (await conn.exec_driver_sql("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != '_migrations' AND name NOT LIKE 'chatbot_%' ORDER BY type, name")).all()
 
 
+@pytest.mark.parametrize("data", ["baseline"], indirect=True)
 async def test_upgrade_preserves_data_history_and_matches_fresh(data, tmp_path, monkeypatch):
     from src.models import Scenario, PromptTemplate
     monkeypatch.setattr(migrate, "engine", data.engine)

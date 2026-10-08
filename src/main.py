@@ -234,6 +234,17 @@ async def auth_required_handler(
 
     Other HTMX requests keep existing HX-Redirect behavior.
     """
+    if request.url.path.startswith("/runs/") or (
+        request.url.path.startswith("/sessions/") and (
+            "/turns/" in request.url.path or request.url.path.endswith("/runs")
+        )
+    ):
+        return Response(
+            content=json.dumps({"code": "AUTH_EXPIRED"}),
+            status_code=401,
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
     is_htmx = request.headers.get("HX-Request") == "true"
     request_path = request.url.path
 

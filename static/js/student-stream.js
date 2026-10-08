@@ -1,6 +1,6 @@
 import {readSSE} from './student-sse.js';
 
-// A4 mounts this on the product page; A3 mounts it only in the browser fixture.
+// Fetch owns the composer transport; initialization is safe to repeat.
 export function mountStudentStream(ui) {
   const form = document.getElementById('teacher-form');
   if (form.dataset.studentStream) return;

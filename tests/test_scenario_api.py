@@ -4,6 +4,7 @@ import base64
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -112,20 +113,17 @@ async def test_missing_public_problem_blocks_new_session(
 
 @pytest.fixture
 def provider(monkeypatch):
-    fake = SimpleNamespace(
-        responses=SimpleNamespace(
-            create=AsyncMock(
-                side_effect=[
-                    SimpleNamespace(output_text="Student answer", usage=None),
-                    SimpleNamespace(
-                        output_text='{"maintains_misconception": true}',
-                        usage=None,
-                    ),
-                ]
-            )
+    from test_student_generation import FakeStream, event
+
+    stream = FakeStream([event(
+        "response.completed", response=SimpleNamespace(
+            status="completed", output_text="Student answer", output=[],
+            usage=None,
         ),
-        close=AsyncMock(),
-        max_retries=0,
+    )])
+    fake = SimpleNamespace(
+        responses=SimpleNamespace(create=AsyncMock(return_value=stream)),
+        close=AsyncMock(), max_retries=0,
     )
     monkeypatch.setattr(base, "AsyncOpenAI", lambda **kwargs: fake)
     return fake
@@ -140,7 +138,8 @@ async def test_missing_public_problem_blocks_generation_in_existing_session(
     await data.db.commit()
     login(client, data.owner)
     response = await client.post(
-        f"/sessions/{data.session.id}/messages", data={"content": "Why?"}
+        f"/sessions/{data.session.id}/turns/stream",
+        json={"request_id": str(uuid4()), "content": "Why?"}
     )
     assert response.status_code == 400
     assert "문제 상황 보완 필요" in response.json()["detail"]
@@ -315,11 +314,12 @@ async def test_generation_does_not_send_legacy_video_to_provider(
     await data.db.commit()
     login(client, data.owner)
     response = await client.post(
-        f"/sessions/{data.session.id}/messages", data={"content": "Why?"}
+        f"/sessions/{data.session.id}/turns/stream",
+        json={"request_id": str(uuid4()), "content": "Why?"}
     )
     assert response.status_code == 200
     assert "Student answer" in response.text
     assert_no_video(response.text)
-    assert provider.responses.create.await_count == 2
+    assert provider.responses.create.await_count == 1
     for call in provider.responses.create.call_args_list:
         assert_no_video(json.dumps(call.kwargs))

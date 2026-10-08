@@ -21,6 +21,24 @@ BASE_STUDENT_PROMPT = (
 )
 
 
+def build_student_input(template, prompt, title, profile, teacher, history):
+    system_prompt = template.format(
+        scenario_title=title, student_profile=profile, prompt=prompt
+    )
+    messages = [
+        {"role": "developer", "content": BASE_STUDENT_PROMPT},
+        {"role": "developer", "content": system_prompt},
+    ]
+    roles = {"teacher": "user", "student": "assistant"}
+    messages.extend(
+        {"role": roles[msg["role"]], "content": msg["content"]}
+        for msg in history
+        if msg["role"] in roles
+    )
+    messages.append({"role": "user", "content": teacher})
+    return messages
+
+
 class StudentBot(OpenAIBaseService):
     """Chatbot simulating student with specific misconception."""
 
@@ -86,33 +104,14 @@ class StudentBot(OpenAIBaseService):
                 self.db_session, self.template_id
             )
 
-            # Format with scenario context
-            system_prompt = template.format(
-                scenario_title=self.scenario_title,
-                student_profile=self.student_profile,
-                prompt=self.scenario_prompt,
+            input_messages = build_student_input(
+                template,
+                self.scenario_prompt,
+                self.scenario_title,
+                self.student_profile,
+                teacher_message,
+                conversation_history,
             )
-
-            # Build input for Responses API (developer role)
-            # Base prompt first (highest priority)
-            input_messages = [
-                {"role": "developer", "content": BASE_STUDENT_PROMPT},
-                {"role": "developer", "content": system_prompt},
-            ]
-
-            # Add conversation history
-            for msg in conversation_history:
-                if msg["role"] == "teacher":
-                    input_messages.append(
-                        {"role": "user", "content": msg["content"]}
-                    )
-                elif msg["role"] == "student":
-                    input_messages.append(
-                        {"role": "assistant", "content": msg["content"]}
-                    )
-
-            # Add current teacher message
-            input_messages.append({"role": "user", "content": teacher_message})
 
             # OpenAI Responses API 호출 (GPT-5 with reasoning)
             response = await self.create_response(

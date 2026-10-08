@@ -233,7 +233,7 @@ async def test_probe_request_rejections_are_unbound_and_owner_status_is_private(
         await write(api, "models/1/probes", **{**body, "api_key": KEY})
     ).status_code == 422
     assert (
-        await write(api, "models/1/probes", **{**body, "role": "mentor"})
+        await write(api, "models/1/probes", **{**body, "role": "unsupported"})
     ).status_code == 422
     assert (
         await api.post("/admin/ai/models/1/probes", json=body)
@@ -414,7 +414,7 @@ async def test_probe_preserves_validated_options_and_uses_lower_stored_budget(
     body["expected_version"] = 2
     assert (await api.get("/admin/ai/state")).json()["models"][0][
         "probe_budgets"
-    ] == {"student": 100}
+    ] == {"student": 100, "mentor": 100, "analysis": 100}
 
     async def upstream(request, payload):
         assert (

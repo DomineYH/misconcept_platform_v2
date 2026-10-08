@@ -15,13 +15,13 @@ MESSAGES = [
 OUTPUT_BUDGET = 1024
 
 
-def probe_options(provider, model):
+def probe_options(provider, model, *, output_budget=OUTPUT_BUDGET):
     definition = capabilities(provider, model.model_id)
     options = validate_model_and_options(
         provider, model.model_id, model.default_options_json
     )
     options["max_output_tokens"] = min(
-        OUTPUT_BUDGET,
+        output_budget,
         options.get("max_output_tokens", definition["max_output_tokens"]),
     )
     return options

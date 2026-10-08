@@ -1,7 +1,9 @@
 """Provider-neutral text request and event contract for new invocations."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
+
+from pydantic import BaseModel
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,12 @@ class TextRequest:
 
 
 @dataclass(frozen=True)
+class StructuredRequest(TextRequest):
+    output_schema: type[BaseModel]
+    validation_context: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class CallEvent:
     type: Literal[
         "text_delta", "usage", "completed", "refused", "interrupted", "error"
@@ -26,6 +34,7 @@ class CallEvent:
     retry_after_seconds: float | None = None
     response_received: bool = False
     models: list[dict] | None = None
+    structured: dict | None = None
 
 
 class InvocationError(Exception):

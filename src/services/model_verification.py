@@ -32,6 +32,8 @@ class RoleVerification(BaseModel):
         Literal[
             "interrupted",
             "invalid_output",
+            "invalid_json",
+            "invalid_reference",
             "configuration_unavailable",
             "call_limit_reached",
             "authentication",

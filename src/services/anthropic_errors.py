@@ -56,7 +56,7 @@ def exception_code(error):
             "overloaded_error": "transient",
             "api_error": "transient",
             "billing_error": "quota",
-        }.get(kind)
+        }.get(kind if isinstance(kind, str) else None)
         if code:
             return code
         if isinstance(error, APIStatusError):

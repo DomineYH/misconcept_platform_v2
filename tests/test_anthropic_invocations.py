@@ -483,3 +483,42 @@ async def test_unverified_price_dimensions_never_use_a_fallback(monkeypatch):
     assert event.usage["estimated_cost_usd"] is None and all(
         c.is_closed() for c in clients
     )
+
+
+@pytest.mark.parametrize("stream", [False, True])
+async def test_malformed_error_type_still_returns_safe_terminal_with_observed_usage(
+    monkeypatch, stream
+):
+    from test_student_probe import sse
+
+    body = {
+        "type": "error",
+        "error": {"type": {"unexpected": "PRIVATE"}, "message": "PRIVATE"},
+    }
+    clients, calls = install(
+        monkeypatch,
+        lambda request: (
+            httpx2.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=stream_body(finish=False)
+                + sse("error", error=body["error"]),
+            )
+            if stream
+            else httpx2.Response(400, json=body)
+        ),
+    )
+    event = (
+        [
+            event
+            async for event in anthropic_generation.stream_text(
+                REQUEST, "fake", TIMEOUTS
+            )
+        ][-1]
+        if stream
+        else await anthropic_generation.generate_text(REQUEST, "fake", TIMEOUTS)
+    )
+    assert event.type == "error" and event.error_code == "invalid_output"
+    assert event.text == "" and "PRIVATE" not in str(event)
+    assert event.usage["output_tokens"] == 12 if stream else event.usage is None
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)

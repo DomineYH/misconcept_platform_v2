@@ -2,15 +2,15 @@
 
 ### Issue tracker
 
-Issues and PRDs are tracked in GitHub Issues using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+이슈와 PRD는 `gh` CLI로 GitHub Issues에서 관리한다. `docs/agents/issue-tracker.md`를 참고한다.
 
 ### Triage labels
 
-Triage uses the five canonical label strings unchanged. See `docs/agents/triage-labels.md`.
+분류에는 다섯 가지 표준 라벨 문자열을 그대로 사용한다. `docs/agents/triage-labels.md`를 참고한다.
 
 ### Domain docs
 
-Domain documentation uses the single-context layout. See `docs/agents/domain.md`.
+도메인 문서는 단일 컨텍스트 구조를 사용한다. `docs/agents/domain.md`를 참고한다.
 
 # Code Quality
 

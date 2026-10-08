@@ -13,6 +13,7 @@ from src.config import config
 from src.models import ApiUsageLog, Message, Scenario, Session, calculate_cost
 from src.services.misconception_analyzer import MisconceptionAnalyzer
 from src.services.student_bot import StudentBot
+from src.services.turn_context import load_completed_turns
 from src.services.tutor_bot import TutorBot
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,9 @@ logger = logging.getLogger(__name__)
 class SessionManager:
     """Orchestrates teacher-student-tutor dialogue interactions."""
 
-    CONTEXT_WINDOW_TURNS: int = 20  # Max messages in conversation history
-
-    def __init__(self, db_session: AsyncSession, session_id: int, *, client=None):
+    def __init__(
+        self, db_session: AsyncSession, session_id: int, *, client=None
+    ):
         """Initialize SessionManager for specific session.
 
         Args:
@@ -39,8 +40,12 @@ class SessionManager:
         self.scenario = None  # Store scenario for analyzer
 
     async def close(self):
-        """Request owner closes all clients, including partial initialization."""
-        for service in (self.student_bot, self.tutor_bot, self.misconception_analyzer):
+        """Close all owned clients, including partial initialization."""
+        for service in (
+            self.student_bot,
+            self.tutor_bot,
+            self.misconception_analyzer,
+        ):
             if service is not None:
                 await service.close()
 
@@ -273,21 +278,8 @@ class SessionManager:
         }
 
     async def _get_conversation_history(self) -> list[dict]:
-        """Retrieve conversation history for context.
-
-        Returns:
-            List of message dicts with role and content.
-            Limited to the most recent CONTEXT_WINDOW_TURNS messages.
-        """
-        result = await self.db.execute(
-            select(Message)
-            .where(Message.session_id == self.session_id)
-            .order_by(Message.created_at)
-        )
-        messages = result.scalars().all()
-        window = config.CONTEXT_WINDOW_TURNS
-        recent = messages[-window:]
-        return [{"role": msg.role, "content": msg.content} for msg in recent]
+        """Retrieve only the last N completed teacher–student pairs."""
+        return await load_completed_turns(self.db, self.session_id)
 
     async def _log_api_usage(
         self,

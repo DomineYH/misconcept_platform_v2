@@ -41,8 +41,8 @@ class Config(BaseSettings):
     TUTOR_MAX_TOKENS: int = 1500
     TUTOR_INTERVENTION_THRESHOLD: int = 3
 
-    # Context Window
-    CONTEXT_WINDOW_TURNS: int = 20
+    # Number of completed teacher–student pairs preceding the current turn.
+    CONTEXT_WINDOW_TURNS: int = 10
 
     # Session Security
     SESSION_SECRET: str = "change-this-insecure-default"

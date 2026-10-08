@@ -3,12 +3,29 @@ from pydantic import ValidationError
 
 from src.config import Config
 
-
 REASONING_FIELDS = (
     "ANALYSIS_REASONING",
     "STUDENT_REASONING",
     "TUTOR_REASONING",
 )
+
+
+def test_context_window_defaults_to_ten_completed_pairs(monkeypatch):
+    monkeypatch.delenv("CONTEXT_WINDOW_TURNS", raising=False)
+    assert Config(_env_file=None).CONTEXT_WINDOW_TURNS == 10
+
+
+@pytest.mark.parametrize("turns", [4, 20, 200])
+def test_explicit_context_window_pair_count_is_preserved(monkeypatch, turns):
+    monkeypatch.setenv("CONTEXT_WINDOW_TURNS", str(turns))
+    assert Config(_env_file=None).CONTEXT_WINDOW_TURNS == turns
+
+
+@pytest.mark.parametrize("turns", [3, 201])
+def test_context_window_rejects_out_of_range_pair_count(monkeypatch, turns):
+    monkeypatch.setenv("CONTEXT_WINDOW_TURNS", str(turns))
+    with pytest.raises(ValidationError, match="CONTEXT_WINDOW_TURNS"):
+        Config(_env_file=None)
 
 
 @pytest.mark.parametrize(

@@ -25,6 +25,7 @@ from src.models import (
 from src.models.scenario_group import ScenarioGroup
 from src.services.prompt_manager import PromptManager
 from src.services.student_bot import build_student_input
+from src.services.turn_context import load_completed_turns
 
 
 def digest(value):
@@ -184,19 +185,9 @@ async def reserve_student(factory, session_id, user, request):
         template = await PromptManager.get_template_text_by_id(
             db, scenario.student_template_id
         )
-        # ponytail: retain message-count context until #30 adds completed pairs.
-        history = (
-            await db.scalars(
-                select(Message)
-                .where(
-                    Message.session_id == session_id,
-                    Message.role.in_(["teacher", "student"]),
-                    Message.id < teacher.id,
-                )
-                .order_by(Message.id.desc())
-                .limit(config.CONTEXT_WINDOW_TURNS)
-            )
-        ).all()
+        history = await load_completed_turns(
+            db, session_id, before_turn_index=teacher.turn_index
+        )
         kwargs = {
             "model": scenario.chat_model or config.CHAT_MODEL,
             "reasoning": {"effort": config.STUDENT_REASONING},
@@ -207,10 +198,7 @@ async def reserve_student(factory, session_id, user, request):
                 scenario.title,
                 scenario.student_profile or "Grade 5 student",
                 request.content,
-                [
-                    {"role": m.role, "content": m.content}
-                    for m in reversed(history)
-                ],
+                history,
             ),
         }
         run = GenerationRun(

@@ -1,5 +1,6 @@
 """Isolated screens: python tests/browser_server.py (no DB/LLM)."""
 
+import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -151,6 +152,19 @@ class Handler(BaseHTTPRequestHandler):
                         b"mountStudentStream(window.chatUI);",
                     )
                 body = body.replace(b"</body>", script + b"</body>")
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/admin/api-usage":
+            fixture = json.loads(
+                Path("tests/fixtures/api_usage.json").read_text()
+            )
+            body = (
+                templates.get_template("admin/api_usage.html")
+                .render(
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    **fixture,
+                )
+                .encode()
+            )
             mime = "text/html; charset=utf-8"
         elif path.path == "/admin/users":
             body = (

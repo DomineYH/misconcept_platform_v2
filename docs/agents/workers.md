@@ -36,11 +36,4 @@ herdr agent prompt <name> "Read and execute the work order at <path>."
 
 ## 검증 명령
 
-```bash
-uv run --frozen python -m pytest -q
-uv run --frozen python tests/check_student_live.py
-npm run test:browser
-uv run --frozen ruff check . && uv run --frozen black --check .
-```
-
-브라우저 검사는 워커마다 다른 포트를 써야 한다. 다른 사람이 띄운 fixture 서버는 끄지 않는다.
+명령은 `README.md`의 테스트 절(`AGENTS.md`의 Checks가 가리킨다). `npm run test:browser`는 빈 포트를 골라 자기 fixture 서버만 띄우고 끈다.

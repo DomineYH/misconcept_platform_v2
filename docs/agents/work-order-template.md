@@ -12,7 +12,7 @@ Role: <implementer | task-verifier | planner>. Workflow: <minor | standard | hig
 ## Allowed
 - Edit only what the ticket requires. Commit on `<branch>` with conventional messages ending with
   `Co-Authored-By: <worker model> <noreply@...>`
-- Targeted tests while working; before reporting, run the checks in docs/agents/workers.md ("검증 명령"). Browser checks: use your own port.
+- Targeted tests while working; before reporting, run the checks listed in AGENTS.md (Checks).
 
 ## Forbidden
 - New dependencies, unless the order allows them.

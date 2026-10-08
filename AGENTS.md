@@ -12,16 +12,17 @@
 
 도메인 문서는 단일 컨텍스트 구조를 사용한다. `docs/agents/domain.md`를 참고한다.
 
+### Checks
+
+검사 명령(pytest, ruff, black, 브라우저 검사, live 스트리밍 검사)은 `README.md`의 테스트 절에 있다. CI와 pre-commit이 같은 명령을 실행하며, 모두 통과해야 변경이 끝난 것이다.
+
 # Code Quality
 
-- Follow the repository's configured formatter and linter.
 - Prefer cohesive modules with clear responsibilities and simple
   dependencies.
 - Treat 300 lines as a review signal, not a hard file limit.
 - Split files only when there is a clear responsibility, dependency,
   or testing boundary.
-- Do not perform unrelated refactoring solely to satisfy size or style
-  preferences.
 - Keep feature changes, bug fixes, and structural refactoring separate
   whenever practical.
 - Generated code, migrations, schemas, fixtures, snapshots, and
@@ -37,7 +38,7 @@
 
 # Instructions
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+Behavioral guidelines to reduce common LLM coding mistakes.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
@@ -51,6 +52,7 @@ Before implementing:
 - If multiple interpretations exist, present them - don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
+- Working under a coordinator's work order, ask by reporting BLOCKED with the question.
 
 ## 2. Simplicity First
 
@@ -101,7 +103,3 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
----
-
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

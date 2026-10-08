@@ -2,13 +2,16 @@
 
 `GET /admin/ai`는 기존 관리자 인증으로 템플릿만 반환한다. 화면 진입,
 새로고침, 재접속은 제공자를 호출하거나 시험을 시작하지 않는다.
-`static/js/ai-connections.js`가 아래 API를 소비한다. A1에는 이 데이터/쓰기
-API, DB 모델, SDK 연결이 없다. 없는 API는 안전한 설정 불가 안내를 표시한다.
+`static/js/ai-connections.js`가 아래 API를 소비한다. A2는 연결 조회와 키 저장/교체/활성 변경/삭제를 실제 DB에 연결한다. 모델/시험/설정과 SDK 호출은 후속 티켓 범위다. 없는 API는 안전한 설정 불가 안내를 표시한다.
 합성 상태는 `tests/browser_ai_*.mjs`의 Playwright 응답에만 존재한다.
 
 ## 읽기: `GET /admin/ai/state`
 
-비밀 없는 JSON 객체:
+비밀 없는 JSON 객체. A2의 아직 제공되지 않은 기능은 `models: []`,
+`models_available: false`, `settings: null`, 각 `catalog.available: false`로
+반환한다. 화면은 해당 작업을 비활성화하고 준비 중 안내를 표시한다.
+연결 API 상태 조회는 `Cache-Control: no-store`이며 관리자 인증이 없으면
+401, 교사면 403이다. 마스터 키 오류도 조회를 막지 않는다.
 
 - `master_key_available`: 마스터 키가 저장/호출 가능한 상태인지 boolean.
 - `providers`: openai/anthropic/google 각 연결의 배열.
@@ -93,3 +96,43 @@ URL/브라우저 저장소에는 기록하지 않는다. 성공 후 상태를 �
 현재 선택된 사용 불가 기본값은 참조를 그대로 표시하며 자동 대체하지 않는다.
 재접속 시 시험의 기존 상태를 복원하고 검증 중 프로세스 재시작은
 failed/interrupted로 정리한다. A1은 운영 전환을 승인하지 않는다.
+
+## A2 연결 저장 계약
+
+`025_provider_connection.sql`은 세 연결 행을 비밀 없이 만들고
+`provider_audit_log`를 추가한다. 초기 credential_revision=0,
+connection_version=1이며 ID는 키 삭제/재등록 후에도 유지한다.
+키 저장/교체/삭제는 credential_revision을 증가시키고 모든 성공한 변경은
+connection_version을 증가시킨다. 역할 검증은 이후 티켓에서 이 버전들을
+비교해야 하며 재활성화만으로 이전 성공을 복원하지 않는다.
+
+비활성화와 삭제는 복호화 성공에 의존하지 않는다. 키 교체는 기존 키를
+복호화할 수 있어야 하므로 손상/다른 마스터 키/버전 불일치는 원래 키·버전
+복원을 안내한다. 복원이 불가능하면 재인증 삭제 후 재등록한다.
+API는 원문 키를 다시 조회하는 기능을 제공하지 않는다. 8자 이하 입력은
+일반 마스킹이며 그보다 긴 키는 끝 4자만 힌트로 보인다.
+
+재인증 실패 제한과 감사 행은 서버 책임이다. 기존 limits의 메모리 이동
+윈도우로 관리자 ID와 클라이언트 주소별 각각 5분/5회 실패를 제한하며
+성공 요청은 실패 횟수를 소비하지 않는다. 429는 Retry-After: 300을 포함한다.
+권한·CSRF·매 요청 비밀번호 검증 후 expected_version을 조건부 갱신한다.
+키 변경과 비밀 없는 감사 행은 같은 트랜잭션에서 커밋하며 감사 실패도 전체
+롤백한다. 입력은 엄격한 버전 정수/활성 boolean/비밀 문자열이며 추가 필드를
+거부한다. 422는 고정 코드만 반환하고 validation input을 반환하지 않는다.
+마스터 키 오류/저장 장애는 안전한 503이며 SQL 예외를 반환하거나 기록하지 않는다.
+
+마스터 키 형식은 표준 base64로 인코딩한 32바이트이며 별도의
+PROVIDER_SECRET_ENCRYPTION_KEY_VERSION이 필요하다. 암호화는
+`src/services/provider_secrets.py`의 cryptography AES-256-GCM, 새 12바이트
+nonce, UTF-8 JSON 배열 `[provider, connection_id, credential_revision]`
+(compact separators) 인증 데이터다. decrypt_key는 잘못된 마스터 키/버전,
+태그/nonce/revision 손상을 ProviderSecretUnavailableError로 차단한다.
+이 복호화 도구는 활성/역할 검증/호출 예약을 대신하지 않는다. 이후 호출
+티켓은 연결/역할/버전 검사를 함께 수행하고 원문 비밀을 요청 범위에서만
+사용해야 한다. Python 메모리의 완전한 영점 삭제를 보장하지 않는다.
+
+A2에는 모델/작성 기본값/DB 키로 시작한 활성 호출 참조가 없으므로 impact는
+빈 배열이다. 해당 저장·호출 티켓이 실제 참조를 이 필드에 채워야 한다.
+활성 호출 취소는 A6, 기존 수업 호출의 DB 자격 증명 전환은 A12–A15의
+출시 게이트다. 기존 환경 키 호출을 이번 연결 화면의 결과로 오해하지 않는다.
+백업/복구 절차는 README의 Provider connection setup and recovery를 따른다.

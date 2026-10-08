@@ -2,7 +2,7 @@
 
 import os
 
-from pydantic import computed_field, field_validator
+from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 IS_TEST_ENV = os.getenv("TESTING", "").lower() == "true"
@@ -19,6 +19,8 @@ class Config(BaseSettings):
 
     # OpenAI API Configuration
     OPENAI_API_KEY: str = ""
+    PROVIDER_SECRET_ENCRYPTION_KEY: SecretStr = SecretStr("")
+    PROVIDER_SECRET_ENCRYPTION_KEY_VERSION: str = ""
     # Supported: gpt-5 (Responses API with reasoning)
     # Recommended: gpt-5 (latest, Aug 2025)
     CHAT_MODEL: str = "gpt-5-mini"
@@ -88,16 +90,6 @@ class Config(BaseSettings):
         if isinstance(v, str):
             return v.lower() == "true"
         return False
-
-    @field_validator("OPENAI_API_KEY")
-    @classmethod
-    def validate_openai_key(cls, v):
-        """Validate OpenAI API key is set."""
-        if IS_TEST_ENV:
-            return v
-        if not v or v.startswith("sk-your"):
-            raise ValueError("OPENAI_API_KEY must be set in .env file")
-        return v
 
     @field_validator("SESSION_SECRET")
     @classmethod

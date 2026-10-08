@@ -46,22 +46,23 @@ export function render(state, actions) {
     row.append(button(p.key_registered ? '키 교체' : '키 저장', () => actions.connection(p, 'key'), !state.master_key_available || p.status === 'decryption_failed'),
       button(p.enabled ? '비활성화' : '재활성화', () => actions.connection(p, 'enabled'), !p.key_registered),
       button('키 삭제', () => actions.connection(p, 'delete'), !p.key_registered),
-      button('비생성 확인·목록 갱신', () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available));
-    card.append(row, node('p', `모델 목록: ${p.catalog.stale ? '오래된 목록' : '최근 목록'} · 마지막 갱신 ${p.catalog.fetched_at || '없음'}`));
+      button('비생성 확인·목록 갱신', () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available || p.catalog.available === false));
+    card.append(row, node('p', p.catalog.available === false ? '모델 목록은 아직 제공되지 않습니다.' : `모델 목록: ${p.catalog.stale ? '오래된 목록' : '최근 목록'} · 마지막 갱신 ${p.catalog.fetched_at || '없음'}`));
     if (p.catalog.stale) card.append(node('p', '참고 목록입니다. 접근 가능 여부나 역할 검증 성공을 보장하지 않습니다.'));
     const list = node('ul');
     for (const model of p.catalog.models) {
       const li = node('li');
-      li.append(button(model.model_id, () => actions.register(p, model.model_id)));
+      li.append(button(model.model_id, () => actions.register(p, model.model_id), state.models_available === false));
       list.append(li);
     }
-    card.append(list, button('모델 ID 직접 입력', () => actions.register(p, '')));
+    card.append(list, button('모델 ID 직접 입력', () => actions.register(p, ''), state.models_available === false));
     cards.append(card);
   }
   connections.append(cards);
   root.append(connections);
   const models = node('section', null, {'aria-label':'모델 설정'});
   models.append(node('h2', '모델 설정'));
+  if (state.models_available === false) models.append(node('p', '모델 등록·역할 시험은 아직 제공되지 않습니다.'));
   for (const m of state.models) {
     const p = state.providers.find(p => p.provider === m.provider);
     const card = node('article', null, {'data-model':m.id});
@@ -82,6 +83,11 @@ export function render(state, actions) {
   root.append(models);
   const settings = node('section', null, {'aria-label':'작성 기본값·호출 설정'});
   settings.append(node('h2', '작성 기본값·호출 설정'), node('p', '작성 기본값은 새 시나리오 작성에만 사용합니다. 기존 시나리오와 세션은 변경하지 않습니다.'));
+  if (!state.settings) {
+    settings.append(node('p', '작성 기본값·호출 설정은 아직 제공되지 않습니다.'));
+    root.append(settings);
+    return;
+  }
   for (const [role, label] of Object.entries(roles)) {
     const d = state.settings.defaults[role];
     const m = state.models.find(m => m.id === d?.model_config_id);

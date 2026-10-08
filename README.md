@@ -8,11 +8,49 @@ Requires Python 3.11+ and uv. Install the locked runtime and test dependencies:
 ```sh
 uv sync --frozen --extra dev --python 3.12
 cp .env.example .env
-# Set OPENAI_API_KEY, SESSION_SECRET (openssl rand -hex 32),
-# and ADMIN_DEFAULT_PASSWORD in .env before seeding a new development DB.
+# Set SESSION_SECRET (openssl rand -hex 32) and ADMIN_DEFAULT_PASSWORD
+# in .env before seeding a new development DB. Provider keys are not required to boot.
 uv run --frozen python -m src.db.seed
 uv run --frozen uvicorn src.main:app --reload
 ```
+
+## Provider connection setup and recovery
+
+The administrator's **AI 연결·모델** screen stores provider keys encrypted in
+SQLite. Login and reading this screen require no provider or encryption key.
+For key storage, supply `PROVIDER_SECRET_ENCRYPTION_KEY` as **standard base64
+encoding of exactly 32 random bytes** (generate with `openssl rand -base64 32`)
+and `PROVIDER_SECRET_ENCRYPTION_KEY_VERSION` as a nonempty identifier, such as
+`v1`, through infrastructure secrets. Keep this key separate from `SESSION_SECRET`.
+A missing/invalid master key blocks storage and credential decryption, not startup.
+
+Every key save/replacement, disable/reactivation and deletion requires the current
+administrator password and CSRF. Five failed confirmations per administrator or
+client address within five minutes temporarily block further confirmations.
+Version conflicts require reloading the screen; requests are never silently replayed.
+Deleting a key clears its ciphertext, nonce, master-key version and masked hint,
+while preserving the connection row and audit history. Disable/delete work even
+when the stored key cannot be decrypted. Restore the original master key and
+version first; if they cannot be recovered, reauthenticate, delete the unusable
+key, then register a replacement under the configured master key.
+
+Back up SQLite with its consistent backup mechanism (for example,
+`sqlite3 dialogue_sim.db ".backup '/secure/backups/dialogue.db'"`), rather than
+copying only a live `.db` file while WAL writes are active. Securely preserve the
+matching master key **and its version separately from that database backup**.
+Restore both before using stored credentials; the database alone cannot recover
+provider keys. No automatic master-key creation, web rotation or key ring exists.
+Python memory clearing of plaintext is not guaranteed.
+
+This is the A2 management stage: catalog/model/probe/settings APIs and the final
+transition of existing lesson calls are still pending later S1 tickets. Saving
+keys neither contacts a provider nor makes these stored credentials active in
+legacy lesson calls. Active-call cancellation belongs to A6. Do not treat this
+stage as the final production cutover.
+
+Encryption uses the exactly pinned [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/)
+[AES-GCM API](https://cryptography.io/en/stable/hazmat/primitives/aead/), a fresh
+12-byte nonce per encryption, and authenticated provider/connection ID/credential revision.
 
 `CONTEXT_WINDOW_TURNS` defaults to 10 completed teacher–student pairs.
 Student input includes those prior pairs and the current question once; mentor

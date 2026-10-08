@@ -9,7 +9,7 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse
 
-from src.api.dependencies import get_current_user, templates
+from src.api.dependencies import get_admin_user, get_current_user, templates
 from src.api.routes.admin_about import router as about_router
 from src.api.routes.admin_frameworks import router as frameworks_router
 from src.api.routes.admin_groups import router as groups_router
@@ -26,6 +26,16 @@ router.include_router(sessions_router)
 router.include_router(users_router)
 router.include_router(groups_router)
 router.include_router(about_router)
+
+
+@router.get("/admin/ai", response_class=HTMLResponse)
+async def ai_connections_page(
+    request: Request, user: User = Depends(get_admin_user)
+):
+    """Render AI management; data APIs are supplied by subsequent S1 tickets."""
+    return templates.TemplateResponse(
+        "admin/ai.html", {"request": request, "user": user}
+    )
 
 
 @router.get("/admin", response_class=HTMLResponse)

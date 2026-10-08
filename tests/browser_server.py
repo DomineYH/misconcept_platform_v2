@@ -166,6 +166,13 @@ class Handler(BaseHTTPRequestHandler):
                 .encode()
             )
             mime = "text/html; charset=utf-8"
+        elif path.path == "/admin/ai":
+            body = (
+                templates.get_template("admin/ai.html")
+                .render(user=SimpleNamespace(nickname="Admin", role="admin"))
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
         elif path.path == "/admin/users":
             body = (
                 templates.get_template("admin/users.html")

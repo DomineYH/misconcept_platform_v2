@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {state} from './browser_ai_connections.mjs';
+
+export default async function checkAIProbes(page) {
+  page.setDefaultTimeout(8000);
+  const base = new URL(page.url()).origin;
+  const data = state(), starts = [], cancels = [];
+  let polls = 0;
+  await page.route('**/admin/ai/state', route => route.fulfill({json:data}));
+  await page.route('**/admin/ai/models/1/probes', async route => {
+    const body = route.request().postDataJSON();
+    starts.push(body);
+    data.models[0].verification_state[body.role] = {status:'verifying', probe_request_id:body.request_id};
+    await route.fulfill({status:202, json:{request_id:body.request_id, status:'verifying'}});
+  });
+  await page.route('**/admin/ai/probes/*', async route => {
+    polls++;
+    const request_id = new URL(route.request().url()).pathname.split('/').at(-1);
+    const start = starts.find(start => start.request_id === request_id);
+    data.models[0].verification_state[start.role] = {status:'succeeded', verified_at:'2026-10-08'};
+    await route.fulfill({json:{request_id, status:'succeeded'}});
+  });
+  await page.route('**/admin/ai/probes/*/cancel', async route => {
+    cancels.push(route.request().postDataJSON());
+    data.models[0].verification_state.mentor = {status:'failed', error_code:'interrupted'};
+    await route.fulfill({json:{status:'cancel_requested'}});
+  });
+  await page.goto(`${base}/admin/ai`);
+  const model = page.locator('[data-model="1"]');
+  await model.getByRole('button', {name:'학생봇 시험', exact:true}).focus();
+  await page.keyboard.press('Enter');
+  const disclosure = await page.locator('#ai-editor').innerText();
+  for (const text of ['학생봇', '최대 2회', '1024', '비용', '자동 재시도 0회']) assert(disclosure.includes(text), `trial disclosure: ${text}`);
+  assert.equal(starts.length, 0, 'opening trial does not generate');
+  await page.getByRole('button', {name:'시험 시작', exact:true}).click();
+  await model.getByRole('button', {name:'학생봇 진행 조회', exact:true}).waitFor();
+  assert.equal(starts.length, 1);
+  assert.equal(starts[0].role, 'student');
+  assert.equal(starts[0].expected_version, 2);
+  assert.match(starts[0].request_id, /^[0-9a-f-]{36}$/);
+  await page.reload();
+  await model.getByRole('button', {name:'학생봇 진행 조회', exact:true}).click();
+  await page.getByRole('status').filter({hasText:'성공'}).waitFor();
+  assert.equal(starts.length, 1, 'reconnect queries existing probe without regeneration');
+  assert.equal(polls, 1);
+  await model.getByRole('button', {name:'멘토 시험', exact:true}).click();
+  await page.getByRole('button', {name:'시험 시작', exact:true}).click();
+  await model.getByRole('button', {name:'멘토 시험 취소', exact:true}).click();
+  await page.getByRole('status').filter({hasText:'중단을 요청했습니다'}).waitFor();
+  assert.equal(cancels.length, 1);
+  assert.notEqual(starts[0].request_id, starts[1].request_id, 'explicit trials have separate identity');
+  return {pageErrors:[]};
+}

@@ -1,11 +1,11 @@
-<div class="message message-{{ message.role }}" data-message-id="{{ message.id }}">
+<div class="message message-{{ message.role }}" data-message-id="{{ message.id }}"{% if message.turn_id %} data-turn-id="{{ message.turn_id }}"{% endif %}>
   <div class="avatar {{ message.role }}">
     {% if message.role == 'teacher' %}
     T
     {% elif message.role == 'student' %}
     {{ student_name or 'S' }}
     {% elif message.role == 'tutor' %}
-    튜터
+    멘토
     {% endif %}
   </div>
 
@@ -13,7 +13,7 @@
     {% if message.role == 'student' and student_name %}
     <div class="message-sender">{{ student_name }}</div>
     {% elif message.role == 'tutor' %}
-    <div class="message-sender">튜터</div>
+    <div class="message-sender">멘토</div>
     {% endif %}
     <div class="message-bubble">
       {% if message.role in ('student', 'tutor') %}

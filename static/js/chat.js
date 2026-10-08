@@ -249,6 +249,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
     chatClosed = true;
     syncComposer();
+    document.dispatchEvent(new CustomEvent('chat:locked', {detail:{authExpired:showLoginButton}}));
 
     const textarea = document.getElementById('teacher-input');
     const submitBtn = document.querySelector('#teacher-form button[type="submit"]');

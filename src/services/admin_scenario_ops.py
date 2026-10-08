@@ -124,12 +124,6 @@ async def update_scenario_record(
                 )
             scenario.tutor_template_id = scenario_data.tutor_template_id
 
-    # Update video fields
-    if scenario_data.video_url is not None:
-        scenario.video_url = scenario_data.video_url
-    if scenario_data.video_transcript is not None:
-        scenario.video_transcript = scenario_data.video_transcript
-
     # Update group assignments
     if scenario_data.group_ids is not None:
         # Delete old assignments

@@ -14,7 +14,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
-from src.api.routes.session_helpers import validate_scenario_access
+from src.api.routes.session_helpers import (
+    validate_public_problem,
+    validate_scenario_access,
+)
 from src.models import Scenario, Session, User
 from src.models.scenario_group import ScenarioGroup
 
@@ -99,6 +102,7 @@ async def get_scenario_detail(
     session = existing_result.scalars().first()
 
     if not session:
+        validate_public_problem(scenario)
         session = Session(
             scenario_id=scenario.id,
             teacher_id=user.id,

@@ -68,6 +68,22 @@ def exception_code(error):
     if isinstance(error, httpx.TransportError):
         return "transient"
     if isinstance(error, errors.APIError):
+        body = error.details
+        if isinstance(body, dict):
+            body = body.get("error", body)
+        details = body.get("details", []) if isinstance(body, dict) else []
+        if (
+            error.code == 400
+            and isinstance(details, list)
+            and any(
+                isinstance(item, dict)
+                and item.get("@type")
+                == "type.googleapis.com/google.rpc.ErrorInfo"
+                and item.get("reason") == "API_KEY_INVALID"
+                for item in details
+            )
+        ):
+            return "authentication"
         return {
             401: "authentication",
             402: "quota",

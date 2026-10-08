@@ -468,3 +468,8 @@ A10이 참고할 [공식 단가](https://ai.google.dev/gemini-api/docs/pricing)
 $0.30/백만 토큰, 캐시 입력 $0.03/백만 토큰, 출력(사고 포함) $2.50/백만
 토큰이다. 무료/유료 계정과 서비스 등급을 확인하지 않은 시도의 비용은
 이 단계에서 NULL로 유지한다.
+
+오류 분류는 [GenerateContent 공식 오류 형식](https://ai.google.dev/gemini-api/docs/generate-content/api-errors)
+(2026-10-09 확인)을 따른다. HTTP 400의 google.rpc.ErrorInfo.reason이
+API_KEY_INVALID이면 authentication으로 분류하며 메시지 문자열을 해석하거나
+저장하지 않는다. 미지/잘못된 details는 invalid_output으로 실패한다.

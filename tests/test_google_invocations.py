@@ -412,3 +412,52 @@ async def test_unsupported_structured_schema_is_rejected_before_sdk(
         and event.structured is None
         and not event.text
     )
+
+
+@pytest.mark.parametrize(
+    "details,code",
+    [
+        (
+            [
+                {
+                    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                    "reason": "API_KEY_INVALID",
+                }
+            ],
+            "authentication",
+        ),
+        (
+            [
+                {
+                    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                    "reason": "UNKNOWN_PRIVATE_REASON",
+                }
+            ],
+            "invalid_output",
+        ),
+        ("PRIVATE-ERROR", "invalid_output"),
+    ],
+)
+async def test_google_invalid_key_uses_structured_reason_without_leaking(
+    monkeypatch, caplog, details, code
+):
+    async def upstream(request):
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "code": 400,
+                    "status": "INVALID_ARGUMENT",
+                    "message": "PRIVATE-ERROR",
+                    "details": details,
+                }
+            },
+        )
+
+    clients, calls = install(monkeypatch, upstream)
+    event = await google_generation.generate_text(
+        REQUEST, "PROVIDER-KEY-SENTINEL-1234", TIMEOUTS
+    )
+    assert event.type == "error" and event.error_code == code
+    assert len(calls) == 1 and all(client.is_closed for client in clients)
+    assert "PRIVATE" not in event.text + caplog.text

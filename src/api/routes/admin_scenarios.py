@@ -26,7 +26,10 @@ from src.models.scenario_group import ScenarioGroup
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
-from src.services.admin_scenario_ops import update_scenario_record, soft_delete_scenario_record
+from src.services.admin_scenario_ops import (
+    soft_delete_scenario_record,
+    update_scenario_record,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +173,6 @@ async def create_scenario(
         # Template selections
         student_template_id=scenario_data.student_template_id,
         tutor_template_id=scenario_data.tutor_template_id,
-        # Video fields
-        video_url=scenario_data.video_url,
-        video_transcript=scenario_data.video_transcript,
         # Problem situation for preservice teachers
         problem_situation=scenario_data.problem_situation,
         # Greeting message for mentor introduction

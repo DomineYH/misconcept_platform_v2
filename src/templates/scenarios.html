@@ -14,15 +14,19 @@
     <div class="scenario-card">
       <h3 class="scenario-title">{{ scenario.title }}</h3>
       <p class="scenario-description">
-        {% if scenario.problem_situation %}
+        {% if (scenario.problem_situation or '')|trim %}
         {{ scenario.problem_situation[:100] }}{% if scenario.problem_situation|length > 100 %}...{% endif %}
         {% else %}
-        <span class="text-muted">문제 상황 미등록</span>
+        <span class="text-muted">문제 상황 보완 필요</span>
         {% endif %}
       </p>
+      {% if (scenario.problem_situation or '')|trim %}
       <a href="/scenarios/{{ scenario.id }}" class="btn-primary">
         대화 시작
       </a>
+      {% else %}
+      <button type="button" class="btn-primary" disabled>대화 시작</button>
+      {% endif %}
     </div>
     {% endfor %}
     {% else %}

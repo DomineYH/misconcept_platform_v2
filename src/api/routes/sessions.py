@@ -16,6 +16,7 @@ from src.api.routes.session_analysis import router as analysis_router
 from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
+    validate_public_problem,
     validate_scenario_access,
 )
 
@@ -63,7 +64,8 @@ async def create_session(
     db: AsyncSession = Depends(get_db_session),
 ) -> SessionResponse:
     """Start new dialogue session."""
-    await validate_scenario_access(data.scenario_id, user, db)
+    scenario = await validate_scenario_access(data.scenario_id, user, db)
+    validate_public_problem(scenario)
     session = Session(scenario_id=data.scenario_id, teacher_id=user.id)
     db.add(session)
     await db.flush()

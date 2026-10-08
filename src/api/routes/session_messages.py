@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
-from src.api.routes.session_helpers import load_session
+from src.api.routes.session_helpers import load_session, validate_public_problem
 from src.config import config
 from src.models import Message, User
 from src.models.scenario import Scenario
@@ -107,6 +107,7 @@ async def send_message(
         raise HTTPException(status_code=400, detail="Content cannot be empty")
 
     scenario = await db.get(Scenario, session.scenario_id)
+    validate_public_problem(scenario)
     student_name = scenario.student_name if scenario else None
 
     manager = SessionManager(db, session_id)

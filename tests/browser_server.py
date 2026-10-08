@@ -1,4 +1,4 @@
-"""Isolated chat fixture server: python tests/browser_server.py (no DB/LLM)."""
+"""Isolated screens: python tests/browser_server.py (no DB/LLM)."""
 
 import os
 import sys
@@ -13,32 +13,66 @@ os.environ.update(
     DATABASE_URL="sqlite+aiosqlite:///:memory:",
     OPENAI_API_KEY="test",
 )
-from src.api.dependencies import templates
+from src.api.dependencies import templates  # noqa: E402
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path)
-        if path.path == "/chat":
+        query = parse_qs(path.query)
+        if path.path in {"/chat", "/scenarios", "/admin/scenarios-page"}:
+            framework = SimpleNamespace(id=1, name="Framework")
+            student_template = SimpleNamespace(
+                id=1, template_name="Student template", version=1
+            )
             scenario = SimpleNamespace(
+                id=1,
                 title="Browser regression",
                 student_name="Student",
                 student_profile="Profile",
                 subject="Math",
-                problem_situation="Problem",
+                problem_situation=(
+                    " " if "missing_problem" in query else "Problem"
+                ),
                 greeting_message="Hello",
-                video_url=None,
-                video_transcript=None,
+                prompt="PRIVATE STUDENT PROMPT",
+                video_url="https://www.youtube.com/watch?v=legacy-secret",
+                video_transcript="PRIVATE LEGACY TRANSCRIPT",
+                is_active=1,
+                framework_id=1,
+                framework=framework,
+                student_template_id=1,
+                tutor_template_id=None,
+                tutor_template=None,
             )
+            template = {
+                "/chat": "chat.html",
+                "/scenarios": "scenarios.html",
+                "/admin/scenarios-page": "admin/scenarios.html",
+            }[path.path]
             body = (
-                templates.get_template("chat.html")
+                templates.get_template(template)
                 .render(
                     scenario=scenario,
+                    scenarios=[scenario],
                     session_id=1,
                     student_name="Student",
-                    user=SimpleNamespace(nickname="Tester", role="teacher"),
+                    user=SimpleNamespace(
+                        nickname="Tester",
+                        role=(
+                            "admin"
+                            if path.path.startswith("/admin")
+                            else "teacher"
+                        ),
+                    ),
                     messages=[],
-                    session_ended="ended" in parse_qs(path.query),
+                    session_ended="ended" in query,
+                    frameworks=[framework],
+                    student_templates=[student_template],
+                    tutor_templates=[],
+                    groups=[],
+                    scenario_group_map={},
+                    session_counts={1: 0},
                 )
                 .encode()
             )

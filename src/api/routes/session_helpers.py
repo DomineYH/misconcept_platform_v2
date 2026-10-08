@@ -10,6 +10,16 @@ from src.models import Scenario, Session, User
 from src.models.scenario_group import ScenarioGroup
 
 
+def validate_public_problem(scenario: Scenario) -> None:
+    """Require an administrator-completed public problem for new dialogue."""
+    if not (scenario.problem_situation or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="문제 상황 보완 필요: 관리자에게 공개 문제 상황 보완을 "
+            "요청해주세요.",
+        )
+
+
 async def load_session(
     session_id: int,
     user: User,

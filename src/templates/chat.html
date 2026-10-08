@@ -43,7 +43,6 @@
       <button class="info-tab active" data-tab="guide">챗봇 활용<br>방법</button>
       <button class="info-tab" data-tab="profile">학생 정보</button>
       <button class="info-tab" data-tab="situation">문제 상황</button>
-      <button class="info-tab" data-tab="video">영상</button>
     </div>
 
     <!-- Tab Content Container -->
@@ -53,7 +52,7 @@
         <section class="info-section">
           <div class="guide-content">
             <p>
-              문제 상황과 영상을 본 후
+              문제 상황을 확인한 후
               <strong>{{ scenario.student_name or '학생' }}</strong>의
               오개념을 해결해 봅시다.
             </p>
@@ -91,42 +90,12 @@
       <div class="tab-pane" id="tab-situation">
         <section class="info-section">
           <div class="scenario-prompt">
-            {% if scenario.problem_situation %}
+            {% if (scenario.problem_situation or '')|trim %}
             {{ scenario.problem_situation }}
             {% else %}
-            <span class="text-muted">문제 상황이 아직 등록되지 않았습니다. 관리자에게 문의하세요.</span>
+            <span class="text-muted">문제 상황 보완 필요 — 관리자에게 문의하세요.</span>
             {% endif %}
           </div>
-        </section>
-      </div>
-
-      <!-- Video Tab -->
-      <div class="tab-pane" id="tab-video">
-        <section class="info-section">
-          {% if scenario.video_url %}
-          <div class="video-player-container" id="video-player-wrapper">
-            <iframe
-              id="video-iframe"
-              frameborder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowfullscreen>
-            </iframe>
-          </div>
-          {% else %}
-          <div class="video-player-placeholder">
-            <p class="text-muted">등록된 영상이 없습니다</p>
-          </div>
-          {% endif %}
-        </section>
-        <section class="info-section">
-          <h4>영상 대본</h4>
-          {% if scenario.video_transcript %}
-          <div class="video-transcript-content">{{ scenario.video_transcript }}</div>
-          {% else %}
-          <div class="video-transcript-placeholder">
-            <p class="text-muted">등록된 대본이 없습니다</p>
-          </div>
-          {% endif %}
         </section>
       </div>
 
@@ -203,7 +172,6 @@
 <script id="chat-config" type="application/json">{{ {
   'sessionId': session_id,
   'studentName': student_name or 'S',
-  'videoUrl': scenario.video_url,
   'ended': session_ended|default(false)
 }|tojson }}</script>
 <script src="/static/js/chat.js"></script>

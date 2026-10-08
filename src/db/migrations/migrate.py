@@ -28,23 +28,29 @@ def statements(sql):
 
 
 async def _history(conn):
-    await conn.exec_driver_sql("""CREATE TABLE IF NOT EXISTS _migrations (
+    await conn.exec_driver_sql(
+        """CREATE TABLE IF NOT EXISTS _migrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT NOT NULL UNIQUE,
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
+    )"""
+    )
 
 
 async def _applied(conn, filename):
-    return (await conn.execute(
-        text("SELECT 1 FROM _migrations WHERE filename=:name"),
-        {"name": filename},
-    )).scalar() is not None
+    return (
+        await conn.execute(
+            text("SELECT 1 FROM _migrations WHERE filename=:name"),
+            {"name": filename},
+        )
+    ).scalar() is not None
 
 
 async def _record(conn, filename):
-    await conn.execute(text("INSERT INTO _migrations(filename) VALUES (:name)"),
-                       {"name": filename})
+    await conn.execute(
+        text("INSERT INTO _migrations(filename) VALUES (:name)"),
+        {"name": filename},
+    )
 
 
 async def run_migration(migration_file: Path):
@@ -68,8 +74,13 @@ async def _install_baseline():
     with sqlite3.connect(":memory:") as reference:
         reference.executescript(sql)
         tables = {
-            name: [row[1] for row in reference.execute(f'PRAGMA table_info("{name}")')]
-            for (name,) in reference.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            name: [
+                row[1]
+                for row in reference.execute(f'PRAGMA table_info("{name}")')
+            ]
+            for (name,) in reference.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
         }
     async with engine.connect() as conn:
         # Rebuild is required to align NULL, FK actions, CHECKs and indexes.
@@ -82,35 +93,70 @@ async def _install_baseline():
             if await _applied(conn, BASELINE):
                 await conn.commit()
                 return
-            existing = set((await conn.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )).scalars())
+            existing = set(
+                (
+                    await conn.exec_driver_sql(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                ).scalars()
+            )
             present = existing.intersection(tables)
             required = set(tables) - {"session_feedback_report", "ui_event"}
             if present and not required.issubset(present):
-                raise ValueError("Unsupported schema: upgrade a backup to revision 018 first")
+                raise ValueError(
+                    "Unsupported schema: upgrade a backup to revision 018 first"
+                )
             copied = {}
             for name in sorted(present):
-                columns = [row[1] for row in (await conn.exec_driver_sql(f'PRAGMA table_info("{name}")'))]
+                columns = [
+                    row[1]
+                    for row in (
+                        await conn.exec_driver_sql(
+                            f'PRAGMA table_info("{name}")'
+                        )
+                    )
+                ]
                 missing = set(tables[name]) - set(columns)
-                allowed_missing = {"api_usage_log": {"operation"}, "analysis_framework": {"category_name"}, "question_analysis": {"grade"}}.get(name, set())
-                if set(columns) - set(tables[name]) or missing - allowed_missing:
-                    raise ValueError(f"Unsupported columns in {name}; no changes committed")
-                custom = (await conn.execute(text(
-                    "SELECT name FROM sqlite_master WHERE tbl_name=:name AND type IN ('trigger', 'view')"
-                ), {"name": name})).first()
+                allowed_missing = {
+                    "api_usage_log": {"operation"},
+                    "analysis_framework": {"category_name"},
+                    "question_analysis": {"grade"},
+                }.get(name, set())
+                if (
+                    set(columns) - set(tables[name])
+                    or missing - allowed_missing
+                ):
+                    raise ValueError(
+                        f"Unsupported columns in {name}; no changes committed"
+                    )
+                custom = (
+                    await conn.execute(
+                        text(
+                            "SELECT name FROM sqlite_master WHERE tbl_name=:name AND type IN ('trigger', 'view')"
+                        ),
+                        {"name": name},
+                    )
+                ).first()
                 if custom:
-                    raise ValueError(f"Custom schema object on {name}; migrate explicitly")
-                copied[name] = ', '.join(f'"{column}"' for column in columns)
-                await conn.exec_driver_sql(f'CREATE TEMP TABLE "_copy_{name}" AS SELECT * FROM "{name}"')
+                    raise ValueError(
+                        f"Custom schema object on {name}; migrate explicitly"
+                    )
+                copied[name] = ", ".join(f'"{column}"' for column in columns)
+                await conn.exec_driver_sql(
+                    f'CREATE TEMP TABLE "_copy_{name}" AS SELECT * FROM "{name}"'
+                )
             for name in sorted(present):
                 await conn.exec_driver_sql(f'DROP TABLE "{name}"')
             for statement in statements(sql):
                 await conn.exec_driver_sql(statement)
             for name, columns in copied.items():
-                await conn.exec_driver_sql(f'INSERT INTO "{name}" ({columns}) SELECT {columns} FROM "_copy_{name}"')
+                await conn.exec_driver_sql(
+                    f'INSERT INTO "{name}" ({columns}) SELECT {columns} FROM "_copy_{name}"'
+                )
                 await conn.exec_driver_sql(f'DROP TABLE "_copy_{name}"')
-            violations = (await conn.exec_driver_sql("PRAGMA foreign_key_check")).all()
+            violations = (
+                await conn.exec_driver_sql("PRAGMA foreign_key_check")
+            ).all()
             if violations:
                 raise ValueError(f"Foreign key violations: {violations}")
             await _record(conn, BASELINE)
@@ -127,7 +173,9 @@ async def run_all_migrations():
     await _install_baseline()
     # 001–022 are archived upgrade history, not fresh-install scripts.
     for path in sorted(DIRECTORY.glob("[0-9]*.sql")):
-        if int(path.name.split("_")[0]) > 23 and not path.name.endswith("_down.sql"):
+        if int(path.name.split("_")[0]) > 23 and not path.name.endswith(
+            "_down.sql"
+        ):
             await run_migration(path)
 
 

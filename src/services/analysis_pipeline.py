@@ -27,8 +27,12 @@ from src.models import (
     Session,
     calculate_cost,
 )
+from src.services.analysis_results import (
+    load_summary,
+    save_analysis,
+    summary_response,
+)
 from src.services.analyzer import Analyzer
-from src.services.analysis_results import load_summary, save_analysis, summary_response
 from src.services.session_synthesizer import FAILED_PAYLOAD, SessionSynthesizer
 
 logger = logging.getLogger(__name__)
@@ -136,7 +140,8 @@ async def run_llm_pipeline(
                     context=context,
                     scenario_title=scenario.title,
                     misconception_prompt=scenario.prompt,
-                    student_profile=scenario.student_profile or "Grade 5 student",
+                    student_profile=scenario.student_profile
+                    or "Grade 5 student",
                 )
 
         classification_results = await asyncio.gather(
@@ -177,7 +182,8 @@ async def run_llm_pipeline(
 
         # Step 3: Synthesize session feedback
         messages_for_synthesis = [
-            {"id": m.id, "role": m.role, "content": m.content} for m in all_messages
+            {"id": m.id, "role": m.role, "content": m.content}
+            for m in all_messages
         ]
         qa_for_synthesis = [
             {
@@ -190,7 +196,9 @@ async def run_llm_pipeline(
         ]
 
         try:
-            synthesizer = await stack.enter_async_context(SessionSynthesizer(client=client))
+            synthesizer = await stack.enter_async_context(
+                SessionSynthesizer(client=client)
+            )
             payload, synthesis_status = await synthesizer.synthesize(
                 messages=messages_for_synthesis,
                 question_analyses=qa_for_synthesis,
@@ -319,7 +327,11 @@ async def handle_duplicate_session_state(
     on IntegrityError. Returns unified response shape.
     """
     # Capture label names before rollback expires ORM attributes.
-    label_names = list(framework) if isinstance(framework, list) else list(framework.label_names)
+    label_names = (
+        list(framework)
+        if isinstance(framework, list)
+        else list(framework.label_names)
+    )
     await db.rollback()
     logger.warning(
         f"Session {session_id}: duplicate session state detected: {error}"
@@ -342,7 +354,11 @@ async def handle_analysis_failure(
 ) -> dict[str, Any]:
     """Handle analysis pipeline failure with fallback."""
     # Capture label names before rollback expires ORM attributes
-    label_names = list(framework) if isinstance(framework, list) else list(framework.label_names)
+    label_names = (
+        list(framework)
+        if isinstance(framework, list)
+        else list(framework.label_names)
+    )
     await db.rollback()
     logger.error(
         f"Session {session_id}: analysis pipeline failed: {error}",
@@ -360,7 +376,14 @@ async def create_fallback_summary(
     """Create fallback summary when analysis fails."""
     return await save_analysis(
         session_id,
-        ({label: 0 for label in label_names}, [], dict(FAILED_PAYLOAD),
-         "failed", "unknown", "unknown", []),
+        (
+            {label: 0 for label in label_names},
+            [],
+            dict(FAILED_PAYLOAD),
+            "failed",
+            "unknown",
+            "unknown",
+            [],
+        ),
         db,
     )

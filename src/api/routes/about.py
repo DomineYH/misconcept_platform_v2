@@ -22,9 +22,7 @@ async def about_content(
 ):
     """GET /about/content - HTML fragment for about modal."""
     result = await db.execute(
-        select(Contributor).order_by(
-            Contributor.sort_order, Contributor.id
-        )
+        select(Contributor).order_by(Contributor.sort_order, Contributor.id)
     )
     contributors = result.scalars().all()
 

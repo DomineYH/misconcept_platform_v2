@@ -43,8 +43,7 @@ async def download_bulk_template(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                "attachment; "
-                "filename=bulk_users_template.csv"
+                "attachment; " "filename=bulk_users_template.csv"
             )
         },
     )
@@ -70,9 +69,7 @@ async def preview_bulk_upload(
     try:
         rows = parse_csv(content)
     except ValueError as e:
-        raise HTTPException(
-            status_code=400, detail=str(e)
-        )
+        raise HTTPException(status_code=400, detail=str(e))
 
     result = await validate_bulk_users(rows, db)
     return result

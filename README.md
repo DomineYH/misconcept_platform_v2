@@ -30,6 +30,11 @@ temporary directory. The repository's dialogue_sim.db and .env are never used:
 uv run --frozen python -m pytest -q
 ```
 
+Lint and format: `uv run --frozen ruff check .` and `uv run --frozen black --check .`.
+Browser setup (Node 24): `npm ci` and `npx playwright install --with-deps chromium`.
+Browser checks: `npm run test:browser` (optional filename filters: `npm run test:browser -- student_stream`).
+Live streaming check (localhost, no paid calls): `uv run --frozen python tests/check_student_live.py`.
+
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it
 contains the original product code, without credentials, databases or caches.

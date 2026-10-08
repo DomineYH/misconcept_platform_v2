@@ -14,9 +14,9 @@ import logging
 from typing import Any, Optional
 
 from openai import APIConnectionError, APIError, RateLimitError
-from src.services.base import OpenAIBaseService
 
 from src.config import config
+from src.services.base import OpenAIBaseService
 from src.utils.cache import load_prompt_template
 from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 

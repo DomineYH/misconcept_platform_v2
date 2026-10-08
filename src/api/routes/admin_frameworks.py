@@ -27,7 +27,10 @@ from src.api.schemas import (
 from src.models.analysis_framework import AnalysisFramework
 from src.models.scenario import Scenario
 from src.models.user import User
-from src.services.admin_framework_ops import update_framework_record, delete_framework_record
+from src.services.admin_framework_ops import (
+    delete_framework_record,
+    update_framework_record,
+)
 
 logger = logging.getLogger(__name__)
 

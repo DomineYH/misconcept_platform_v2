@@ -10,7 +10,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import HTMLResponse
-from sqlalchemy import func, select, desc
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
@@ -36,39 +36,29 @@ async def get_stats(
     total_teachers_query = select(
         func.count(func.distinct(Session.teacher_id))
     ).where(Session.deleted_at.is_(None))
-    total_teachers = (
-        await db.scalar(total_teachers_query) or 0
-    )
+    total_teachers = await db.scalar(total_teachers_query) or 0
 
-    total_sessions_query = select(
-        func.count(Session.id)
-    ).where(Session.deleted_at.is_(None))
-    total_sessions = (
-        await db.scalar(total_sessions_query) or 0
+    total_sessions_query = select(func.count(Session.id)).where(
+        Session.deleted_at.is_(None)
     )
+    total_sessions = await db.scalar(total_sessions_query) or 0
 
-    active_sessions_query = select(
-        func.count(Session.id)
-    ).where(
+    active_sessions_query = select(func.count(Session.id)).where(
         Session.ended_at.is_(None),
         Session.deleted_at.is_(None),
     )
-    active_sessions = (
-        await db.scalar(active_sessions_query) or 0
-    )
+    active_sessions = await db.scalar(active_sessions_query) or 0
 
-    duration_query = (
-        select(
-            func.avg(
-                func.julianday(Session.ended_at)
-                - func.julianday(Session.started_at)
-            )
-            * 24
-            * 60
-        ).where(
-            Session.ended_at.isnot(None),
-            Session.deleted_at.is_(None),
+    duration_query = select(
+        func.avg(
+            func.julianday(Session.ended_at)
+            - func.julianday(Session.started_at)
         )
+        * 24
+        * 60
+    ).where(
+        Session.ended_at.isnot(None),
+        Session.deleted_at.is_(None),
     )
     avg_duration = await db.scalar(duration_query) or 0
 
@@ -76,9 +66,7 @@ async def get_stats(
         "total_teachers": total_teachers,
         "total_sessions": total_sessions,
         "active_sessions": active_sessions,
-        "avg_session_duration_minutes": round(
-            avg_duration, 1
-        ),
+        "avg_session_duration_minutes": round(avg_duration, 1),
         "avg_questions_per_session": 0,
     }
 
@@ -102,12 +90,8 @@ async def user_conversations_page(
     subq_total = (
         select(
             Session.teacher_id,
-            func.count(Session.id).label(
-                "session_count"
-            ),
-            func.max(Session.started_at).label(
-                "last_session"
-            ),
+            func.count(Session.id).label("session_count"),
+            func.max(Session.started_at).label("last_session"),
         )
         .where(Session.deleted_at.is_(None))
         .group_by(Session.teacher_id)
@@ -132,9 +116,7 @@ async def user_conversations_page(
             User,
             subq_total.c.session_count,
             subq_total.c.last_session,
-            func.coalesce(
-                subq_ended.c.ended_count, 0
-            ).label("ended_count"),
+            func.coalesce(subq_ended.c.ended_count, 0).label("ended_count"),
         )
         .join(
             subq_total,

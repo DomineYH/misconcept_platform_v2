@@ -27,13 +27,14 @@ from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.user import User
 from src.services.analysis_pipeline import analyze_session, run_llm_pipeline
-from src.services.analysis_results import load_analysis_response as _load_analysis_response, save_analysis
+from src.services.analysis_results import (
+    load_analysis_response as _load_analysis_response,
+)
+from src.services.analysis_results import save_analysis
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
-
-
 
 
 @router.post(
@@ -98,9 +99,13 @@ async def end_session(
         logger.warning(f"Analysis failed for session {session_id}: {e}")
 
     # Rollback expires scalar and relationship attributes; reload all render inputs.
-    session = (await db.execute(
-        query.options(joinedload(Session.summary)).execution_options(populate_existing=True)
-    )).scalar_one()
+    session = (
+        await db.execute(
+            query.options(joinedload(Session.summary)).execution_options(
+                populate_existing=True
+            )
+        )
+    ).scalar_one()
 
     return templates.TemplateResponse(
         "partials/session_row.html",
@@ -312,9 +317,17 @@ async def regenerate_analysis(
 
     saved = await save_analysis(
         session_id,
-        (distribution, question_analyses, payload, synthesis_status,
-         synth_model, synth_hash, api_usage_logs),
-        db, regenerate=True,
+        (
+            distribution,
+            question_analyses,
+            payload,
+            synthesis_status,
+            synth_model,
+            synth_hash,
+            api_usage_logs,
+        ),
+        db,
+        regenerate=True,
     )
 
     analysis_data = await _load_analysis_response(session_id, db)

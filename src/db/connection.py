@@ -41,6 +41,7 @@ def set_sqlite_pragma(dbapi_conn, connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
+
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(
     engine,
@@ -59,6 +60,7 @@ async def init_db():
     if config.is_production:
         return
     from src.db.migrations.migrate import run_all_migrations
+
     await run_all_migrations()
 
 

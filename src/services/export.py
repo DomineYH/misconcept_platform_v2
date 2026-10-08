@@ -9,8 +9,7 @@ import csv
 import hashlib
 import io
 import logging
-from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +21,6 @@ from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.session_summary import SessionSummary
 from src.models.user import User
-
 
 logger = logging.getLogger(__name__)
 
@@ -144,9 +142,7 @@ class CSVExporter:
 
         # Anonymize student
         session_salt = str(session.started_at.timestamp())
-        student_hash = self._anonymize_student(
-            teacher.username, session_salt
-        )
+        student_hash = self._anonymize_student(teacher.username, session_salt)
 
         # Write message rows
         for msg in messages:
@@ -158,9 +154,7 @@ class CSVExporter:
                     "student_hash": student_hash,
                     "timestamp": msg.created_at.isoformat(),
                     "role": msg.role,
-                    "content": self._sanitize_csv_value(
-                        msg.content
-                    ),
+                    "content": self._sanitize_csv_value(msg.content),
                     "label": analysis.label if analysis else "",
                     "confidence": (
                         f"{analysis.confidence:.2f}"
@@ -301,16 +295,12 @@ class CSVExporter:
                     ),
                     "session_started_at": session.started_at.isoformat(),
                     "session_ended_at": (
-                        session.ended_at.isoformat()
-                        if session.ended_at
-                        else ""
+                        session.ended_at.isoformat() if session.ended_at else ""
                     ),
                     "message_id": msg.id,
                     "message_created_at": msg.created_at.isoformat(),
                     "role": msg.role,
-                    "content": self._sanitize_csv_value(
-                        msg.content
-                    ),
+                    "content": self._sanitize_csv_value(msg.content),
                     "label": analysis.label if analysis else "",
                     "confidence": (
                         f"{analysis.confidence:.2f}"
@@ -337,9 +327,7 @@ class CSVExporter:
                     ),
                     "session_started_at": session.started_at.isoformat(),
                     "session_ended_at": (
-                        session.ended_at.isoformat()
-                        if session.ended_at
-                        else ""
+                        session.ended_at.isoformat() if session.ended_at else ""
                     ),
                     "message_id": "",
                     "message_created_at": summary.created_at.isoformat(),
@@ -413,9 +401,7 @@ class CSVExporter:
                 SessionSummary.session_id.in_(session_ids)
             )
         )
-        summaries = {
-            s.session_id: s for s in summaries_result.scalars().all()
-        }
+        summaries = {s.session_id: s for s in summaries_result.scalars().all()}
 
         # Generate CSV with all pre-loaded data
         output = io.StringIO()
@@ -465,31 +451,23 @@ class CSVExporter:
                         "teacher_nickname": self._sanitize_csv_value(
                             teacher.nickname
                         ),
-                        "session_started_at": (
-                            session.started_at.isoformat()
-                        ),
+                        "session_started_at": (session.started_at.isoformat()),
                         "session_ended_at": (
                             session.ended_at.isoformat()
                             if session.ended_at
                             else ""
                         ),
                         "message_id": msg.id,
-                        "message_created_at": (
-                            msg.created_at.isoformat()
-                        ),
+                        "message_created_at": (msg.created_at.isoformat()),
                         "role": msg.role,
-                        "content": self._sanitize_csv_value(
-                            msg.content
-                        ),
+                        "content": self._sanitize_csv_value(msg.content),
                         "label": analysis.label if analysis else "",
                         "confidence": (
                             f"{analysis.confidence:.2f}"
                             if analysis and analysis.confidence
                             else ""
                         ),
-                        "meta_json": (
-                            analysis.meta_json if analysis else ""
-                        ),
+                        "meta_json": (analysis.meta_json if analysis else ""),
                         "feedback": "",
                     }
                 )
@@ -509,18 +487,14 @@ class CSVExporter:
                         "teacher_nickname": self._sanitize_csv_value(
                             teacher.nickname
                         ),
-                        "session_started_at": (
-                            session.started_at.isoformat()
-                        ),
+                        "session_started_at": (session.started_at.isoformat()),
                         "session_ended_at": (
                             session.ended_at.isoformat()
                             if session.ended_at
                             else ""
                         ),
                         "message_id": "",
-                        "message_created_at": (
-                            summary.created_at.isoformat()
-                        ),
+                        "message_created_at": (summary.created_at.isoformat()),
                         "role": "summary",
                         "content": "Session Summary",
                         "label": "",

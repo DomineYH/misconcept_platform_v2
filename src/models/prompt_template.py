@@ -4,6 +4,7 @@
 관리자가 StudentBot과 TutorBot의 시스템 프롬프트를 웹 UI를 통해
 관리하고 버전 관리할 수 있는 데이터베이스 모델입니다.
 """
+
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 

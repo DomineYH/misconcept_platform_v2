@@ -3,6 +3,7 @@ Caching utilities for performance optimization (T111).
 
 Provides LRU cache for prompt templates and other reusable data.
 """
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -21,9 +22,7 @@ def load_prompt_template(template_name: str) -> str:
     Raises:
         FileNotFoundError: If template file doesn't exist
     """
-    prompt_path = (
-        Path(__file__).parent.parent / "prompts" / template_name
-    )
+    prompt_path = Path(__file__).parent.parent / "prompts" / template_name
 
     if not prompt_path.exists():
         raise FileNotFoundError(f"Template not found: {template_name}")

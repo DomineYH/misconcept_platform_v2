@@ -114,9 +114,7 @@ class AnalysisFramework(Base):
                         raise ValueError("dict labels must have 'name' key")
                     level = item.get("level")
                     if level is not None and level not in ("high", "low"):
-                        raise ValueError(
-                            "label level must be 'high' or 'low'"
-                        )
+                        raise ValueError("label level must be 'high' or 'low'")
             return value
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON: {e}")

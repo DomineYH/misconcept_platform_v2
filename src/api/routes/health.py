@@ -90,7 +90,5 @@ async def get_metrics(
         logger.error("Metrics retrieval failure: %s", e)
         return {
             "error": "Failed to retrieve metrics",
-            "uptime_seconds": round(
-                time.time() - START_TIME, 2
-            ),
+            "uptime_seconds": round(time.time() - START_TIME, 2),
         }

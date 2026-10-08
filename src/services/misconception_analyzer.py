@@ -36,9 +36,7 @@ class MisconceptionAnalyzer(OpenAIBaseService):
         super().__init__(client=client)
         self.db_session = db_session
         self.model = model or config.ANALYSIS_MODEL
-        self.reasoning_effort = (
-            reasoning_effort or config.ANALYSIS_REASONING
-        )
+        self.reasoning_effort = reasoning_effort or config.ANALYSIS_REASONING
 
     async def analyze_student_response(
         self,
@@ -105,7 +103,9 @@ class MisconceptionAnalyzer(OpenAIBaseService):
 
         except (APIConnectionError, RateLimitError, APIError) as e:
             logger.error(
-                "MisconceptionAnalyzer API error: %s: %s", type(e).__name__, str(e)
+                "MisconceptionAnalyzer API error: %s: %s",
+                type(e).__name__,
+                str(e),
             )
             raise
         except Exception as e:

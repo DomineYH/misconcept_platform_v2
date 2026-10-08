@@ -255,9 +255,13 @@ async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
 
     monkeypatch.setattr(base, "AsyncOpenAI", factory)
     response = await student_turn(
-        request(), sid, StudentRequest(
+        request(),
+        sid,
+        StudentRequest(
             request_id="00000000-0000-0000-0000-000000000001", content="Why?"
-        ), data.owner, data.db,
+        ),
+        data.owner,
+        data.db,
     )
     body = "".join([chunk async for chunk in response.body_iterator])
     assert "event: run.failed" in body
@@ -274,8 +278,8 @@ async def test_injected_sdk_retry_policy_is_explicit():
 
 
 async def test_owned_client_closes_after_success(monkeypatch):
-    fake = client(response('ok'))
-    monkeypatch.setattr(base, 'AsyncOpenAI', lambda **kwargs: fake)
+    fake = client(response("ok"))
+    monkeypatch.setattr(base, "AsyncOpenAI", lambda **kwargs: fake)
     async with base.OpenAIBaseService() as service:
         assert (
             await service.create_response(model="gpt-5-mini", input="test")

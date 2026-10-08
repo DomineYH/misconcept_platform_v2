@@ -24,7 +24,12 @@ from src.services.analysis_pipeline import (
     handle_analysis_failure,
     handle_duplicate_session_state,
 )
-from src.services.analysis_results import analysis_status, load_summary, summary_response, load_analysis_response
+from src.services.analysis_results import (
+    analysis_status,
+    load_analysis_response,
+    load_summary,
+    summary_response,
+)
 from src.services.export import CSVExporter
 
 logger = logging.getLogger(__name__)
@@ -74,7 +79,10 @@ async def analyze_session_endpoint(
         )
 
     existing_summary, existing_report = await load_summary(session_id, db)
-    if existing_summary and analysis_status(existing_summary, existing_report) != "failed":
+    if (
+        existing_summary
+        and analysis_status(existing_summary, existing_report) != "failed"
+    ):
         return summary_response(existing_summary, existing_report)
 
     # Load scenario and framework

@@ -1,12 +1,14 @@
 """SessionSummary model for aggregated session statistics (T056)."""
-from datetime import datetime
-from typing import Optional, Dict
+
 import json
+from datetime import datetime
+from typing import Dict, Optional
+
 from sqlalchemy import (
+    DateTime,
     ForeignKey,
     Integer,
     Text,
-    DateTime,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship

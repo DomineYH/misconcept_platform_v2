@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "test:browser": "node tests/run_browser_checks.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

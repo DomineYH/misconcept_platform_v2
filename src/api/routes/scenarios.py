@@ -118,9 +118,7 @@ async def get_scenario_detail(
                 f"on scenario {scenario.id}"
             )
         except SQLAlchemyError as e:
-            logger.error(
-                f"Failed to create session: {e}"
-            )
+            logger.error(f"Failed to create session: {e}")
             raise HTTPException(
                 status_code=500,
                 detail="대화 세션을 시작할 수 없습니다. "
@@ -135,6 +133,7 @@ async def get_scenario_detail(
 
     # Load existing messages for the session
     from src.models import Message
+
     messages_result = await db.execute(
         select(Message)
         .where(Message.session_id == session.id)

@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
@@ -289,7 +289,7 @@ async def regenerate_analysis(
 
     await db.commit()  # Release the read transaction before external calls.
 
-    # Run LLM pipeline (no DB writes) — synthesize FIRST
+    # Run LLM pipeline before replacing results; attempts use separate transactions.
     try:
         (
             distribution,
@@ -300,7 +300,15 @@ async def regenerate_analysis(
             synth_hash,
             api_usage_logs,
         ) = await run_llm_pipeline(
-            session_id, all_messages, teacher_messages, scenario, framework
+            session_id,
+            all_messages,
+            teacher_messages,
+            scenario,
+            framework,
+            async_sessionmaker(
+                db.bind, expire_on_commit=False, autoflush=False
+            ),
+            session.teacher_id,
         )
     except Exception as e:
         logger.error(

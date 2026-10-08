@@ -23,6 +23,9 @@ class CallEvent:
     text: str = ""
     usage: dict | None = None
     error_code: str | None = None
+    retry_after_seconds: float | None = None
+    response_received: bool = False
+    models: list[dict] | None = None
 
 
 class InvocationError(Exception):

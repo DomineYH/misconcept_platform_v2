@@ -11,6 +11,7 @@ from src.api.schemas.ai_settings import SettingsUpdate
 from src.models.model_config import AppSetting, ModelConfig
 from src.models.provider_connection import ProviderConnection, now
 from src.models.user import User
+from src.services.call_admission import execution_lock
 from src.services.model_verification import model_available
 
 router = APIRouter(tags=["Admin AI Settings"], route_class=CredentialRoute)
@@ -42,18 +43,19 @@ async def update_settings(
                     422, detail={"code": "default_model_unavailable"}
                 )
         values[field] = model_id
-    return await commit_configuration(
-        db,
-        update(AppSetting)
-        .where(
-            AppSetting.id == 1,
-            AppSetting.settings_version == data.expected_version,
+    async with execution_lock():
+        return await commit_configuration(
+            db,
+            update(AppSetting)
+            .where(
+                AppSetting.id == 1,
+                AppSetting.settings_version == data.expected_version,
+            )
+            .values(
+                **values,
+                limits_json=data.limits.model_dump(),
+                timeouts_json=data.timeouts.model_dump(),
+                settings_version=data.expected_version + 1,
+                updated_at=now(),
+            ),
         )
-        .values(
-            **values,
-            limits_json=data.limits.model_dump(),
-            timeouts_json=data.timeouts.model_dump(),
-            settings_version=data.expected_version + 1,
-            updated_at=now(),
-        ),
-    )

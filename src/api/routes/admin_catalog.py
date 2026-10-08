@@ -1,7 +1,6 @@
 """Manual non-generating catalog refresh with revision-fenced cache writes."""
 
-import asyncio
-from uuid import uuid4
+from contextlib import aclosing
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
@@ -15,17 +14,11 @@ from src.api.routes.admin_providers import (
     Provider,
     changed_connection,
 )
-from src.models.model_config import AppSetting
 from src.models.provider_connection import ProviderConnection, now
 from src.models.user import User
-from src.services.invocation_ledger import finish_attempt, start_attempt
+from src.services.call_admission import admit_call
+from src.services.call_execution import execute_call
 from src.services.invocation_types import InvocationError
-from src.services.model_configuration import settings_values
-from src.services.openai_catalog import CatalogError, list_models
-from src.services.provider_secrets import (
-    ProviderSecretUnavailableError,
-    decrypt_key,
-)
 
 router = APIRouter(tags=["Admin Catalog"], route_class=CredentialRoute)
 
@@ -47,18 +40,9 @@ async def refresh_catalog(
     connection = await changed_connection(db, provider, data.expected_version)
     if not connection.enabled:
         raise HTTPException(422, detail={"code": "connection_disabled"})
-    try:
-        secret = decrypt_key(connection)
-    except ProviderSecretUnavailableError:
-        raise HTTPException(
-            503, detail={"code": "configuration_unavailable"}
-        ) from None
-    setting = await db.get(AppSetting, 1)
-    if setting is None:
-        raise HTTPException(503, detail={"code": "storage_unavailable"})
-    _, timeouts = settings_values(setting)
     owner_id = user.id
     factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    connection_id = connection.id
     revision = connection.credential_revision
     statement = update(ProviderConnection).where(
         ProviderConnection.id == connection.id,
@@ -69,60 +53,42 @@ async def refresh_catalog(
     # Release the read transaction before waiting on the provider.
     await db.rollback()
     try:
-        entry_id = await start_attempt(
+        permit = await admit_call(
             factory,
-            request_id=str(uuid4()),
+            connection_id=connection_id,
             owner_id=owner_id,
-            provider=provider,
-            model=None,
-            role=None,
             operation="model_list",
-            credential_revision=revision,
+            expected_connection_version=data.expected_version,
         )
-    except InvocationError:
+    except InvocationError as error:
         raise HTTPException(
-            503, detail={"code": "configuration_unavailable"}
+            (
+                429
+                if error.code == "call_limit_reached"
+                else 409 if error.code == "version_conflict" else 503
+            ),
+            detail={"code": error.code},
+            headers=(
+                {"Retry-After": "1"}
+                if error.code == "call_limit_reached"
+                else None
+            ),
         ) from None
-    try:
-        models = await list_models(
-            secret,
-            connect_timeout=timeouts["connect"],
-            total_timeout=timeouts["model_list_total"],
-        )
-        await finish_attempt(factory, entry_id, status="completed")
-    except asyncio.CancelledError:
-        await asyncio.shield(
-            finish_attempt(
-                factory, entry_id, status="cancelled", error_code="interrupted"
+    async with aclosing(execute_call(permit, kind="catalog")) as events:
+        async for terminal in events:
+            pass
+    if terminal.type != "completed":
+        code = terminal.error_code or "configuration_unavailable"
+        if code not in (
+            "configuration_unavailable",
+            "interrupted",
+            "call_limit_reached",
+        ):
+            await commit_configuration(
+                db, statement.values(error_code=code, verified_at=None)
             )
-        )
-        raise
-    except InvocationError:
-        raise HTTPException(
-            503, detail={"code": "configuration_unavailable"}
-        ) from None
-    except CatalogError as error:
-        try:
-            await finish_attempt(
-                factory,
-                entry_id,
-                status=(
-                    "timed_out"
-                    if error.code.startswith("timeout_")
-                    else "failed"
-                ),
-                error_code=error.code,
-            )
-        except InvocationError:
-            raise HTTPException(
-                503, detail={"code": "configuration_unavailable"}
-            ) from None
-        await commit_configuration(
-            db, statement.values(error_code=error.code, verified_at=None)
-        )
-        raise HTTPException(503, detail={"code": error.code}) from None
-    finally:
-        secret = None
+        raise HTTPException(503, detail={"code": code})
+    models = terminal.models
     fetched = now()
     return await commit_configuration(
         db,

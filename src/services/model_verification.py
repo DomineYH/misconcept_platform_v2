@@ -33,6 +33,7 @@ class RoleVerification(BaseModel):
             "interrupted",
             "invalid_output",
             "configuration_unavailable",
+            "call_limit_reached",
             "authentication",
             "permission",
             "model_unavailable",

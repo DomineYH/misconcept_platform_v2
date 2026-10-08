@@ -25,10 +25,13 @@ async def start_attempt(
     operation,
     credential_revision,
     probe_step=None,
+    invocation_id=None,
+    attempt_no=1,
+    retry_wait_ms=None,
 ):
     async with factory() as db:
         entry = ApiUsageLog(
-            invocation_id=str(uuid4()),
+            invocation_id=invocation_id or str(uuid4()),
             request_id=request_id,
             owner_id=owner_id,
             provider=provider,
@@ -37,7 +40,8 @@ async def start_attempt(
             operation=operation,
             credential_revision=credential_revision,
             probe_step=probe_step,
-            attempt_no=1,
+            attempt_no=attempt_no,
+            retry_wait_ms=retry_wait_ms,
             status="running",
             timestamp=now(),
             started_at=now(),

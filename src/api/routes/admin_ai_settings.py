@@ -1,7 +1,7 @@
 """Administrator singleton settings writes without secret reauthentication."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import update
+from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session
@@ -23,27 +23,33 @@ async def update_settings(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    setting = await db.get(AppSetting, 1)
-    if setting is None:
-        raise HTTPException(503, detail={"code": "storage_unavailable"})
-    if setting.settings_version != data.expected_version:
-        raise HTTPException(409, detail={"code": "version_conflict"})
-    values = {}
-    for role, model_id in data.defaults.model_dump().items():
-        field = f"{role}_model_config_id"
-        if model_id is not None and model_id != getattr(setting, field):
-            model = await db.get(ModelConfig, model_id)
-            connection = (
-                await db.get(ProviderConnection, model.provider_connection_id)
-                if model
-                else None
-            )
-            if model is None or not model_available(model, connection, role):
-                raise HTTPException(
-                    422, detail={"code": "default_model_unavailable"}
-                )
-        values[field] = model_id
     async with execution_lock():
+        await db.rollback()
+        await db.execute(text("BEGIN IMMEDIATE"))
+        setting = await db.get(AppSetting, 1)
+        if setting is None:
+            raise HTTPException(503, detail={"code": "storage_unavailable"})
+        if setting.settings_version != data.expected_version:
+            raise HTTPException(409, detail={"code": "version_conflict"})
+        values = {}
+        for role, model_id in data.defaults.model_dump().items():
+            field = f"{role}_model_config_id"
+            if model_id is not None and model_id != getattr(setting, field):
+                model = await db.get(ModelConfig, model_id)
+                connection = (
+                    await db.get(
+                        ProviderConnection, model.provider_connection_id
+                    )
+                    if model
+                    else None
+                )
+                if model is None or not model_available(
+                    model, connection, role
+                ):
+                    raise HTTPException(
+                        422, detail={"code": "default_model_unavailable"}
+                    )
+            values[field] = model_id
         return await commit_configuration(
             db,
             update(AppSetting)

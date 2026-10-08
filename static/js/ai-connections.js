@@ -196,6 +196,7 @@ const actions = {
       const current = settings.defaults[role];
       const choices = [['', '기본값 없음']];
       for (const m of state.models) {
+        if (m.id === current?.model_config_id && !current.available) continue;
         const p = state.providers.find(p => p.provider === m.provider);
         if (p.enabled && p.status === 'ready' && state.master_key_available && m.enabled && m.capabilities && !m.capabilities.metadata_conflict && m.verification_state[role].status === 'succeeded') choices.push([m.id, `${providers[m.provider]} / ${m.display_name}`]);
       }

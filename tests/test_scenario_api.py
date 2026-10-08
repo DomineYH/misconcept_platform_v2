@@ -14,7 +14,6 @@ from src.api.dependencies import get_db_session
 from src.config import config
 from src.main import app
 from src.models.prompt_template import PromptTemplate
-from src.services import base
 
 
 @pytest.fixture
@@ -112,28 +111,40 @@ async def test_missing_public_problem_blocks_new_session(
 
 
 @pytest.fixture
-def provider(monkeypatch):
-    from test_student_generation import FakeStream, event
+async def provider(data, scenario_payload, monkeypatch):
+    import httpx2
+    from lesson_fixtures import LESSON_KEY, install_connection
+    from openai import AsyncOpenAI
+    from test_student_probe import response_body, sse
 
-    stream = FakeStream(
-        [
-            event(
+    from src.services import openai_generation
+
+    await install_connection(data, monkeypatch)
+    fake = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock()))
+
+    async def upstream(request):
+        assert request.headers["authorization"] == f"Bearer {LESSON_KEY}"
+        await fake.responses.create(**json.loads(request.content))
+        return httpx2.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sse(
                 "response.completed",
-                response=SimpleNamespace(
-                    status="completed",
-                    output_text="Student answer",
-                    output=[],
-                    usage=None,
-                ),
-            )
-        ]
-    )
-    fake = SimpleNamespace(
-        responses=SimpleNamespace(create=AsyncMock(return_value=stream)),
-        close=AsyncMock(),
-        max_retries=0,
-    )
-    monkeypatch.setattr(base, "AsyncOpenAI", lambda **kwargs: fake)
+                response=response_body("Student answer"),
+                sequence_number=1,
+            ),
+        )
+
+    def factory(**kwargs):
+        assert kwargs["max_retries"] == 0
+        return AsyncOpenAI(
+            **kwargs,
+            http_client=httpx2.AsyncClient(
+                transport=httpx2.MockTransport(upstream)
+            ),
+        )
+
+    monkeypatch.setattr(openai_generation, "AsyncOpenAI", factory)
     return fake
 
 

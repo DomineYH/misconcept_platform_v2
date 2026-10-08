@@ -187,6 +187,14 @@ async def generate_text(request, secret, timeouts, *, deadline=None):
         return CallEvent(
             "error",
             error_code=exception_code(error),
+            # Only connection transport failures are safe to replay.
+            response_received=isinstance(
+                error.__cause__ or error, httpx2.TransportError
+            )
+            and not isinstance(
+                error.__cause__ or error,
+                (httpx2.ConnectError, httpx2.ConnectTimeout),
+            ),
             retry_after_seconds=(
                 retry_after(error.response.headers.get("Retry-After"))
                 if isinstance(error, APIStatusError)

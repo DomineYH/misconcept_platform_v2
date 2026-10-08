@@ -5,39 +5,26 @@ Stateless LLM-based classification using framework-specific
 prompts with structured JSON output.
 """
 
-import json
 import logging
 from typing import Any, Dict, Optional
 
-from openai import APIConnectionError, APIError, RateLimitError
-
-from src.config import config
 from src.models.analysis_framework import AnalysisFramework
 from src.prompts.example_templates import generate_examples
-from src.services.base import OpenAIBaseService
+from src.services.analysis_invocations import AnalysisCaller
+from src.services.role_output_contracts import (
+    RuntimeClassification,
+    RuntimeGreetings,
+)
 from src.utils.cache import load_prompt_template
-from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 
 logger = logging.getLogger(__name__)
 
 
-class Analyzer(OpenAIBaseService):
-    """
-    Question classification service using OpenAI Responses API.
+class Analyzer(AnalysisCaller):
+    """Question classification with the legacy normalization policy."""
 
-    Supports GPT-5 and GPT-4 models via Responses API (GPT-3.5 not supported).
-
-    Attributes:
-        client: Async OpenAI client
-        model: Model identifier (GPT-5 or GPT-4)
-        temperature: Deprecated (Responses API uses fixed temperature)
-    """
-
-    def __init__(self, *, client=None):
-        """Initialize analyzer with OpenAI client."""
-        super().__init__(client=client)
-        self.model = config.ANALYSIS_MODEL or "gpt-5"
-        self.reasoning_effort = config.ANALYSIS_REASONING
+    def __init__(self, factory, **context):
+        super().__init__(factory, **context)
         # Load cached prompt templates (T111 optimization)
         self.prompt_template = load_prompt_template("analysis_prompt.txt")
         self.greeting_template = load_prompt_template("greeting_detection.txt")
@@ -93,7 +80,7 @@ class Analyzer(OpenAIBaseService):
 
         Raises:
             ValueError: If response format is invalid
-            APIError: If OpenAI API call fails after retries
+            InvocationError: If the common provider invocation fails
         """
         # Generate dynamic few-shot examples
         few_shot_examples = generate_examples(
@@ -139,24 +126,9 @@ class Analyzer(OpenAIBaseService):
         )
 
         try:
-            # OpenAI Responses API 호출 (GPT-5 호환)
-            # GPT-5 models use temperature=1.0 (default, not configurable)
-            # For GPT-4/3.5: temperature is ignored in Responses API
-
-            # Build input (user role)
-            input_messages = [{"role": "user", "content": prompt}]
-
-            response = await self.create_response(
-                model=self.model,
-                input=input_messages,
-                max_output_tokens=1500,  # Increased for structured reasoning
-                reasoning={"effort": self.reasoning_effort},
+            result, api_usage = await self.structured(
+                prompt, RuntimeClassification, "classification", 1500
             )
-            api_usage = extract_usage_dict(response)
-
-            # Parse JSON response (GPT-5 structure)
-            content = extract_response_text(response)
-            result = json.loads(content)
 
             # Validate response structure
             if not all(k in result for k in ["label", "confidence"]):
@@ -190,12 +162,6 @@ class Analyzer(OpenAIBaseService):
 
             return result
 
-        except json.JSONDecodeError as e:
-            logger.error("Failed to parse JSON response: %s", e)
-            raise ValueError(f"Invalid JSON in LLM response: {e}")
-        except (APIConnectionError, RateLimitError, APIError) as e:
-            logger.error("Analyzer API error: %s: %s", type(e).__name__, str(e))
-            raise
         except Exception as e:
             logger.error("Classification failed: %s", e)
             raise
@@ -280,20 +246,10 @@ class Analyzer(OpenAIBaseService):
         prompt = self.greeting_template.format(messages=formatted_messages)
 
         try:
-            response = await self.create_response(
-                model=self.model,
-                input=[{"role": "user", "content": prompt}],
-                max_output_tokens=500,
-                reasoning={"effort": self.reasoning_effort},
+            payload, self.last_greeting_usage = await self.structured(
+                prompt, RuntimeGreetings, "greeting", 500
             )
-            self.last_greeting_usage = extract_usage_dict(response)
-
-            content = extract_response_text(response)
-            results = json.loads(content)
-
-            # Validate response structure
-            if not isinstance(results, list):
-                raise ValueError("Response must be a JSON array")
+            results = payload["results"]
 
             # Ensure all indices are covered
             validated_results = []
@@ -314,13 +270,6 @@ class Analyzer(OpenAIBaseService):
 
             return validated_results
 
-        except json.JSONDecodeError as e:
-            logger.warning("Greeting detection JSON parse error: %s", e)
-            # Return safe defaults (assume no greetings)
-            return [
-                {"index": i, "is_greeting": False, "reason": "Parse error"}
-                for i in range(len(messages))
-            ]
         except Exception as e:
             logger.warning("Greeting detection failed: %s", e)
             self.last_greeting_usage = None

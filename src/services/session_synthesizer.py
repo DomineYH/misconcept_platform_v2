@@ -13,12 +13,10 @@ import json
 import logging
 from typing import Any, Optional
 
-from openai import APIConnectionError, APIError, RateLimitError
-
-from src.config import config
-from src.services.base import OpenAIBaseService
+from src.services.analysis_invocations import AnalysisCaller
+from src.services.invocation_types import InvocationError
+from src.services.role_output_contracts import RuntimeSynthesis
 from src.utils.cache import load_prompt_template
-from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +39,12 @@ def prompt_hash(template_content: str) -> str:
     return hashlib.sha256(template_content.encode("utf-8")).hexdigest()
 
 
-class SessionSynthesizer(OpenAIBaseService):
+class SessionSynthesizer(AnalysisCaller):
     """Synthesize structured coaching feedback for a session.
 
     Usage::
 
-        synth = SessionSynthesizer()
+        synth = SessionSynthesizer(factory)
         payload, status = await synth.synthesize(
             messages=[...],
             question_analyses=[...],
@@ -57,10 +55,8 @@ class SessionSynthesizer(OpenAIBaseService):
         )
     """
 
-    def __init__(self, *, client=None) -> None:
-        super().__init__(client=client)
-        self.model = config.ANALYSIS_MODEL or "gpt-5"
-        self.reasoning_effort = config.ANALYSIS_REASONING
+    def __init__(self, factory, **context) -> None:
+        super().__init__(factory, **context)
         self._template = load_prompt_template("session_synthesis_prompt.txt")
         self._hash = prompt_hash(self._template)
         self.last_usage: dict[str, int] | None = None
@@ -109,28 +105,12 @@ class SessionSynthesizer(OpenAIBaseService):
 
         self.last_usage = None
         try:
-            response = await self.create_response(
-                model=self.model,
-                input=[{"role": "user", "content": prompt}],
-                max_output_tokens=2500,
-                reasoning={"effort": self.reasoning_effort},
+            payload, self.last_usage = await self.structured(
+                prompt, RuntimeSynthesis, "synthesis", 2500
             )
-            self.last_usage = extract_usage_dict(response)
-            content = extract_response_text(response)
-            payload = json.loads(content)
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(
-                "Synthesis JSON parse failed: %s",
-                e,
-            )
+        except InvocationError as e:
+            logger.error("Synthesis invocation failed: %s", e.code)
             return dict(FAILED_PAYLOAD), "failed"
-        except (APIConnectionError, RateLimitError, APIError) as e:
-            logger.error(
-                "Synthesis API error: %s: %s",
-                type(e).__name__,
-                str(e),
-            )
-            raise
 
         if not isinstance(payload, dict):
             logger.error(

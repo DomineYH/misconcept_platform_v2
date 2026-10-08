@@ -285,9 +285,9 @@ async def test_catalog_errors_timeouts_and_trust_checks_never_retry(
     assert (
         await write(api, "providers/openai/catalog", expected_version=3)
     ).status_code == 422
-    assert (
-        await write(api, "providers/google/catalog", expected_version=1)
-    ).status_code == 503
+    google = await write(api, "providers/google/catalog", expected_version=1)
+    assert google.status_code == 422
+    assert google.json() == {"detail": {"code": "connection_disabled"}}
     assert len(requests) == 9
 
 

@@ -17,9 +17,14 @@ from src.services.invocation_types import CallEvent, InvocationError
 
 
 async def sdk_events(permit, request, kind, deadline):
+    if permit.provider == "google":
+        from src.services import google_catalog as catalog
+        from src.services import google_generation as generation
+    else:
+        catalog, generation = openai_catalog, openai_generation
     if kind == "catalog":
         try:
-            models = await openai_catalog.list_models(
+            models = await catalog.list_models(
                 permit.secret,
                 connect_timeout=permit.timeouts["connect"],
                 total_timeout=permit.timeouts["model_list_total"],
@@ -30,18 +35,18 @@ async def sdk_events(permit, request, kind, deadline):
             yield CallEvent("error", error_code=error.code)
     elif kind == "stream":
         async with aclosing(
-            openai_generation.stream_text(
+            generation.stream_text(
                 request, permit.secret, permit.timeouts, deadline=deadline
             )
         ) as events:
             async for event in events:
                 yield event
     elif kind == "structured":
-        yield await openai_generation.generate_structured(
+        yield await generation.generate_structured(
             request, permit.secret, permit.timeouts, deadline=deadline
         )
     else:
-        yield await openai_generation.generate_text(
+        yield await generation.generate_text(
             request, permit.secret, permit.timeouts, deadline=deadline
         )
 
@@ -99,7 +104,7 @@ async def execute_call(
     wait_ms = None
     try:
         if (
-            permit.provider != "openai"
+            permit.provider not in ("openai", "google")
             or permit not in registered_calls
             or permit.task is not asyncio.current_task()
         ):

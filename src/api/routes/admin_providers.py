@@ -122,7 +122,7 @@ def public_connection(provider, connection):
         error_code=error,
         impact=[],
         catalog={
-            "available": provider == "openai",
+            "available": provider in ("openai", "google"),
             "stale": bool(
                 connection
                 and (

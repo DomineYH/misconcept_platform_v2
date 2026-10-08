@@ -447,3 +447,65 @@ writes a second usage row. No partial or refused coaching is saved as a message.
 Connection revocation cancels the active worker and releases its SDK client/slot;
 session end and disconnect retain the S0 cancellation/late-result rules. Provider
 or storage exception bodies are not logged by the mentor services.
+
+### A9 Gemini 목록·옵션·어댑터 계약
+
+`provider=google`은 고정 `google-genai==2.29.0`의 Models 목록과
+`generate_content`/`generate_content_stream`을 사용한다. Interactions와
+`response_format`은 사용하지 않는다. 공개 `HttpOptions.httpx_async_client`에
+요청 범위 HTTPX를 주입하고 `HttpRetryOptions(attempts=1)`로 SDK 재시도를
+막는다. 공개 request hook의 timeout extension은 connect=설정값(기본 5초),
+read/write/pool=None이다. SDK scalar 5초를 쓰지 않으며 앱의 첫 본문/전체
+절대 deadline을 재사용한다. 응답 hook으로 열린 응답을 요청 범위에서
+추적해 취소·실패·완료 시 HTTP 응답, sync/async 클라이언트를 닫는다.
+공통 실행 경계가 슬롯과 시도 원장을 정리한다. 과금 중단 보장은 없다.
+
+목록은 모든 SDK 페이지를 읽고 공개 model_id/display_name/version,
+input_token_limit/output_token_limit/supported_actions/thinking/
+max_temperature만 저장한다. `models/` 접두사만 제거하며 직접 등록에도
+같은 정규화를 적용한다. 전체 성공 뒤 기존 revision 조건부 캐시 갱신을
+사용하므로 중간 실패·이전 키 결과는 최신 캐시를 덮어쓰지 못한다.
+
+최초 기능 표는 정확한 안정 ID `gemini-2.5-flash`, 정의
+`google-2026-10-09-v1`, 확인일 2026-10-09이다. 텍스트·스트리밍·구조화
+출력과 thinking budget을 지원하고 출력 상한은 65536, temperature는 0–2,
+thinking.budget은 -1(자동) 또는 0–24576(0은 끄기)이다. 이 모델의 허용
+thinking level은 없으며 level/budget 동시 지정과 다른 미지원 옵션은 422다.
+다른 모델·변형의 기능을 접두사로 추측하지 않는다. 명시적인 목록 메타데이터가
+thinking, generateContent, 출력 상한, 최대 temperature와 충돌하면 시험·실행을
+차단한다. 목록 부재만으로 충돌을 만들지 않는다.
+
+근거는 [모델과 안정 ID](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash),
+[thinking budget](https://ai.google.dev/gemini-api/docs/generate-content/thinking),
+[목록 메타데이터](https://ai.google.dev/api/models),
+[모델 temperature 범위](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/2-5-flash),
+[텍스트·스트리밍](https://ai.google.dev/gemini-api/docs/generate-content/text-generation),
+[구조화 출력](https://ai.google.dev/gemini-api/docs/generate-content/structured-output),
+[고정 SDK 소스](https://github.com/googleapis/python-genai/tree/v2.29.0),
+[HTTPX timeout extension](https://www.python-httpx.org/advanced/extensions/#timeout)이다.
+모델 공식 안내상 기존 사용 계정으로 접근이 제한될 수 있다. 표는 계정 접근
+보장이 아니며 자동 모델 교체·자동 생성 시험을 하지 않는다.
+
+구조화 요청은 `response_mime_type=application/json`과
+`response_json_schema`로 전송하고 서버의 기존 타입·의미 검증을 반드시
+거친다. Google이 표현하는 구조 제약만 보내며 문자열 길이·패턴 등은 서버가
+검사한다. 공개 시험 DTO와 원장에는 본문/부분 JSON/thought를 넣지 않는다.
+본문은 thought를 제외하고 STOP만 성공 후보로 인정한다. 미지 종료 값,
+차단·거절, MAX_TOKENS, 빈 응답, 중간 오류와 STOP 없는 EOF는 실패다.
+
+Google 사용량의 raw_usage_json은 prompt_token_count,
+candidates_token_count, thoughts_token_count, cached_content_token_count,
+total_token_count의 관측된 비음수 정수만 갖는다. 캐시는 prompt의 부분집합,
+출력은 candidates+thoughts이며 필수 구성값이 누락되면 합계는 NULL이다.
+누적/후행 usage는 최신 non-null 값으로 병합한다. 캐시 쓰기는 보고되지
+않으면 NULL이며 다른 모델 가격으로 채우지 않는다. 비용 연결은 A10 범위다.
+A10이 참고할 [공식 단가](https://ai.google.dev/gemini-api/docs/pricing)
+(2026-10-09 확인)의 gemini-2.5-flash Standard 유료 텍스트 기준은 입력
+$0.30/백만 토큰, 캐시 입력 $0.03/백만 토큰, 출력(사고 포함) $2.50/백만
+토큰이다. 무료/유료 계정과 서비스 등급을 확인하지 않은 시도의 비용은
+이 단계에서 NULL로 유지한다.
+
+오류 분류는 [GenerateContent 공식 오류 형식](https://ai.google.dev/gemini-api/docs/generate-content/api-errors)
+(2026-10-09 확인)을 따른다. HTTP 400의 google.rpc.ErrorInfo.reason이
+API_KEY_INVALID이면 authentication으로 분류하며 메시지 문자열을 해석하거나
+저장하지 않는다. 미지/잘못된 details는 invalid_output으로 실패한다.

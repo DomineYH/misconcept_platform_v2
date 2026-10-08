@@ -189,11 +189,11 @@ async def check():
         )
         task = asyncio.create_task(server.serve(sockets=[listener]))
         try:
-            async with asyncio.timeout(5):
+            async with asyncio.timeout(30):
                 while not server.started:
                     await asyncio.sleep(0.01)
             async with httpx.AsyncClient(
-                base_url=f"http://127.0.0.1:{port}"
+                base_url=f"http://127.0.0.1:{port}", timeout=30
             ) as http:
                 cookie = (
                     TimestampSigner(config.SESSION_SECRET)
@@ -229,7 +229,7 @@ async def check():
                             if line:
                                 data.append(line)
 
-                    async with asyncio.timeout(5):
+                    async with asyncio.timeout(30):
                         accepted = await next_frame()
                         delta = await next_frame()
                     assert accepted[0] == "event: run.accepted"

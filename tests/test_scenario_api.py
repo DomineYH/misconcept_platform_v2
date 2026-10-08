@@ -115,15 +115,23 @@ async def test_missing_public_problem_blocks_new_session(
 def provider(monkeypatch):
     from test_student_generation import FakeStream, event
 
-    stream = FakeStream([event(
-        "response.completed", response=SimpleNamespace(
-            status="completed", output_text="Student answer", output=[],
-            usage=None,
-        ),
-    )])
+    stream = FakeStream(
+        [
+            event(
+                "response.completed",
+                response=SimpleNamespace(
+                    status="completed",
+                    output_text="Student answer",
+                    output=[],
+                    usage=None,
+                ),
+            )
+        ]
+    )
     fake = SimpleNamespace(
         responses=SimpleNamespace(create=AsyncMock(return_value=stream)),
-        close=AsyncMock(), max_retries=0,
+        close=AsyncMock(),
+        max_retries=0,
     )
     monkeypatch.setattr(base, "AsyncOpenAI", lambda **kwargs: fake)
     return fake
@@ -139,7 +147,7 @@ async def test_missing_public_problem_blocks_generation_in_existing_session(
     login(client, data.owner)
     response = await client.post(
         f"/sessions/{data.session.id}/turns/stream",
-        json={"request_id": str(uuid4()), "content": "Why?"}
+        json={"request_id": str(uuid4()), "content": "Why?"},
     )
     assert response.status_code == 400
     assert "문제 상황 보완 필요" in response.json()["detail"]
@@ -315,7 +323,7 @@ async def test_generation_does_not_send_legacy_video_to_provider(
     login(client, data.owner)
     response = await client.post(
         f"/sessions/{data.session.id}/turns/stream",
-        json={"request_id": str(uuid4()), "content": "Why?"}
+        json={"request_id": str(uuid4()), "content": "Why?"},
     )
     assert response.status_code == 200
     assert "Student answer" in response.text

@@ -7,11 +7,14 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from test_scenario_api import client as client_fixture
 from test_scenario_api import login
+from test_scenario_api import scenario_payload as scenario_fixture
 
 from src.services import base
 
-pytest_plugins = ("test_scenario_api",)
+client = client_fixture
+scenario_payload = scenario_fixture
 
 
 def event(kind, **kwargs):

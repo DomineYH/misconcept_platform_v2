@@ -114,10 +114,6 @@ async def reserve_student(factory, session_id, user, request):
             if existing.input_hash != input_hash:
                 conflict("request_conflict")
             return await snapshot(db, existing), None
-        if session.ended_at:
-            raise HTTPException(400, detail="Session already ended")
-        await validate_scenario_access(scenario.id, user, db)
-        validate_public_problem(scenario)
         if request.turn_id:
             teacher = await db.scalar(
                 select(Message).where(
@@ -142,6 +138,10 @@ async def reserve_student(factory, session_id, user, request):
                 return await snapshot(db, completed), None
         else:
             teacher = None
+        if session.ended_at:
+            raise HTTPException(400, detail="Session already ended")
+        await validate_scenario_access(scenario.id, user, db)
+        validate_public_problem(scenario)
         busy = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.session_id == session_id,

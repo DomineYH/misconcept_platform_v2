@@ -4,10 +4,15 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from test_scenario_api import client as client_fixture
 from test_scenario_api import login
+from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_generation import event, frames
+from test_student_generation import student as student_fixture
 
-pytest_plugins = ("test_student_generation",)
+client = client_fixture
+scenario_payload = scenario_fixture
+student = student_fixture
 
 
 @pytest.mark.parametrize(
@@ -201,9 +206,16 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
     assert student.stream.closed
 
 
-@pytest.mark.parametrize("slow_close", [False, True])
+@pytest.mark.parametrize(
+    "slow_close,disconnect_when",
+    [
+        (False, "delta"),
+        (True, "delta"),
+        (False, "open"),
+    ],
+)
 async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
-    data, client, student, monkeypatch, slow_close
+    data, client, student, monkeypatch, slow_close, disconnect_when
 ):
     import asyncio
     import json
@@ -230,6 +242,13 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
     student.responses.create.return_value = student.stream
     payload = {"request_id": str(uuid4()), "content": "Keep after disconnect"}
     disconnect = asyncio.Event()
+    if disconnect_when == "open":
+
+        async def create(**kwargs):
+            disconnect.set()
+            return student.stream
+
+        student.responses.create.side_effect = create
     requested = False
     received = []
 
@@ -277,7 +296,9 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
         params={"request_id": payload["request_id"]},
     )
     assert state.json()["status"] == "interrupted"
-    assert state.json()["partial_text"] == "Partial before disconnect"
+    assert state.json()["partial_text"] == (
+        "Partial before disconnect" if disconnect_when == "delta" else None
+    )
     assert state.json()["message"] is None
     updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
     assert "Keep after disconnect" in updates.text

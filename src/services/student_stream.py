@@ -30,7 +30,7 @@ async def stream_student(factory, accepted, kwargs, started):
     partial = ""
     first_output_at = None
     usage = None
-    service = stream = task = None
+    service = stream = task = opening = None
     terminal = False
     last_sent = started
 
@@ -88,7 +88,7 @@ async def stream_student(factory, accepted, kwargs, started):
         )
         service = OpenAIBaseService()
         # Bypass the non-streaming application's retry decorator deliberately.
-        task = asyncio.create_task(
+        task = opening = asyncio.create_task(
             service.client.responses.create(**kwargs, stream=True)
         )
         iterator = None
@@ -203,6 +203,9 @@ async def stream_student(factory, accepted, kwargs, started):
                 if task is not None:
                     with suppress(asyncio.CancelledError, Exception):
                         await task
+                if stream is None and opening is not None and opening.done():
+                    with suppress(asyncio.CancelledError, Exception):
+                        stream = opening.result()
                 if stream is not None:
                     with suppress(Exception):
                         await stream.close()

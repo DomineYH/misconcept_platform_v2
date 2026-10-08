@@ -3,10 +3,15 @@
 from uuid import uuid4
 
 import pytest
+from test_scenario_api import client as client_fixture
 from test_scenario_api import login
+from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_generation import frames
+from test_student_generation import student as student_fixture
 
-pytest_plugins = ("test_student_generation",)
+client = client_fixture
+scenario_payload = scenario_fixture
+student = student_fixture
 
 
 @pytest.mark.parametrize(
@@ -75,6 +80,16 @@ async def test_replay_survives_config_changes_and_session_end(
         await client.post(f"/sessions/{data.session.id}/close")
     ).status_code == 200
     assert (await client.post(path, json=payload)).json()["message"] == saved
+    completed_turn = await client.post(
+        path,
+        json={
+            **payload,
+            "request_id": str(uuid4()),
+            "turn_id": frames(response)[0][1]["turn_id"],
+        },
+    )
+    assert completed_turn.status_code == 200
+    assert completed_turn.json()["message"] == saved
     assert (
         await client.post(path, json={**payload, "request_id": str(uuid4())})
     ).status_code == 400

@@ -4,10 +4,15 @@ import asyncio
 from uuid import uuid4
 
 import pytest
+from test_scenario_api import client as client_fixture
 from test_scenario_api import login
+from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_generation import frames
+from test_student_generation import student as student_fixture
 
-pytest_plugins = ("test_student_generation",)
+client = client_fixture
+scenario_payload = scenario_fixture
+student = student_fixture
 
 
 @pytest.mark.parametrize("same_request", [True, False])

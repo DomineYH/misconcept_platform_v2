@@ -45,7 +45,7 @@ def public_model(model, connection):
             model.model_id, connection
         )
     budgets = {}
-    if definition and connection.provider in ("openai", "anthropic"):
+    if definition and connection.provider in ("openai", "anthropic", "google"):
         for role in ROLES:
             try:
                 budgets[role] = probe_options(connection.provider, model, role)[

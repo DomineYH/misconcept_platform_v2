@@ -42,8 +42,8 @@ Restore both before using stored credentials; the database alone cannot recover
 provider keys. No automatic master-key creation, web rotation or key ring exists.
 Python memory clearing of plaintext is not guaranteed.
 
-This is the A8 management and A12/A13 lesson transition stage. Explicit OpenAI
-and Claude catalog refresh uses the saved
+This is the A8/A9 management and A12/A13 lesson transition stage. Explicit OpenAI,
+Claude and Gemini catalog refresh uses the saved
 DB key and the non-generating Models API, with no retries and a default 30-second
 deadline. Successful lists are cached for 24 hours; failures preserve the list.
 Models can be registered directly, start disabled/unverified, and have immutable
@@ -52,7 +52,7 @@ limits/timeouts are validated on save. See the
 [screen/data contract](docs/agents/ai-connections-screen.md) for capability sources
 and the APIs later tickets must reuse.
 
-Saving keys or models does not call a provider. Explicit OpenAI and Claude role probes
+Saving keys or models does not call a provider. Explicit OpenAI, Claude and Gemini role probes
 reserve a durable request and make at most two sequential synthetic calls:
 student text/stream, mentor judgment JSON/coaching text, or analysis
 classification JSON/synthesis JSON. Each stops on the first failure with no retries.

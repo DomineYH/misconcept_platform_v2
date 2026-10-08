@@ -22,12 +22,20 @@ async def sdk_events(permit, request, kind, deadline):
         from src.services import anthropic_generation
 
         generation = anthropic_generation
+    elif permit.provider == "google" and kind != "catalog":
+        from src.services import google_generation
+
+        generation = google_generation
     if kind == "catalog":
         catalog = openai_catalog
         if permit.provider == "anthropic":
             from src.services import anthropic_catalog
 
             catalog = anthropic_catalog
+        elif permit.provider == "google":
+            from src.services import google_catalog
+
+            catalog = google_catalog
         try:
             models = await catalog.list_models(
                 permit.secret,
@@ -109,7 +117,7 @@ async def execute_call(
     wait_ms = None
     try:
         if (
-            permit.provider not in ("openai", "anthropic")
+            permit.provider not in ("openai", "anthropic", "google")
             or permit not in registered_calls
             or permit.task is not asyncio.current_task()
         ):

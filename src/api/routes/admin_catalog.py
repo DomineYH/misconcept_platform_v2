@@ -35,7 +35,7 @@ async def refresh_catalog(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    if provider not in ("openai", "anthropic"):
+    if provider not in ("openai", "anthropic", "google"):
         raise HTTPException(503, detail={"code": "provider_not_available"})
     connection = await changed_connection(db, provider, data.expected_version)
     if not connection.enabled:

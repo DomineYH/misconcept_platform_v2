@@ -2,6 +2,9 @@ export const providers = {openai:'OpenAI', anthropic:'Claude', google:'Gemini'};
 export const roles = {student:'학생봇', mentor:'멘토', analysis:'사후 분석'};
 const states = {unconfigured:'미설정', ready:'사용 가능', decryption_failed:'복호화 실패',
   unverified:'미검증', verifying:'검증 중', succeeded:'성공', failed:'실패', stale:'재검증 필요'};
+const roleErrors = {refused:'응답이 거절되었습니다.', output_limit:'출력 길이 상한에 도달했습니다.',
+  invalid_json:'완전한 JSON 응답이 아닙니다.', invalid_reference:'레이블·발화 참조 또는 인용이 유효하지 않습니다.',
+  empty_response:'필요한 결과가 비어 있습니다.', invalid_output:'응답 형식이 역할 계약과 일치하지 않습니다.'};
 
 export function node(tag, text, attrs = {}) {
   const el = document.createElement(tag);
@@ -75,7 +78,7 @@ export function render(state, actions) {
       const verification = m.verification_state[role];
       const row = node('div', null, {class:'ai-actions'});
       row.append(node('p', `${label}: ${states[verification.status] || '미검증'}${verification.verified_at ? ` · ${verification.verified_at}` : ''}`));
-      if (verification.error_code) row.append(node('p', '역할 응답 형식 시험에 실패했습니다. 설정을 확인한 후 다시 시험하세요.'));
+      if (verification.error_code) row.append(node('p', `${roleErrors[verification.error_code] || '역할 응답 형식 시험에 실패했습니다.'} 설정을 확인한 후 다시 시험하세요.`));
       row.append(button(`${label} 시험`, () => actions.probe(m, role), state.probes_available === false || (state.probe_roles && !state.probe_roles.includes(role)) || !m.probe_budgets?.[role] || !m.capabilities || m.capabilities.metadata_conflict || !state.master_key_available || !p.enabled || p.status !== 'ready' || verification.status === 'verifying'));
       if (verification.status === 'verifying') row.append(button(`${label} 진행 조회`, () => actions.poll(verification.probe_request_id)), button(`${label} 시험 취소`, () => actions.cancel(verification.probe_request_id)));
       card.append(row);

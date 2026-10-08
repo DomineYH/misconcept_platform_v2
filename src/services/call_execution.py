@@ -36,6 +36,10 @@ async def sdk_events(permit, request, kind, deadline):
         ) as events:
             async for event in events:
                 yield event
+    elif kind == "structured":
+        yield await openai_generation.generate_structured(
+            request, permit.secret, permit.timeouts, deadline=deadline
+        )
     else:
         yield await openai_generation.generate_text(
             request, permit.secret, permit.timeouts, deadline=deadline
@@ -93,7 +97,7 @@ async def execute_call(permit, request=None, *, kind="text", probe_step=None):
         ):
             raise InvocationError("configuration_unavailable")
         if (
-            kind not in ("text", "stream", "catalog")
+            kind not in ("text", "stream", "catalog", "structured")
             or (kind == "catalog") != (permit.operation == "model_list")
             or (kind != "catalog" and request is None)
         ):

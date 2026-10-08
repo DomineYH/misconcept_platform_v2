@@ -8,7 +8,7 @@ from src.api.schemas.ai_settings import CallLimits, CallTimeouts
 from src.models.model_config import ROLES, AppSetting, ModelConfig
 from src.services.model_capabilities import capabilities, metadata_conflict
 from src.services.model_verification import effective_roles, model_available
-from src.services.student_probe_contract import probe_options
+from src.services.role_probe_contract import probe_options
 
 
 def settings_values(setting):
@@ -47,9 +47,12 @@ def public_model(model, connection):
     budgets = {}
     if definition and connection.provider == "openai":
         try:
-            budgets["student"] = probe_options(connection.provider, model)[
-                "max_output_tokens"
-            ]
+            budgets = {
+                role: probe_options(connection.provider, model, role)[
+                    "max_output_tokens"
+                ]
+                for role in ROLES
+            }
         except ValueError:
             pass
     return dict(
@@ -105,6 +108,6 @@ async def configuration_state(db, connections):
         ],
         models_available=True,
         probes_available=True,
-        probe_roles=["student"],
+        probe_roles=list(ROLES),
         settings=settings,
     )

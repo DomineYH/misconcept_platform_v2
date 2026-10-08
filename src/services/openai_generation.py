@@ -14,10 +14,15 @@ from openai import (
 )
 
 from src.services.call_policy import CallDeadline, retry_after
-from src.services.invocation_types import CallEvent, InvocationError
+from src.services.invocation_types import (
+    CallEvent,
+    InvocationError,
+    StructuredRequest,
+)
 from src.services.model_capabilities import validate_model_and_options
 from src.services.openai_catalog import status_code
 from src.services.openai_usage import normalize_usage
+from src.services.structured_output import strict_schema, validate_output
 
 
 def parameters(request):
@@ -33,13 +38,42 @@ def parameters(request):
         )
     except ValueError:
         raise InvocationError("configuration_unavailable") from None
-    return dict(
+    values = dict(
         model=request.model_id,
         instructions=request.system_instruction,
         input=request.messages,
         store=False,
         **options,
     )
+    if isinstance(request, StructuredRequest):
+        schema = strict_schema(request.output_schema)
+        values["text"] = {
+            "format": {
+                "type": "json_schema",
+                "name": request.output_schema.__name__,
+                "strict": True,
+                "schema": schema,
+            }
+        }
+    return values
+
+
+async def generate_structured(request, secret, timeouts, *, deadline=None):
+    try:
+        # Preflight before constructing a client, never downgrade to JSON prompting.
+        if not isinstance(request, StructuredRequest):
+            raise InvocationError("configuration_unavailable")
+        parameters(request)
+    except (InvocationError, TypeError, ValueError, AttributeError) as error:
+        return CallEvent("error", error_code=exception_code(error))
+    event = await generate_text(request, secret, timeouts, deadline=deadline)
+    if event.type != "completed":
+        return event
+    try:
+        value = validate_output(request, event.text)
+    except InvocationError as error:
+        return replace(event, type="error", text="", error_code=error.code)
+    return replace(event, text="", structured=value)
 
 
 def response_error(code):

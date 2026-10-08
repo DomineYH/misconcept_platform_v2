@@ -7,9 +7,9 @@ from contextlib import aclosing
 from src.models import ModelConfig, ModelProbe
 from src.services.call_admission import admit_call
 from src.services.call_execution import execute_call
-from src.services.invocation_types import InvocationError, TextRequest
+from src.services.invocation_types import InvocationError
 from src.services.probe_lifecycle import finish_probe
-from src.services.student_probe_contract import MESSAGES, SYSTEM_INSTRUCTION
+from src.services.role_probe_contract import probe_steps
 
 logger = logging.getLogger(__name__)
 active_probes: dict[int, asyncio.Task] = {}
@@ -22,17 +22,15 @@ async def run_probe(factory, probe_id, permit):
             probe = await db.get(ModelProbe, probe_id)
             model = await db.get(ModelConfig, probe.model_config_id)
             connection_id = model.provider_connection_id
-            request = TextRequest(
+            steps = probe_steps(
                 permit.provider,
                 model.model_id,
                 probe.role,
-                SYSTEM_INSTRUCTION,
-                MESSAGES,
                 probe.options_json,
                 probe.request_id,
             )
-        for step in ("text", "stream"):
-            if step == "stream":
+        for index, (step, kind, request) in enumerate(steps):
+            if index:
                 permit = await admit_call(
                     factory,
                     connection_id=connection_id,
@@ -42,7 +40,7 @@ async def run_probe(factory, probe_id, permit):
                     probe_id=probe_id,
                 )
             async with aclosing(
-                execute_call(permit, request, kind=step, probe_step=step)
+                execute_call(permit, request, kind=kind, probe_step=step)
             ) as events:
                 async for terminal in events:
                     pass

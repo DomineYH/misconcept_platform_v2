@@ -23,6 +23,13 @@ from src.utils.openai_helpers import extract_response_text, extract_usage_dict
 logger = logging.getLogger(__name__)
 
 
+def advance_question_count(question_count, intervention_count):
+    question_count += 1
+    return (
+        (0, 0) if question_count > 10 else (question_count, intervention_count)
+    )
+
+
 class TutorBot(OpenAIBaseService):
     """Chatbot providing real-time pedagogical feedback."""
 
@@ -79,10 +86,9 @@ class TutorBot(OpenAIBaseService):
 
     def should_intervene(self, recent_teacher_questions: list[str]) -> bool:
         """Determine if tutor should provide feedback (legacy method)."""
-        self.question_count += 1
-        if self.question_count > 10:
-            self.intervention_count = 0
-            self.question_count = 0
+        self.question_count, self.intervention_count = advance_question_count(
+            self.question_count, self.intervention_count
+        )
 
         if self.intervention_count >= self.intervention_threshold:
             return False
@@ -163,15 +169,19 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
         recent_exchanges: list[dict],
         current_teacher: str,
         current_student: str,
+        *,
+        question_counted: bool = False,
     ) -> tuple[bool, str | None]:
         """Analyze conversation pairs to determine intervention need."""
         sc = self.sensitivity_config
 
         # Rate limiting
-        self.question_count += 1
-        if self.question_count > 10:
-            self.intervention_count = 0
-            self.question_count = 0
+        if not question_counted:
+            self.question_count, self.intervention_count = (
+                advance_question_count(
+                    self.question_count, self.intervention_count
+                )
+            )
 
         if self.intervention_count >= self.intervention_threshold:
             return False, None
@@ -234,21 +244,27 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
         teacher_question: str,
         student_response: str,
         recent_exchanges: list[dict],
+        *,
+        template_text: str | None = None,
+        question_counted: bool = False,
     ) -> tuple[str | None, Optional[dict]]:
         """Generate pedagogical feedback for teacher."""
         should_intervene, reason = await self.analyze_conversation(
             recent_exchanges,
             teacher_question,
             student_response,
+            question_counted=question_counted,
         )
 
         if not should_intervene:
             return None, None
 
         try:
-            template = await PromptManager.get_template_text_by_id(
-                self.db_session, self.template_id
-            )
+            template = template_text
+            if template is None:
+                template = await PromptManager.get_template_text_by_id(
+                    self.db_session, self.template_id
+                )
 
             system_prompt = template.format(
                 scenario_title=self.scenario_title,

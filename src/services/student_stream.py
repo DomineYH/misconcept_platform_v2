@@ -29,11 +29,20 @@ class StudentStreamError(Exception):
 
 
 class StudentStreamingResponse(StreamingResponse):
-    def __init__(self, factory, accepted, kwargs):
+    def __init__(
+        self,
+        factory,
+        accepted,
+        kwargs,
+        *,
+        stream_generator=None,
+        finisher=finish_student,
+    ):
         self.factory, self.run_id = factory, accepted["run_id"]
+        self.finisher = finisher
         cancelled = active_runs[self.run_id] = asyncio.Event()
         super().__init__(
-            stream_student(
+            (stream_generator or stream_student)(
                 factory, accepted, kwargs, time.monotonic(), cancelled
             ),
             media_type="text/event-stream",
@@ -54,14 +63,16 @@ class StudentStreamingResponse(StreamingResponse):
                     if active_runs.pop(self.run_id, None) is not None:
                         # Response headers can fail before the generator starts.
                         try:
-                            await finish_student(
+                            await self.finisher(
                                 self.factory,
                                 self.run_id,
                                 status="interrupted",
                                 error_code="disconnected",
                             )
                         except Exception:
-                            logger.exception("Unable to record unsent student")
+                            logger.exception(
+                                "Unable to record unsent generation"
+                            )
 
 
 async def stream_student(factory, accepted, kwargs, started, cancelled):

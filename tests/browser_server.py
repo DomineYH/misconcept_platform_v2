@@ -42,7 +42,7 @@ class Handler(BaseHTTPRequestHandler):
                 framework_id=1,
                 framework=framework,
                 student_template_id=1,
-                tutor_template_id=None,
+                tutor_template_id=2 if "mentor" in query else None,
                 tutor_template=None,
             )
             template = {
@@ -51,6 +51,20 @@ class Handler(BaseHTTPRequestHandler):
                 "/admin/scenarios-page": "admin/scenarios.html",
             }[path.path]
             messages = []
+            if "mentor_history" in query:
+                messages = [
+                    SimpleNamespace(
+                        id=message_id,
+                        role=role,
+                        content=content,
+                        created_at=None,
+                        turn_id="turn-1",
+                    )
+                    for message_id, role, content in [
+                        (10, "teacher", "Teacher question"),
+                        (11, "student", "Stored student"),
+                    ]
+                ]
             if "mentor_legacy" in query:
                 messages = [
                     SimpleNamespace(

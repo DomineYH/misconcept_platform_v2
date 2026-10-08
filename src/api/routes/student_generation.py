@@ -13,22 +13,54 @@ from src.api.routes.session_helpers import load_session
 from src.api.routes.session_messages import limiter
 from src.models import GenerationRun, User
 from src.services.generation_runs import reserve_student, snapshot
+from src.services.mentor_generation import reserve_mentor
+from src.services.mentor_stream import mentor_response
 from src.services.student_stream import StudentStreamingResponse
 
 router = APIRouter(tags=["Sessions"])
 
 
-class StudentRequest(BaseModel):
+class MentorRequest(BaseModel):
     request_id: str
-    content: str = Field(min_length=1, max_length=5000)
-    turn_id: str | None = None
 
-    @field_validator("request_id", "turn_id")
+    @field_validator("request_id")
     @classmethod
     def uuid_string(cls, value):
         if value is not None:
             return str(UUID(value))
         return value
+
+
+class StudentRequest(MentorRequest):
+    content: str = Field(min_length=1, max_length=5000)
+    turn_id: str | None = None
+
+    @field_validator("turn_id")
+    @classmethod
+    def turn_uuid_string(cls, value):
+        return cls.uuid_string(value)
+
+
+@router.post("/sessions/{session_id}/turns/{turn_id}/mentor/stream")
+@limiter.limit("30/minute")
+async def mentor_turn(
+    request: Request,
+    session_id: int,
+    turn_id: UUID,
+    body: MentorRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    factory = async_sessionmaker(
+        db.bind, expire_on_commit=False, autoflush=False
+    )
+    await db.close()
+    accepted, execution = await reserve_mentor(
+        factory, session_id, str(turn_id), user, body.request_id
+    )
+    if execution is None:
+        return JSONResponse(accepted)
+    return mentor_response(factory, accepted, execution)
 
 
 @router.post("/sessions/{session_id}/turns/stream")

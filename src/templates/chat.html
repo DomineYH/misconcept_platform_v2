@@ -168,11 +168,14 @@
 <script id="chat-config" type="application/json">{{ {
   'sessionId': session_id,
   'studentName': student_name or 'S',
+  'mentorEnabled': scenario.tutor_template_id is not none,
   'ended': session_ended|default(false)
 }|tojson }}</script>
 <script src="/static/js/chat.js"></script>
 <script type="module">
   import {mountStudentStream} from '/static/js/student-stream.js';
+  import {mountMentorStream} from '/static/js/mentor-stream.js';
+  mountMentorStream(window.chatUI);
   mountStudentStream(window.chatUI);
 </script>
 {% endblock %}

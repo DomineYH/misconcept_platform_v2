@@ -967,6 +967,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   window.chatUI = {
     sessionId: chatConfig.sessionId,
     studentName: chatConfig.studentName,
+    mentorEnabled: chatConfig.mentorEnabled,
     fetch: fetchWithAuthGuard,
     headers: getCsrfHeaders,
     stopPolling: disablePolling,

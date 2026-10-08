@@ -125,6 +125,7 @@ async def interrupt_probe_orphans(factory):
             .where(
                 ApiUsageLog.invocation_id.is_not(None),
                 ApiUsageLog.status == "running",
+                ApiUsageLog.finished_at.is_(None),
             )
             .values(
                 status="interrupted",
@@ -146,6 +147,7 @@ async def cancel_reserved_probe(factory, probe_id):
                 ApiUsageLog.owner_id == probe.owner_id,
                 ApiUsageLog.request_id == probe.request_id,
                 ApiUsageLog.status == "running",
+                ApiUsageLog.finished_at.is_(None),
             )
             .values(
                 status="cancelled",

@@ -213,13 +213,12 @@ async def stream_text(request, secret, timeouts):
                                     error_code=response_error(event.code),
                                 )
                                 break
-        yield terminal or CallEvent(
-            "error", usage=usage, error_code="invalid_output"
-        )
     except asyncio.CancelledError:
-        yield CallEvent("interrupted", usage=usage, error_code="interrupted")
+        terminal = terminal or CallEvent(
+            "interrupted", usage=usage, error_code="interrupted"
+        )
     except TimeoutError:
-        yield CallEvent(
+        terminal = terminal or CallEvent(
             "error",
             usage=usage,
             error_code=(
@@ -228,12 +227,10 @@ async def stream_text(request, secret, timeouts):
                 else "timeout_total"
             ),
         )
-    except (
-        APIError,
-        httpx2.TransportError,
-        ValueError,
-        TypeError,
-        AttributeError,
-        InvocationError,
-    ) as error:
-        yield CallEvent("error", usage=usage, error_code=exception_code(error))
+    except Exception as error:
+        terminal = terminal or CallEvent(
+            "error", usage=usage, error_code=exception_code(error)
+        )
+    yield terminal or CallEvent(
+        "error", usage=usage, error_code="invalid_output"
+    )

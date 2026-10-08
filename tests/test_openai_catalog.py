@@ -396,6 +396,7 @@ async def test_catalog_attempt_is_committed_before_upstream_and_unknown_cost_sta
             .one()
         )
         assert row["status"] == "completed" and row["finished_at"]
+        assert row["retry_wait_ms"] is None
         assert (
             row["total_tokens"] is None
             and row["estimated_cost_usd"] is None

@@ -41,7 +41,6 @@ async def start_attempt(
             status="running",
             timestamp=now(),
             started_at=now(),
-            retry_wait_ms=0,
         )
         db.add(entry)
         try:

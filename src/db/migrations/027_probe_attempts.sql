@@ -46,7 +46,7 @@ CREATE INDEX ix_api_usage_bot_type ON api_usage_log(bot_type);
 
 CREATE TABLE model_probe (
     id INTEGER PRIMARY KEY,
-    owner_id INTEGER REFERENCES user(id) ON DELETE SET NULL,
+    owner_id INTEGER NOT NULL REFERENCES user(id) ON DELETE RESTRICT,
     model_config_id INTEGER NOT NULL REFERENCES model_config(id),
     role TEXT NOT NULL CHECK (role IN ('student','mentor','analysis')),
     request_id TEXT NOT NULL,

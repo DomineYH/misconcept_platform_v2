@@ -169,6 +169,50 @@ async def test_late_probe_cannot_verify_changed_versions_or_overwrite_newer_role
         ).scalar() == 2
 
 
+async def test_deleting_probe_owner_preserves_durable_identity(
+    data, api, monkeypatch
+):
+    from sqlalchemy.exc import IntegrityError
+    from test_scenario_api import login
+
+    body = await prepare(api)
+
+    async def upstream(request, payload):
+        return httpx2.Response(401, json={"error": {"code": "invalid_api_key"}})
+
+    clients, calls = sdk_transport(monkeypatch, upstream)
+    assert (await write(api, "models/1/probes", **body)).status_code == 202
+    assert (await completed(api, body["request_id"]))["status"] == "failed"
+    data.other.role = "admin"
+    await data.db.commit()
+    login(api, data.other)
+    await api.get("/admin/ai")
+    deletion = await api.post(
+        f"/admin/users/{data.admin.id}/delete",
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
+    )
+    assert deletion.status_code == 400
+    assert "모델 시험 기록" in deletion.text
+    for statement in (
+        "UPDATE model_probe SET owner_id=NULL",
+        "DELETE FROM user WHERE id=:owner",
+    ):
+        with pytest.raises(IntegrityError):
+            async with data.engine.begin() as db:
+                await db.execute(text(statement), {"owner": data.admin.id})
+    async with data.engine.connect() as db:
+        assert (
+            await db.execute(text("SELECT owner_id FROM model_probe"))
+        ).scalar() == data.admin.id
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
+    assert (
+        await api.post(
+            f"/admin/users/{data.owner.id}/delete",
+            headers={"x-csrf-token": api.cookies["csrftoken"]},
+        )
+    ).status_code == 200
+
+
 async def test_probe_request_rejections_are_unbound_and_owner_status_is_private(
     data, api, monkeypatch
 ):

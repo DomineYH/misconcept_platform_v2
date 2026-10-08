@@ -41,6 +41,36 @@ async def test_probe_attempt_schema_fresh_upgrade_and_rerun(
         await migrate.run_all_migrations()
         await migrate.run_all_migrations()
         async with engine.begin() as db:
+            columns = (
+                (await db.exec_driver_sql("PRAGMA table_info(model_probe)"))
+                .mappings()
+                .all()
+            )
+            assert (
+                next(
+                    column["notnull"]
+                    for column in columns
+                    if column["name"] == "owner_id"
+                )
+                == 1
+            )
+            references = (
+                (
+                    await db.exec_driver_sql(
+                        "PRAGMA foreign_key_list(model_probe)"
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            assert (
+                next(
+                    ref["on_delete"]
+                    for ref in references
+                    if ref["from"] == "owner_id"
+                )
+                == "RESTRICT"
+            )
             assert (
                 await db.exec_driver_sql("SELECT count(*) FROM model_probe")
             ).scalar() == 0

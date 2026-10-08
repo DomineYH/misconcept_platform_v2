@@ -23,6 +23,7 @@ from src.api.schemas import (
     UserCreate,
     UserUpdate,
 )
+from src.models.model_probe import ModelProbe
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
@@ -283,6 +284,17 @@ async def delete_user(
             detail="활성 세션이 있는 사용자는 "
             "삭제할 수 없습니다. "
             "먼저 세션을 종료해주세요.",
+        )
+
+    if (
+        await db.scalar(
+            select(ModelProbe.id).where(ModelProbe.owner_id == user_id).limit(1)
+        )
+        is not None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="모델 시험 기록이 있는 사용자는 삭제할 수 없습니다.",
         )
 
     # Nullify teacher_id on ended sessions

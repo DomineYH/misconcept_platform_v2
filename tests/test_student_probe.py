@@ -106,6 +106,16 @@ async def completed(api, request_id):
             await asyncio.sleep(0.01)
 
 
+async def seed_finished_attempt(data, request_id):
+    async with data.engine.begin() as db:
+        await db.execute(
+            text(
+                "INSERT INTO api_usage_log(id,invocation_id,request_id,owner_id,status,finished_at,timestamp,usage_complete) VALUES (999,'finished-attempt',:request_id,:owner_id,'running','2026-01-01','2026-01-01',1)"
+            ),
+            {"request_id": request_id, "owner_id": data.admin.id},
+        )
+
+
 async def test_student_probe_is_durable_idempotent_and_records_two_calls(
     data, api, monkeypatch
 ):
@@ -235,6 +245,7 @@ async def test_student_probe_is_durable_idempotent_and_records_two_calls(
             for r in rows
         )
         assert len({r["invocation_id"] for r in rows}) == 2
+        assert all(r["retry_wait_ms"] is None for r in rows)
         assert (
             await db.execute(text("SELECT count(*) FROM generation_run"))
         ).scalar() == 0
@@ -340,6 +351,7 @@ async def test_cancel_closes_upstream_and_keeps_probe_identity(
     assert (await write(api, "models/1/probes", **body)).status_code == 202
     async with asyncio.timeout(5):
         await opened.wait()
+    await seed_finished_attempt(data, body["request_id"])
     cancelled = await write(api, f"probes/{body['request_id']}/cancel")
     assert cancelled.status_code == 200
     done = await completed(api, body["request_id"])
@@ -348,7 +360,11 @@ async def test_cancel_closes_upstream_and_keeps_probe_identity(
     assert (await write(api, "models/1/probes", **body)).json() == done
     async with data.engine.connect() as db:
         row = (
-            (await db.execute(text("SELECT * FROM api_usage_log")))
+            (
+                await db.execute(
+                    text("SELECT * FROM api_usage_log WHERE id != 999")
+                )
+            )
             .mappings()
             .one()
         )
@@ -358,6 +374,13 @@ async def test_cancel_closes_upstream_and_keeps_probe_identity(
             and row["finished_at"]
         )
         assert row["input_tokens"] is None and row["usage_complete"] == 0
+        assert (
+            await db.execute(
+                text(
+                    "SELECT status,finished_at,usage_complete FROM api_usage_log WHERE id=999"
+                )
+            )
+        ).one() == ("running", "2026-01-01", 1)
 
 
 async def test_ledger_start_failure_blocks_provider_and_finalize_failure_is_safe(
@@ -517,6 +540,7 @@ async def test_restart_interrupts_orphan_probe_and_attempt_without_regeneration(
         )
     monkeypatch.setattr(connection, "AsyncSessionLocal", data.factory)
     monkeypatch.setattr(connection, "engine", data.engine)
+    await seed_finished_attempt(data, body["request_id"])
     async with lifespan(app):
         done = (await api.get(f"/admin/ai/probes/{body['request_id']}")).json()
         assert (
@@ -525,7 +549,11 @@ async def test_restart_interrupts_orphan_probe_and_attempt_without_regeneration(
         assert (await write(api, "models/1/probes", **body)).json() == done
     async with data.engine.connect() as db:
         row = (
-            (await db.execute(text("SELECT * FROM api_usage_log")))
+            (
+                await db.execute(
+                    text("SELECT * FROM api_usage_log WHERE id != 999")
+                )
+            )
             .mappings()
             .one()
         )
@@ -535,4 +563,11 @@ async def test_restart_interrupts_orphan_probe_and_attempt_without_regeneration(
             and row["finished_at"]
         )
         assert row["input_tokens"] is None and row["estimated_cost_usd"] is None
+        assert (
+            await db.execute(
+                text(
+                    "SELECT status,finished_at,usage_complete FROM api_usage_log WHERE id=999"
+                )
+            )
+        ).one() == ("running", "2026-01-01", 1)
     assert len(calls) == 1 and all(c.is_closed() for c in clients)

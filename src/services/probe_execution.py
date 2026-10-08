@@ -92,6 +92,7 @@ async def run_probe(factory, probe_id):
                             "error",
                         ):
                             terminal = event
+                            break
             code = terminal.error_code
             if not await finish_attempt(
                 factory,

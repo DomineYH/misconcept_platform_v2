@@ -20,8 +20,8 @@ from src.db.connection import Base
 class ModelProbe(Base):
     __tablename__ = "model_probe"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    owner_id: Mapped[int | None] = mapped_column(
-        ForeignKey("user.id", ondelete="SET NULL")
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id", ondelete="RESTRICT")
     )
     model_config_id: Mapped[int] = mapped_column(ForeignKey("model_config.id"))
     role: Mapped[str] = mapped_column(Text)

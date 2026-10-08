@@ -289,8 +289,12 @@ async def test_usage_preserves_observed_zero_and_rejects_inconsistent_totals(
     assert all(c.is_closed() for c in clients)
 
 
-async def test_stream_cleanup_failure_cannot_emit_a_second_terminal(
+@pytest.mark.parametrize("outcome", ["completed", "refused", "output_limit"])
+@pytest.mark.parametrize("closer", ["stream", "client"])
+async def test_stream_cleanup_failure_preserves_computed_terminal(
     monkeypatch,
+    outcome,
+    closer,
 ):
     payload = sse(
         "response.output_text.delta",
@@ -300,29 +304,54 @@ async def test_stream_cleanup_failure_cannot_emit_a_second_terminal(
         output_index=0,
         content_index=0,
     )
+    response = response_body("visible")
+    kind = "response.completed"
+    if outcome == "refused":
+        response["output"][0]["content"] = [
+            dict(type="refusal", refusal="PRIVATE-REFUSAL")
+        ]
+    elif outcome == "output_limit":
+        response.update(
+            status="incomplete",
+            incomplete_details=dict(reason="max_output_tokens"),
+        )
+        kind = "response.incomplete"
     payload += sse(
-        "response.completed",
-        response=response_body("visible"),
+        kind,
+        response=response,
         sequence_number=1,
     )
 
+    class Body(httpx2.AsyncByteStream):
+        async def __aiter__(self):
+            yield payload
+
+        async def aclose(self):
+            if closer == "stream":
+                raise httpx2.TransportError("PRIVATE-CLOSE-ERROR")
+
     class BrokenClose(httpx2.MockTransport):
         async def aclose(self):
-            raise httpx2.TransportError("PRIVATE-CLOSE-ERROR")
+            if closer == "client":
+                raise httpx2.TransportError("PRIVATE-CLOSE-ERROR")
+
+    clients = []
 
     def factory(**kwargs):
-        return AsyncOpenAI(
+        client = AsyncOpenAI(
             **kwargs,
             http_client=httpx2.AsyncClient(
                 transport=BrokenClose(
                     lambda request: httpx2.Response(
                         200,
                         headers={"content-type": "text/event-stream"},
-                        content=payload,
+                        stream=Body(),
                     )
                 )
             ),
         )
+        clients.append(client)
+        return client
 
     monkeypatch.setattr(openai_generation, "AsyncOpenAI", factory)
     events = [
@@ -337,3 +366,10 @@ async def test_stream_cleanup_failure_cannot_emit_a_second_terminal(
         if event.type in ("completed", "refused", "interrupted", "error")
     ]
     assert len(terminals) == 1 and "PRIVATE" not in str(terminals)
+    assert terminals[0].type == (
+        "error" if outcome == "output_limit" else outcome
+    )
+    assert terminals[0].error_code == (
+        None if outcome == "completed" else outcome
+    )
+    assert all(client.is_closed() for client in clients)

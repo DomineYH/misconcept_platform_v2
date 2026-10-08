@@ -69,12 +69,11 @@ async def reserve_probe(
     ).hexdigest()
     await db.rollback()
     await db.execute(text("BEGIN IMMEDIATE"))
-    prior = await db.scalar(
-        select(ModelProbe).where(
-            ModelProbe.owner_id == owner_id,
-            ModelProbe.request_id == str(data.request_id),
-        )
+    identity = select(ModelProbe).where(
+        ModelProbe.owner_id == owner_id,
+        ModelProbe.request_id == str(data.request_id),
     )
+    prior = await db.scalar(identity)
     if prior:
         if prior.fingerprint != fingerprint:
             raise HTTPException(409, detail={"code": "request_conflict"})
@@ -138,6 +137,13 @@ async def reserve_probe(
         await db.commit()
     except IntegrityError:
         await db.rollback()
+        prior = await db.scalar(identity)
+        if prior is not None:
+            if prior.fingerprint != fingerprint:
+                raise HTTPException(
+                    409, detail={"code": "request_conflict"}
+                ) from None
+            return public_probe(prior)
         raise HTTPException(409, detail={"code": "probe_in_progress"}) from None
     from src.services.probe_execution import start_probe
 

@@ -6,6 +6,7 @@ from src.models.contributor import Contributor
 from src.models.generation_run import GenerationRun
 from src.models.message import Message
 from src.models.prompt_template import PromptTemplate
+from src.models.provider_connection import ProviderAuditLog, ProviderConnection
 from src.models.question_analysis import QuestionAnalysis
 from src.models.scenario import Scenario
 from src.models.scenario_group import ScenarioGroup
@@ -31,6 +32,8 @@ __all__ = [
     "UiEvent",
     "ApiUsageLog",
     "PromptTemplate",
+    "ProviderConnection",
+    "ProviderAuditLog",
     "Contributor",
     "calculate_cost",
 ]

@@ -19,6 +19,17 @@ export default async function checkAIBoundaries(page) {
   assert(await page.locator('[data-provider=google]').getByRole('button', {name:'키 교체', exact:true}).isDisabled(), 'decryption failure blocks key replacement');
   assert(await page.locator('[data-provider=google]').getByRole('button', {name:'키 삭제', exact:true}).isEnabled(), 'deletion does not require decryption');
   assert(await page.locator('[data-provider=openai]').getByRole('button', {name:'비활성화', exact:true}).isEnabled(), 'disable does not require master key');
+  data.providers[0].enabled = false;
+  data.providers[2].enabled = false;
+  await page.getByRole('button', {name:'설정 다시 불러오기'}).click();
+  await page.locator('[data-provider=google]').getByRole('button', {name:'재활성화', exact:true}).waitFor();
+  assert(await page.locator('[data-provider=openai]').getByRole('button', {name:'재활성화', exact:true}).isDisabled(), 'missing master blocks reactivation');
+  data.master_key_available = true;
+  await page.getByRole('button', {name:'설정 다시 불러오기'}).click();
+  await page.getByText('마스터 키 설정 필요', {exact:false}).waitFor({state:'hidden'});
+  assert(await page.locator('[data-provider=openai]').getByRole('button', {name:'재활성화', exact:true}).isEnabled(), 'restored master permits ready connection reactivation');
+  assert(await page.locator('[data-provider=google]').getByRole('button', {name:'재활성화', exact:true}).isDisabled(), 'decryption failure blocks reactivation');
+  assert(await page.locator('[data-provider=google]').getByRole('button', {name:'키 삭제', exact:true}).isEnabled(), 'broken disabled key remains deletable');
   data = state();
   data.models[0].display_name = '<img src=x onerror=window.injected=true>';
   await page.getByRole('button', {name:'설정 다시 불러오기'}).click();

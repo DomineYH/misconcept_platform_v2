@@ -82,7 +82,11 @@ async def test_024_preserves_legacy_and_matches_fresh(tmp_path, monkeypatch):
             await conn.exec_driver_sql(
                 "SELECT filename FROM _migrations ORDER BY id"
             )
-        ).scalars().all() == [migrate.BASELINE, "024_generation_run.sql"]
+        ).scalars().all() == [
+            migrate.BASELINE,
+            "024_generation_run.sql",
+            "025_provider_connection.sql",
+        ]
     await engine.dispose()
     await fresh.dispose()
 

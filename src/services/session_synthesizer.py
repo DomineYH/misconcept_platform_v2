@@ -59,7 +59,6 @@ class SessionSynthesizer(AnalysisCaller):
         super().__init__(factory, **context)
         self._template = load_prompt_template("session_synthesis_prompt.txt")
         self._hash = prompt_hash(self._template)
-        self.last_usage: dict[str, int] | None = None
 
     async def synthesize(
         self,
@@ -113,9 +112,8 @@ class SessionSynthesizer(AnalysisCaller):
                 raise InvocationError("empty_response")
             return payload
 
-        self.last_usage = None
         try:
-            payload, self.last_usage = await self.structured(
+            payload, _ = await self.structured(
                 prompt, RuntimeSynthesis, "synthesis", 2500, normalize=normalize
             )
         except InvocationError as e:

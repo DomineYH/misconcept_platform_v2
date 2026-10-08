@@ -83,7 +83,6 @@ class AnalysisCaller:
                     )
                     else None
                 )
-                self.last_usage = legacy_usage
                 if event.type == "interrupted":
                     raise asyncio.CancelledError
                 if event.type != "completed":

@@ -164,7 +164,10 @@ async def test_retry_success_does_not_repeat_tutor_state(data):
 async def test_classification_and_synthesis_parse_errors_do_not_retry(
     data, monkeypatch
 ):
+    from sqlalchemy import select
+
     from src.config import config
+    from src.models import ApiUsageLog
     from src.services.invocation_types import InvocationError
 
     _, model = await install_connection(data, monkeypatch)
@@ -199,7 +202,12 @@ async def test_classification_and_synthesis_parse_errors_do_not_retry(
     synth = SessionSynthesizer(data.factory)
     _, status = await synth.synthesize(messages=[], framework=data.framework)
     assert status == "failed"
-    assert synth.last_usage["total_tokens"] == 15
+    async with data.factory() as db:
+        row = await db.scalar(
+            select(ApiUsageLog).where(ApiUsageLog.operation == "synthesis")
+        )
+    assert row.total_tokens == 15
+    assert row.status == "failed" and row.error_code == "invalid_json"
     assert len(calls) == 3 and calls[-1]["max_output_tokens"] == 2500
     assert all(sdk.is_closed() for sdk in clients)
 

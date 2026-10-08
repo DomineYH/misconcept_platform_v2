@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.models import (
     AnalysisFramework,
     ApiUsageLog,
+    AppSetting,
     Message,
     QuestionAnalysis,
     Scenario,
@@ -31,6 +32,7 @@ from src.services.analysis_results import (
     summary_response,
 )
 from src.services.analyzer import Analyzer
+from src.services.model_configuration import settings_values
 from src.services.session_synthesizer import FAILED_PAYLOAD, SessionSynthesizer
 
 logger = logging.getLogger(__name__)
@@ -121,7 +123,13 @@ async def run_llm_pipeline(
     # Step 2: Parallel classification with bounded semaphore
     distribution = {label: 0 for label in framework.label_names}
     msg_index_map = {msg.id: idx for idx, msg in enumerate(all_messages)}
-    semaphore = asyncio.Semaphore(5)
+    parallelism = 1
+    async with factory() as settings_db:
+        setting = await settings_db.get(AppSetting, 1)
+        if setting is not None:
+            limits, _ = settings_values(setting)
+            parallelism = min(5, limits["total"], limits["openai"])
+    semaphore = asyncio.Semaphore(parallelism)
 
     async def _classify_with_semaphore(msg: Message) -> dict:
         async with semaphore:

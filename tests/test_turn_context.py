@@ -1,0 +1,276 @@
+"""Generation inputs use bounded pairs, independent of storage order."""
+
+from datetime import datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import event
+from test_scenario_api import login
+from test_student_generation import client, frames, scenario_payload, student
+
+from src.config import config
+from src.db.migrations import migrate
+from src.models import GenerationRun, Message, Session
+from src.services.student_bot import BASE_STUDENT_PROMPT
+
+__all__ = ["client", "scenario_payload", "student"]
+UNFINISHED_TURN = "00000000-0000-0000-0000-000000000061"
+pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
+
+
+@pytest.fixture
+async def long_dialogue(data, monkeypatch):
+    monkeypatch.setattr(migrate, "engine", data.engine)
+    await migrate.run_all_migrations()
+    # Timestamps tie and insertion order opposes turn order deliberately.
+    for index in range(60, 0, -1):
+        for role in ("student", "tutor", "teacher"):
+            data.db.add(
+                Message(
+                    session_id=data.session.id,
+                    turn_id=f"turn-{index}",
+                    turn_index=index,
+                    role=role,
+                    content=f"{role.title()} {index}",
+                    created_at=datetime(2026, 1, 1),
+                )
+            )
+    data.db.add_all(
+        [
+            Message(
+                session_id=data.session.id,
+                role="student",
+                content="Legacy greeting without a turn",
+            ),
+            Message(
+                session_id=data.session.id,
+                role="teacher",
+                turn_id=UNFINISHED_TURN,
+                turn_index=61,
+                content="Current question",
+            ),
+            GenerationRun(
+                id=str(uuid4()),
+                owner_id=data.owner.id,
+                session_id=data.session.id,
+                turn_id=UNFINISHED_TURN,
+                operation="student",
+                request_id=str(uuid4()),
+                input_hash="hash",
+                config_hash="hash",
+                provider="openai",
+                model="gpt-5-mini",
+                status="failed",
+                partial_text="Unsaved student fragment",
+            ),
+        ]
+    )
+    other_session = Session(
+        scenario_id=data.scenario.id, teacher_id=data.owner.id
+    )
+    data.db.add(other_session)
+    await data.db.flush()
+    for role in ("teacher", "student"):
+        data.db.add(
+            Message(
+                session_id=other_session.id,
+                role=role,
+                turn_id="turn-60",
+                turn_index=60,
+                content="Other session content",
+            )
+        )
+    await data.db.commit()
+    return other_session.id
+
+
+async def test_student_route_receives_n_completed_pairs_and_current_once(
+    data, client, student, long_dialogue, monkeypatch
+):
+    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
+    login(client, data.owner)
+    response = await client.post(
+        f"/sessions/{data.session.id}/turns/stream",
+        json={
+            "request_id": str(uuid4()),
+            "turn_id": UNFINISHED_TURN,
+            "content": "Current question",
+        },
+    )
+    assert frames(response)[-1][0] == "output.completed"
+    actual = student.responses.create.call_args.kwargs["input"]
+    assert actual[:2] == [
+        {"role": "developer", "content": BASE_STUDENT_PROMPT},
+        {"role": "developer", "content": "Test misconception Student profile"},
+    ]
+    assert actual[2:] == [
+        {"role": "user", "content": "Teacher 57"},
+        {"role": "assistant", "content": "Student 57"},
+        {"role": "user", "content": "Teacher 58"},
+        {"role": "assistant", "content": "Student 58"},
+        {"role": "user", "content": "Teacher 59"},
+        {"role": "assistant", "content": "Student 59"},
+        {"role": "user", "content": "Teacher 60"},
+        {"role": "assistant", "content": "Student 60"},
+        {"role": "user", "content": "Current question"},
+    ]
+    assert student.responses.create.await_count == 1
+    history = await client.get(f"/sessions/{data.session.id}/messages/updates")
+    assert history.status_code == 200
+    assert history.text.count("data-message-id=") == 183
+    assert "Teacher 1" in history.text and "Student 1" in history.text
+    assert "Tutor 60" in history.text
+    assert "Unsaved student fragment" not in history.text
+
+
+async def test_mentor_input_stays_at_target_after_later_turns_complete(
+    data, long_dialogue, monkeypatch
+):
+    from src.services.turn_context import load_mentor_context
+    from src.services.tutor_bot import TutorBot
+
+    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
+    context = await load_mentor_context(data.db, data.session.id, "turn-50")
+    assert context == [
+        {"role": "teacher", "content": "Teacher 46"},
+        {"role": "student", "content": "Student 46"},
+        {"role": "teacher", "content": "Teacher 47"},
+        {"role": "student", "content": "Student 47"},
+        {"role": "teacher", "content": "Teacher 48"},
+        {"role": "student", "content": "Student 48"},
+        {"role": "teacher", "content": "Teacher 49"},
+        {"role": "student", "content": "Student 49"},
+        {"role": "teacher", "content": "Teacher 50"},
+        {"role": "student", "content": "Student 50"},
+    ]
+    fake = SimpleNamespace(
+        max_retries=0,
+        close=AsyncMock(),
+        responses=SimpleNamespace(
+            create=AsyncMock(
+                return_value=(
+                    SimpleNamespace(
+                        output_text='{"is_repetitive": false, '
+                        '"is_inappropriate": false}',
+                        usage=None,
+                    )
+                )
+            )
+        ),
+    )
+    async with TutorBot(data.db, 1, client=fake) as mentor:
+        result = await mentor.generate_feedback(
+            context[-2]["content"], context[-1]["content"], context[:-2]
+        )
+    assert result == (None, None)
+    assert fake.responses.create.await_count == 1
+    prompt = fake.responses.create.call_args.kwargs["input"][0]["content"]
+    assert "교사: Teacher 48\n학생: Student 48" in prompt
+    assert "교사: Teacher 49\n학생: Student 49" in prompt
+    assert "교사: Teacher 50\n학생: Student 50" in prompt
+    assert "Teacher 51" not in prompt and "Teacher 47" not in prompt
+
+
+async def test_legacy_generation_also_uses_only_completed_pairs(
+    data, scenario_payload, long_dialogue, monkeypatch
+):
+    from src.services.session_mgr import SessionManager
+
+    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
+    fake = SimpleNamespace(
+        max_retries=0,
+        close=AsyncMock(),
+        responses=SimpleNamespace(
+            create=AsyncMock(side_effect=RuntimeError("provider offline"))
+        ),
+    )
+    manager = SessionManager(data.db, data.session.id, client=fake)
+    try:
+        with pytest.raises(RuntimeError, match="provider offline"):
+            await manager.process_teacher_message("Legacy caller question")
+        actual = fake.responses.create.call_args.kwargs["input"]
+        assert len(actual) == 11  # Two instructions, four pairs, one question.
+        assert actual[2] == {"role": "user", "content": "Teacher 57"}
+        assert actual[-2:] == [
+            {"role": "assistant", "content": "Student 60"},
+            {"role": "user", "content": "Legacy caller question"},
+        ]
+    finally:
+        await manager.close()
+
+
+@pytest.mark.parametrize(
+    "before, first, last", [(None, 51, 60), (50, 40, 49), (1, None, None)]
+)
+async def test_completed_turn_window_is_limited_and_uses_024_indexes(
+    data, long_dialogue, monkeypatch, before, first, last
+):
+    from src.services.turn_context import load_completed_turns
+
+    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 10)
+    queries = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("SELECT") and "LIMIT" in statement:
+            queries.append((statement, parameters))
+
+    event.listen(data.engine.sync_engine, "before_cursor_execute", capture)
+    try:
+        history = await load_completed_turns(
+            data.db, data.session.id, before_turn_index=before
+        )
+    finally:
+        event.remove(data.engine.sync_engine, "before_cursor_execute", capture)
+    if first is None:
+        assert history == []
+    else:
+        assert history == [
+            {"role": role, "content": f"{role.title()} {index}"}
+            for index in range(first, last + 1)
+            for role in ("teacher", "student")
+        ]
+        assert len(history) == 20
+    assert len(queries) == 1
+    statement, parameters = queries[0]
+    assert "turn_index DESC" in statement
+    assert "LIMIT ? OFFSET ?" in statement
+    connection = await data.db.connection()
+    plan = "\n".join(
+        row[-1]
+        for row in (
+            await connection.exec_driver_sql(
+                "EXPLAIN QUERY PLAN " + statement, parameters
+            )
+        )
+    )
+    assert "ix_message_completed_student" in plan
+    assert "uq_message_turn_role" in plan
+    assert "SCAN message" not in plan
+    # Only the bounded outer result may sort; the inner LIMIT is indexed.
+    assert plan.count("USE TEMP B-TREE FOR ORDER BY") <= 1
+
+
+@pytest.mark.parametrize("target", [UNFINISHED_TURN, "missing", "turn-50"])
+async def test_mentor_context_rejects_unfinished_missing_and_foreign_turns(
+    data, long_dialogue, target
+):
+    from sqlalchemy.exc import NoResultFound
+
+    from src.services.turn_context import load_mentor_context
+
+    session_id = long_dialogue if target == "turn-50" else data.session.id
+    with pytest.raises(NoResultFound):
+        await load_mentor_context(data.db, session_id, target)
+
+
+async def test_first_mentor_turn_has_no_invented_prior_context(
+    data, long_dialogue
+):
+    from src.services.turn_context import load_mentor_context
+
+    assert await load_mentor_context(data.db, data.session.id, "turn-1") == [
+        {"role": "teacher", "content": "Teacher 1"},
+        {"role": "student", "content": "Student 1"},
+    ]

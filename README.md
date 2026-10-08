@@ -14,6 +14,14 @@ uv run --frozen python -m src.db.seed
 uv run --frozen uvicorn src.main:app --reload
 ```
 
+`CONTEXT_WINDOW_TURNS` defaults to 10 completed teacher–student pairs.
+Student input includes those prior pairs and the current question once; mentor
+input includes the prior pairs and its target pair, excluding later turns.
+On upgrading to Phase A, review any explicitly configured value: it previously
+counted individual messages (including mentor rows), and now counts complete
+pairs. Existing values are preserved, so administrators should adjust them
+before starting new sessions. Failed attempts and greetings consume no slots.
+
 Tests need no API credentials or network. They override configuration before
 imports, reject outbound sockets, and create databases only under pytest's
 temporary directory. The repository's dialogue_sim.db and .env are never used:

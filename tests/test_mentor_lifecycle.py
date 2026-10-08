@@ -45,7 +45,15 @@ async def test_mentor_deadline_heartbeats_and_cleanup(
     data, client, mentor, monkeypatch
 ):
     turn, entered, cancelled = await waiting_mentor(data, client, mentor)
-    monkeypatch.setattr(mentor_stream, "RUN_SECONDS", 0.2)
+    from src.models import AppSetting
+
+    setting = await data.db.get(AppSetting, 1)
+    setting.timeouts_json = {
+        **setting.timeouts_json,
+        "mentor_total": 1,
+        "mentor_first_output": 1,
+    }
+    await data.db.commit()
     monkeypatch.setattr(mentor_stream, "HEARTBEAT_SECONDS", 0.02)
     response = await client.post(
         mentor_url(data, turn), json={"request_id": str(uuid4())}
@@ -56,7 +64,7 @@ async def test_mentor_deadline_heartbeats_and_cleanup(
         "run.accepted",
         "run.failed",
     ]
-    assert frames(response)[-1][1]["code"] == "run_timeout"
+    assert frames(response)[-1][1]["code"] == "timeout_total"
     assert cancelled.is_set()
     mentor.close.assert_awaited_once()
     snapshot = (
@@ -64,6 +72,21 @@ async def test_mentor_deadline_heartbeats_and_cleanup(
     ).json()
     assert snapshot["status"] == "failed"
     assert snapshot["message"] is None
+    from sqlalchemy import select
+
+    from src.models import ApiUsageLog
+
+    async with data.factory() as db:
+        attempt = (
+            await db.scalars(
+                select(ApiUsageLog).where(ApiUsageLog.operation == "mentor")
+            )
+        ).one()
+        assert (
+            attempt.status == "timed_out"
+            and attempt.error_code == "timeout_total"
+        )
+        assert attempt.input_tokens is None and attempt.finished_at is not None
     await data.db.refresh(data.session)
     assert data.session.tutor_question_count == 1
     assert data.session.tutor_intervention_count == 0

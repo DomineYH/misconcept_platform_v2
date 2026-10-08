@@ -84,3 +84,26 @@ async def install_connection(data, monkeypatch):
         )
     await data.db.commit()
     return connection, model
+
+
+async def install_mentor_model(data, connection):
+    model = ModelConfig(
+        provider_connection_id=connection.id,
+        model_id="gpt-5.2",
+        display_name="Lesson mentor",
+        enabled=True,
+        capability_definition_version=DEFINITION_VERSION,
+        default_options_json={"max_output_tokens": 1024},
+        verification_state={
+            "mentor": {
+                "status": "succeeded",
+                "credential_revision": connection.credential_revision,
+                "connection_version": connection.connection_version,
+                "capability_definition_version": DEFINITION_VERSION,
+                "role_contract_version": "s1-v1",
+            }
+        },
+    )
+    data.db.add(model)
+    await data.db.commit()
+    return model

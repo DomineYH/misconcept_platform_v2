@@ -37,6 +37,8 @@ export default async function checkStudentProbe(page) {
   assert(await model.getByRole('button',{name:'사후 분석 시험',exact:true}).isDisabled(),'A7 analysis probe unavailable');
   await model.getByRole('button',{name:'학생봇 시험',exact:true}).click();
   assert.equal(starts.length,0);
+  assert((await page.locator('#ai-editor').innerText()).includes('관리자당 시험은 한 묶음'));
+  assert((await page.locator('#ai-editor').innerText()).includes('대기하지 않으므로'));
   await page.getByRole('button',{name:'시험 시작',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'한도'}).waitFor();
   assert(!(await page.content()).includes('PRIVATE-ERROR'));
@@ -53,6 +55,7 @@ export default async function checkStudentProbe(page) {
   await model.getByRole('button',{name:'학생봇 시험 취소',exact:true}).click();
   await page.getByRole('status').filter({hasText:'중단을 요청했습니다'}).waitFor();
   assert.equal(starts.length,3);
+  assert((await page.getByRole('status').innerText()).includes('제공자 처리 및 이미 발생한 비용은 취소되지 않을 수 있습니다.'));
   assert.deepEqual(cancels,[starts[2].request_id]);
   assert.notEqual(starts[2].request_id,starts[1].request_id,'explicit retest gets a new identity');
   return {pageErrors:[]};

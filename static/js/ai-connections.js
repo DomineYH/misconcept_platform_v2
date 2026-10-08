@@ -96,7 +96,7 @@ const actions = {
       f.querySelectorAll('input[type=password]').forEach(input => { input.value = ''; });
       submit(`providers/${p.provider}/${operation}`, payload);
     });
-    f.append(node('p', '키 변경은 역할 재검증이 필요합니다. 비활성화·삭제는 새 호출을 차단하고 진행 중 호출에 취소를 요청합니다. 모델 설정과 과거 기록은 보존합니다.'));
+    f.append(node('p', '키 교체·재활성화 후에는 역할 재검증이 필요합니다. 교체 전에 시작한 호출은 기존 키로 완료할 수 있습니다. 비활성화·삭제는 새 호출을 즉시 차단하고 이전 키로 시작한 호출에도 중단을 요청합니다. 제공자 처리 및 이미 발생한 비용은 취소되지 않을 수 있습니다. 모델 설정과 과거 기록은 보존합니다.'));
     const impact = node('ul');
     for (const item of p.impact) impact.append(node('li', item));
     f.append(node('p', '영향 범위'), impact);
@@ -160,7 +160,7 @@ const actions = {
     const contracts = {student:'일반 텍스트와 스트리밍', mentor:'개입 판단 JSON과 코칭 텍스트', analysis:'분류 JSON과 종합 결과 JSON'};
     f.append(node('p', `${roles[role]} · ${contracts[role]} · 최대 2회 생성 호출 · 각 호출 최대 출력 ${m.probe_budgets[role]} 토큰 · 자동 재시도 0회`),
       node('p', '유료 비용이 발생할 수 있습니다. 고정 합성 입력을 사용하며 시험 성공은 교육적 품질 보증이 아닙니다. 첫 단계 실패 시 다음 호출은 하지 않습니다.'),
-      node('p', '페이지를 닫아도 시험은 재시작하거나 중단되지 않습니다. 진행 조회와 시험 취소를 사용하세요.'));
+      node('p', '관리자당 시험은 한 묶음만 진행할 수 있습니다. 한도 부족 시 대기하지 않으므로 잠시 후 다시 시도하세요. 페이지를 닫아도 시험은 재시작하거나 중단되지 않습니다. 진행 조회와 시험 취소를 사용하세요.'));
     finish(f, '시험 시작');
   },
   async poll(requestId) {

@@ -1,8 +1,8 @@
 """Request-scoped non-generating OpenAI Models API adapter."""
 
-import asyncio
 import json
 import logging
+from contextlib import nullcontext
 from datetime import date
 
 import httpx2
@@ -15,6 +15,7 @@ from openai import (
 )
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
+from src.services.call_policy import CallDeadline
 from src.services.model_capabilities import normalize_model_id
 
 # SDK debug traces can contain provider error bodies or HTTP headers.
@@ -55,12 +56,20 @@ def status_code(error):
             if body.get("code") == "insufficient_quota"
             else "rate_limited"
         )
-    return "transient" if error.status_code >= 500 else "invalid_output"
+    return (
+        "transient"
+        if error.status_code >= 500 or error.status_code in (408, 409)
+        else "invalid_output"
+    )
 
 
-async def list_models(secret, *, connect_timeout, total_timeout):
+async def list_models(secret, *, connect_timeout, total_timeout, deadline=None):
+    owned = deadline is None
+    deadline = deadline or CallDeadline(
+        {"model_list_total": total_timeout}, None
+    )
     try:
-        async with asyncio.timeout(total_timeout):
+        async with deadline.total() if owned else nullcontext():
             async with AsyncOpenAI(
                 api_key=secret,
                 max_retries=0,

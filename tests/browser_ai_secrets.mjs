@@ -18,6 +18,8 @@ export default async function checkAISecrets(page) {
     await card.getByRole('button', {name:'키 교체', exact:true}).focus();
     await page.keyboard.press('Enter');
     assert((await page.locator('#ai-editor').innerText()).includes('진행 중 호출 1건'), 'impact is shown before sensitive action');
+    assert((await page.locator('#ai-editor').innerText()).includes('이전 키로 시작한 호출에도 중단을 요청'), 'revocation covers every credential revision');
+    assert((await page.locator('#ai-editor').innerText()).includes('이미 발생한 비용은 취소되지 않을 수'), 'upstream cost warning');
     const key = page.getByLabel('새 API 키', {exact:true});
     const password = page.getByLabel('현재 비밀번호', {exact:true});
     assert(await key.evaluate(el => el === document.activeElement), 'editor focuses first field');

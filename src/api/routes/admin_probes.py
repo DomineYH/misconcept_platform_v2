@@ -22,6 +22,8 @@ from src.models import (
     User,
 )
 from src.models.provider_connection import now
+from src.services.call_admission import approve_call, execution_lock
+from src.services.invocation_types import InvocationError
 from src.services.model_capabilities import capabilities, metadata_conflict
 from src.services.model_configuration import settings_values
 from src.services.model_verification import (
@@ -56,6 +58,11 @@ async def reserve_probe(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
+    async with execution_lock():
+        return await _reserve_probe(model_id, data, user, db)
+
+
+async def _reserve_probe(model_id, data, user, db):
     owner_id = user.id
     fingerprint = hashlib.sha256(
         json.dumps(
@@ -103,6 +110,26 @@ async def reserve_probe(
     if setting is None:
         raise HTTPException(503, detail={"code": "configuration_unavailable"})
     settings_values(setting)
+    pending = await db.scalar(
+        select(ModelProbe).where(
+            ModelProbe.status == "verifying",
+            ModelProbe.model_config_id == model_id,
+            ModelProbe.role == data.role,
+        )
+    )
+    if pending:
+        raise HTTPException(409, detail={"code": "probe_in_progress"})
+    owned = await db.scalar(
+        select(ModelProbe).where(
+            ModelProbe.owner_id == owner_id, ModelProbe.status == "verifying"
+        )
+    )
+    if owned:
+        raise HTTPException(
+            429,
+            detail={"code": "call_limit_reached"},
+            headers={"Retry-After": "1"},
+        )
     probe = ModelProbe(
         owner_id=owner_id,
         model_config_id=model_id,
@@ -118,37 +145,69 @@ async def reserve_probe(
         status="verifying",
         started_at=now(),
     )
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    try:
+        permit = approve_call(
+            factory,
+            connection,
+            setting,
+            owner_id=owner_id,
+            operation="probe",
+            role=data.role,
+        )
+    except InvocationError as error:
+        raise HTTPException(
+            429 if error.code == "call_limit_reached" else 503,
+            detail={"code": error.code},
+            headers=(
+                {"Retry-After": "1"}
+                if error.code == "call_limit_reached"
+                else None
+            ),
+        ) from None
     db.add(probe)
     try:
-        await db.flush()
-        await db.execute(
-            update(ModelConfig)
-            .where(ModelConfig.id == model_id)
-            .values(
-                verification_state=func.json_set(
-                    ModelConfig.verification_state,
-                    "$.student",
-                    func.json(json.dumps(probe_evidence(probe, "verifying"))),
-                ),
-                capabilities_json=definition,
-                capability_definition_version=definition["definition_version"],
+        try:
+            await db.flush()
+            await db.execute(
+                update(ModelConfig)
+                .where(ModelConfig.id == model_id)
+                .values(
+                    verification_state=func.json_set(
+                        ModelConfig.verification_state,
+                        "$.student",
+                        func.json(
+                            json.dumps(probe_evidence(probe, "verifying"))
+                        ),
+                    ),
+                    capabilities_json=definition,
+                    capability_definition_version=definition[
+                        "definition_version"
+                    ],
+                )
             )
-        )
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        prior = await db.scalar(identity)
-        if prior is not None:
-            if prior.fingerprint != fingerprint:
-                raise HTTPException(
-                    409, detail={"code": "request_conflict"}
-                ) from None
-            return public_probe(prior)
-        raise HTTPException(409, detail={"code": "probe_in_progress"}) from None
-    from src.services.probe_execution import start_probe
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            prior = await db.scalar(identity)
+            if prior is not None:
+                if prior.fingerprint != fingerprint:
+                    raise HTTPException(
+                        409, detail={"code": "request_conflict"}
+                    ) from None
+                return public_probe(prior)
+            raise HTTPException(
+                409, detail={"code": "probe_in_progress"}
+            ) from None
+        from src.services.probe_execution import start_probe
 
-    start_probe(async_sessionmaker(db.bind, expire_on_commit=False), probe.id)
-    return public_probe(probe)
+        permit.probe_id = probe.id
+        permit.model_id = model.model_id
+        start_probe(factory, probe.id, permit)
+        return public_probe(probe)
+    finally:
+        if permit.task is asyncio.current_task():
+            permit.release()
 
 
 @router.get("/admin/ai/probes/{request_id}")

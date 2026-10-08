@@ -1,6 +1,8 @@
 """Request-scoped Responses text/stream adapter; no lesson-path changes."""
 
 import asyncio
+from contextlib import nullcontext
+from dataclasses import replace
 
 import httpx2
 from openai import (
@@ -11,6 +13,7 @@ from openai import (
     AsyncOpenAI,
 )
 
+from src.services.call_policy import CallDeadline, retry_after
 from src.services.invocation_types import CallEvent, InvocationError
 from src.services.model_capabilities import validate_model_and_options
 from src.services.openai_catalog import status_code
@@ -113,21 +116,30 @@ def result(response, previous_usage=None):
     return CallEvent("completed", text=text, usage=usage)
 
 
-async def generate_text(request, secret, timeouts):
+async def generate_text(request, secret, timeouts, *, deadline=None):
+    owned = deadline is None
+    deadline = deadline or CallDeadline(timeouts, request.role)
     try:
-        async with asyncio.timeout(timeouts["student_total"]):
+        async with deadline.total() if owned else nullcontext():
             async with AsyncOpenAI(
                 api_key=secret,
                 max_retries=0,
                 timeout=httpx2.Timeout(
-                    timeouts["student_total"], connect=timeouts["connect"]
+                    timeouts[f"{request.role}_total"],
+                    connect=timeouts["connect"],
                 ),
             ) as client:
-                return result(
-                    await client.responses.create(**parameters(request))
+                return replace(
+                    result(
+                        await client.responses.create(**parameters(request))
+                    ),
+                    response_received=True,
                 )
     except asyncio.CancelledError:
-        return CallEvent("interrupted", error_code="interrupted")
+        return CallEvent(
+            "error" if deadline.expired() else "interrupted",
+            error_code="timeout_total" if deadline.expired() else "interrupted",
+        )
     except TimeoutError:
         return CallEvent("error", error_code="timeout_total")
     except (
@@ -138,27 +150,36 @@ async def generate_text(request, secret, timeouts):
         AttributeError,
         InvocationError,
     ) as error:
-        return CallEvent("error", error_code=exception_code(error))
+        return CallEvent(
+            "error",
+            error_code=exception_code(error),
+            retry_after_seconds=(
+                retry_after(error.response.headers.get("Retry-After"))
+                if isinstance(error, APIStatusError)
+                else None
+            ),
+        )
 
 
-async def stream_text(request, secret, timeouts):
+async def stream_text(request, secret, timeouts, *, deadline=None):
+    owned = deadline is None
+    deadline = deadline or CallDeadline(timeouts, request.role)
     first = None
     displayed = False
     refused = False
     usage = None
     terminal = None
     try:
-        async with asyncio.timeout(timeouts["student_total"]):
+        async with deadline.total() if owned else nullcontext():
             async with AsyncOpenAI(
                 api_key=secret,
                 max_retries=0,
                 timeout=httpx2.Timeout(
-                    timeouts["student_total"], connect=timeouts["connect"]
+                    timeouts[f"{request.role}_total"],
+                    connect=timeouts["connect"],
                 ),
             ) as client:
-                async with asyncio.timeout(
-                    timeouts["student_first_output"]
-                ) as first:
+                async with deadline.first() as first:
                     stream = await client.responses.create(
                         **parameters(request), stream=True
                     )
@@ -188,7 +209,10 @@ async def stream_text(request, secret, timeouts):
                                 "response.failed",
                                 "response.incomplete",
                             ):
-                                terminal = result(event.response, usage)
+                                terminal = replace(
+                                    result(event.response, usage),
+                                    response_received=True,
+                                )
                                 if refused:
                                     terminal = CallEvent(
                                         "refused",
@@ -215,7 +239,9 @@ async def stream_text(request, secret, timeouts):
                                 break
     except asyncio.CancelledError:
         terminal = terminal or CallEvent(
-            "interrupted", usage=usage, error_code="interrupted"
+            "error" if deadline.expired() else "interrupted",
+            usage=usage,
+            error_code="timeout_total" if deadline.expired() else "interrupted",
         )
     except TimeoutError:
         terminal = terminal or CallEvent(
@@ -229,7 +255,14 @@ async def stream_text(request, secret, timeouts):
         )
     except Exception as error:
         terminal = terminal or CallEvent(
-            "error", usage=usage, error_code=exception_code(error)
+            "error",
+            usage=usage,
+            error_code=exception_code(error),
+            retry_after_seconds=(
+                retry_after(error.response.headers.get("Retry-After"))
+                if isinstance(error, APIStatusError)
+                else None
+            ),
         )
     yield terminal or CallEvent(
         "error", usage=usage, error_code="invalid_output"

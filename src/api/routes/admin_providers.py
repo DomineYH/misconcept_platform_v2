@@ -29,6 +29,11 @@ from src.api.dependencies import (
 from src.config import config
 from src.models.provider_connection import ProviderAuditLog, ProviderConnection
 from src.models.user import User
+from src.services.call_admission import (
+    active_connection_count,
+    cancel_connection,
+    execution_lock,
+)
 from src.services.model_configuration import (
     configuration_state,
     connection_impact,
@@ -160,7 +165,8 @@ async def provider_state(
                             p,
                             configuration["models"],
                             configuration["settings"],
-                        ),
+                        )
+                        + [f"활성 호출: {active_connection_count(p)}건"],
                     }
                     for p in PROVIDERS
                 ],
@@ -216,44 +222,47 @@ async def save_key(
 async def commit_change(
     db, connection, actor_id, expected_version, values, kind
 ):
-    values.update(
-        connection_version=expected_version + 1,
-        updated_by=actor_id,
-        updated_at=datetime.now(timezone.utc),
-    )
-    try:
-        result = await db.execute(
-            update(ProviderConnection)
-            .where(
-                ProviderConnection.id == connection.id,
-                ProviderConnection.connection_version == expected_version,
-            )
-            .values(**values)
-            .execution_options(synchronize_session=False)
+    async with execution_lock():
+        values.update(
+            connection_version=expected_version + 1,
+            updated_by=actor_id,
+            updated_at=datetime.now(timezone.utc),
         )
-        if result.rowcount != 1:
-            raise HTTPException(409, detail={"code": "version_conflict"})
-        db.add(
-            ProviderAuditLog(
-                actor_id=actor_id,
-                provider_connection_id=connection.id,
-                provider=connection.provider,
-                change_kind=kind,
-                previous_credential_revision=connection.credential_revision,
-                credential_revision=values.get(
-                    "credential_revision", connection.credential_revision
-                ),
-                previous_connection_version=expected_version,
-                connection_version=expected_version + 1,
+        try:
+            result = await db.execute(
+                update(ProviderConnection)
+                .where(
+                    ProviderConnection.id == connection.id,
+                    ProviderConnection.connection_version == expected_version,
+                )
+                .values(**values)
+                .execution_options(synchronize_session=False)
             )
-        )
-        await db.commit()
-    except SQLAlchemyError:
-        await db.rollback()
-        raise HTTPException(
-            503, detail={"code": "storage_unavailable"}
-        ) from None
-    return {"status": "saved"}
+            if result.rowcount != 1:
+                raise HTTPException(409, detail={"code": "version_conflict"})
+            db.add(
+                ProviderAuditLog(
+                    actor_id=actor_id,
+                    provider_connection_id=connection.id,
+                    provider=connection.provider,
+                    change_kind=kind,
+                    previous_credential_revision=connection.credential_revision,
+                    credential_revision=values.get(
+                        "credential_revision", connection.credential_revision
+                    ),
+                    previous_connection_version=expected_version,
+                    connection_version=expected_version + 1,
+                )
+            )
+            await db.commit()
+            if kind in ("disabled", "deleted"):
+                cancel_connection(connection.id)
+        except SQLAlchemyError:
+            await db.rollback()
+            raise HTTPException(
+                503, detail={"code": "storage_unavailable"}
+            ) from None
+        return {"status": "saved"}
 
 
 async def changed_connection(db, provider, version):

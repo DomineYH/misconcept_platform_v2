@@ -42,7 +42,7 @@ Restore both before using stored credentials; the database alone cannot recover
 provider keys. No automatic master-key creation, web rotation or key ring exists.
 Python memory clearing of plaintext is not guaranteed.
 
-This is the A5 management stage. Explicit OpenAI catalog refresh uses the saved
+This is the A6 management stage. Explicit OpenAI catalog refresh uses the saved
 DB key and the non-generating Models API, with no retries and a default 30-second
 deadline. Successful lists are cached for 24 hours; failures preserve the list.
 Models can be registered directly, start disabled/unverified, and have immutable
@@ -56,9 +56,15 @@ reserve a durable request and make at most two sequential synthetic text/stream
 calls, stopping on the first failure with no retries. Reopening the page reads
 the existing result; cancellation closes the local HTTP request but cannot undo
 provider processing or incurred charges. Probe and catalog attempts are recorded
-before calling upstream; unknown tokens and unpriced costs stay NULL. Common
-call slots and stronger connection-revocation races belong to A6, and mentor/
-analysis probes to A7. Existing lesson calls
+before calling upstream; unknown tokens and unpriced costs stay NULL. Common admission limits catalog and probe calls together, preserving one slot
+for ordinary calls globally and per provider. Capacity refusals return 429 without
+a queue. Each administrator can run one probe bundle. Disable/delete immediately
+block admission and request cancellation of every active credential revision.
+Limits and absolute deadlines are read for new calls; reducing limits preserves
+existing calls. Only future ordinary classification/synthesis calls may retry once;
+backoff returns capacity and reacquires it under the current limits. This service
+requires one asynchronous worker in one app instance. Mentor/analysis probes
+belong to A7. Existing lesson calls
 continue using their previous configuration until later S1 transition tickets.
 Do not treat this stage as the final production cutover.
 

@@ -25,8 +25,11 @@ async def api_usage_dashboard(
     result = await db.execute(query)
     logs = result.scalars().all()
 
-    # Calculate total cost
-    total_cost_query = select(func.sum(ApiUsageLog.estimated_cost_usd))
+    # Preserve recorded generation estimates; list calls are not generation.
+    total_cost_query = select(func.sum(ApiUsageLog.estimated_cost_usd)).where(
+        ApiUsageLog.operation.is_(None)
+        | (ApiUsageLog.operation != "model_list")
+    )
     total_cost = await db.scalar(total_cost_query) or 0.0
 
     return templates.TemplateResponse(
@@ -35,6 +38,9 @@ async def api_usage_dashboard(
             "request": request,
             "user": user,
             "logs": logs,
-            "total_cost": round(total_cost, 4),
+            "total_cost": total_cost,
+            # ponytail: legacy rows lack attempt metadata; A10 wires ledger counts.
+            "unpriced_generation_attempts": None,
+            "model_list_calls": None,
         },
     )

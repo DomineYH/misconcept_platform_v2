@@ -224,6 +224,8 @@ async def check():
                         data = []
                         while True:
                             line = await anext(lines)
+                            if line.startswith(":"):
+                                continue
                             if not line and data:
                                 return data
                             if line:
@@ -232,13 +234,15 @@ async def check():
                     async with asyncio.timeout(30):
                         accepted = await next_frame()
                         delta = await next_frame()
-                    assert accepted[0] == "event: run.accepted"
+                    assert accepted[0] == "event: run.accepted", accepted
                     accepted_data = json.loads(accepted[1][6:])
-                    assert delta[0] == "event: output.delta"
-                    assert json.loads(delta[1][6:])["text"] == "First body"
+                    assert delta[0] == "event: output.delta", delta
+                    assert (
+                        json.loads(delta[1][6:])["text"] == "First body"
+                    ), delta
                     assert (
                         not release.is_set()
-                    ), "Delta arrived before completion"
+                    ), f"Delta arrived after completion: {delta!r}"
                     snapshot = await http.get(
                         f"/runs/{accepted_data['run_id']}"
                     )
@@ -246,11 +250,11 @@ async def check():
                     assert snapshot.json()["message"] is None
                     release.set()
                     completed = await next_frame()
-                    assert completed[0] == "event: output.completed"
+                    assert completed[0] == "event: output.completed", completed
                     assert (
                         json.loads(completed[1][6:])["message"]["content"]
                         == "Saved body"
-                    )
+                    ), completed
                 replay = await http.post(path, json=payload, headers=headers)
                 assert (
                     replay.json()["status"] == "completed" and len(calls) == 1

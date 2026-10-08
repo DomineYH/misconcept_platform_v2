@@ -42,7 +42,7 @@ Restore both before using stored credentials; the database alone cannot recover
 provider keys. No automatic master-key creation, web rotation or key ring exists.
 Python memory clearing of plaintext is not guaranteed.
 
-This is the A6 management and A12 student transition stage. Explicit OpenAI catalog refresh uses the saved
+This is the A7 management and A12 student transition stage. Explicit OpenAI catalog refresh uses the saved
 DB key and the non-generating Models API, with no retries and a default 30-second
 deadline. Successful lists are cached for 24 hours; failures preserve the list.
 Models can be registered directly, start disabled/unverified, and have immutable
@@ -51,9 +51,13 @@ limits/timeouts are validated on save. See the
 [screen/data contract](docs/agents/ai-connections-screen.md) for capability sources
 and the APIs later tickets must reuse.
 
-Saving keys or models does not call a provider. Explicit OpenAI student probes
-reserve a durable request and make at most two sequential synthetic text/stream
-calls, stopping on the first failure with no retries. Reopening the page reads
+Saving keys or models does not call a provider. Explicit OpenAI role probes
+reserve a durable request and make at most two sequential synthetic calls:
+student text/stream, mentor judgment JSON/coaching text, or analysis
+classification JSON/synthesis JSON. Each stops on the first failure with no retries.
+Strict structured transport is followed by server type and semantic validation;
+invalid JSON, references, refusals, output limits and empty results fail the role.
+Reopening the page reads
 the existing result; cancellation closes the local HTTP request but cannot undo
 provider processing or incurred charges. Probe and catalog attempts are recorded
 before calling upstream; unknown tokens and unpriced costs stay NULL. Common admission limits catalog and probe calls together, preserving one slot
@@ -63,8 +67,8 @@ block admission and request cancellation of every active credential revision.
 Limits and absolute deadlines are read for new calls; reducing limits preserves
 existing calls. Only future ordinary classification/synthesis calls may retry once;
 backoff returns capacity and reacquires it under the current limits. This service
-requires one asynchronous worker in one app instance. Mentor/analysis probes
-belong to A7. Student lesson calls now require an enabled, student-verified DB registration
+requires one asynchronous worker in one app instance. Student lesson calls now
+require an enabled, student-verified DB registration
 of the exact existing OpenAI model ID. They preserve scenario/config model IDs,
 per-call reasoning/output options, prompts, completed-turn context and stored
 greetings; authoring defaults never replace existing selections. Missing keys,

@@ -130,8 +130,14 @@ async def admit_call(
                     raise InvocationError("version_conflict")
                 if probe_id is not None:
                     probe = await db.get(ModelProbe, probe_id)
+                    if probe is None:
+                        raise InvocationError("configuration_unavailable")
                     model = await db.get(ModelConfig, probe.model_config_id)
-                    if not current_probe(probe, model, connection):
+                    if (
+                        model is None
+                        or model.provider_connection_id != connection_id
+                        or not current_probe(probe, model, connection)
+                    ):
                         raise InvocationError("configuration_unavailable")
                 elif model_config_id is not None:
                     model = await db.get(ModelConfig, model_config_id)
@@ -185,15 +191,23 @@ async def recheck_call(permit):
     async with execution_lock():
         async with permit.factory() as db:
             connection = await db.get(ProviderConnection, permit.connection_id)
-            if not connection.enabled or not connection.encrypted_key:
+            if (
+                connection is None
+                or not connection.enabled
+                or not connection.encrypted_key
+            ):
                 raise InvocationError("configuration_unavailable")
             if permit.probe_id is not None:
                 probe = await db.get(ModelProbe, permit.probe_id)
+                if probe is None:
+                    raise InvocationError("configuration_unavailable")
                 model = await db.get(ModelConfig, probe.model_config_id)
-                if not current_probe(probe, model, connection):
+                if model is None or not current_probe(probe, model, connection):
                     raise InvocationError("configuration_unavailable")
             elif permit.model_config_id is not None:
                 model = await db.get(ModelConfig, permit.model_config_id)
+                if model is None:
+                    raise InvocationError("configuration_unavailable")
                 definition = capabilities(permit.provider, model.model_id)
                 if (
                     model.config_version != permit.config_version
@@ -227,6 +241,7 @@ async def readmit_call(permit):
         expected_connection_version=permit.connection_version,
         model_config_id=permit.model_config_id,
         expected_model_version=permit.config_version,
+        probe_id=permit.probe_id,
     )
     current.timeouts = permit.timeouts
     current.admitted_at = permit.admitted_at

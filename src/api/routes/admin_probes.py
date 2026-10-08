@@ -31,7 +31,7 @@ from src.services.model_verification import (
     connection_ready,
 )
 from src.services.probe_lifecycle import probe_evidence
-from src.services.student_probe_contract import probe_options
+from src.services.role_probe_contract import probe_options
 
 router = APIRouter(tags=["Admin Probes"], route_class=CredentialRoute)
 
@@ -39,7 +39,7 @@ router = APIRouter(tags=["Admin Probes"], route_class=CredentialRoute)
 class ProbeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     expected_version: StrictInt = Field(gt=0)
-    role: Literal["student"]
+    role: Literal["student", "mentor", "analysis"]
     request_id: UUID
 
 
@@ -103,7 +103,7 @@ async def _reserve_probe(model_id, data, user, db):
     if not connection_ready(connection):
         raise HTTPException(503, detail={"code": "configuration_unavailable"})
     try:
-        options = probe_options(connection.provider, model)
+        options = probe_options(connection.provider, model, data.role)
     except ValueError:
         raise HTTPException(422, detail={"code": "invalid_options"}) from None
     setting = await db.get(AppSetting, 1)
@@ -175,7 +175,7 @@ async def _reserve_probe(model_id, data, user, db):
                 .values(
                     verification_state=func.json_set(
                         ModelConfig.verification_state,
-                        "$.student",
+                        f"$.{data.role}",
                         func.json(
                             json.dumps(probe_evidence(probe, "verifying"))
                         ),
@@ -260,5 +260,8 @@ async def cancel_probe(
         if task is not None and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        await cancel_reserved_probe(factory, probe_id)
+        try:
+            await cancel_reserved_probe(factory, probe_id)
+        except InvocationError as error:
+            raise HTTPException(503, detail={"code": error.code}) from None
     return {"status": "cancel_requested"}

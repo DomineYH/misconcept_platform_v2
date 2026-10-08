@@ -4,7 +4,7 @@ import {state} from './browser_ai_connections.mjs';
 export default async function checkStudentProbe(page) {
   page.setDefaultTimeout(8000);
   const base = new URL(page.url()).origin;
-  const data = {...state(), probes_available:true, probe_roles:['student']};
+  const data = state();
   const starts=[], cancels=[];
   await page.context().addCookies([{name:'csrftoken', value:'ai-probe-csrf', url:base}]);
   let polls=0;
@@ -33,8 +33,8 @@ export default async function checkStudentProbe(page) {
   await page.goto(`${base}/admin/ai`);
   const model=page.locator('[data-model="1"]');
   await model.getByRole('button',{name:'학생봇 시험',exact:true}).waitFor();
-  assert(await model.getByRole('button',{name:'멘토 시험',exact:true}).isDisabled(),'A7 mentor probe unavailable');
-  assert(await model.getByRole('button',{name:'사후 분석 시험',exact:true}).isDisabled(),'A7 analysis probe unavailable');
+  assert(await model.getByRole('button',{name:'멘토 시험',exact:true}).isEnabled(),'mentor probe available');
+  assert(await model.getByRole('button',{name:'사후 분석 시험',exact:true}).isEnabled(),'analysis probe available');
   await model.getByRole('button',{name:'학생봇 시험',exact:true}).click();
   assert.equal(starts.length,0);
   assert((await page.locator('#ai-editor').innerText()).includes('관리자당 시험은 한 묶음'));

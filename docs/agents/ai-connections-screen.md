@@ -2,16 +2,16 @@
 
 `GET /admin/ai`는 기존 관리자 인증으로 템플릿만 반환한다. 화면 진입,
 새로고침, 재접속은 제공자를 호출하거나 시험을 시작하지 않는다.
-`static/js/ai-connections.js`가 아래 API를 소비한다. A2는 연결 조회와 키 저장/교체/활성 변경/삭제를 실제 DB에 연결한다. A3는 OpenAI 비생성 목록·모델 등록/편집·singleton 설정을 연결한다. A5는 OpenAI 학생 역할 시험과 시도 원장을 연결한다. 멘토/분석 시험은 A7 범위다. 없는 API는 안전한 설정 불가 안내를 표시한다.
+`static/js/ai-connections.js`가 아래 API를 소비한다. A2는 연결 조회와 키 저장/교체/활성 변경/삭제를 실제 DB에 연결한다. A3는 OpenAI 비생성 목록·모델 등록/편집·singleton 설정을 연결한다. A5는 OpenAI 학생 역할 시험과 시도 원장을, A7은 멘토/분석 시험을 연결한다. 없는 API는 안전한 설정 불가 안내를 표시한다.
 합성 상태는 `tests/browser_ai_*.mjs`의 Playwright 응답에만 존재한다.
 
 ## 읽기: `GET /admin/ai/state`
 
-비밀 없는 JSON 객체. A5는 `models_available: true`, `probes_available: true`,
-`probe_roles: ["student"]`,
+비밀 없는 JSON 객체. A7은 `models_available: true`, `probes_available: true`,
+`probe_roles: ["student", "mentor", "analysis"]`,
 DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 없고 역할
 기본값은 모두 null이다. OpenAI만 `catalog.available: true`이며 나머지 목록과
-학생 이외 역할 시험 버튼은 비활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
+그 제공자의 역할 시험 버튼은 비활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
 연결 API 상태 조회는 `Cache-Control: no-store`이며 관리자 인증이 없으면
 401, 교사면 403이다. 마스터 키 오류도 조회를 막지 않는다.
 
@@ -34,7 +34,8 @@ DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 �
   `error_code`, 진행 중이면 `probe_request_id`를 포함한다. 서버는 검증의
   credential/connection/capability/role-contract 버전 유효성을 반영한 상태를
   반환한다. 성공을 클라이언트가 목록 등록에서 추측하지 않는다.
-  `probe_budgets.student`는 min(1024, 저장된 출력 상한, 모델 기능 상한)이다.
+  `probe_budgets[role]`은 min(역할 상한, 저장된 출력 상한, 모델 기능 상한)이다.
+  역할 상한은 student=1024, mentor=1500, analysis=2500이다.
   기능 정의/옵션이 유효하지 않으면 빈 객체이며 시험 버튼도 비활성화한다.
   후속 `probe_budgets[role]`도 해당 역할 계약과 모델 기본값/기능 한도에
   맞춘 호출별 서버 계산 값이어야 한다.
@@ -257,7 +258,8 @@ attempt_no/provider/model/role/operation/credential_revision, status/error_code,
 started_at/first_output_at/finished_at/retry_wait_ms, input_tokens/output_tokens/
 cache_read_tokens/cache_write_tokens/reasoning_tokens/total_tokens,
 raw_usage_json/estimated_cost_usd/pricing_as_of/pricing_source/usage_complete를
-사용한다. probe의 하위 호출은 probe_step=text/stream이며 각자 invocation과
+사용한다. probe의 하위 호출은 학생 text/stream, 멘토 judgment/coaching,
+분석 classification/synthesis이며 각자 invocation과
 attempt_no=1을 갖는다. 가짜 세션/턴/run은 만들지 않는다. 외부 호출 전 running
 행을 별도 트랜잭션으로 커밋하고 실패하면 호출하지 않는다. 최종화는 running
 조건부 갱신으로 한 번만 수행한다. 목록은 operation=model_list, model/role=null로
@@ -364,3 +366,48 @@ saved results even after connection/configuration changes. Stored greetings rema
 local content; entering/reopening a scenario starts no generation or misconception
 call. Migration 028 widens only the generation provider CHECK and preserves all
 message/attempt references and execution uniqueness constraints.
+
+## A7 OpenAI 멘토·사후 분석 검증 계약
+
+기존 예약·상태 조회·취소 API에 role=mentor/analysis를 허용한다. UUID 재전송,
+관리자당 한 묶음, 최대 두 호출, 첫 실패 중단, 자동 재시도 0회는 학생과 같다.
+화면은 역할별 상한과 계약, 비용 가능성, 교육적 품질 보증이 아님을 먼저 표시한다.
+모델 활성화에는 한 역할 이상의 유효 성공이 필요하지만 실제 역할 사용에는
+해당 역할의 성공이 필요하다. 재시험은 해당 역할만 verifying으로 교체하며 실패가
+이전 성공을 복원하지 않는다. 지원 범위 안 기본 옵션 변경은 성공을 유지하고
+자격 증명·연결·기능 정의·역할 계약 변경은 stale로 표시한다.
+
+`StructuredRequest`는 기존 `TextRequest`에 Pydantic 모델인 `output_schema`와
+서버용 `validation_context`를 추가한다. `execute_call(..., kind="structured")`는
+OpenAI `generate_structured`를 호출하고 서버 검증 이후에 원장을 최종화한다.
+성공 `CallEvent.structured`에는 검증된 객체만, `text`에는 빈 문자열이 들어간다.
+실패에는 객체나 부분 JSON을 반환하지 않는다. 공개 probe/state 응답과 원장은
+출력 본문을 저장·반환하지 않는다. 수업 호출 전환은 A13/A14 범위다.
+
+`structured_output.strict_schema`는 Pydantic JSON Schema의 닫힌 object,
+primitive, array, $defs/$ref, enum/const, 중첩 anyOf를 strict text.format으로
+변환한다. 모든 property를 required로, 객체를 additionalProperties=false로
+만들고 default를 제거한다. Optional은 nullable 스키마를 사용한다. 열린
+딕셔너리·extra=allow·tuple·임의 Any·미지원 스키마 키워드·루트 union/array는
+SDK 생성 전에 configuration_unavailable로 거부하며 JSON 프롬프트로 우회하지 않는다.
+지원 구조의 근거는 [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+(2026-10-09 확인)이다. 서버 Pydantic·의미 검증은 전송의 strict 보장을 신뢰해 생략하지 않는다.
+
+`role_output_contracts`의 s1-v1 모델은 현재 필드 계약을 보존한다.
+
+- InterventionJudgment: is_repetitive/is_inappropriate는 boolean, reason은 문자열.
+  개입 판단이 true이면 비어 있지 않은 근거가 필요하다.
+- QuestionClassification: label, confidence(0~1), DetailedReasoning 기반
+  summary/improved_sentence. context.labels는 {label: level}; 존재하지 않는
+  label을 거부한다. low에는 개선 질문, 다른 level에는 null이 필요하다.
+- SessionSynthesis: brief_feedback/strengths/improvements/dialogue_coaching.
+  context.messages는 {id, role, content} 배열. ID·역할·원문 인용을 확인하고
+  70자 피드백·60자 대안 질문, 유효 marker를 검사한다. 비어 있는 핵심/상세
+  결과는 실패한다. 기존 분석 fixture의 합성 ID=100(teacher, Why?), 101(student)를
+  사용한다. 기존 lesson의 보정·degraded·보존 정책은 변경하지 않는다.
+
+구문 오류는 invalid_json, 잘못된 label/ID/역할/인용은 invalid_reference,
+타입·범위·계약 오류는 invalid_output, 필요한 빈 결과는 empty_response다.
+refused/output_limit은 제공자 종료 상태에서 구분하며 usage는 실패해도 보존한다.
+상태의 역할 계약 버전은 ROLE_CONTRACT_VERSIONS에서 읽는다. 새 교육 동작이나
+출력 계약을 도입하는 후속 티켓은 버전을 올려 기존 증거를 stale로 만들어야 한다.

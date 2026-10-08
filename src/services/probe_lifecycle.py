@@ -6,6 +6,7 @@ from sqlalchemy import func, select, text, update
 
 from src.models import ApiUsageLog, ModelConfig, ModelProbe, ProviderConnection
 from src.models.provider_connection import now
+from src.services.invocation_types import InvocationError
 from src.services.model_capabilities import capabilities, metadata_conflict
 from src.services.model_verification import (
     ROLE_CONTRACT_VERSIONS,
@@ -141,6 +142,8 @@ async def cancel_reserved_probe(factory, probe_id):
     await finish_probe(factory, probe_id, "failed", "interrupted")
     async with factory() as db:
         probe = await db.get(ModelProbe, probe_id)
+        if probe is None:
+            raise InvocationError("configuration_unavailable")
         await db.execute(
             update(ApiUsageLog)
             .where(

@@ -232,6 +232,24 @@ async def test_disable_replace_reactivate_delete_keep_identity_history(
     ] == "unconfigured"
 
 
+async def test_enable_disable_clear_connection_check_metadata(data, api):
+    assert (await post(api, "key", 1, api_key=KEY)).status_code == 200
+    for version, enabled in [(2, False), (3, True)]:
+        async with data.engine.begin() as conn:
+            await conn.exec_driver_sql(
+                "UPDATE provider_connection SET verified_at='2026-01-01', error_code='check_failed' WHERE provider='openai'"
+            )
+        response = await post(api, "enabled", version, enabled=enabled)
+        assert response.status_code == 200
+        current = await row(data)
+        assert current["verified_at"] is None
+        assert current["error_code"] is None
+        assert current["enabled"] == enabled
+        assert current["connection_version"] == version + 1
+        snapshot = (await api.get("/admin/ai/state")).json()["providers"][0]
+        assert snapshot["verified_at"] is None
+
+
 async def test_reauthentication_limits_admin_and_address_failures_only(
     data, api, monkeypatch
 ):
@@ -411,6 +429,20 @@ async def test_recovery_isolated_and_delete_without_decryption(
     blocked = await post(api, "key", 2, api_key=KEY)
     assert blocked.status_code == 503 and (await row(data)) == before
     assert (await post(api, "enabled", 2, enabled=False)).status_code == 200
+    disabled = await row(data)
+    async with data.factory() as db:
+        audit_count = (
+            await db.execute(text("SELECT count(*) FROM provider_audit_log"))
+        ).scalar()
+    rejected = await post(api, "enabled", 3, enabled=True)
+    assert rejected.status_code == 503
+    assert rejected.json() == {"detail": {"code": "configuration_unavailable"}}
+    assert KEY not in rejected.text and PASSWORD not in rejected.text
+    assert (await row(data)) == disabled
+    async with data.factory() as db:
+        assert (
+            await db.execute(text("SELECT count(*) FROM provider_audit_log"))
+        ).scalar() == audit_count
     assert (await post(api, "delete", 3)).status_code == 200
     deleted = await row(data)
     assert deleted["encrypted_key"] is None and deleted["nonce"] is None

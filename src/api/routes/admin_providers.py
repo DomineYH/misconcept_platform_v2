@@ -255,12 +255,19 @@ async def set_enabled(
     connection = await changed_connection(db, provider, data.expected_version)
     if data.enabled and not connection.encrypted_key:
         raise HTTPException(422, detail={"code": "key_required"})
+    if data.enabled:
+        try:
+            decrypt_key(connection)
+        except ProviderSecretUnavailableError:
+            raise HTTPException(
+                503, detail={"code": "configuration_unavailable"}
+            ) from None
     return await commit_change(
         db,
         connection,
         user.id,
         data.expected_version,
-        {"enabled": data.enabled},
+        {"enabled": data.enabled, "verified_at": None, "error_code": None},
         "enabled" if data.enabled else "disabled",
     )
 

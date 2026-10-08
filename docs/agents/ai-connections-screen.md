@@ -19,7 +19,7 @@
   `masked_hint` (끝 4자 이하), `enabled`,
   `status` (unconfigured/ready/decryption_failed), `verified_at` (nullable),
   `error_code` (nullable, 허용된 안전 코드), `impact` (비밀 없는 설명 문자열 배열).
-  `catalog`: `stale`, `fetched_at` (nullable), `models` (`model_id` 객체 배열).
+  `catalog`: `available`, `stale`, `fetched_at` (nullable), `models` (`model_id` 객체 배열).
   서버가 TTL 24시간, 이전 credential revision, 조회 실패를 반영해 stale을
   계산한다. 기존 성공 목록은 실패 시 유지한다. 확인 시각과 목록 시각은 별개다.
   `impact`는 현재 역할 설정/작성 기본값/활성 호출의 영향이다. 민감 작업 전에
@@ -109,6 +109,8 @@ connection_version을 증가시킨다. 역할 검증은 이후 티켓에서 이 
 비활성화와 삭제는 복호화 성공에 의존하지 않는다. 키 교체는 기존 키를
 복호화할 수 있어야 하므로 손상/다른 마스터 키/버전 불일치는 원래 키·버전
 복원을 안내한다. 복원이 불가능하면 재인증 삭제 후 재등록한다.
+재활성화도 저장 키의 복호화 성공을 요구하며 실패하면 변경 없이 안전한
+503을 반환한다. 활성/비활성 변경 성공 시 verified_at과 error_code를 비운다.
 API는 원문 키를 다시 조회하는 기능을 제공하지 않는다. 8자 이하 입력은
 일반 마스킹이며 그보다 긴 키는 끝 4자만 힌트로 보인다.
 

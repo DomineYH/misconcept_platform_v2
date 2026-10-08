@@ -44,7 +44,7 @@ export function render(state, actions) {
     if (p.error_code) card.append(node('p', '최근 연결 확인 실패. 연결 설정과 접근 권한을 확인하세요.'));
     const row = node('div', null, {class:'ai-actions'});
     row.append(button(p.key_registered ? '키 교체' : '키 저장', () => actions.connection(p, 'key'), !state.master_key_available || p.status === 'decryption_failed'),
-      button(p.enabled ? '비활성화' : '재활성화', () => actions.connection(p, 'enabled'), !p.key_registered),
+      button(p.enabled ? '비활성화' : '재활성화', () => actions.connection(p, 'enabled'), !p.key_registered || (!p.enabled && (!state.master_key_available || p.status === 'decryption_failed'))),
       button('키 삭제', () => actions.connection(p, 'delete'), !p.key_registered),
       button('비생성 확인·목록 갱신', () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available || p.catalog.available === false));
     card.append(row, node('p', p.catalog.available === false ? '모델 목록은 아직 제공되지 않습니다.' : `모델 목록: ${p.catalog.stale ? '오래된 목록' : '최근 목록'} · 마지막 갱신 ${p.catalog.fetched_at || '없음'}`));

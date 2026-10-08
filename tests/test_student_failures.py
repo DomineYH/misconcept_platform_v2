@@ -458,9 +458,15 @@ async def test_transient_creation_error_has_no_automatic_retry(
 
 
 async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
-    data, client, student
+    data, client, student, monkeypatch
 ):
     import json
+
+    import httpx2
+    from test_analysis_invocations import analysis_transport
+    from test_student_probe import response_body
+
+    from src.config import config
 
     login(client, data.owner)
     student.stream.events = [
@@ -483,11 +489,18 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
     assert (await client.post(f"{path}/end")).status_code == 200
     inputs = []
 
-    async def analysis_response(**kwargs):
-        inputs.append(kwargs["input"])
-        raise ValueError("Fake analysis failure")
+    student.model.verification_state = {
+        **student.model.verification_state,
+        "analysis": dict(student.model.verification_state["student"]),
+    }
+    monkeypatch.setattr(config, "ANALYSIS_MODEL", student.model.model_id)
+    await data.db.commit()
 
-    student.responses.create.side_effect = analysis_response
+    async def analysis_response(request, body):
+        inputs.append(body["input"])
+        return httpx2.Response(200, json=response_body("not json"))
+
+    analysis_transport(monkeypatch, analysis_response)
     analyzed = await client.post(f"{path}/analyze")
     assert analyzed.status_code == 200
     assert analyzed.json()["feedback_status"] == "failed"

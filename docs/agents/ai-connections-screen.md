@@ -279,6 +279,22 @@ invocation_id=NULL인 채 기존 관측값을 유지한다. A4 화면은 양쪽�
 FastAPI/Google용 HTTPX와 OpenAI SDK용 HTTPX2 구분을 유지한다.
 이 단계는 운영 전환 승인이 아니다.
 
+A14의 실제 사후 분석은 정확한 기존 OpenAI 모델/옵션을 A12 resolver로
+조회하고 analysis 역할 검증을 확인한 뒤 공통 구조화 호출 경계를 사용한다.
+실행용 `RuntimeClassification`/`RuntimeSynthesis` 계약은 선택·nullable 필드를
+포함한 기존 구조를 검증하며, 기존 분류 정규화와 종합 `_validate`가 공통
+경계의 원장 최종화 전에 최종 의미 검증 및 ok/degraded/failed를 결정한다.
+의미 검증 실패도 실패한 시도로 남고 재시도하지 않는다. A7 시험의 더 엄격한
+`QuestionClassification`/`SessionSynthesis` 계약과 버전은 그대로 유지한다.
+엄격한 시험에 성공한 결과는 실행용 구조 계약도 만족한다. 인사 판별은
+배열을 `RuntimeGreetings.results` 객체 필드로 전달받아 기존 판별 정책을
+적용하며 자동 재시도하지 않는다.
+
+분석 작업의 인사/분류/종합은 하나의 request_id와 실제 session/owner를
+공유하고, 호출마다 별도 invocation_id를 가진다. 공통 원장은 결과 저장이나
+재생성 결과 보존과 독립적으로 모든 외부 시도를 기록한다. 결과 튜플의
+기존 usage 목록은 빈 목록이며 결과 저장 단계는 중복 사용량 행을 만들지 않는다.
+
 
 ### A6 호출 승인·취소·시간 제한 계약
 

@@ -25,7 +25,7 @@ async def test_register_known_unknown_models_and_safe_initial_settings(
 ):
     snapshot = (await api.get("/admin/ai/state")).json()
     assert snapshot["models_available"] is True
-    assert snapshot["probes_available"] is False
+    assert snapshot["probes_available"] is True
     assert snapshot["settings"]["defaults"] == dict(
         student=None, mentor=None, analysis=None
     )
@@ -121,7 +121,7 @@ async def test_model_edit_options_and_conflict(data, api):
             json={},
             headers={"x-csrf-token": api.cookies["csrftoken"]},
         )
-    ).status_code == 404
+    ).status_code == 422
 
 
 async def test_model_activation_requires_current_role_verification(data, api):

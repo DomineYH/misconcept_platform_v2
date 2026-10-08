@@ -345,3 +345,82 @@ async def test_explicit_model_shutdown_metadata_blocks_activation(
             default_options={},
         )
     ).status_code == 422
+
+
+async def test_catalog_attempt_is_committed_before_upstream_and_unknown_cost_stays_null(
+    data, api, monkeypatch, caplog
+):
+    from sqlalchemy import text
+
+    assert (await post(api, "key", 1, api_key=KEY)).status_code == 200
+
+    async def handler(request):
+        async with data.engine.connect() as db:
+            row = (
+                (
+                    await db.execute(
+                        text(
+                            "SELECT * FROM api_usage_log WHERE operation='model_list' AND status='running'"
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            assert (
+                row["status"] == "running"
+                and row["invocation_id"]
+                and row["attempt_no"] == 1
+            )
+            assert (
+                row["session_id"] is None
+                and row["model"] is None
+                and row["input_tokens"] is None
+            )
+        return httpx2.Response(200, json=model_list("gpt-5-mini"))
+
+    clients, requests = sdk_transport(monkeypatch, handler)
+    assert (
+        await write(api, "providers/openai/catalog", expected_version=2)
+    ).status_code == 200
+    async with data.engine.connect() as db:
+        row = (
+            (
+                await db.execute(
+                    text(
+                        "SELECT * FROM api_usage_log WHERE operation='model_list'"
+                    )
+                )
+            )
+            .mappings()
+            .one()
+        )
+        assert row["status"] == "completed" and row["finished_at"]
+        assert (
+            row["total_tokens"] is None
+            and row["estimated_cost_usd"] is None
+            and row["usage_complete"] == 0
+        )
+        await db.execute(
+            text(
+                "CREATE TRIGGER reject_list_attempt BEFORE INSERT ON api_usage_log BEGIN SELECT RAISE(ABORT,'PRIVATE-ERROR'); END"
+            )
+        )
+        await db.commit()
+    response = await write(api, "providers/openai/catalog", expected_version=2)
+    assert response.status_code == 503 and "PRIVATE-ERROR" not in response.text
+    assert len(requests) == 1 and all(c.is_closed() for c in clients)
+    async with data.engine.begin() as db:
+        await db.execute(text("DROP TRIGGER reject_list_attempt"))
+        await db.execute(
+            text(
+                "CREATE TRIGGER reject_list_finish BEFORE UPDATE ON api_usage_log BEGIN SELECT RAISE(ABORT,'PRIVATE-ERROR'); END"
+            )
+        )
+    response = await write(api, "providers/openai/catalog", expected_version=2)
+    assert response.status_code == 503 and "PRIVATE-ERROR" not in response.text
+    assert len(requests) == 2 and all(c.is_closed() for c in clients)
+    assert (
+        "Invocation finalization failed" in caplog.text
+        and "PRIVATE-ERROR" not in caplog.text
+    )

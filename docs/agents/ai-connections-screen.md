@@ -2,15 +2,16 @@
 
 `GET /admin/ai`는 기존 관리자 인증으로 템플릿만 반환한다. 화면 진입,
 새로고침, 재접속은 제공자를 호출하거나 시험을 시작하지 않는다.
-`static/js/ai-connections.js`가 아래 API를 소비한다. A2는 연결 조회와 키 저장/교체/활성 변경/삭제를 실제 DB에 연결한다. A3는 OpenAI 비생성 목록·모델 등록/편집·singleton 설정을 연결한다. 역할 시험은 A5 이후 범위다. 없는 API는 안전한 설정 불가 안내를 표시한다.
+`static/js/ai-connections.js`가 아래 API를 소비한다. A2는 연결 조회와 키 저장/교체/활성 변경/삭제를 실제 DB에 연결한다. A3는 OpenAI 비생성 목록·모델 등록/편집·singleton 설정을 연결한다. A5는 OpenAI 학생 역할 시험과 시도 원장을 연결한다. 멘토/분석 시험은 A7 범위다. 없는 API는 안전한 설정 불가 안내를 표시한다.
 합성 상태는 `tests/browser_ai_*.mjs`의 Playwright 응답에만 존재한다.
 
 ## 읽기: `GET /admin/ai/state`
 
-비밀 없는 JSON 객체. A3는 `models_available: true`, `probes_available: false`,
+비밀 없는 JSON 객체. A5는 `models_available: true`, `probes_available: true`,
+`probe_roles: ["student"]`,
 DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 없고 역할
 기본값은 모두 null이다. OpenAI만 `catalog.available: true`이며 나머지 목록과
-역할 시험 버튼은 비활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
+학생 이외 역할 시험 버튼은 비활성화한다. singleton이 없는 미설치 DB의 설정은 null이다.
 연결 API 상태 조회는 `Cache-Control: no-store`이며 관리자 인증이 없으면
 401, 교사면 403이다. 마스터 키 오류도 조회를 막지 않는다.
 
@@ -33,8 +34,10 @@ DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 �
   `error_code`, 진행 중이면 `probe_request_id`를 포함한다. 서버는 검증의
   credential/connection/capability/role-contract 버전 유효성을 반영한 상태를
   반환한다. 성공을 클라이언트가 목록 등록에서 추측하지 않는다.
-  A3의 `probe_budgets`는 빈 객체다. 후속 `probe_budgets[role]`은 호출별 출력 상한이며 해당 역할 계약과 모델 기본값/
-  기능 한도에 맞춘 서버 계산 값이다.
+  `probe_budgets.student`는 min(1024, 저장된 출력 상한, 모델 기능 상한)이다.
+  기능 정의/옵션이 유효하지 않으면 빈 객체이며 시험 버튼도 비활성화한다.
+  후속 `probe_budgets[role]`도 해당 역할 계약과 모델 기본값/기능 한도에
+  맞춘 호출별 서버 계산 값이어야 한다.
 - `settings`: `settings_version`, `defaults`, `limits`, `timeouts`.
   `defaults[role]`은 null 또는 `{model_config_id, available}`.
   사용 불가 참조도 보존한다. `limits` 키는 total/openai/anthropic/google/admin.
@@ -73,11 +76,18 @@ DB의 모델 배열과 singleton `settings`를 반환한다. 초기 모델은 �
 | settings/update | expected_version, defaults, limits, timeouts | defaults[role]은 모델 정수 ID/null; 비밀번호 불필요 |
 
 일반 쓰기는 2xx JSON(예: `{status:"saved"}`) 또는 204.
-시험 예약은 `{request_id, status:"verifying"}`를 반환한다.
+시험 예약은 `{request_id, status:"verifying", error_code:null}`를 반환한다.
 `GET /admin/ai/probes/{request_id}`는 비밀·출력 본문 없는
-`{request_id, status}`를 반환한다. 진행 중 상태의 명시적 조회로 재접속을
+`{request_id, status, error_code}`만 반환한다. 진행 중 상태의 명시적 조회로 재접속을
 지원한다. 같은 request_id 재전송은 기존 시험을 반환하며 새 호출을 만들지
 않는다. 새로운 시험 확인 화면을 여는 명시적 동작만 새 UUID를 만든다.
+예약된 ID는 owner별 유일하며 model_config_id/role/expected_version의
+fingerprint와 결합한다. 같은 ID/입력은 진행/성공/실패/오래된 결과 모두
+202로 재생하며 다른 입력은 409다. 예약 전 401/403/404/409/422/503 거부는
+ID를 결합하지 않으므로 올바른 입력으로 다시 예약할 수 있다. A6의 슬롯
+429도 같은 예약 전 의미를 따라야 한다. UI는 예약 실패 후 동일 ID를 유지한다.
+상태/취소는 해당 owner인 관리자만 접근한다. 다른 관리자의 상태는 404이며
+상태 응답은 `Cache-Control: no-store`다.
 시험 묶음은 최대 2회 생성, 자동 재시도 0회이며 첫 실패 후 다음 단계 없음.
 학생은 텍스트/스트리밍, 멘토는 판단 JSON/코칭, 분석은 분류/종합 JSON이다.
 
@@ -212,10 +222,52 @@ Mini effort는 [GPT-5 가이드의 기존 모델 절](https://developers.openai.
 sampling 조합은 [GPT-5.4 가이드의 parameter compatibility 절](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.4)을 따른다.
 temperature 0–2 범위는 고정 공식 SDK의 Responses 요청 정의에도 명시돼 있다.
 top_p/logprobs/verbosity/thinking 및 다른 모델 변형은 이번 허용 표에 없다.
-미확인 모델/옵션은 추측하지 않고 차단한다. Mini 공식 페이지의 Deprecated
-표시는 접근 보장이 아니며, 기존 모델을 다른 ID로 자동 대체하지 않는다.
+미확인 모델/옵션은 추측하지 않고 차단한다. Mini 공식 페이지는 더 새로운
+모델을 권장하며 이 안내는 접근 보장이 아니다. 기존 모델을 다른 ID로
+자동 대체하지 않는다.
 
-A3의 생성 시험은 API/버튼 모두 사용할 수 없고 `probe_budgets={}`다.
-호출 슬롯·시도 원장·취소를 목록에도 붙이는 작업은 A5/A6가 맡는다.
-기존 학생/멘토/분석 SDK 전송 테스트만 HTTPX2로 바꾸며 FastAPI와 Google용
-HTTPX는 유지한다. 이번 단계로 기존 수업의 DB 연결 전환을 승인하지 않는다.
+### A5 학생 시험과 원장 계약
+
+학생 역할 계약 `s1-v1`은 고정된 합성 물의 상태 질문과 한국어 한 문장
+지시로 Responses 일반 텍스트와 스트리밍을 순차 호출한다. 수업 입력은
+사용하지 않는다. 저장된 옵션을 검증한 뒤 출력 예산만 위 상한으로 낮추며
+`store=false`, SDK/app 재시도 0회다. 첫 호출 실패 시 스트림을 시작하지 않는다.
+학생/멘토의 초기 역할 버전은 유지하며 이 입력/검증 계약 변경 시 올린다.
+
+`TextRequest`는 provider/model_id/role/system_instruction/messages/
+validated_options/request_id를 가지며 비밀은 별도 인수로 요청 동안만
+복호화한다. 공통 이벤트는 text_delta/usage와 completed/refused/interrupted/
+error 중 하나의 종료다. 추론 delta는 본문/첫 표시 시간에 포함하지 않는다.
+EOF, 미지 상태, 빈 본문, output_limit, 거절은 성공이 아니다. 상태 API/원장은
+본문·프롬프트·전체 SDK 응답을 반환하거나 저장하지 않는다.
+
+호출마다 시작 시 현재 시간 제한을 읽는다. 기본 연결 5초, 스트림 첫 표시
+60초, 각 호출 전체 180초이며 일반 텍스트는 첫 표시 타이머가 없다. 변경은
+이후 호출에만 적용한다. 명시적 취소/시간 초과는 SDK HTTP를 닫고 안전한
+종료를 기록한다. 서버 시작 시 verifying 시험과 running 새 원장은 interrupted로
+정리하며 자동 재생성하지 않는다. 역할 최종화는 키/연결/모델/정의/계약
+버전을 확인하고 새 역할 증거를 덮어쓰지 않는다. 공통 슬롯/관리자당 예약
+한도/연결 철회 경합 강화는 A6이다.
+
+Migration 027은 기존 api_usage_log의 ID/세션/토큰/비용을 그대로 보존한다.
+새 행은 invocation_id/request_id, nullable run_id/session_id/owner_id,
+attempt_no/provider/model/role/operation/credential_revision, status/error_code,
+started_at/first_output_at/finished_at/retry_wait_ms, input_tokens/output_tokens/
+cache_read_tokens/cache_write_tokens/reasoning_tokens/total_tokens,
+raw_usage_json/estimated_cost_usd/pricing_as_of/pricing_source/usage_complete를
+사용한다. probe의 하위 호출은 probe_step=text/stream이며 각자 invocation과
+attempt_no=1을 갖는다. 가짜 세션/턴/run은 만들지 않는다. 외부 호출 전 running
+행을 별도 트랜잭션으로 커밋하고 실패하면 호출하지 않는다. 최종화는 running
+조건부 갱신으로 한 번만 수행한다. 목록은 operation=model_list, model/role=null로
+생성 시도와 구분하며 A4 화면의 생성 비용 합계에서 제외한다.
+
+NULL은 알 수 없음, 0은 관측한 0이다. 누적 usage는 합산하지 않고 최신 관측
+필드를 병합한다. 캐시는 입력, reasoning은 출력의 부분집합이며 중복 가산하지
+않는다. OpenAI가 보고하지 않은 cache_write는 NULL이다. raw_usage_json에는
+검증된 토큰 숫자만 저장한다. 새 호출의 비용/단가 출처/기준일은 A10 공식
+단가 연결까지 NULL이며 다른 모델 가격으로 대체하지 않는다. 과거 행은
+invocation_id=NULL인 채 기존 관측값을 유지한다. A4 화면은 양쪽을 표시한다.
+
+기존 수업 학생/멘토/분석 경로는 A12–A14까지 기존 설정을 사용한다.
+FastAPI/Google용 HTTPX와 OpenAI SDK용 HTTPX2 구분을 유지한다.
+이 단계는 운영 전환 승인이 아니다.

@@ -16,6 +16,7 @@ from src.api.routes.admin_catalog import router as catalog_router
 from src.api.routes.admin_frameworks import router as frameworks_router
 from src.api.routes.admin_groups import router as groups_router
 from src.api.routes.admin_models import router as models_router
+from src.api.routes.admin_probes import router as probes_router
 from src.api.routes.admin_providers import router as providers_router
 from src.api.routes.admin_scenarios import router as scenarios_router
 from src.api.routes.admin_sessions import router as sessions_router
@@ -34,6 +35,7 @@ router.include_router(providers_router)
 router.include_router(models_router)
 router.include_router(ai_settings_router)
 router.include_router(catalog_router)
+router.include_router(probes_router)
 
 
 @router.get("/admin/ai", response_class=HTMLResponse)

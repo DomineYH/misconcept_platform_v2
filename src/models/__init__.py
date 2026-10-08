@@ -6,6 +6,7 @@ from src.models.contributor import Contributor
 from src.models.generation_run import GenerationRun
 from src.models.message import Message
 from src.models.model_config import AppSetting, ModelConfig
+from src.models.model_probe import ModelProbe
 from src.models.prompt_template import PromptTemplate
 from src.models.provider_connection import ProviderAuditLog, ProviderConnection
 from src.models.question_analysis import QuestionAnalysis
@@ -27,6 +28,7 @@ __all__ = [
     "Session",
     "Message",
     "ModelConfig",
+    "ModelProbe",
     "AppSetting",
     "GenerationRun",
     "QuestionAnalysis",

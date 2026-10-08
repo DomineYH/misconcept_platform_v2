@@ -111,7 +111,7 @@ async def test_key_save_replace_and_safe_state(data, api, caplog):
         ["student", "mentor", "analysis"]
     )
     assert initial["models_available"] is True
-    assert initial["probes_available"] is False
+    assert initial["probes_available"] is True
     response = await post(api, "key", 1, api_key=KEY)
     assert response.status_code == 200
     first = await row(data)

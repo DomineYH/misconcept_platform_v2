@@ -42,7 +42,7 @@ Restore both before using stored credentials; the database alone cannot recover
 provider keys. No automatic master-key creation, web rotation or key ring exists.
 Python memory clearing of plaintext is not guaranteed.
 
-This is the A3 management stage. Explicit OpenAI catalog refresh uses the saved
+This is the A5 management stage. Explicit OpenAI catalog refresh uses the saved
 DB key and the non-generating Models API, with no retries and a default 30-second
 deadline. Successful lists are cached for 24 hours; failures preserve the list.
 Models can be registered directly, start disabled/unverified, and have immutable
@@ -51,8 +51,14 @@ limits/timeouts are validated on save. See the
 [screen/data contract](docs/agents/ai-connections-screen.md) for capability sources
 and the APIs later tickets must reuse.
 
-Saving keys or models does not call a provider. Role probes are still pending A5;
-catalog slots/attempt ledger/cancellation belong to A5/A6. Existing lesson calls
+Saving keys or models does not call a provider. Explicit OpenAI student probes
+reserve a durable request and make at most two sequential synthetic text/stream
+calls, stopping on the first failure with no retries. Reopening the page reads
+the existing result; cancellation closes the local HTTP request but cannot undo
+provider processing or incurred charges. Probe and catalog attempts are recorded
+before calling upstream; unknown tokens and unpriced costs stay NULL. Common
+call slots and stronger connection-revocation races belong to A6, and mentor/
+analysis probes to A7. Existing lesson calls
 continue using their previous configuration until later S1 transition tickets.
 Do not treat this stage as the final production cutover.
 

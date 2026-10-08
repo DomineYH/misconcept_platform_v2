@@ -200,16 +200,23 @@ async def lifespan(app: FastAPI):
     from src.services.generation_lifecycle import interrupt_orphans
 
     await interrupt_orphans(AsyncSessionLocal)
+    from src.services.probe_lifecycle import interrupt_probe_orphans
+
+    await interrupt_probe_orphans(AsyncSessionLocal)
     # Admin bootstrap is opt-in: production deployments with read-only DB
     # roles or external seed jobs would otherwise fail to boot. Set
     # BOOTSTRAP_ADMIN_ON_STARTUP=true in .env for dev first-run seeding.
     if not config.TESTING and config.BOOTSTRAP_ADMIN_ON_STARTUP:
         await ensure_default_admin_account()
     print("Database initialized")
-    yield
-    # Shutdown
-    await close_db()
-    print("Database connections closed")
+    try:
+        yield
+    finally:
+        from src.services.probe_execution import stop_probes
+
+        await stop_probes()
+        await close_db()
+        print("Database connections closed")
 
 
 # Create FastAPI application

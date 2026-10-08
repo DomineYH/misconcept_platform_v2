@@ -49,7 +49,7 @@ async def test_ai_page_requires_admin_and_renders_no_secret(
                 assert state.status_code == 200
                 assert len(state.json()["providers"]) == 3
                 assert state.json()["models_available"] is True
-                assert state.json()["probes_available"] is False
+                assert state.json()["probes_available"] is True
                 assert state.json()["settings"] is None
     finally:
         app.dependency_overrides.clear()

@@ -76,7 +76,7 @@ export function render(state, actions) {
       const row = node('div', null, {class:'ai-actions'});
       row.append(node('p', `${label}: ${states[verification.status] || '미검증'}${verification.verified_at ? ` · ${verification.verified_at}` : ''}`));
       if (verification.error_code) row.append(node('p', '역할 응답 형식 시험에 실패했습니다. 설정을 확인한 후 다시 시험하세요.'));
-      row.append(button(`${label} 시험`, () => actions.probe(m, role), state.probes_available === false || !m.capabilities || m.capabilities.metadata_conflict || !state.master_key_available || !p.enabled || p.status !== 'ready' || verification.status === 'verifying'));
+      row.append(button(`${label} 시험`, () => actions.probe(m, role), state.probes_available === false || (state.probe_roles && !state.probe_roles.includes(role)) || !m.probe_budgets?.[role] || !m.capabilities || m.capabilities.metadata_conflict || !state.master_key_available || !p.enabled || p.status !== 'ready' || verification.status === 'verifying'));
       if (verification.status === 'verifying') row.append(button(`${label} 진행 조회`, () => actions.poll(verification.probe_request_id)), button(`${label} 시험 취소`, () => actions.cancel(verification.probe_request_id)));
       card.append(row);
     }

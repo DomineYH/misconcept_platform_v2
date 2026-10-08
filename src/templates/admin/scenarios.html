@@ -265,7 +265,7 @@
             name="greeting_message"
             rows="4"
             maxlength="5000"
-            placeholder="예) 선생님, 안녕하세요! 먼저 지수가 문제를 해결하는 과정을 영상으로 확인해 주세요. 영상을 보신 후, 지수와 대화를 나누며 지수의 생각을 탐색해 주세요. 대화를 마치시면 대화 종료 및 분석버튼을 눌러주세요."
+            placeholder="예) 선생님, 안녕하세요! 먼저 문제 상황을 확인해 주세요. 지수와 대화를 나누며 지수의 생각을 탐색해 주세요. 대화를 마치시면 대화 종료 및 분석버튼을 눌러주세요."
           ></textarea>
           <small class="form-help">채팅 진입 시 최상단에 멘토 스타일 메시지로 노출됩니다. 비워두면 표시되지 않습니다.</small>
         </div>
@@ -299,33 +299,6 @@
         </div>
         {% endif %}
 
-        <!-- Video Settings (Collapsible) -->
-        <details class="advanced-settings">
-          <summary>영상 설정</summary>
-          <div class="settings-content">
-            <div class="form-group">
-              <label for="new-video-url">영상 URL</label>
-              <input
-                type="url"
-                id="new-video-url"
-                name="video_url"
-                maxlength="500"
-                placeholder="https://www.youtube.com/..."
-              />
-              <small class="form-help">YouTube, Vimeo 등 영상 URL을 입력하세요</small>
-            </div>
-
-            <div class="form-group">
-              <label for="new-video-transcript">영상 대본</label>
-              <textarea
-                id="new-video-transcript"
-                name="video_transcript"
-                rows="4"
-                placeholder="영상에서 나오는 대사/대본을 입력하세요..."
-              ></textarea>
-            </div>
-          </div>
-        </details>
       </div>
 
       <div class="modal-footer">
@@ -492,33 +465,6 @@
       </div>
       {% endif %}
 
-      <!-- Video Settings -->
-      <details class="advanced-settings" id="edit-video-settings">
-        <summary>영상 설정</summary>
-        <div class="settings-content">
-          <div class="form-group">
-            <label for="edit-video-url">영상 URL</label>
-            <input
-              type="url"
-              id="edit-video-url"
-              name="video_url"
-              maxlength="500"
-              placeholder="https://www.youtube.com/..."
-            />
-            <small class="form-help">YouTube, Vimeo 등 영상 URL을 입력하세요</small>
-          </div>
-
-          <div class="form-group">
-            <label for="edit-video-transcript">영상 대본</label>
-            <textarea
-              id="edit-video-transcript"
-              name="video_transcript"
-              rows="4"
-              placeholder="영상에서 나오는 대사/대본을 입력하세요..."
-            ></textarea>
-          </div>
-        </div>
-      </details>
     </div>
 
     <div class="panel-footer">
@@ -553,8 +499,6 @@ const scenariosData = {
     student_profile: `{{ scenario.student_profile|replace('\n', '\\n')|replace('\r', '')|e }}`,
     student_name: "{{ (scenario.student_name or '')|e }}",
     subject: "{{ (scenario.subject or '')|e }}",
-    video_url: "{{ scenario.video_url or '' }}",
-    video_transcript: `{{ (scenario.video_transcript|replace('\n', '\\n')|replace('\r', '')|e) if scenario.video_transcript else '' }}`,
     student_template_id: {{ scenario.student_template_id }},
     tutor_template_id: {{ scenario.tutor_template_id|default('null', true) }},
     tutor_sensitivity: "{{ scenario.tutor_sensitivity|default('medium', true)|e }}",
@@ -621,8 +565,6 @@ function openEditPanel(scenarioId) {
   document.getElementById('edit-profile').value = data.student_profile;
   document.getElementById('edit-student-name').value = data.student_name || '';
   document.getElementById('edit-subject').value = data.subject || '';
-  document.getElementById('edit-video-url').value = data.video_url || '';
-  document.getElementById('edit-video-transcript').value = data.video_transcript || '';
   document.getElementById('edit-student-template').value = data.student_template_id;
   document.getElementById('edit-tutor-template').value = data.tutor_template_id || '';
   document.getElementById('edit-tutor-sensitivity').value = data.tutor_sensitivity || 'medium';
@@ -632,11 +574,6 @@ function openEditPanel(scenarioId) {
   editGroupCbs.forEach(cb => {
     cb.checked = data.group_ids && data.group_ids.includes(parseInt(cb.value));
   });
-
-  // If any video setting is set, open the video details
-  if (data.video_url || data.video_transcript) {
-    document.getElementById('edit-video-settings').open = true;
-  }
 
   // Show panel
   editPanel.classList.add('active');
@@ -683,8 +620,6 @@ document.getElementById('create-form').addEventListener('submit', async (e) => {
     student_name: formData.get('student_name') || null,
     subject: formData.get('subject') || null,
     framework_id: parseInt(formData.get('framework_id')),
-    video_url: formData.get('video_url') || null,
-    video_transcript: formData.get('video_transcript') || null,
     student_template_id: parseInt(formData.get('student_template_id')),
     tutor_template_id: formData.get('tutor_template_id') ? parseInt(formData.get('tutor_template_id')) : null,
     tutor_sensitivity: formData.get('tutor_sensitivity') || 'medium',
@@ -728,8 +663,6 @@ document.getElementById('edit-form').addEventListener('submit', async (e) => {
     student_name: formData.get('student_name') || null,
     subject: formData.get('subject') || null,
     framework_id: parseInt(formData.get('framework_id')),
-    video_url: formData.get('video_url') || null,
-    video_transcript: formData.get('video_transcript') || null,
     student_template_id: parseInt(formData.get('student_template_id')),
     tutor_template_id: formData.get('tutor_template_id') ? parseInt(formData.get('tutor_template_id')) : null,
     tutor_sensitivity: formData.get('tutor_sensitivity') || 'medium',

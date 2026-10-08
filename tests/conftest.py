@@ -24,11 +24,18 @@ def no_network(monkeypatch):
 
 
 @pytest.fixture
-async def data(tmp_path):
+async def data(tmp_path, request):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     event.listen(engine.sync_engine, "connect", set_sqlite_pragma)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        if getattr(request, "param", None) == "baseline":
+            from src.db.migrations import migrate
+            for statement in migrate.statements(
+                (migrate.DIRECTORY / "baseline.sql").read_text()
+            ):
+                await conn.exec_driver_sql(statement)
+        else:
+            await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
     async with factory() as db:
         group = UserGroup(name="test")

@@ -16,11 +16,13 @@ from src.api.routes.session_analysis import router as analysis_router
 from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
+    validate_public_problem,
     validate_scenario_access,
 )
 
 # Import sub-routers to include all session routes
 from src.api.routes.session_messages import router as messages_router
+from src.api.routes.student_generation import router as student_router
 from src.config import config
 from src.models import Session, User
 
@@ -30,6 +32,7 @@ limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 # Include sub-routers
 router.include_router(messages_router)
 router.include_router(analysis_router)
+router.include_router(student_router)
 
 
 class CreateSessionRequest(BaseModel):
@@ -63,7 +66,8 @@ async def create_session(
     db: AsyncSession = Depends(get_db_session),
 ) -> SessionResponse:
     """Start new dialogue session."""
-    await validate_scenario_access(data.scenario_id, user, db)
+    scenario = await validate_scenario_access(data.scenario_id, user, db)
+    validate_public_problem(scenario)
     session = Session(scenario_id=data.scenario_id, teacher_id=user.id)
     db.add(session)
     await db.flush()

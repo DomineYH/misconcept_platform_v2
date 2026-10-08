@@ -1,7 +1,7 @@
 {# Issue #33 — "상세 분석" 탭 공유 partial.
 
    Inputs (template context):
-   - messages: list of {role, content, created_at, label, grade, level}
+   - messages: list of {role, content, created_at, turn_index, label, grade, level}
    - questions: list of {content, label, grade, confidence, reasoning}
    - framework_label_criteria: dict {label_name: criteria_text}
    - session_id: int
@@ -54,6 +54,9 @@
                         {%- elif m.role == 'tutor' %}멘토
                         {%- else %}{{ m.role }}{% endif -%}
                     </span>
+                    {% if m.turn_index %}
+                    <span class="coach-msg__turn">{{ m.turn_index }}번째 턴</span>
+                    {% endif %}
                     {% if m.role == 'teacher' and m.level == 'high' %}
                     <span class="coach-msg__tag tag--good">잘 한 대화</span>
                     {% elif m.role == 'teacher' and m.level == 'low' %}

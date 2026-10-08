@@ -19,8 +19,10 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
   function syncComposer() {
     const disabled = authExpiredHandled || chatClosed || messageSending;
-    document.getElementById('teacher-input').disabled = disabled;
-    document.querySelector('#teacher-form button[type="submit"]').disabled = disabled;
+    if (!document.getElementById('teacher-form').dataset.studentStream || authExpiredHandled || chatClosed) {
+      document.getElementById('teacher-input').disabled = disabled;
+      document.querySelector('#teacher-form button[type="submit"]').disabled = disabled;
+    }
     const endBtn = document.getElementById('end-session-btn');
     endBtn.disabled = authExpiredHandled || messageSending || ['ending', 'analyzing'].includes(endBtn.dataset.state);
   }
@@ -42,39 +44,6 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     messageSending = false;
     syncComposer();
     enablePolling();
-  }
-
-  // ========================================
-  // YouTube URL Conversion
-  // ========================================
-  function convertToEmbedUrl(url) {
-    if (!url) return '';
-
-    // YouTube live URL
-    let match = url.match(/youtube\.com\/live\/([^?&]+)/);
-    if (match) return `https://www.youtube.com/embed/${match[1]}`;
-
-    // YouTube watch URL
-    match = url.match(/youtube\.com\/watch\?v=([^&]+)/);
-    if (match) return `https://www.youtube.com/embed/${match[1]}`;
-
-    // YouTube short URL
-    match = url.match(/youtu\.be\/([^?&]+)/);
-    if (match) return `https://www.youtube.com/embed/${match[1]}`;
-
-    // Already embed URL or other format
-    return url;
-  }
-
-  // Initialize video player if video URL exists
-  if (chatConfig.videoUrl) {
-  const videoIframe = document.getElementById('video-iframe');
-  if (videoIframe) {
-    const originalUrl = chatConfig.videoUrl;
-    const embedUrl = convertToEmbedUrl(originalUrl);
-    videoIframe.src = embedUrl;
-    console.log('Video player initialized:', embedUrl);
-  }
   }
 
   // ========================================
@@ -136,26 +105,6 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     return window.innerWidth > 768;
   }
 
-  function pauseScenarioVideo() {
-    const iframe = document.getElementById('video-iframe');
-    if (!iframe) return;
-    const currentSrc = iframe.getAttribute('src');
-    if (currentSrc) {
-      iframe.dataset.savedSrc = currentSrc;
-      iframe.setAttribute('src', '');
-    }
-  }
-
-  function resumeScenarioVideo() {
-    const iframe = document.getElementById('video-iframe');
-    if (!iframe) return;
-    const savedSrc = iframe.dataset.savedSrc;
-    if (savedSrc && !iframe.getAttribute('src')) {
-      iframe.setAttribute('src', savedSrc);
-      delete iframe.dataset.savedSrc;
-    }
-  }
-
   function applyScenarioPanelCollapsed(collapsed) {
     const panel = document.getElementById('scenario-panel');
     const toggle = document.getElementById('scenario-panel-toggle');
@@ -165,12 +114,10 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       panel.setAttribute('data-collapsed', 'true');
       toggle.setAttribute('aria-expanded', 'false');
       toggle.setAttribute('aria-label', '정보 패널 펼치기');
-      pauseScenarioVideo();
     } else {
       panel.removeAttribute('data-collapsed');
       toggle.setAttribute('aria-expanded', 'true');
       toggle.setAttribute('aria-label', '정보 패널 접기');
-      resumeScenarioVideo();
     }
   }
 
@@ -267,7 +214,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // Polling Functions
   // ========================================
   function enablePolling() {
-    if (authExpiredHandled || chatClosed || messageSending) return;
+    if (authExpiredHandled || chatClosed || messageSending || document.getElementById('teacher-form').dataset.studentStream) return;
     const pollingFlag = document.getElementById('polling-enabled');
     if (pollingFlag && pollingFlag.value === 'true') {
       console.log('📡 Polling already enabled');
@@ -302,6 +249,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
     chatClosed = true;
     syncComposer();
+    document.dispatchEvent(new CustomEvent('chat:locked', {detail:{authExpired:showLoginButton}}));
 
     const textarea = document.getElementById('teacher-input');
     const submitBtn = document.querySelector('#teacher-form button[type="submit"]');
@@ -346,6 +294,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   }
 
   function saveDraftMessage() {
+    if (document.getElementById('teacher-form').dataset.studentStream) return;
     const key = getDraftStorageKey();
     const input = document.getElementById('teacher-input');
     if (!key || !input) return;
@@ -359,6 +308,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   }
 
   function restoreDraftMessage() {
+    if (document.getElementById('teacher-form').dataset.studentStream) return;
     const key = getDraftStorageKey();
     const input = document.getElementById('teacher-input');
     if (!key || !input) return;
@@ -1013,6 +963,21 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       if (lastId > 0) enablePolling();
     }
   }
+  // Share existing auth and session controls with the student stream.
+  window.chatUI = {
+    sessionId: chatConfig.sessionId,
+    studentName: chatConfig.studentName,
+    mentorEnabled: chatConfig.mentorEnabled,
+    fetch: fetchWithAuthGuard,
+    headers: getCsrfHeaders,
+    stopPolling: disablePolling,
+    isLocked: () => authExpiredHandled || chatClosed,
+    expire: () => handleAuthExpired('student-stream'),
+    end: () => {
+      lockChatUI('이 대화는 종료되었습니다.');
+      setAnalysisState('ready-to-analyze');
+    }
+  };
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeChat, { once: true });
   } else {

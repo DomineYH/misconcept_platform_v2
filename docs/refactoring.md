@@ -209,3 +209,118 @@ Follow-up validation completed:
 
 These checks used temporary databases and synthetic credentials, with no live
 LLM calls or changes to the local application database.
+
+## S0 Phase A: integration and pilot cutover (#33)
+
+The contract is [spec #24](https://github.com/DomineYH/misconcept_platform_v2/issues/24),
+especially D9/D10 and its Testing Decisions. This work rehearses the procedure
+on synthetic SQLite databases; it does not authorize an operating database
+upgrade, paid API calls, deployment, push or merge. Execute the operating steps
+below only under separate approval, with the actual deployment paths supplied.
+
+### Cutover order
+
+1. Announce the maintenance window, the end of existing sessions, and the need
+   to reload previously opened chat pages. The retired write endpoint returns
+   `410 reload_required`; old pages cannot bypass the new generation contract.
+2. End all existing active sessions through the existing teacher/admin close
+   paths before stopping the old app. Verify `SELECT count(*) FROM session
+   WHERE ended_at IS NULL AND deleted_at IS NULL` is zero. Preserve historical
+   messages, analyses and NULL turn links; do not infer or backfill old turns.
+3. Stop **every writer**: app workers, scheduled jobs, seed/admin scripts and
+   shell sessions that write SQLite. Keep maintenance access closed. Never let
+   old and new versions write the same database concurrently.
+4. Use SQLite's backup API as in section #2, with explicit source/backup paths.
+   It includes committed WAL pages. Do not copy only the main `.db` file or
+   remove live WAL/SHM files. Retain the untouched backup and the old code/config
+   revision. Make the upgrade rehearsal copy with the backup API too:
+
+   ```sh
+   # Paths below are examples; supply the approved maintenance paths.
+   python - <<'PY'
+   import sqlite3
+   with sqlite3.connect('/maintenance/pre-phase-a.backup.db') as backup:
+       with sqlite3.connect('/maintenance/upgrade-check.db') as copy:
+           backup.backup(copy)
+   PY
+   DATABASE_URL=sqlite+aiosqlite:////maintenance/upgrade-check.db uv run --frozen python -m src.db.migrations.migrate
+   ```
+
+5. On the copy, run the official migration command **twice**. Compare schema
+   with a fresh install (frozen baseline 023 followed by 024), check
+   `PRAGMA integrity_check` = `ok` and empty `PRAGMA foreign_key_check`, and
+   compare row counts and existing message IDs/role/body/timestamp/metadata.
+   Verify preserved normal analysis, teacher/admin CSV columns and actual
+   stored ordering, ownership/group denial, and legacy video values remaining
+   in storage without appearing in HTML/API/provider input. Old message
+   turn/run links must stay NULL. Repair blank public problems explicitly in
+   the administrator UI before starting new sessions; never copy transcripts
+   automatically or substitute the private student prompt.
+6. Review `CONTEXT_WINDOW_TURNS` with the administrator: N now means **completed
+   teacher–student pairs**, with default 10. Previously it counted individual
+   messages, including mentor messages. Explicit existing values are preserved,
+   so an old value of 20 now allows 20 complete pairs. Do not silently halve
+   values. Record the chosen value before reopening traffic.
+7. With writers still stopped, apply the same official migration command to
+   the approved destination and repeat integrity/data checks. Do not edit 023,
+   historical SQL, legacy video columns or stored `tutor` roles. Production
+   startup (`ENV=production`) does not install the schema automatically.
+8. Start **one app instance, one asynchronous worker**, with `TESTING=false`,
+   production secrets and the reviewed configuration:
+   `ENV=production TESTING=false uv run --frozen uvicorn src.main:app --workers 1`.
+   Do not use reload or multiple replicas. Startup marks remaining running
+   executions interrupted without generating again. Check health/login,
+   historical readers and the blank-problem gate; reopen traffic for new
+   sessions only after those checks. Paid generation smoke tests need their
+   own approval. Retain the backup through pilot acceptance.
+
+### Restore and data-loss boundary
+
+Close traffic and stop **all** new-version writers. Restore the retained backup
+into the destination with SQLite's backup API (section #2), rather than
+replacing a database underneath WAL/SHM sidecars. Check integrity, foreign keys,
+row counts, IDs, metadata, analysis and migration history, then restart the
+recorded old code/config as a single worker. This restores the pre-024 schema
+as well as its data; no automatic down migration is used. **Any messages,
+sessions, coaching, analysis or configuration written after the backup are
+lost on restore.** Decide whether that loss is acceptable before restoration.
+
+`test_wal_backup_upgrade_readers_and_restore` in
+`tests/test_phase_a_cutover.py` holds a synthetic 023 connection open with
+committed WAL pages, backs it up, upgrades a separate copy twice, verifies all
+old rows plus the real authenticated readers/exports, introduces a new write,
+and restores the backup. It proves both the old schema/data recovery and loss
+of the later write. `test_024_preserves_legacy_and_matches_fresh` separately
+compares upgrade/fresh schemas; no operating database is read or copied.
+
+### Coverage of A1–A8
+
+The numbered criterion groups below cover every child-ticket acceptance item;
+the Python tests use file SQLite, signed login and fake providers, with network
+blocked. Browser checks use the isolated section #6 fixture server.
+
+| Ticket / acceptance items | Evidence |
+| --- | --- |
+| A1 #25, 1–5: video-free teacher/admin screens, public problem/greeting, blank problem, desktop/mobile/keyboard, preserved storage/no product mock | `test_scenario_screens.py`, `browser_scenarios.mjs`, unchanged baseline/legacy column checks |
+| A2 #26, 1–5: retired-field 422, text CRUD/non-exposure, missing-problem gate/history/edit, data preservation, permissions | `test_scenario_api.py`, `test_phase_a_cutover.py`, `browser_scenarios.mjs` |
+| A3 #27, 1–7: optimistic/durable identity, exclusive events, failure/drafts/retry, parser/XSS, JSON/auth, zero normal polling, keyboard/mobile/EOF | `test_student_sse.py`, `browser_student_stream.mjs`, `browser_student_errors.mjs`, `browser_student_recovery.mjs` |
+| A4 #28, 1–10: 024/ORM/constraints/fresh, DB reservation/idempotency/ordering, one student/no classifier/mentor/retries, settings/failures/resources/deadlines, real mount/410, races/security, integration before release | `test_generation_migration.py`, `test_student_generation.py`, `test_student_concurrency.py`, `test_student_security.py`, `test_student_failures.py`, `check_student_live.py`, all browser checks; no deployment |
+| A5 #29, 1–8: public recovery/auth, bounded lookup/storage/EOF, explicit resend/retry, disconnect/partial isolation, startup, all end races, unknown DB outcomes, analysis/draft preservation | `test_student_lifecycle.py`, `test_student_failures.py`, `test_student_security.py`, `test_transactions.py`, `browser_student_recovery.mjs`, `browser_student_errors.mjs`, `browser_chat.mjs` |
+| A6 #30, 1–6: N completed pairs/default/transition, bounded student/mentor context, excluded partial/mentor/greeting, LIMIT/index plan, unchanged full readers | `test_config.py`, `test_turn_context.py`, `test_phase_a_cutover.py`; README and cutover step 6 |
+| A7 #31, 1–6: original-turn coaching, final-only/no-intervention, explicit failure/busy retry/obsolete/end, independent input/focus/scroll, NULL legacy order/terminology, desktop/mobile | `browser_mentor_stream.mjs`, `browser_mentor_recovery.mjs`; shared admin history additionally checked by `test_phase_a_history.py` and `browser_phase_a_history.mjs` |
+| A8 #32, 1–9: completion-trigger/validation, unchanged judgment/deadlines, durable replay/no-intervention, independent rights/busy, counters, obsolete/late target, linkage/context/end, enabled setting, integrated races | `test_mentor_generation.py`, `test_mentor_policy.py`, `test_mentor_security.py`, `test_mentor_lifecycle.py`, `browser_mentor_stream.mjs`, `browser_mentor_recovery.mjs` |
+
+The live check uses actual localhost uvicorn, active CSRF and the installed SDK
+over fake upstream transport. It holds upstream completion until a delta is
+received and the stored run is still running. It prints persisted first-output
+and completion durations and proves one student call, zero misconception calls
+and zero mentor calls in that path even with mentor enabled. The slow-mentor
+HTTP test completes the next student while coaching is held; browser tests
+count zero normal message/recovery polls. These are structural checks, not a
+p95 release target or measurements of actual provider latency.
+
+**Unverified:** operating reverse-proxy buffering and provider billing cessation
+after disconnect. Phase A remains single-worker, with no automatic generation
+retry or mentor queue; busy skipped turns require explicit requests. Memory-only
+partial tokens may be lost on process failure, and unavailable DB cleanup is
+best effort. No S1/S3/S5 feature or legacy-column deletion is part of this work.

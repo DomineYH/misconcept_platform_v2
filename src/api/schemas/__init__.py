@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 from src.api.schemas.contributor import (
@@ -91,10 +92,6 @@ class ScenarioCreate(BaseModel):
     framework_id: int
     is_active: bool = True
 
-    # Video fields
-    video_url: str | None = None
-    video_transcript: str | None = None
-
     # Bot overrides (Phase 2)
     chat_model: str | None = None
     chat_temperature: float | None = 0.7
@@ -110,15 +107,14 @@ class ScenarioCreate(BaseModel):
     # Group assignment
     group_ids: list[int] | None = None
 
-    @field_validator("video_url")
+    @model_validator(mode="before")
     @classmethod
-    def validate_video_url(cls, v):
-        """Validate video URL format."""
-        if v is None or v.strip() == "":
-            return v
-        if not (v.startswith("http://") or v.startswith("https://")):
-            raise ValueError("video_url must start with " "http:// or https://")
-        return v
+    def reject_video_fields(cls, data):
+        if isinstance(data, dict):
+            for field in ("video_url", "video_transcript"):
+                if field in data:
+                    raise ValueError(f"{field} is no longer supported")
+        return data
 
     @field_validator("chat_model")
     @classmethod
@@ -168,10 +164,6 @@ class ScenarioUpdate(BaseModel):
     framework_id: int | None = None
     is_active: int | None = Field(None, ge=0, le=1)
 
-    # Video fields
-    video_url: str | None = None
-    video_transcript: str | None = None
-
     # Bot overrides
     chat_model: str | None = None
     chat_temperature: float | None = None
@@ -187,15 +179,14 @@ class ScenarioUpdate(BaseModel):
     # Group assignment
     group_ids: list[int] | None = None
 
-    @field_validator("video_url")
+    @model_validator(mode="before")
     @classmethod
-    def validate_video_url(cls, v):
-        """Validate video URL format."""
-        if v is None or v.strip() == "":
-            return v
-        if not (v.startswith("http://") or v.startswith("https://")):
-            raise ValueError("video_url must start with " "http:// or https://")
-        return v
+    def reject_video_fields(cls, data):
+        if isinstance(data, dict):
+            for field in ("video_url", "video_transcript"):
+                if field in data:
+                    raise ValueError(f"{field} is no longer supported")
+        return data
 
 
 class AdminScenarioResponse(BaseModel):
@@ -211,10 +202,6 @@ class AdminScenarioResponse(BaseModel):
     greeting_message: str | None = None
     framework_id: int
     is_active: int
-
-    # Video fields
-    video_url: str | None = None
-    video_transcript: str | None = None
 
     # Bot overrides
     chat_model: str | None = None

@@ -196,6 +196,10 @@ async def lifespan(app: FastAPI):
     if not config.TESTING:
         config.validate()
     await init_db()
+    from src.db.connection import AsyncSessionLocal
+    from src.services.generation_lifecycle import interrupt_orphans
+
+    await interrupt_orphans(AsyncSessionLocal)
     # Admin bootstrap is opt-in: production deployments with read-only DB
     # roles or external seed jobs would otherwise fail to boot. Set
     # BOOTSTRAP_ADMIN_ON_STARTUP=true in .env for dev first-run seeding.
@@ -234,6 +238,17 @@ async def auth_required_handler(
 
     Other HTMX requests keep existing HX-Redirect behavior.
     """
+    if request.url.path.startswith("/runs/") or (
+        request.url.path.startswith("/sessions/") and (
+            "/turns/" in request.url.path or request.url.path.endswith("/runs")
+        )
+    ):
+        return Response(
+            content=json.dumps({"code": "AUTH_EXPIRED"}),
+            status_code=401,
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
     is_htmx = request.headers.get("HX-Request") == "true"
     request_path = request.url.path
 

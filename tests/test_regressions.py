@@ -100,7 +100,13 @@ async def test_http_permissions_retry_and_ended_message_guard(data, monkeypatch)
             result = await client.post(f'/sessions/{sid}/analyze')
             assert result.status_code == 200
             assert result.json()['feedback_status'] == 'ok'
-            assert (await client.post(f'/sessions/{sid}/messages', data={'content': 'late'})).status_code == 400
+            late = await client.post(
+                f"/sessions/{sid}/turns/stream", json={
+                    "request_id": "00000000-0000-0000-0000-000000000001",
+                    "content": "late",
+                },
+            )
+            assert late.status_code == 400
             assert fake.await_count == 1
             normal = await client.get(f'/sessions/{sid}/analysis')
             assert normal.json()['feedback'] == 'HTTP success'

@@ -20,6 +20,7 @@ async def schema(conn):
     return (await conn.exec_driver_sql("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != '_migrations' AND name NOT LIKE 'chatbot_%' ORDER BY type, name")).all()
 
 
+@pytest.mark.parametrize("data", ["baseline"], indirect=True)
 async def test_upgrade_preserves_data_history_and_matches_fresh(data, tmp_path, monkeypatch):
     from src.models import Scenario, PromptTemplate
     monkeypatch.setattr(migrate, "engine", data.engine)
@@ -91,9 +92,16 @@ async def test_ddl_failure_rolls_back_history_and_schema(tmp_path, monkeypatch):
 
 
 async def test_official_install_starts_app(tmp_path, monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from src.db import connection
     from src.main import app, lifespan
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'startup.db'}")
     monkeypatch.setattr(migrate, 'engine', engine)
+    monkeypatch.setattr(
+        connection, 'AsyncSessionLocal',
+        async_sessionmaker(engine, expire_on_commit=False),
+    )
     async with lifespan(app):
         async with engine.connect() as conn:
             assert (await conn.exec_driver_sql('SELECT count(*) FROM "user"')).scalar() == 0

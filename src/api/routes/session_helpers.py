@@ -3,11 +3,22 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models import Scenario, Session, User
+from src.models import GenerationRun, Scenario, Session, User
 from src.models.scenario_group import ScenarioGroup
+from src.services.generation_lifecycle import active_runs
+
+
+def validate_public_problem(scenario: Scenario) -> None:
+    """Require an administrator-completed public problem for new dialogue."""
+    if not (scenario.problem_situation or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="문제 상황 보완 필요: 관리자에게 공개 문제 상황 보완을 "
+            "요청해주세요.",
+        )
 
 
 async def load_session(
@@ -63,13 +74,36 @@ async def mark_session_ended(
     Raises:
         HTTPException: 400 if already ended and force=False
     """
+    # Release auth reads, then serialize with reservation/finalization.
+    await db.commit()
+    await db.execute(text("BEGIN IMMEDIATE"))
+    await db.refresh(session, ["ended_at"])
     if session.ended_at:
         if not force:
             raise HTTPException(status_code=400, detail="Session already ended")
+        await db.commit()
         return session.ended_at, True
 
     session.ended_at = datetime.now(timezone.utc)
+    cancelled = (
+        await db.scalars(
+            update(GenerationRun)
+            .where(
+                GenerationRun.session_id == session.id,
+                GenerationRun.status == "running",
+            )
+            .values(
+                status="cancelled",
+                error_code="session_ended",
+                finished_at=session.ended_at,
+            )
+            .returning(GenerationRun.id)
+        )
+    ).all()
     await db.commit()  # End state survives a later analysis failure.
+    for run_id in cancelled:
+        if run_id in active_runs:
+            active_runs[run_id].set()
 
     return session.ended_at, False
 

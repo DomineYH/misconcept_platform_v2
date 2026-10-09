@@ -128,8 +128,37 @@ draft, then acknowledge the remaining warnings for that exact revision.
 Failed publication and stale writes preserve the stored revision and browser
 input. Every successful edit, activation, group change or deletion advances the
 revision once. Migration 029 preserves legacy rows and adds snapshot storage
-only. Explicit legacy conversion and native lesson snapshots belong to following
-S2 tickets; this intermediate change is not a production cutover.
+only. Native lesson snapshots belong to following S2 tickets; this intermediate
+change is not a production cutover.
+
+S2-04 legacy review (#61) runs only on an explicitly selected consistent DB copy
+with migration 029 already applied. Capture actual deployment inputs in a private
+JSON file; `tests/fixtures/s2_legacy_effective.json` documents its shape with
+synthetic values, not deployment defaults. Supply the old effective BASE text,
+student options (the scenario's exact chat_model override still applies), mentor
+coaching/judgment and analysis synthesis/greeting/classification model/options,
+threshold N and context turn limit. Unknown inputs are explicit nulls; no keys,
+passwords or master keys are accepted. No environment model defaults are read.
+
+```sh
+uv run --frozen python -m src.db.convert_scenarios \
+  --database-copy /private/s2-copy.sqlite3 --settings /private/effective.json \
+  --archive /private/s2-source.json --manifest /private/s2-manifest.json
+```
+
+The default is a deterministic dry run. It creates private (0600) source and
+manifest files without writing the DB; existing files must match. Keep the same
+artifacts and append `--apply` to convert the selected copy to review drafts.
+Each row reports converted/skipped/conflict; conflicts cause a nonzero exit and
+never overwrite native edits. Original IDs, groups, activation, deletion and
+historical sessions/results stay intact. Video originals exist only in the
+private archive, never in conversion provenance or the form. Oversized or
+damaged sources remain archived with blocking reasons and bounded drafts.
+The administrator editor shows source/target evidence, archive references and
+hashes. Repair blocking fields, save, acknowledge the new revision's warnings,
+then publish. The live browser rehearsal includes this actual conversion flow.
+This command does not back up the operating DB, reconstruct past sessions,
+perform an operating cutover or call a paid provider.
 
 S2-01 screen fixtures (#58): `npm run test:browser -- s2_` exercises the five-step
 editor, public preview, model options, synthetic save errors/conflicts, conversion

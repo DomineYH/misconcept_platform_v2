@@ -32,16 +32,20 @@ async def check():
 
         from src.config import config
         from src.db.connection import AsyncSessionLocal
+        from src.db.convert_scenarios import convert_copy
         from src.db.migrations.migrate import run_all_migrations
         from src.main import app
         from src.models import (
+            AnalysisFramework,
             ModelConfig,
+            PromptTemplate,
             ProviderConnection,
             Scenario,
             User,
             UserGroup,
         )
         from src.models.model_config import AppSetting
+        from src.models.scenario_group import ScenarioGroup
         from src.services.model_capabilities import capabilities
         from src.services.model_verification import ROLE_CONTRACT_VERSIONS
         from src.services.provider_secrets import encrypt_key
@@ -165,6 +169,56 @@ async def check():
                 )
             )
             await db.commit()
+
+            original = PromptTemplate(
+                bot_type="student",
+                template_name="Conversion student",
+                template_text="{scenario_title}: {student_profile}; {prompt}; {{literal}}",
+            )
+            rubric = AnalysisFramework(
+                name="Conversion rubric",
+                description="Original rubric metadata",
+                labels_json=json.dumps(
+                    [
+                        dict(
+                            name="Explain",
+                            criteria="PRIVATE RUBRIC criterion",
+                            level="high",
+                        ),
+                        dict(
+                            name="Recall",
+                            criteria="Check remembered facts",
+                            level="low",
+                        ),
+                    ]
+                ),
+            )
+            db.add_all([original, rubric])
+            await db.flush()
+            converted = Scenario(
+                title="Live real conversion",
+                prompt="INTERNAL_CONVERSION_MISCONCEPTION",
+                student_name="민수",
+                student_profile="INTERNAL_CONVERSION_SENTINEL " + "x" * 50001,
+                problem_situation=None,
+                student_template_id=original.id,
+                framework_id=rubric.id,
+                chat_temperature=0.8,
+                video_url="PRIVATE CONVERSION VIDEO",
+                video_transcript="PRIVATE CONVERSION TRANSCRIPT",
+            )
+            db.add(converted)
+            await db.flush()
+            db.add(ScenarioGroup(scenario_id=converted.id, group_id=group.id))
+            await db.commit()
+            results = await convert_copy(
+                Path(directory) / "draft.db",
+                ROOT / "tests/fixtures/s2_legacy_effective.json",
+                Path(directory) / "conversion_source.json",
+                Path(directory) / "conversion_manifest.json",
+                apply=True,
+            )
+            assert dict(id=converted.id, status="converted") in results
 
         original_connect = socket.socket.connect
 

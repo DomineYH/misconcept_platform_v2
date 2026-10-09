@@ -1,27 +1,23 @@
 """Scenario browsing and selection routes."""
 
-import logging
-
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Request,
 )
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
-from src.api.routes.session_helpers import (
-    validate_new_session,
-    validate_scenario_access,
-)
-from src.models import Scenario, Session, User
+from src.models import Scenario, User
 from src.models.scenario_group import ScenarioGroup
-
-logger = logging.getLogger(__name__)
+from src.services.lesson_snapshots import (
+    public_lesson,
+    public_scenario,
+    read_lesson_snapshot,
+    start_lesson,
+)
 
 router = APIRouter(tags=["Scenarios"])
 
@@ -47,6 +43,7 @@ async def list_scenarios(
         .where(Scenario.is_active == 1)
         .where(Scenario.deleted_at.is_(None))
         .where(Scenario.status == "published")
+        .where(Scenario.config_json.is_not(None))
     )
 
     # Admin sees all scenarios
@@ -72,7 +69,7 @@ async def list_scenarios(
         {
             "request": request,
             "user": user,
-            "scenarios": scenarios,
+            "scenarios": [public_scenario(scenario) for scenario in scenarios],
         },
     )
 
@@ -88,49 +85,9 @@ async def get_scenario_detail(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Display scenario and dialogue interface."""
-    scenario = await validate_scenario_access(scenario_id, user, db)
-    await db.refresh(scenario, ["framework"])
-
-    # Check for existing active session (dedup)
-    existing_result = await db.execute(
-        select(Session).where(
-            Session.scenario_id == scenario.id,
-            Session.teacher_id == user.id,
-            Session.ended_at.is_(None),
-            Session.deleted_at.is_(None),
-        )
-    )
-    session = existing_result.scalars().first()
-
-    if not session:
-        validate_new_session(scenario)
-        session = Session(
-            scenario_id=scenario.id,
-            teacher_id=user.id,
-        )
-        db.add(session)
-
-        try:
-            await db.flush()
-            await db.refresh(session)
-            logger.info(
-                f"Auto-created session {session.id} "
-                f"for user {user.id} "
-                f"on scenario {scenario.id}"
-            )
-        except SQLAlchemyError as e:
-            logger.error(f"Failed to create session: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="대화 세션을 시작할 수 없습니다. "
-                "잠시 후 다시 시도해주세요.",
-            )
-    else:
-        logger.info(
-            f"Reusing session {session.id} "
-            f"for user {user.id} "
-            f"on scenario {scenario.id}"
-        )
+    session = await start_lesson(db, scenario_id, user, reuse=True)
+    snapshot = read_lesson_snapshot(session)
+    scenario = public_lesson(snapshot.scenario_context, snapshot.config)
 
     # Load existing messages for the session
     from src.models import Message
@@ -151,6 +108,6 @@ async def get_scenario_detail(
             "session_id": session.id,
             "session_ended": session.ended_at is not None,
             "messages": existing_messages,
-            "student_name": scenario.student_name,
+            "student_name": scenario["student_name"],
         },
     )

@@ -253,18 +253,19 @@ async def test_failed_feedback_retry_counts_question_once(data, client, mentor):
         )
 
 
-async def test_chat_mounts_mentor_only_when_scenario_enables_it(
+async def test_unconverted_chat_is_blocked_and_legacy_mentor_disable_is_preserved(
     data, client, mentor
 ):
     login(client, data.owner)
     html = await client.get(f"/scenarios/{data.scenario.id}")
-    assert '"mentorEnabled": true' in html.text
-    assert "mountMentorStream" in html.text
+    assert html.status_code == 400
+    assert html.json()["detail"] == {"code": "configuration_unavailable"}
     turn = await complete_turn(client, data)
     data.scenario.tutor_template_id = None
     await data.db.commit()
     html = await client.get(f"/scenarios/{data.scenario.id}")
-    assert '"mentorEnabled": false' in html.text
+    assert html.status_code == 400
+    assert html.json()["detail"] == {"code": "configuration_unavailable"}
     mentor.responses.create.reset_mock()
     disabled = await client.post(
         mentor_url(data, turn), json={"request_id": str(uuid4())}

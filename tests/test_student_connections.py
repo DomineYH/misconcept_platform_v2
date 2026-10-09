@@ -230,9 +230,9 @@ async def test_unavailable_student_configuration_has_no_fallback_or_attempt(
     assert (
         await client.get(f"/sessions/{data.session.id}/messages/updates")
     ).status_code == 204
-    assert (
-        await client.get(f"/scenarios/{data.scenario.id}")
-    ).status_code == 200
+    screen = await client.get(f"/scenarios/{data.scenario.id}")
+    assert screen.status_code == 400
+    assert screen.json()["detail"] == {"code": "configuration_unavailable"}
     async with data.factory() as db:
         assert (await db.scalars(select(ApiUsageLog))).all() == []
 

@@ -20,6 +20,7 @@ from src.api.routes.session_helpers import load_session
 from src.config import config
 from src.models import Message, User
 from src.models.scenario import Scenario
+from src.services.lesson_snapshots import read_lesson_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -109,8 +110,14 @@ async def get_message_updates(
     """Get new messages since last message ID for HTMX polling."""
     session = await load_session(session_id, user, db)
 
-    scenario = await db.get(Scenario, session.scenario_id)
-    student_name = scenario.student_name if scenario else None
+    if (
+        session.snapshot_origin is not None
+        or session.config_snapshot_json is not None
+    ):
+        student_name = read_lesson_snapshot(session).config.student.name
+    else:
+        scenario = await db.get(Scenario, session.scenario_id)
+        student_name = scenario.student_name if scenario else None
 
     query = (
         select(Message)

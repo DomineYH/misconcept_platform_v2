@@ -128,8 +128,13 @@ draft, then acknowledge the remaining warnings for that exact revision.
 Failed publication and stale writes preserve the stored revision and browser
 input. Every successful edit, activation, group change or deletion advances the
 revision once. Migration 029 preserves legacy rows and adds snapshot storage
-only. Native lesson snapshots belong to following S2 tickets; this intermediate
-change is not a production cutover.
+only. S2-05 (#62) connects both lesson-start paths to current publication,
+assignment and role-model checks, atomically storing a native configuration
+snapshot and canonical hash. Reopening a lesson preserves its public problem,
+student introduction and title; current activation and assignment still apply.
+Missing/corrupt native snapshots fail closed. Unconverted scenarios cannot start
+new lessons. Student/mentor/analysis execution wiring remains
+for following S2 tickets; this intermediate change is not a production cutover.
 
 S2-04 legacy review (#61) runs only on an explicitly selected consistent DB copy
 with migration 029 already applied. Capture actual deployment inputs in a private

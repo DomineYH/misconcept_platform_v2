@@ -21,6 +21,17 @@ from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.session_summary import SessionSummary
 from src.models.user import User
+from src.services.lesson_snapshots import read_lesson_snapshot
+
+
+def _session_title(session, scenario):
+    if (
+        session.snapshot_origin is not None
+        or session.config_snapshot_json is not None
+    ):
+        return read_lesson_snapshot(session).scenario_context.title
+    return scenario.title
+
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +109,7 @@ class CSVExporter:
             select(Scenario).where(Scenario.id == session.scenario_id)
         )
         scenario = scenario_result.scalar_one()
+        scenario_title = _session_title(session, scenario)
 
         messages_result = await db.execute(
             select(Message)
@@ -150,7 +162,7 @@ class CSVExporter:
             writer.writerow(
                 {
                     "session_id": session_id,
-                    "scenario_title": scenario.title,
+                    "scenario_title": scenario_title,
                     "student_hash": student_hash,
                     "timestamp": msg.created_at.isoformat(),
                     "role": msg.role,
@@ -170,7 +182,7 @@ class CSVExporter:
             writer.writerow(
                 {
                     "session_id": session_id,
-                    "scenario_title": scenario.title,
+                    "scenario_title": scenario_title,
                     "student_hash": student_hash,
                     "timestamp": summary.created_at.isoformat(),
                     "role": "summary",
@@ -235,6 +247,7 @@ class CSVExporter:
             select(Scenario).where(Scenario.id == session.scenario_id)
         )
         scenario = scenario_result.scalar_one()
+        scenario_title = _session_title(session, scenario)
 
         messages_result = await db.execute(
             select(Message)
@@ -285,7 +298,7 @@ class CSVExporter:
                 {
                     "session_id": session_id,
                     "scenario_id": scenario.id,
-                    "scenario_title": scenario.title,
+                    "scenario_title": scenario_title,
                     "teacher_id": teacher.id,
                     "teacher_username": self._sanitize_csv_value(
                         teacher.username
@@ -317,7 +330,7 @@ class CSVExporter:
                 {
                     "session_id": session_id,
                     "scenario_id": scenario.id,
-                    "scenario_title": scenario.title,
+                    "scenario_title": scenario_title,
                     "teacher_id": teacher.id,
                     "teacher_username": self._sanitize_csv_value(
                         teacher.username
@@ -435,6 +448,7 @@ class CSVExporter:
 
             teacher = session.teacher
             scenario = session.scenario
+            scenario_title = _session_title(session, scenario)
             session_messages = messages_by_session.get(session_id, [])
 
             for msg in session_messages:
@@ -443,7 +457,7 @@ class CSVExporter:
                     {
                         "session_id": session_id,
                         "scenario_id": scenario.id,
-                        "scenario_title": scenario.title,
+                        "scenario_title": scenario_title,
                         "teacher_id": teacher.id,
                         "teacher_username": self._sanitize_csv_value(
                             teacher.username
@@ -479,7 +493,7 @@ class CSVExporter:
                     {
                         "session_id": session_id,
                         "scenario_id": scenario.id,
-                        "scenario_title": scenario.title,
+                        "scenario_title": scenario_title,
                         "teacher_id": teacher.id,
                         "teacher_username": self._sanitize_csv_value(
                             teacher.username

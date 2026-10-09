@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+
+export default async function checkConversion(page, base) {
+  await page.goto(`${base}/admin/scenarios`);
+  await page.locator('.scenario-card', {hasText:'Live real conversion'}).getByRole('link', {name:'수정', exact:true}).click();
+  await page.getByText('현재 상태: 초안 · 버전 2', {exact:true}).waitFor();
+  const review = await page.locator('#conversion-review').innerText();
+  assert(review.includes('conversion_source.json'));
+  assert(review.includes('발췌'));
+  assert(review.includes('INTERNAL_CONVERSION_SENTINEL'));
+  assert(review.includes('이전 하위 호출 설정'));
+  assert(review.includes('SHA-256'));
+  assert(!review.includes('PRIVATE CONVERSION VIDEO'));
+  assert(!review.includes('PRIVATE CONVERSION TRANSCRIPT'));
+  assert.equal(await page.getByLabel('공개 학생 소개 (선택)', {exact:true}).inputValue(), '');
+  assert(!(await page.locator('#public-preview').innerText()).includes('INTERNAL_CONVERSION'));
+  await page.getByLabel('이 버전의 변환 경고를 검토했습니다.').check();
+  assert(await page.getByRole('button', {name:'게시', exact:true}).isDisabled());
+  await page.getByRole('button', {name:'공개 문제 상황 보완 필요', exact:true}).click();
+  assert(await page.getByLabel('공개 문제 상황', {exact:true}).evaluate(el => el === document.activeElement));
+  await page.getByLabel('공개 문제 상황', {exact:true}).fill('관리자가 선정한 공개 분수 문제');
+  await page.getByLabel('학습목표', {exact:true}).fill('같은 전체를 기준으로 비교한다');
+  await page.locator('[data-step="2"]').click();
+  await page.getByLabel('내부 학생 프로필 (선택)', {exact:true}).fill('검토 후 작성한 내부 페르소나');
+  await page.getByLabel('학생봇 행동 지시', {exact:true}).fill('검토 후 작성한 연기 지시 {literal}');
+  await page.locator('[data-step="4"]').click();
+  await page.getByLabel('분석 맥락', {exact:true}).fill('분수 비교 질문을 평가한다');
+  await page.getByLabel('정답·기대 이해', {exact:true}).fill('같은 전체에서 분모가 클수록 단위 조각은 작다');
+  await page.getByLabel('분석 지시·강조점', {exact:true}).fill('교사 질문의 근거를 설명한다');
+  await page.getByRole('button', {name:'초안으로 저장', exact:true}).click();
+  await page.getByText('초안을 저장했습니다.', {exact:true}).waitFor();
+  assert.equal(await page.getByLabel('이 버전의 변환 경고를 검토했습니다.').isChecked(), false);
+  await page.getByLabel('이 버전의 변환 경고를 검토했습니다.').check();
+  assert(await page.getByRole('button', {name:'게시', exact:true}).isEnabled());
+  await page.getByRole('button', {name:'게시', exact:true}).click();
+  await page.getByText('게시했습니다.', {exact:true}).waitFor();
+  const path = new URL(page.url()).pathname.replace('/edit', '');
+  const saved = await (await page.request.get(base + path)).json();
+  assert.equal(saved.status, 'published');
+  assert.equal(saved.config_version, 4);
+  assert.equal(saved.review_required, false);
+  assert.deepEqual(saved.review_reasons, []);
+  assert.equal(saved.config.student.public_profile, '');
+  assert(saved.conversion_provenance[0].archive_ref.endsWith('conversion_source.json'));
+  assert(await page.locator('#conversion-review').isHidden());
+}

@@ -207,8 +207,9 @@ damaged sources remain archived with blocking reasons and bounded drafts.
 The administrator editor shows source/target evidence, archive references and
 hashes. Repair blocking fields, save, acknowledge the new revision's warnings,
 then publish. The live browser rehearsal includes this actual conversion flow.
-This command does not back up the operating DB, reconstruct past sessions,
-perform an operating cutover or call a paid provider.
+This command does not back up the operating DB, perform an operating cutover
+or call a paid provider. Its reconstructed session candidates cannot establish
+the settings used at the original lesson start.
 
 S2-01 screen fixtures (#58): `npm run test:browser -- s2_` exercises the five-step
 editor, public preview, model options, synthetic save errors/conflicts, conversion
@@ -220,7 +221,8 @@ Teacher fixtures also accept `help=running|failed|rate_limited|limit`,
 `classification=off` and `legacy=1`. Use one value per parameter.
 The isolated server never writes a database or calls a provider; save/help
 responses are intercepted only by browser tests. These fixture routes and query
-switches do not exist in the application. Runtime wiring follows in #59–#66.
+switches do not exist in the application. Production uses the native routes
+described above.
 
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it
@@ -233,3 +235,14 @@ S2-11 (#68) preparation: see [the S2 cutover runbook](docs/s2-cutover.md).
 restores and contracts only the rehearsal copy. Populated installations require
 validated preservation evidence before final migration 031. Existing 030 mentor
 policy SQL stays unchanged. No operating deployment is performed by this tool.
+
+S2-12 (#69) offline integration: `uv run --frozen python -m pytest -q
+tests/test_s2_integration.py` exercises final-schema fresh seed and verified
+legacy-copy conversion/restore, real login/CSRF, draft repair/review/publication,
+both lesson starts, frozen student/mentor/analysis execution and CSV with all
+three pinned SDKs over mocked HTTP. It includes concurrent version conflicts,
+durable replay, failed reanalysis preservation and private-role separation.
+Run the full pytest, lint/format, browser and localhost streaming checks above
+before integration review. Mock success verifies the execution contract;
+real model educational quality, provider latency and operating deployment
+remain separate work.

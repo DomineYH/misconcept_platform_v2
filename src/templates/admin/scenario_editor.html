@@ -131,11 +131,9 @@
     <aside class="scenario-preview">
       <section id="public-preview" aria-label="교사 화면 미리보기">
         <h2>교사 화면 미리보기</h2><p class="visibility-badge">교사에게 공개</p>
-        <h3 data-preview="title"></h3>
-        <p data-preview="subject"></p><p data-preview="target_grade"></p>
-        <p data-preview="problem.public_text"></p><p data-preview="problem.learning_objective"></p>
-        <p data-preview="student.name"></p><p data-preview="student.public_profile"></p>
-        <p data-preview="mentor.name"></p><p data-preview="mentor.welcome_message"></p>
+        {% for key in editor.public_lesson_fields %}
+        {% if key == 'title' %}<h3 data-preview="{{ key }}"></h3>{% else %}<p data-preview="{{ key }}"></p>{% endif %}
+        {% endfor %}
       </section>
       <section aria-label="실행 설정 확인"><h2>실행 설정 확인</h2><p id="execution-summary"></p><p id="validation-summary">보완 항목 0개</p></section>
     </aside>

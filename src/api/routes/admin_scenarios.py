@@ -26,6 +26,7 @@ from src.models.scenario_group import ScenarioGroup
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
+from src.services.lesson_snapshots import PUBLIC_LESSON_FIELDS
 from src.services.scenario_drafts import (
     delete_draft,
     draft_view,
@@ -196,6 +197,7 @@ async def render_editor(request, user, db, editor):
             await db.scalars(select(UserGroup).order_by(UserGroup.name))
         ).all()
     ]
+    editor["public_lesson_fields"] = PUBLIC_LESSON_FIELDS
     editor["publication_available"] = True
     return templates.TemplateResponse(
         "admin/scenario_editor.html",

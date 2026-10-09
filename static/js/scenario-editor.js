@@ -76,8 +76,10 @@ function preview() {
   document.getElementById('rubric-settings').hidden = !classification;
   document.getElementById('mentor-mode-note').textContent = {off:'멘토를 사용하지 않습니다. 숨긴 입력은 보존합니다.', manual:'완료된 학생 턴에서 도움 버튼으로 요청합니다. 수동 총횟수 상한은 없습니다.', auto:'완료 턴 뒤 조건을 검사합니다. 도움 버튼으로도 요청할 수 있습니다.'}[mode];
   document.querySelectorAll('[data-preview]').forEach(el => {
-    el.textContent = document.getElementById(el.dataset.preview).value;
-    el.hidden = el.dataset.preview.startsWith('mentor.') && mode === 'off';
+    const path = data.public_lesson_fields[el.dataset.preview];
+    const hidden = ['mentor_name', 'greeting_message'].includes(el.dataset.preview) && mode === 'off';
+    el.textContent = hidden ? '' : document.getElementById(path).value;
+    el.hidden = hidden;
   });
   document.getElementById('execution-summary').textContent = `${Object.entries(models).map(([role, model]) => `${role}: ${model ? `${model.provider} / ${model.model_id}` : '선택 필요'}`).join('\n')}\n멘토 ${mode} · 분류 ${classification ? `${rubric.length}개` : '미사용'}`;
 }

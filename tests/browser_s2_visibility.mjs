@@ -14,7 +14,7 @@ export default async function checkHiddenScenarioValues(page) {
   await page.getByLabel('멘토 행동 지시').fill('보존할 코칭 지시');
   await mode.selectOption('off');
   assert(await page.getByLabel('멘토 행동 지시').isHidden());
-  assert(await page.locator('[data-preview="mentor.name"]').isHidden());
+  assert(await page.locator('[data-preview="mentor_name"]').isHidden());
   await mode.selectOption('auto');
   assert.equal(await page.getByLabel('멘토 행동 지시').inputValue(), '보존할 코칭 지시');
   assert.equal(await page.getByLabel('자동 개입 조건', {exact:true}).inputValue(), '조건 {literal}');

@@ -83,22 +83,31 @@ async def load_active_lesson(db, session_id, owner_id):
     return read_lesson_snapshot(session)
 
 
+PUBLIC_LESSON_FIELDS = {
+    "title": "title",
+    "subject": "subject",
+    "target_grade": "target_grade",
+    "problem_situation": "problem.public_text",
+    "learning_objective": "problem.learning_objective",
+    "student_name": "student.name",
+    "student_profile": "student.public_profile",
+    "mentor_mode": "mentor.mode",
+    "mentor_name": "mentor.name",
+    "greeting_message": "mentor.welcome_message",
+}
+
+
 def public_lesson(context, config):
     """Only fields allowed to cross the teacher HTML/API boundary."""
-    mentor = config.mentor
-    enabled = mentor.mode != "off"
-    return dict(
-        title=context.title,
-        subject=context.subject,
-        target_grade=context.target_grade,
-        problem_situation=config.problem.public_text,
-        learning_objective=config.problem.learning_objective,
-        student_name=config.student.name,
-        student_profile=config.student.public_profile,
-        mentor_mode=mentor.mode,
-        mentor_name=mentor.name if enabled else "",
-        greeting_message=mentor.welcome_message if enabled else "",
-    )
+    public = {}
+    for key, path in PUBLIC_LESSON_FIELDS.items():
+        value = config if "." in path else context
+        for part in path.split("."):
+            value = getattr(value, part)
+        public[key] = value
+    if public["mentor_mode"] == "off":
+        public["mentor_name"] = public["greeting_message"] = ""
+    return public
 
 
 def scenario_snapshot(scenario):

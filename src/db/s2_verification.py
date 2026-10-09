@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src.api.schemas.scenario_config import ScenarioConfig
-from src.services.scenario_conversion import checksum
+from src.services.lesson_snapshots import canonical_hash
 from src.services.session_history import session_display
 
 
@@ -82,7 +82,7 @@ def consistent_backup(source, destination):
 
 
 def row_hash(rows):
-    return checksum(
+    return canonical_hash(
         [
             [
                 {"blob": value.hex()} if isinstance(value, bytes) else value

@@ -11,8 +11,6 @@ from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_generation import frames
 from test_student_generation import student as student_fixture
 
-from src.config import config
-
 client = client_fixture
 scenario_payload = scenario_fixture
 student = student_fixture
@@ -168,7 +166,7 @@ async def test_slow_mentor_does_not_block_student_and_busy_creates_nothing(
             )
         assert len(feedback_inputs) == 1
         assert "Later question" not in str(feedback_inputs)
-        assert feedback_inputs[0]["model"] == config.ANALYSIS_MODEL
+        assert feedback_inputs[0]["model"] == "gpt-5.2"
         assert "stream" not in feedback_inputs[0]
     finally:
         gate.set()

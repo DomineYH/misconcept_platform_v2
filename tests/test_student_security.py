@@ -146,7 +146,7 @@ async def test_student_uses_existing_settings_without_mentor_or_classifier(
         options={"max_output_tokens": 1234, "reasoning": {"effort": "low"}},
     )
     monkeypatch.setattr(config, "STUDENT_REASONING", "low")
-    monkeypatch.setattr(config, "STUDENT_MAX_TOKENS", 1234)
+    monkeypatch.setenv("STUDENT_MAX_TOKENS", "1234")
     login(client, data.owner)
     response = await client.post(
         f"/sessions/{data.session.id}/turns/stream",

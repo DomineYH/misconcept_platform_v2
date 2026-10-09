@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 
+from src.services.lesson_snapshots import PUBLIC_LESSON_FIELDS
 from src.services.model_capabilities import (
     capabilities,
     validate_model_and_options,
@@ -100,6 +101,7 @@ def editor_fixture(*, new=False, published=False, legacy=False):
     models = model_choices()
     data = dict(
         id=1,
+        public_lesson_fields=PUBLIC_LESSON_FIELDS,
         title="분수의 크기 비교",
         subject="수학",
         target_grade="초등 4학년",
@@ -219,43 +221,3 @@ def editor_fixture(*, new=False, published=False, legacy=False):
                 )
             )
     return data
-
-
-def lesson_fixture(query):
-    source = editor_fixture()["config"]
-    mode = query.get("mode", ["manual"])[0]
-    legacy = "legacy" in query
-    public = dict(
-        title="분수의 크기 비교",
-        subject="수학",
-        target_grade="초등 4학년",
-        problem=source["problem"],
-        student=dict(
-            name=source["student"]["name"],
-            public_profile=source["student"]["public_profile"],
-        ),
-        mentor=dict(
-            mode=mode,
-            name="멘토" if mode != "off" else "",
-            welcome_message=(
-                source["mentor"]["welcome_message"] if mode != "off" else ""
-            ),
-        ),
-    )
-    return dict(
-        public=public,
-        snapshot_origin="legacy_reconstructed" if legacy else "native",
-        snapshot_created_at="2026-10-09 09:00",
-        unknown_fields=["당시 모델", "당시 역할 지시"] if legacy else [],
-        classification_enabled=query.get("classification", ["on"])[0] != "off",
-        help=dict(status=query.get("help", ["ready"])[0], message=None),
-        completed_turn_id="turn-1",
-        session_id=1,
-        auto_eligible=mode == "auto" and not legacy,
-        feedback=dict(
-            overall="학생의 생각을 확인했습니다.",
-            strengths="그림으로 이유를 물었습니다.",
-            improvements="같은 전체인지 먼저 확인하세요.",
-            alternative="같은 크기의 종이를 나누면 어떨까요?",
-        ),
-    )

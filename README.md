@@ -170,6 +170,17 @@ or raw configuration. Unconverted display metadata remains unknown until the
 explicit conversion. The browser rehearsal includes mixed native/legacy
 history on desktop and mobile.
 
+S2-10 (#67) administration uses only `/admin/scenarios/new` and the unified editor.
+Template/framework management routes and legacy scenario writes are retired;
+retired video and template fields are rejected by the native API. The seed installs
+a template-free draft with public problem text. Select verified student and
+analysis models in the editor before publishing; no model is selected implicitly.
+The scenario list shows publication/activation/review state and grouped session
+counts. AI connection impact includes saved scenario roles and distinguishes
+mentor off and drafts/inactive scenarios from new-lesson execution references.
+Legacy tables/columns remain private conversion inputs until the verified S2
+cutover; they do not supply runtime settings or public video resources.
+
 S2-04 legacy review (#61) runs only on an explicitly selected consistent DB copy
 with migration 029 already applied. Capture actual deployment inputs in a private
 JSON file; `tests/fixtures/s2_legacy_effective.json` documents its shape with

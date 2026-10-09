@@ -1,5 +1,4 @@
 import json
-from unittest.mock import AsyncMock
 
 import httpx2 as httpx
 import pytest
@@ -13,24 +12,12 @@ from test_student_probe import response_body
 from src.models import Message
 from src.services import analysis_pipeline
 from src.services.analyzer import Analyzer
-from src.services.prompt_manager import PromptManager
 from src.services.session_synthesizer import SessionSynthesizer
 from src.services.student_bot import StudentBot
 
 USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
 scenario_payload = scenario_fixture
 client = client_fixture
-
-
-@pytest.fixture(autouse=True)
-def prompt_template(monkeypatch):
-    monkeypatch.setattr(
-        PromptManager,
-        "get_template_text_by_id",
-        AsyncMock(
-            return_value="{scenario_title}: {prompt} / {student_profile}"
-        ),
-    )
 
 
 async def test_student_success_settings_and_input_failure(data, monkeypatch):

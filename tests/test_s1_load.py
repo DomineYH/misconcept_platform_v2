@@ -1,11 +1,13 @@
 """Twenty teacher sessions and three admin jobs, through HTTP and mock SDKs."""
 
 import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import httpx2
 import pytest
+from lesson_fixtures import install_snapshot
 from sqlalchemy import select, text
 from starlette_csrf import CSRFMiddleware
 from test_call_admission import catalog_transport
@@ -13,7 +15,6 @@ from test_call_execution import verified_model
 from test_model_management import write
 from test_provider_connections import KEY, PASSWORD, post
 from test_scenario_api import login
-from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_generation import frames
 from test_student_probe import api as probe_api
 from test_student_probe import cleanup_probes as cleanup_probes
@@ -21,12 +22,18 @@ from test_student_probe import response_body, sdk_transport, sse
 
 from src.config import config
 from src.main import app
-from src.models import ApiUsageLog, GenerationRun, Message, Session
+from src.models import (
+    ApiUsageLog,
+    GenerationRun,
+    Message,
+    ModelConfig,
+    ProviderConnection,
+    Session,
+)
 from src.services.call_admission import active_calls, registered_calls
 
 pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 api = probe_api
-scenario_payload = scenario_fixture
 REPLACEMENT = "REPLACEMENT-KEY-SENTINEL-5678"
 
 
@@ -38,11 +45,9 @@ async def until(condition):
 
 @pytest.mark.parametrize("revoke", ["enabled", "delete"])
 async def test_twenty_sessions_admin_headroom_rotation_and_revocation(
-    data, api, scenario_payload, monkeypatch, caplog, revoke
+    data, api, monkeypatch, caplog, revoke
 ):
     await verified_model(data, api, monkeypatch)
-    data.scenario.problem_situation = "Synthetic public problem"
-    data.session.ended_at = None
     sessions = [data.session]
     for _ in range(19):
         session = Session(
@@ -51,6 +56,16 @@ async def test_twenty_sessions_admin_headroom_rotation_and_revocation(
         data.db.add(session)
         sessions.append(session)
     await data.db.commit()
+    connection = await data.db.get(ProviderConnection, 1)
+    model = await data.db.get(ModelConfig, 1)
+    for session in sessions:
+        await install_snapshot(
+            SimpleNamespace(
+                db=data.db, scenario=data.scenario, session=session
+            ),
+            connection,
+            model,
+        )
     identities = [session.id for session in sessions]
     bodies = [dict(request_id=str(uuid4()), content="Why?") for _ in sessions]
     catalog_gates = [asyncio.Event() for _ in range(4)]

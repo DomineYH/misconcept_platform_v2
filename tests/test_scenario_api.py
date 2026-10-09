@@ -66,7 +66,7 @@ async def test_mock_query_flags_do_not_replace_production_screen(data, client):
     login(client, data.admin)
     response = await client.get("/admin/scenarios?variant=C&mock=1")
     assert response.status_code == 200
-    assert 'id="create-form"' in response.text
+    assert 'href="/admin/scenarios/new"' in response.text
     assert 'id="scenario-form"' not in response.text
     assert "INTERNAL_STUDENT_SENTINEL" not in response.text
 
@@ -204,56 +204,46 @@ def assert_no_video(text):
 
 def test_public_scenario_schemas_do_not_include_video():
     schemas = app.openapi()["components"]["schemas"]
-    for name in ("ScenarioCreate", "ScenarioUpdate", "AdminScenarioResponse"):
+    for name in ("DraftCreate", "DraftUpdate", "DraftSaved"):
         assert_no_video(json.dumps(schemas[name]))
 
 
-async def test_legacy_crud_preserves_data_but_cannot_start_native_lesson(
+async def test_legacy_crud_is_retired_and_source_data_preserved(
     data, client, scenario_payload
 ):
     login(client, data.admin)
-    created = await client.post("/admin/scenarios", json=scenario_payload)
-    assert created.status_code == 201
-    assert_no_video(created.text)
-    sid = created.json()["id"]
     assert (
-        created.json()["problem_situation"]
-        == scenario_payload["problem_situation"]
-    )
-    assert created.json()["greeting_message"] == "Mentor greeting"
+        await client.post("/admin/scenarios", json=scenario_payload)
+    ).status_code == 422
     updated = await client.post(
         f"/admin/scenarios/{data.scenario.id}/update",
-        json={
-            "problem_situation": " Edited public problem ",
-            "greeting_message": " Edited mentor greeting ",
-            "unrelated_extra": "still ignored",
-        },
+        json={"problem_situation": "Edited public problem"},
     )
-    assert updated.status_code == 200
-    assert_no_video(updated.text)
-    assert updated.json()["problem_situation"] == "Edited public problem"
-    assert updated.json()["greeting_message"] == "Edited mentor greeting"
+    assert updated.status_code == 422
     admin_html = await client.get("/admin/scenarios")
     assert admin_html.status_code == 200
-    assert "Edited public problem" in admin_html.text
-    assert "Public problem" in admin_html.text
+    assert "변환 필요" in admin_html.text
     assert_no_video(admin_html.text)
-    # These retained columns intentionally have no public API reader.
     await data.db.refresh(data.scenario)
     assert data.scenario.video_url == "https://example.com/legacy-secret"
     assert data.scenario.video_transcript == "PRIVATE LEGACY TRANSCRIPT"
+    assert data.scenario.problem_situation is None
     login(client, data.owner)
-    listing = await client.get("/scenarios")
-    assert listing.status_code == 200
-    assert_no_video(listing.text)
-    chat = await client.get(f"/scenarios/{sid}")
-    assert chat.status_code == 400
-    assert chat.json()["detail"] == {"code": "configuration_unavailable"}
-    assert scenario_payload["prompt"] not in chat.text
-    assert_no_video(chat.text)
-    session = await client.post("/sessions", json={"scenario_id": sid})
-    assert session.status_code == 400
-    assert session.json()["detail"] == {"code": "configuration_unavailable"}
+    for path, method in [
+        (f"/scenarios/{data.scenario.id}", "GET"),
+        ("/sessions", "POST"),
+    ]:
+        response = (
+            await client.get(path)
+            if method == "GET"
+            else await client.post(path, json={"scenario_id": data.scenario.id})
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == {
+            "code": "configuration_unavailable"
+        }
+        assert scenario_payload["prompt"] not in response.text
+        assert_no_video(response.text)
 
 
 async def test_legacy_history_is_preserved_without_reconstructing_lesson(
@@ -294,7 +284,7 @@ async def test_legacy_history_is_preserved_without_reconstructing_lesson(
         f"/admin/scenarios/{data.scenario.id}/update",
         json={"problem_situation": "Administrator-completed public problem"},
     )
-    assert repaired.status_code == 200
+    assert repaired.status_code == 422
     login(client, data.owner)
     session = await client.post(
         "/sessions", json={"scenario_id": data.scenario.id}

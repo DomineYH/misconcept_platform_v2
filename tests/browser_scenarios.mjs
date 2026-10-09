@@ -8,13 +8,10 @@ export default async function checkScenarioScreens(page) {
   const assert = (value, message) => { if (!value) throw new Error(message); };
   page.on('pageerror', error => errors.push(error.message));
   await page.context().addCookies([{name:'csrftoken', value:'screen-test-token', url:base}]);
-  await page.route('**/admin/scenarios', captureSubmission);
-  await page.route('**/admin/scenarios/1/update', captureSubmission);
-  async function captureSubmission(route) {
+  await page.route('**/admin/scenarios/1/delete', async route => {
     requests.push({body:route.request().postDataJSON(), csrf:route.request().headers()['x-csrf-token']});
-    // Keep the fixture screen open while exercising the real form handler.
-    await route.fulfill({status:422, contentType:'application/json', body:'{"detail":"Fixture: no writes"}'});
-  }
+    await route.fulfill({status:409, json:{detail:{code:'version_conflict', current_version:2}}});
+  });
   const noLegacyVideo = async () => {
     const html = await page.content();
     for (const removed of ['legacy-secret', 'PRIVATE LEGACY TRANSCRIPT', 'video_url', 'video_transcript', 'videoUrl']) {
@@ -60,52 +57,39 @@ export default async function checkScenarioScreens(page) {
 
     await page.goto(`${base}/admin/scenarios-page`);
     await noLegacyVideo();
-    await page.locator('#open-create-modal').focus();
+    assert(await page.getByRole('link', {name:'통합 초안 작성'}).getAttribute('href') === '/admin/scenarios/new', 'unified creation link');
+    assert(await page.getByRole('link', {name:'수정', exact:true}).getAttribute('href') === '/admin/scenarios/1/edit', 'unified edit link');
+    assert(await page.locator('[name="framework_id"], [name="student_template_id"], [name="tutor_template_id"], #create-form, #edit-form').count() === 0, 'retired selectors/forms absent');
+    assert(!(await page.content()).includes('PRIVATE STUDENT PROMPT'), 'list contains no private source');
+    assert((await page.locator('.scenario-card').innerText()).includes('초안'), 'draft state shown');
+    await page.locator('#filter-publication').selectOption('published');
+    assert(!(await page.locator('.scenario-card').isVisible()), 'publication filter');
+    await page.locator('#filter-publication').selectOption('draft');
+    assert(await page.locator('.scenario-card').isVisible(), 'draft restored');
+    await page.locator('#search-input').fill('missing');
+    assert(!(await page.locator('.scenario-card').isVisible()), 'search filter');
+    await page.locator('#search-input').fill('Browser');
+    assert(await page.locator('.scenario-card').isVisible(), 'search restored');
+    await page.locator('#filter-status').selectOption('inactive');
+    assert(!(await page.locator('.scenario-card').isVisible()), 'activation filter');
+    await page.locator('#filter-status').selectOption('active');
+    assert(await page.locator('.scenario-card').isVisible(), 'active restored');
+    await page.locator('.delete-btn').focus();
+    const confirm = page.waitForEvent('dialog').then(dialog => dialog.accept());
+    const failed = page.waitForEvent('dialog', {predicate:d => d.type() === 'alert'}).then(async dialog => {
+      assert(dialog.message().includes('다른 관리자'), 'conflict is explicit');
+      await dialog.accept();
+    });
     await page.keyboard.press('Enter');
-    assert(await page.locator('#create-modal').evaluate(el => el.classList.contains('active')), 'keyboard opens create modal');
-    await page.locator('#new-title').fill('New screen scenario');
-    await page.locator('#new-framework').selectOption('1');
-    await page.locator('#new-student-template').selectOption('1');
-    await page.locator('#new-prompt').fill('Internal student context');
-    await page.locator('#new-profile').fill('Student profile');
-    await page.locator('#new-problem-situation').fill('New public problem');
-    await page.locator('#new-problem-situation').press('Tab');
-    assert(await page.locator('#new-greeting-message').evaluate(el => el === document.activeElement), 'create keyboard field order');
-    await page.locator('#new-greeting-message').fill('New mentor greeting');
-    await Promise.all([
-      page.waitForResponse(response => response.url() === `${base}/admin/scenarios`),
-      page.waitForEvent('dialog').then(dialog => dialog.accept()),
-      page.locator('#create-form button[type="submit"]').click()
-    ]);
-    assert(requests.at(-1).body.problem_situation === 'New public problem', 'create keeps public problem');
-    assert(requests.at(-1).body.greeting_message === 'New mentor greeting', 'create keeps greeting');
-    await page.keyboard.press('Escape');
-    assert(!(await page.locator('#create-modal').evaluate(el => el.classList.contains('active'))), 'Escape closes create');
-    checks.push(`${width}px admin create fields, keyboard and submission`);
-
-    await page.locator('.edit-btn').focus();
-    await page.keyboard.press('Enter');
-    assert(await page.locator('#edit-panel').evaluate(el => el.classList.contains('active')), 'keyboard opens edit panel');
-    assert(await page.locator('#edit-problem-situation').inputValue() === 'Problem', 'edit public problem populated');
-    assert(await page.locator('#edit-greeting-message').inputValue() === 'Hello', 'edit greeting populated');
-    await page.locator('#edit-problem-situation').fill('Edited public problem');
-    await page.locator('#edit-problem-situation').press('Tab');
-    assert(await page.locator('#edit-greeting-message').evaluate(el => el === document.activeElement), 'edit keyboard field order');
-    await page.locator('#edit-greeting-message').fill('Edited mentor greeting');
-    await Promise.all([
-      page.waitForResponse(response => response.url() === `${base}/admin/scenarios/1/update`),
-      page.waitForEvent('dialog').then(dialog => dialog.accept()),
-      page.locator('#edit-form button[type="submit"]').click()
-    ]);
-    assert(requests.at(-1).body.problem_situation === 'Edited public problem', 'edit keeps public problem');
-    assert(requests.at(-1).body.greeting_message === 'Edited mentor greeting', 'edit keeps greeting');
-    await page.keyboard.press('Escape');
-    assert(!(await page.locator('#edit-panel').evaluate(el => el.classList.contains('active'))), 'Escape closes edit');
-    checks.push(`${width}px admin edit legacy fixture, keyboard and submission`);
+    await Promise.all([confirm, failed]);
+    assert(await page.locator('.delete-btn').isEnabled(), 'failed deletion preserves control');
+    assert(await page.locator('.scenario-card').isVisible(), 'conflict preserves list');
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal overflow');
+    checks.push(`${width}px unified list links/filter/keyboard/CSRF/version conflict`);
   }
-  assert(requests.length === 4, 'one request per form submission');
+  assert(requests.length === 2, 'one request per delete attempt');
   for (const request of requests) {
-    assert(!('video_url' in request.body) && !('video_transcript' in request.body), 'no video keys submitted');
+    assert(request.body.expected_version === 1, 'deletion carries revision');
     assert(request.csrf === 'screen-test-token', 'CSRF retained');
   }
   assert(errors.length === 0, `uncaught page errors: ${errors.join('; ')}`);

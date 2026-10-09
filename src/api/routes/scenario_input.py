@@ -9,24 +9,6 @@ from src.api.dependencies import AuthenticationRequired
 REQUEST_LIMIT = 1024 * 1024
 
 
-def input_kind(value):
-    if isinstance(value, dict):
-        return (
-            "draft"
-            if any(
-                key in value
-                for key in (
-                    "config",
-                    "config_schema_version",
-                    "action",
-                    "expected_version",
-                )
-            )
-            else "legacy"
-        )
-    return "draft" if hasattr(value, "config") else "legacy"
-
-
 class ScenarioRoute(APIRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()

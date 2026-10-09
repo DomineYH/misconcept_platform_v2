@@ -21,6 +21,135 @@ REQUEST = TextRequest(
 TIMEOUTS = dict(connect=5, student_total=30, student_first_output=1)
 
 
+async def test_native_standard_price_requires_exact_model_and_thoughts(
+    monkeypatch,
+):
+    from pathlib import Path
+
+    fixture = json.loads(Path("tests/fixtures/usage_pricing.json").read_text())[
+        "google"
+    ]
+    payload = response(usage=fixture["usage"])
+    payload["modelVersion"] = fixture["modelVersion"]
+
+    async def upstream(request):
+        return httpx.Response(200, json=payload)
+
+    clients, calls = install(monkeypatch, upstream)
+    event = await google_generation.generate_text(
+        REQUEST, "PROVIDER-KEY-SENTINEL-1234", TIMEOUTS
+    )
+    assert event.type == "completed"
+    assert event.usage["estimated_cost_usd"] == pytest.approx(fixture["cost"])
+    assert event.usage["input_tokens"] == 100
+    assert event.usage["output_tokens"] == 20
+    assert event.usage["reasoning_tokens"] == 8
+    assert event.usage["total_tokens"] == 120
+    assert event.usage["pricing_as_of"] == "2026-10-09"
+    assert (
+        event.usage["pricing_source"]
+        == "https://ai.google.dev/gemini-api/docs/pricing?hl=ja"
+    )
+    assert len(calls) == 1 and all(c.is_closed for c in clients)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"modelVersion": None},
+        {"modelVersion": "gemini-2.5-flash-lite"},
+        {"modelVersion": "gemini-2.5-flash-unknown"},
+        {"usage": {"thoughtsTokenCount": None}},
+        {"usage": {"cachedContentTokenCount": None}},
+        {"usage": {"cachedContentTokenCount": 101}},
+        {"usage": {"totalTokenCount": 128}},
+    ],
+)
+async def test_missing_google_billing_dimensions_stay_unpriced(
+    monkeypatch, change
+):
+    from pathlib import Path
+
+    fixture = json.loads(Path("tests/fixtures/usage_pricing.json").read_text())[
+        "google"
+    ]
+    payload = response(usage=fixture["usage"])
+    payload["modelVersion"] = fixture["modelVersion"]
+    if "usage" in change:
+        payload["usageMetadata"] = {**fixture["usage"], **change["usage"]}
+    else:
+        payload.update(change)
+
+    async def upstream(request):
+        return httpx.Response(200, json=payload)
+
+    install(monkeypatch, upstream)
+    event = await google_generation.generate_text(
+        REQUEST, "PROVIDER-KEY-SENTINEL-1234", TIMEOUTS
+    )
+    assert event.type == "completed"
+    assert event.usage["estimated_cost_usd"] is None
+    assert (
+        event.usage["pricing_as_of"] is None
+        and event.usage["pricing_source"] is None
+    )
+    if change == {"usage": {"thoughtsTokenCount": None}}:
+        assert event.usage["output_tokens"] is None
+
+
+async def test_google_priced_stream_replaces_cumulative_counts_and_observed_zero(
+    monkeypatch,
+):
+    from pathlib import Path
+
+    fixture = json.loads(Path("tests/fixtures/usage_pricing.json").read_text())[
+        "google"
+    ]
+    for final_usage, expected in [
+        (
+            {
+                "candidatesTokenCount": 12,
+                "thoughtsTokenCount": 8,
+                "totalTokenCount": 120,
+            },
+            0.0000692,
+        ),
+        ({key: 0 for key in fixture["usage"]}, 0.0),
+    ]:
+        first = response(
+            finish=None,
+            usage={
+                **fixture["usage"],
+                "candidatesTokenCount": 6,
+                "thoughtsTokenCount": 4,
+                "totalTokenCount": 110,
+            },
+        )
+        first["modelVersion"] = fixture["modelVersion"]
+        last = response(text="", usage=final_usage)
+
+        async def upstream(request):
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=sse(first, last),
+            )
+
+        clients, calls = install(monkeypatch, upstream)
+        events = [
+            event
+            async for event in google_generation.stream_text(
+                REQUEST, "PROVIDER-KEY-SENTINEL-1234", TIMEOUTS
+            )
+        ]
+        assert events[-1].type == "completed"
+        assert events[-1].usage["estimated_cost_usd"] == pytest.approx(expected)
+        assert (
+            events[-1].usage["total_tokens"] == final_usage["totalTokenCount"]
+        )
+        assert len(calls) == 1 and all(c.is_closed for c in clients)
+
+
 def response(text="Answer", finish="STOP", usage=None):
     return dict(
         candidates=[

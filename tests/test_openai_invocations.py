@@ -20,6 +20,131 @@ REQUEST = TextRequest(
 TIMEOUTS = dict(connect=5, student_total=3, student_first_output=1)
 
 
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gpt-5-mini",
+        "gpt-5-mini-2025-08-07",
+        "gpt-5.2",
+        "gpt-5.2-2025-12-11",
+    ],
+)
+async def test_exact_standard_prices_cache_and_reasoning_without_double_counting(
+    monkeypatch, model
+):
+    import json
+    from dataclasses import replace
+    from pathlib import Path
+
+    fixture = json.loads(Path("tests/fixtures/usage_pricing.json").read_text())[
+        "openai"
+    ]
+    payload = response_body(usage=fixture["usage"])
+    payload.update(model=model, service_tier="default")
+    clients = install(monkeypatch, payload)
+    event = await openai_generation.generate_text(
+        replace(REQUEST, model_id=model), "fake", TIMEOUTS
+    )
+    assert event.type == "completed"
+    assert event.usage["estimated_cost_usd"] == pytest.approx(
+        fixture["costs"][model]
+    )
+    assert event.usage["total_tokens"] == 120
+    assert event.usage["cache_read_tokens"] == 40
+    assert event.usage["reasoning_tokens"] == 8
+    assert event.usage["pricing_as_of"] == "2026-10-09"
+    assert event.usage["pricing_source"].startswith(
+        "https://developers.openai.com/api/docs/models/"
+    )
+    assert all(c.is_closed() for c in clients)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"model": "unregistered-model"},
+        {"model": "gpt-5-mini-2099-01-01"},
+        {"service_tier": None},
+        {"service_tier": "auto"},
+        {"service_tier": "flex"},
+        {"service_tier": "priority"},
+        {"usage": {"input_tokens_details": None}},
+        {"usage": {"input_tokens_details": {"cached_tokens": 101}}},
+        {"usage": {"total_tokens": 121}},
+        {"usage": {"output_tokens": None}},
+    ],
+)
+async def test_missing_billing_dimensions_never_use_another_openai_rate(
+    monkeypatch, change
+):
+    import json
+    from pathlib import Path
+
+    fixture = json.loads(Path("tests/fixtures/usage_pricing.json").read_text())[
+        "openai"
+    ]
+    payload = response_body(usage=fixture["usage"])
+    payload["service_tier"] = "default"
+    if "usage" in change:
+        payload["usage"] = {**fixture["usage"], **change["usage"]}
+    else:
+        payload.update(change)
+    install(monkeypatch, payload)
+    event = await openai_generation.generate_text(REQUEST, "fake", TIMEOUTS)
+    assert event.type == "completed"
+    assert event.usage["estimated_cost_usd"] is None
+    assert (
+        event.usage["pricing_as_of"] is None
+        and event.usage["pricing_source"] is None
+    )
+
+
+async def test_priced_stream_replaces_cumulative_usage_and_preserves_observed_zero(
+    monkeypatch,
+):
+    import json
+    from pathlib import Path
+
+    fixture = json.loads(Path("tests/fixtures/usage_pricing.json").read_text())[
+        "openai"
+    ]
+    for final_usage, expected in [
+        (fixture["usage"], 0.000056),
+        (
+            dict(
+                input_tokens=0,
+                output_tokens=0,
+                total_tokens=0,
+                input_tokens_details={"cached_tokens": 0},
+                output_tokens_details={"reasoning_tokens": 0},
+            ),
+            0.0,
+        ),
+    ]:
+        first = response_body(
+            usage={**fixture["usage"], "output_tokens": 10, "total_tokens": 110}
+        )
+        first.update(service_tier="default", status="in_progress")
+        last = response_body(usage=final_usage)
+        last["service_tier"] = "default"
+        clients = install(
+            monkeypatch,
+            sse("response.in_progress", response=first, sequence_number=0)
+            + sse("response.completed", response=last, sequence_number=1),
+            stream=True,
+        )
+        events = [
+            event
+            async for event in openai_generation.stream_text(
+                REQUEST, "fake", TIMEOUTS
+            )
+        ]
+        assert events[-1].type == "completed"
+        assert events[-1].usage["estimated_cost_usd"] == pytest.approx(expected)
+        assert events[-1].usage["total_tokens"] == final_usage["total_tokens"]
+        assert all(c.is_closed() for c in clients)
+
+
 def install(monkeypatch, payload, *, stream=False):
     clients = []
 

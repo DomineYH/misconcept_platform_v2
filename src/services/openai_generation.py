@@ -112,7 +112,12 @@ def exception_code(error):
 
 
 def result(response, previous_usage=None):
-    usage = normalize_usage(getattr(response, "usage", None), previous_usage)
+    usage = normalize_usage(
+        getattr(response, "usage", None),
+        previous_usage,
+        model_id=getattr(response, "model", None),
+        service_tier=getattr(response, "service_tier", None),
+    )
     status = getattr(response, "status", None)
     if status == "incomplete":
         reason = getattr(
@@ -230,7 +235,14 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
                                 response is not None
                                 and getattr(response, "usage", None) is not None
                             ):
-                                usage = normalize_usage(response.usage, usage)
+                                usage = normalize_usage(
+                                    response.usage,
+                                    usage,
+                                    model_id=getattr(response, "model", None),
+                                    service_tier=getattr(
+                                        response, "service_tier", None
+                                    ),
+                                )
                                 yield CallEvent("usage", usage=usage)
                             if event.type == "response.output_text.delta":
                                 if not isinstance(event.delta, str):

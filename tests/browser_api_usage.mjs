@@ -31,6 +31,8 @@ export default async function checkApiUsage(page) {
     assert.equal(retry[6], '2');
     assert.deepEqual(retry.slice(8, 14), ['100', '20', '30', '10', '알 수 없음', '120']);
     assert(retry[7].includes('재시도 대기 (ms): 1000'));
+    assert(retry[15].includes('2026-10-01'));
+    assert(retry[15].includes('근거: https://platform.claude.com/docs/en/about-claude/pricing'));
     const legacy = await cells(4);
     assert.equal(legacy[0], '기존 기록');
     assert.equal(legacy[3], '멘토 (tutor)');
@@ -67,7 +69,7 @@ export default async function checkApiUsage(page) {
     await page.waitForFunction(() => document.querySelector('[aria-labelledby="generation-usage-caption"]').scrollLeft > 0);
     await page.keyboard.press('Tab');
     assert(await page.evaluate(() => document.activeElement?.getAttribute('aria-labelledby') === 'model-list-usage-caption'), 'keyboard reaches separate list table');
-    checks.push(`${width}px: zero/NULL, failure/retry, preserved legacy, partial totals, keyboard scrolling`);
+    checks.push(`${width}px: zero/NULL, failure/retry, preserved legacy, partial totals, price source, keyboard scrolling`);
   }
   return {checks};
 }

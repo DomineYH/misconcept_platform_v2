@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for dialogue simulator."""
 
 from src.models.analysis_framework import AnalysisFramework
-from src.models.api_usage import ApiUsageLog, calculate_cost
+from src.models.api_usage import ApiUsageLog
 from src.models.contributor import Contributor
 from src.models.generation_run import GenerationRun
 from src.models.message import Message
@@ -40,5 +40,4 @@ __all__ = [
     "ProviderConnection",
     "ProviderAuditLog",
     "Contributor",
-    "calculate_cost",
 ]

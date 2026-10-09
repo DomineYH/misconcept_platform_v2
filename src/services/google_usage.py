@@ -1,7 +1,9 @@
 """Gemini prompt includes cache; output is candidates plus thoughts."""
 
+PRICING_SOURCE = "https://ai.google.dev/gemini-api/docs/pricing?hl=ja"
 
-def normalize_usage(usage, previous=None):
+
+def normalize_usage(usage, previous=None, *, model_id=None):
     names = (
         "prompt_token_count",
         "candidates_token_count",
@@ -14,6 +16,10 @@ def normalize_usage(usage, previous=None):
         value = getattr(usage, name, None)
         if type(value) is int and value >= 0:
             raw[name] = value
+    if model_id is not None:
+        raw["pricing_model"] = (
+            model_id if model_id == "gemini-2.5-flash" else None
+        )
     candidates, thoughts = raw.get("candidates_token_count"), raw.get(
         "thoughts_token_count"
     )
@@ -56,5 +62,27 @@ def normalize_usage(usage, previous=None):
     )
     values["raw_usage_json"] = (
         raw if usage is not None or previous is not None else None
+    )
+    cost = None
+    if raw.get("pricing_model") == "gemini-2.5-flash" and all(
+        values[k] is not None
+        for k in (
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "cache_read_tokens",
+        )
+    ):
+        # This text-only native adapter uses the documented default standard tier.
+        # Paid list rates, checked 2026-10-09; see docs/ai-usage-pricing.md.
+        cost = (
+            (values["input_tokens"] - values["cache_read_tokens"]) * 0.30
+            + values["cache_read_tokens"] * 0.03
+            + values["output_tokens"] * 2.50
+        ) / 1000000
+    values.update(
+        estimated_cost_usd=cost,
+        pricing_as_of="2026-10-09" if cost is not None else None,
+        pricing_source=PRICING_SOURCE if cost is not None else None,
     )
     return values

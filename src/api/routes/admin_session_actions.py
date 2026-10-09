@@ -14,10 +14,13 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
-from src.api.routes.session_helpers import mark_session_ended
+from src.api.routes.session_helpers import (
+    mark_session_ended,
+    require_native_session,
+)
 from src.config import config
 from src.models.session import Session
 from src.models.user import User
@@ -25,6 +28,7 @@ from src.services.analysis_pipeline import analyze_session, load_analysis_lesson
 from src.services.analysis_results import (
     load_analysis_response as _load_analysis_response,
 )
+from src.services.session_history import session_display
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -59,6 +63,7 @@ async def end_session(
             detail="Session not found",
         )
 
+    require_native_session(session)
     if session.ended_at is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -85,7 +90,11 @@ async def end_session(
 
     return templates.TemplateResponse(
         "partials/session_row.html",
-        {"request": request, "session": session},
+        {
+            "request": request,
+            "session": session,
+            "session_display": session_display,
+        },
     )
 
 
@@ -134,6 +143,7 @@ async def session_detail(
         .options(
             joinedload(Session.scenario),
             joinedload(Session.teacher),
+            selectinload(Session.messages),
         )
         .where(Session.id == session_id)
     )
@@ -148,7 +158,7 @@ async def session_detail(
 
     return templates.TemplateResponse(
         "partials/session_detail.html",
-        {"request": request, "session": session},
+        {"request": request, "session": session, **session_display(session)},
     )
 
 
@@ -229,6 +239,7 @@ async def regenerate_analysis(
             detail="Session not found",
         )
 
+    require_native_session(session)
     if not session.ended_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

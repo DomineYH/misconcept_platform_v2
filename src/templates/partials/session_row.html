@@ -10,7 +10,8 @@
     {% endif %}
   </td>
   <td>{{ session.id }}</td>
-  <td>{{ session.scenario.title if session.scenario else '-' }}</td>
+  {% set display = session_display(session) %}
+  <td>{{ display.scenario_title }}{% if display.snapshot_provenance.snapshot_origin != 'native' %} · 과거 자료 · 읽기 전용{% endif %}</td>
   <td>
     {% if session.teacher %}
     {{ session.teacher.nickname }}
@@ -35,7 +36,7 @@
     {% endif %}
   </td>
   <td class="action-cell">
-    {% if not session.ended_at %}
+    {% if not session.ended_at and session.snapshot_origin == 'native' %}
     <button type="button"
       hx-post="/admin/sessions/{{ session.id }}/end"
       hx-confirm="세션을 종료하고 분석하시겠습니까?"

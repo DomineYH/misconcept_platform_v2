@@ -16,11 +16,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
-from src.api.routes.session_helpers import load_session
+from src.api.routes.session_helpers import load_session, require_native_session
 from src.config import config
 from src.models import Message, User
-from src.models.scenario import Scenario
-from src.services.lesson_snapshots import read_lesson_snapshot
+from src.services.session_history import session_display
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,8 @@ async def send_message(
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     """Old tabs must reload; all new writes use durable execution rights."""
-    await load_session(session_id, user, db)
+    session = await load_session(session_id, user, db)
+    require_native_session(session)
     return JSONResponse(
         {"code": "reload_required", "detail": "새로고침 후 다시 전송해주세요."},
         status_code=410,
@@ -110,14 +110,7 @@ async def get_message_updates(
     """Get new messages since last message ID for HTMX polling."""
     session = await load_session(session_id, user, db)
 
-    if (
-        session.snapshot_origin is not None
-        or session.config_snapshot_json is not None
-    ):
-        student_name = read_lesson_snapshot(session).config.student.name
-    else:
-        scenario = await db.get(Scenario, session.scenario_id)
-        student_name = scenario.student_name if scenario else None
+    student_name = session_display(session)["student_name"]
 
     query = (
         select(Message)

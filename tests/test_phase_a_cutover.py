@@ -180,7 +180,8 @@ async def test_wal_backup_upgrade_readers_and_restore(
             assert analysis.json()["feedback"] == "Preserved feedback"
             assert analysis.json()["distribution"] == {"A": 1}
             reused = await client.post("/sessions/1/analyze")
-            assert reused.json()["feedback_status"] == "ok"
+            assert reused.status_code == 409
+            assert reused.json()["detail"]["code"] == "legacy_read_only"
             updates = await client.get("/sessions/1/messages/updates")
             assert [
                 updates.text.index(f'data-message-id="{identity}"')
@@ -203,6 +204,11 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "confidence",
                 "feedback",
                 "classification_status",
+                "student_name",
+                "snapshot_origin",
+                "snapshot_created_at",
+                "source_scenario_version",
+                "config_hash_kind",
             ]
             assert [row[4] for row in rows[1:]] == [
                 "teacher",
@@ -212,7 +218,9 @@ async def test_wal_backup_upgrade_readers_and_restore(
             ]
             assert rows[1][5:8] == ["'=Legacy question", "A", "0.90"]
             assert rows[-1][8] == "Preserved feedback"
-            assert all(row[-1] == "legacy" for row in rows[1:])
+            assert all(row[9] == "legacy" for row in rows[1:])
+            assert all(row[-4] == "legacy_unconverted" for row in rows[1:])
+            assert all(row[-1] == "unknown" for row in rows[1:])
             assert data.owner.username not in exported.text
             login(client, data.other)
             for path in (
@@ -272,6 +280,11 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "meta_json",
                 "feedback",
                 "classification_status",
+                "student_name",
+                "snapshot_origin",
+                "snapshot_created_at",
+                "source_scenario_version",
+                "config_hash_kind",
             ]
             assert [row["message_id"] for row in rows[:-1]] == [
                 "41",

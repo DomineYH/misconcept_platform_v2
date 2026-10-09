@@ -154,6 +154,22 @@ feedback; reports and CSV explicitly show its disabled state. CSV appends a
 `classification_status` column and maps native IDs to frozen display names.
 This is not a production cutover.
 
+S2-09 (#66) extends the same explicit-copy conversion command below to store
+`legacy_reconstructed` session candidates, reconstruction time, a null source
+revision and unknown historical fields. These candidates and their hashes do
+not prove the model, instructions or rubric used at the original start time.
+Original dialogue, results, usage and timestamps remain unchanged. Legacy and
+unconverted sessions are read-only: resume, new messages, mentor requests,
+ending and analysis writes return `409 legacy_read_only`. Start a separate
+native session from a published scenario for new practice. Owners can read
+`/sessions/{id}`, existing reports and CSV; administrators use the session
+detail/results screens. History and CSV use frozen native or explicitly
+reconstructed display data, with no current-framework lookup. CSV appends the
+public student name and provenance columns; it never exports internal criteria
+or raw configuration. Unconverted display metadata remains unknown until the
+explicit conversion. The browser rehearsal includes mixed native/legacy
+history on desktop and mobile.
+
 S2-04 legacy review (#61) runs only on an explicitly selected consistent DB copy
 with migration 029 already applied. Capture actual deployment inputs in a private
 JSON file; `tests/fixtures/s2_legacy_effective.json` documents its shape with

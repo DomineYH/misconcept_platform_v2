@@ -6,12 +6,14 @@ For analysis endpoints, see session_analysis.py
 """
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, StrictInt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_current_user, get_db_session
+from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_analysis import router as analysis_router
 from src.api.routes.session_helpers import (
     load_session,
@@ -22,8 +24,9 @@ from src.api.routes.session_helpers import (
 from src.api.routes.session_messages import router as messages_router
 from src.api.routes.student_generation import router as student_router
 from src.config import config
-from src.models import User
+from src.models import Message, User
 from src.services.lesson_snapshots import start_lesson
+from src.services.session_history import session_display
 
 router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
@@ -55,6 +58,33 @@ class CloseSessionResponse(BaseModel):
     status: str
     ended_at: str
     already_ended: bool
+
+
+@router.get("/sessions/{session_id}", response_class=HTMLResponse)
+async def session_history(
+    request: Request,
+    session_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    session = await load_session(session_id, user, db)
+    messages = (
+        await db.scalars(
+            select(Message)
+            .where(Message.session_id == session_id)
+            .order_by(Message.created_at, Message.id)
+        )
+    ).all()
+    return templates.TemplateResponse(
+        "session_history.html",
+        dict(
+            request=request,
+            user=user,
+            session=session,
+            messages=messages,
+            **session_display(session),
+        ),
+    )
 
 
 @router.post("/sessions", status_code=201)

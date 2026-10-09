@@ -11,6 +11,26 @@ from src.models.scenario_group import ScenarioGroup
 from src.services.generation_lifecycle import active_runs
 
 
+def require_native_session(session):
+    if session.snapshot_origin not in {
+        None,
+        "native",
+        "legacy_reconstructed",
+    } or (
+        session.snapshot_origin is None
+        and session.config_snapshot_json is not None
+    ):
+        raise HTTPException(400, detail={"code": "configuration_unavailable"})
+    if session.snapshot_origin != "native":
+        raise HTTPException(
+            409,
+            detail={
+                "code": "legacy_read_only",
+                "message": "과거 세션은 읽기 전용입니다. 게시된 시나리오로 새 연습을 시작해주세요.",
+            },
+        )
+
+
 def validate_public_problem(scenario: Scenario) -> None:
     """Require an administrator-completed public problem for new dialogue."""
     if not (scenario.problem_situation or "").strip():
@@ -74,6 +94,7 @@ async def mark_session_ended(
     Raises:
         HTTPException: 400 if already ended and force=False
     """
+    require_native_session(session)
     # Release auth reads, then serialize with reservation/finalization.
     await db.commit()
     await db.execute(text("BEGIN IMMEDIATE"))

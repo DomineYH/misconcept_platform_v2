@@ -282,7 +282,12 @@ async def test_analysis_checks_current_authority_and_native_provenance(
         f"/sessions/{data.session.id}/analyze",
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
-    assert response.status_code in (400, 403, 404) and calls == clients == []
+    if blocked == "legacy":
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "legacy_read_only"
+    else:
+        assert response.status_code in (400, 403, 404)
+    assert calls == clients == []
 
 
 @pytest.mark.parametrize(

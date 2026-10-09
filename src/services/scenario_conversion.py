@@ -1,6 +1,7 @@
 """Offline, deterministic legacy conversion; artifacts are administrator only."""
 
 import json
+from datetime import datetime, timezone
 from hashlib import sha256
 
 from sqlalchemy import select, text, update
@@ -17,6 +18,7 @@ from src.services.legacy_conversion_values import (
     EffectiveSettings,
     convert_values,
 )
+from src.services.session_history import reconstruct_sessions
 
 LEGACY_COLUMNS = (
     "id",
@@ -202,6 +204,7 @@ async def apply_manifest(db, archive, manifest):
         row["id"]: row for row in (await capture_archive(db))["scenarios"]
     }
     results = []
+    created_at = datetime.now(timezone.utc)
     for row in manifest["scenarios"]:
         scenario = await db.get(Scenario, row["id"], populate_existing=True)
         if scenario is None:
@@ -247,5 +250,7 @@ async def apply_manifest(db, archive, manifest):
             )
             status = "converted"
         results.append(dict(id=row["id"], status=status))
+        if status in {"converted", "skipped"}:
+            await reconstruct_sessions(db, row["id"], row["target"], created_at)
     await db.flush()
     return results

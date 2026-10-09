@@ -435,13 +435,14 @@ async def test_every_legacy_identity_and_historical_record_survives_conversion(
 ):
     from datetime import datetime
 
-    from sqlalchemy import text
+    from sqlalchemy import select, text
 
     from src.models import (
         Message,
         QuestionAnalysis,
         Scenario,
         ScenarioGroup,
+        Session,
         SessionFeedbackReport,
         SessionSummary,
     )
@@ -498,9 +499,30 @@ async def test_every_legacy_identity_and_historical_record_survives_conversion(
             "session_summary",
             "session_feedback_report",
         )
-        before = {
-            table: (await db.execute(text(f"SELECT * FROM {table}"))).all()
+        added_metadata = {
+            "config_snapshot_json",
+            "config_hash",
+            "source_scenario_version",
+            "snapshot_origin",
+            "snapshot_created_at",
+        }
+        history_queries = {
+            table: (
+                select(
+                    *(
+                        c
+                        for c in Session.__table__.columns
+                        if c.name not in added_metadata
+                    )
+                )
+                if table == "session"
+                else text(f"SELECT * FROM {table}")
+            )
             for table in historical_tables
+        }
+        before = {
+            table: (await db.execute(query)).all()
+            for table, query in history_queries.items()
         }
         archive = await capture_archive(db)
         manifest = await conversion_manifest(
@@ -520,8 +542,8 @@ async def test_every_legacy_identity_and_historical_record_survives_conversion(
                 "config_version": old["config_version"] + 1
             }
         assert before == {
-            table: (await db.execute(text(f"SELECT * FROM {table}"))).all()
-            for table in historical_tables
+            table: (await db.execute(query)).all()
+            for table, query in history_queries.items()
         }
         assert (
             await db.get(Scenario, hidden.id, populate_existing=True)

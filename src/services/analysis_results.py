@@ -13,6 +13,7 @@ from src.models import (
     SessionSummary,
 )
 from src.services.lesson_snapshots import read_lesson_snapshot
+from src.services.session_history import session_display
 from src.utils.analysis_helpers import parse_reasoning
 from src.utils.session_feedback import (
     FALLBACK_FEEDBACK,
@@ -259,7 +260,9 @@ async def load_analysis_response(
         "classification_enabled": classification_enabled,
         "feedback": summary.feedback,
         "feedback_status": feedback_status,
-        "retryable": feedback_status == "failed",
+        "retryable": feedback_status == "failed"
+        and session.snapshot_origin == "native",
+        **session_display(session),
         "feedback_sections": feedback_sections,
         "stats": {
             "duration_seconds": duration_seconds,
@@ -271,5 +274,7 @@ async def load_analysis_response(
         "messages": messages_payload,
         "framework_label_criteria": framework_label_criteria,
         "grade_counts": grade_counts,
-        "session_ended_at": session.ended_at.isoformat(),
+        "session_ended_at": (
+            session.ended_at.isoformat() if session.ended_at else None
+        ),
     }

@@ -151,8 +151,8 @@ async def test_native_csv_uses_frozen_title_after_edit(data, api, publishable):
     csv_response = await api.get(f"/admin/sessions/{session_id}/download")
     assert csv_response.status_code == 200
     assert (
-        publishable["config"]["student"]["name"] not in csv_response.text
-    )  # CSV has no student-name column.
+        publishable["config"]["student"]["name"] in csv_response.text
+    )  # Native CSV uses the frozen public student name.
     assert "EDITED CSV TITLE" not in csv_response.text
     assert "새 통합 초안" in csv_response.text
 

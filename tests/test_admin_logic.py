@@ -72,6 +72,9 @@ async def test_user_and_admin_analysis_contract(data):
         "framework_label_criteria",
         "grade_counts",
         "session_ended_at",
+        "scenario_title",
+        "student_name",
+        "snapshot_provenance",
     }
     assert normal["feedback_status"] == "legacy"
     assert [q["content"] for q in normal["questions"]] == ["first", "later"]

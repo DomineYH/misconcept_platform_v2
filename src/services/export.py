@@ -17,21 +17,31 @@ from sqlalchemy.orm import joinedload
 
 from src.models.message import Message
 from src.models.question_analysis import QuestionAnalysis
-from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.session_summary import SessionSummary
 from src.models.user import User
 from src.services.analysis_results import analysis_display
-from src.services.lesson_snapshots import read_lesson_snapshot
+from src.services.session_history import session_display
+
+HISTORY_COLUMNS = [
+    "student_name",
+    "snapshot_origin",
+    "snapshot_created_at",
+    "source_scenario_version",
+    "config_hash_kind",
+]
 
 
-def _session_title(session, scenario):
-    if (
-        session.snapshot_origin is not None
-        or session.config_snapshot_json is not None
-    ):
-        return read_lesson_snapshot(session).scenario_context.title
-    return scenario.title
+def _history_columns(display):
+    return {
+        "student_name": CSVExporter._sanitize_csv_value(
+            display["student_name"]
+        ),
+        **{
+            key: display["snapshot_provenance"][key]
+            for key in HISTORY_COLUMNS[1:]
+        },
+    }
 
 
 logger = logging.getLogger(__name__)
@@ -106,13 +116,9 @@ class CSVExporter:
         )
         teacher = teacher_result.scalar_one()
 
-        scenario_result = await db.execute(
-            select(Scenario).where(Scenario.id == session.scenario_id)
-        )
-        scenario = scenario_result.scalar_one()
-        scenario_title = self._sanitize_csv_value(
-            _session_title(session, scenario)
-        )
+        display = session_display(session)
+        history_columns = _history_columns(display)
+        scenario_title = self._sanitize_csv_value(display["scenario_title"])
         classification_enabled, label_names = analysis_display(session)
         classification_status = {
             False: "classification_disabled",
@@ -158,6 +164,7 @@ class CSVExporter:
                 "confidence",
                 "feedback",
                 "classification_status",
+                *HISTORY_COLUMNS,
             ],
         )
         writer.writeheader()
@@ -185,6 +192,7 @@ class CSVExporter:
                         else ""
                     ),
                     "classification_status": classification_status,
+                    **history_columns,
                     "confidence": (
                         f"{analysis.confidence:.2f}"
                         if analysis and analysis.confidence
@@ -206,6 +214,7 @@ class CSVExporter:
                     "content": "Session Summary",
                     "label": "",
                     "classification_status": classification_status,
+                    **history_columns,
                     "confidence": "",
                     "feedback": self._sanitize_csv_value(
                         summary.feedback or ""
@@ -261,13 +270,9 @@ class CSVExporter:
         )
         teacher = teacher_result.scalar_one()
 
-        scenario_result = await db.execute(
-            select(Scenario).where(Scenario.id == session.scenario_id)
-        )
-        scenario = scenario_result.scalar_one()
-        scenario_title = self._sanitize_csv_value(
-            _session_title(session, scenario)
-        )
+        display = session_display(session)
+        history_columns = _history_columns(display)
+        scenario_title = self._sanitize_csv_value(display["scenario_title"])
         classification_enabled, label_names = analysis_display(session)
         classification_status = {
             False: "classification_disabled",
@@ -315,6 +320,7 @@ class CSVExporter:
             "meta_json",
             "feedback",
             "classification_status",
+            *HISTORY_COLUMNS,
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -324,7 +330,7 @@ class CSVExporter:
             writer.writerow(
                 {
                     "session_id": session_id,
-                    "scenario_id": scenario.id,
+                    "scenario_id": session.scenario_id,
                     "scenario_title": scenario_title,
                     "teacher_id": teacher.id,
                     "teacher_username": self._sanitize_csv_value(
@@ -349,6 +355,7 @@ class CSVExporter:
                         else ""
                     ),
                     "classification_status": classification_status,
+                    **history_columns,
                     "confidence": (
                         f"{analysis.confidence:.2f}"
                         if analysis and analysis.confidence
@@ -363,7 +370,7 @@ class CSVExporter:
             writer.writerow(
                 {
                     "session_id": session_id,
-                    "scenario_id": scenario.id,
+                    "scenario_id": session.scenario_id,
                     "scenario_title": scenario_title,
                     "teacher_id": teacher.id,
                     "teacher_username": self._sanitize_csv_value(
@@ -382,6 +389,7 @@ class CSVExporter:
                     "content": "Session Summary",
                     "label": "",
                     "classification_status": classification_status,
+                    **history_columns,
                     "confidence": "",
                     "meta_json": "",
                     "feedback": self._sanitize_csv_value(
@@ -408,7 +416,6 @@ class CSVExporter:
             .where(Session.id.in_(session_ids))
             .options(
                 joinedload(Session.teacher),
-                joinedload(Session.scenario),
             )
         )
         sessions = {s.id: s for s in sessions_result.scalars().unique().all()}
@@ -471,6 +478,7 @@ class CSVExporter:
             "meta_json",
             "feedback",
             "classification_status",
+            *HISTORY_COLUMNS,
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -483,10 +491,9 @@ class CSVExporter:
                 continue
 
             teacher = session.teacher
-            scenario = session.scenario
-            scenario_title = self._sanitize_csv_value(
-                _session_title(session, scenario)
-            )
+            display = session_display(session)
+            history_columns = _history_columns(display)
+            scenario_title = self._sanitize_csv_value(display["scenario_title"])
             classification_enabled, label_names = analysis_display(session)
             classification_status = {
                 False: "classification_disabled",
@@ -500,7 +507,7 @@ class CSVExporter:
                 writer.writerow(
                     {
                         "session_id": session_id,
-                        "scenario_id": scenario.id,
+                        "scenario_id": session.scenario_id,
                         "scenario_title": scenario_title,
                         "teacher_id": teacher.id,
                         "teacher_username": self._sanitize_csv_value(
@@ -527,6 +534,7 @@ class CSVExporter:
                             else ""
                         ),
                         "classification_status": classification_status,
+                        **history_columns,
                         "confidence": (
                             f"{analysis.confidence:.2f}"
                             if analysis and analysis.confidence
@@ -543,7 +551,7 @@ class CSVExporter:
                 writer.writerow(
                     {
                         "session_id": session_id,
-                        "scenario_id": scenario.id,
+                        "scenario_id": session.scenario_id,
                         "scenario_title": scenario_title,
                         "teacher_id": teacher.id,
                         "teacher_username": self._sanitize_csv_value(
@@ -564,6 +572,7 @@ class CSVExporter:
                         "content": "Session Summary",
                         "label": "",
                         "classification_status": classification_status,
+                        **history_columns,
                         "confidence": "",
                         "meta_json": "",
                         "feedback": self._sanitize_csv_value(

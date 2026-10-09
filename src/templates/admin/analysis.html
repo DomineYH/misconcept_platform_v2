@@ -118,7 +118,7 @@
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-900">{{ "%.0f"|format(item.confidence * 100) }}%</td>
                         <td class="px-4 py-3 text-sm text-gray-900">{{ item.session_id }}</td>
-                        <td class="px-4 py-3 text-sm text-gray-900">{{ item.scenario_title }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-900">{{ item.scenario_title }}{% if item.snapshot_provenance.snapshot_origin != 'native' %} · 과거 자료 · 읽기 전용{% endif %}</td>
                         <td class="px-4 py-3 text-sm text-gray-500">{{ item.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                         <td class="px-4 py-3">
                             <button hx-get="/admin/analysis/{{ item.id }}/detail"

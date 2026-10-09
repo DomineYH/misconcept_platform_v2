@@ -143,8 +143,9 @@ async def provider(data, scenario_payload, monkeypatch):
 
     from src.services import openai_generation
 
-    await install_connection(data, monkeypatch)
+    connection, model = await install_connection(data, monkeypatch)
     fake = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock()))
+    fake.connection, fake.model = connection, model
 
     async def upstream(request):
         assert request.headers["authorization"] == f"Bearer {LESSON_KEY}"
@@ -184,8 +185,8 @@ async def test_missing_public_problem_blocks_generation_in_existing_session(
         f"/sessions/{data.session.id}/turns/stream",
         json={"request_id": str(uuid4()), "content": "Why?"},
     )
-    assert response.status_code == 400
-    assert "문제 상황 보완 필요" in response.json()["detail"]
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "legacy_read_only"
     provider.responses.create.assert_not_awaited()
     updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
     assert updates.status_code == 204
@@ -301,9 +302,10 @@ async def test_legacy_history_is_preserved_without_reconstructing_lesson(
     assert session.status_code == 400
     assert session.json()["detail"] == {"code": "configuration_unavailable"}
     assert await data.db.scalar(select(func.count(Session.id))) == 1
-    # Ending a historical session does not make its saved messages unreadable.
+    # Read-only history cannot change its original ending timestamp.
     closed = await client.post(f"/sessions/{data.session.id}/close")
-    assert closed.status_code == 200
+    assert closed.status_code == 409
+    assert closed.json()["detail"]["code"] == "legacy_read_only"
     updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
     assert updates.status_code == 200
     assert "Historical answer" in updates.text
@@ -354,6 +356,9 @@ async def test_text_scenario_permissions_preserved(
 async def test_generation_does_not_send_legacy_video_to_provider(
     data, client, scenario_payload, provider
 ):
+    from lesson_fixtures import install_snapshot
+
+    await install_snapshot(data, provider.connection, provider.model)
     data.scenario.problem_situation = "Public problem"
     data.session.ended_at = None
     await data.db.commit()

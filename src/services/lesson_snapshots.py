@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from pydantic import Field, StrictInt, ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.api.routes.session_helpers import (
     load_session,
+    require_native_session,
     validate_scenario_access,
 )
 from src.api.schemas.scenario_config import ConfigValue, ScenarioConfig
@@ -50,6 +51,7 @@ def configuration_error():
 
 def read_lesson_snapshot(session):
     """Fail closed: never reconstruct missing/corrupt native lesson inputs."""
+    require_native_session(session)
     try:
         snapshot = LessonSnapshot.model_validate(session.config_snapshot_json)
         if (
@@ -74,6 +76,7 @@ async def load_active_lesson(db, session_id, owner_id):
     if user is None:
         raise configuration_error()
     session = await load_session(session_id, user, db)
+    require_native_session(session)
     scenario = await validate_scenario_access(session.scenario_id, user, db)
     if session.ended_at or not scenario.is_active:
         raise configuration_error()
@@ -139,6 +142,13 @@ async def start_lesson(db, scenario_id, user, *, reuse=False):
                 Session.teacher_id == user.id,
                 Session.ended_at.is_(None),
                 Session.deleted_at.is_(None),
+                or_(
+                    Session.snapshot_origin.not_in(["legacy_reconstructed"]),
+                    and_(
+                        Session.snapshot_origin.is_(None),
+                        Session.config_snapshot_json.is_not(None),
+                    ),
+                ),
             )
         )
     if session is None:

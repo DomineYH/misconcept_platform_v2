@@ -52,6 +52,8 @@
         <!-- Metadata -->
         <div class="text-sm text-gray-500 pt-3 border-t">
             <p>세션 ID: {{ analysis.session_id }} | 시나리오: {{ analysis.scenario_title }}</p>
+            {% set snapshot_provenance = analysis.snapshot_provenance %}
+            {% include "partials/snapshot_provenance.html" %}
             <p>분석 시간: {{ analysis.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
         </div>
     </div>

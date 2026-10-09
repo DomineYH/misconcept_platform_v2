@@ -1,10 +1,11 @@
 <div class="session-detail">
+  {% include "partials/snapshot_provenance.html" %}
   <div class="session-info">
     <dl>
       <dt>세션 ID</dt>
       <dd>{{ session.id }}</dd>
       <dt>시나리오</dt>
-      <dd>{{ session.scenario.title if session.scenario else '-' }}</dd>
+      <dd>{{ scenario_title }} · {{ student_name }}</dd>
       <dt>교사</dt>
       <dd>
         {% if session.teacher %}
@@ -35,4 +36,7 @@
       </dd>
     </dl>
   </div>
+  <section aria-label="원래 대화">
+    {% for message in session.messages %}{% include "partials/message.html" %}{% endfor %}
+  </section>
 </div>

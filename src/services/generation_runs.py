@@ -10,6 +10,7 @@ from sqlalchemy import func, select, text
 
 from src.api.routes.session_helpers import (
     load_session,
+    require_native_session,
     validate_scenario_access,
 )
 from src.models import (
@@ -110,6 +111,7 @@ async def _reserve_student(factory, session_id, user, request):
             )
             if access is None:
                 raise HTTPException(403, detail="Forbidden")
+        require_native_session(session)
         existing = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.owner_id == user.id,

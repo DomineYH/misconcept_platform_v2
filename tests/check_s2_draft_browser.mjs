@@ -106,6 +106,8 @@ try {
   await checkConversion(page, base);
   const {default: checkSnapshots} = await import('./check_s2_snapshots_browser.mjs');
   await checkSnapshots(page, base);
+  const {default: checkHistory} = await import('./check_s2_history_browser.mjs');
+  await checkHistory(page, base);
   assert.deepEqual(errors, []);
   console.log('PASS: real draft browser saved and reopened hidden values and model options');
 } finally {

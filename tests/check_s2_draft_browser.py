@@ -8,6 +8,7 @@ import re
 import socket
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,10 +38,14 @@ async def check():
         from src.main import app
         from src.models import (
             AnalysisFramework,
+            Message,
             ModelConfig,
             PromptTemplate,
             ProviderConnection,
+            QuestionAnalysis,
             Scenario,
+            Session,
+            SessionSummary,
             User,
             UserGroup,
         )
@@ -210,6 +215,51 @@ async def check():
             db.add(converted)
             await db.flush()
             db.add(ScenarioGroup(scenario_id=converted.id, group_id=group.id))
+            from sqlalchemy import select
+
+            teacher = await db.scalar(
+                select(User).where(User.username == "draft_teacher")
+            )
+            history = Session(
+                scenario_id=converted.id,
+                teacher_id=teacher.id,
+                started_at=datetime(2026, 1, 1),
+                ended_at=datetime(2026, 1, 2),
+            )
+            db.add(history)
+            await db.flush()
+            question = Message(
+                session_id=history.id,
+                role="teacher",
+                content="Original history question <script>window.historyLeaked=true</script>",
+            )
+            db.add_all(
+                [
+                    question,
+                    Message(
+                        session_id=history.id,
+                        role="student",
+                        content="Original history answer",
+                    ),
+                ]
+            )
+            await db.flush()
+            db.add_all(
+                [
+                    QuestionAnalysis(
+                        message_id=question.id,
+                        label="Original label",
+                        grade="우수",
+                        confidence=0.9,
+                        meta_json='{"summary":"Original history evidence"}',
+                    ),
+                    SessionSummary(
+                        session_id=history.id,
+                        distribution_json='{"Original label":1}',
+                        feedback="Original history feedback",
+                    ),
+                ]
+            )
             await db.commit()
             results = await convert_copy(
                 Path(directory) / "draft.db",

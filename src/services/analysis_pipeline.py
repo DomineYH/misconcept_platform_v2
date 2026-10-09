@@ -18,7 +18,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.api.routes.session_helpers import validate_scenario_access
+from src.api.routes.session_helpers import (
+    require_native_session,
+    validate_scenario_access,
+)
 from src.models import (
     ApiUsageLog,
     AppSetting,
@@ -56,6 +59,7 @@ async def load_analysis_lesson(db, session_id, actor_id):
         raise HTTPException(404, detail="Session not found")
     if user is None or (not user.is_admin and session.teacher_id != user.id):
         raise HTTPException(403, detail="Forbidden")
+    require_native_session(session)
     if not session.ended_at:
         raise HTTPException(400, detail="Session must be ended before analysis")
     scenario = await validate_scenario_access(session.scenario_id, user, db)

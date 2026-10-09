@@ -15,6 +15,14 @@ __all__ = ["client", "scenario_payload", "student"]
 async def test_missing_db_connection_blocks_before_creating_a_turn(
     data, client, scenario_payload
 ):
+    from types import SimpleNamespace
+
+    # Native selection deliberately references an absent DB connection/model.
+    await install_snapshot(
+        data,
+        SimpleNamespace(id=1, provider="openai"),
+        SimpleNamespace(id=1, model_id="gpt-5-mini"),
+    )
     data.scenario.problem_situation = "Public problem"
     data.session.ended_at = None
     await data.db.commit()

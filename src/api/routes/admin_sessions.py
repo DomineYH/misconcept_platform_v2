@@ -19,6 +19,7 @@ from sqlalchemy.orm import joinedload
 from src.api.dependencies import get_admin_user, get_db_session, templates
 from src.models.session import Session
 from src.models.user import User
+from src.services.session_history import session_display
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -128,6 +129,7 @@ async def sessions_page(
             "request": request,
             "user": user,
             "sessions": sessions,
+            "session_display": session_display,
             "teachers": teachers,
             "current_teacher_id": teacher_id_val,
             "current_date_from": date_from or "",
@@ -197,9 +199,7 @@ async def list_sessions_api(
             {
                 "id": s.id,
                 "scenario_id": s.scenario_id,
-                "scenario_title": (
-                    s.scenario.title if s.scenario else "Unknown"
-                ),
+                **session_display(s),
                 "teacher_id": s.teacher_id,
                 "teacher_nickname": (
                     s.teacher.nickname if s.teacher else "Unknown"

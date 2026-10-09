@@ -10,7 +10,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
-from src.api.routes.session_helpers import load_session, mark_session_ended
+from src.api.routes.session_helpers import (
+    load_session,
+    mark_session_ended,
+    require_native_session,
+)
 from src.config import config
 from src.models import (
     UiEvent,
@@ -68,6 +72,7 @@ async def analyze_session_endpoint(
 ) -> dict:
     """Analyze questions and generate summary for an ended session."""
     session = await load_session(session_id, user, db)
+    require_native_session(session)
 
     # Session must be ended before analysis
     if not session.ended_at:

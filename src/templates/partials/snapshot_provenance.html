@@ -1,0 +1,8 @@
+{% if snapshot_provenance and snapshot_provenance.snapshot_origin != 'native' %}
+<div id="snapshot-provenance" role="status">
+  <strong>과거 자료 · 재구성된 수업 설정 · 읽기 전용</strong>
+  <p>재구성 시각: {{ snapshot_provenance.snapshot_created_at or '아직 재구성되지 않음' }}. 실제 시작 시점의 설정을 증명하지 않습니다.</p>
+  <p>당시 설정을 확인할 수 없음: {{ snapshot_provenance.unknown_field_names|join(', ') }}</p>
+  <p>설정 해시는 재구성 자료의 해시입니다. 기존 대화·분석 결과를 보존합니다. 재개·신규 발화·멘토 요청·재분석은 사용할 수 없습니다.</p>
+</div>
+{% endif %}

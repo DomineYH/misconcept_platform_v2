@@ -209,8 +209,12 @@ async def test_unusable_snapshot_never_falls_back_to_current_student_settings(
         f"/sessions/{data.session.id}/turns/stream",
         json=dict(request_id=str(uuid4()), content="No fallback"),
     )
-    assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "configuration_unavailable"
+    assert response.status_code == (409 if damage == "legacy" else 503)
+    assert response.json()["detail"]["code"] == (
+        "legacy_read_only"
+        if damage == "legacy"
+        else "configuration_unavailable"
+    )
     student.responses.create.assert_not_awaited()
     updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
     assert updates.status_code == 400
@@ -241,7 +245,8 @@ async def test_session_manager_rejects_legacy_session_before_saving_teacher_mess
             await manager.process_teacher_message(
                 "Legacy sessions are read only"
             )
-        assert rejected.value.detail == {"code": "configuration_unavailable"}
+        assert rejected.value.status_code == 409
+        assert rejected.value.detail["code"] == "legacy_read_only"
         async with data.factory() as db:
             assert (await db.scalars(select(Message))).all() == []
     finally:

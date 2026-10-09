@@ -17,6 +17,7 @@ from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.user import User
 from src.services.analysis_results import analysis_display
+from src.services.session_history import session_display
 from src.utils.analysis_helpers import parse_reasoning
 
 logger = logging.getLogger(__name__)
@@ -41,10 +42,9 @@ async def analysis_page(
 
     # Build base query
     query = (
-        select(QuestionAnalysis, Message, Session, Scenario)
+        select(QuestionAnalysis, Message, Session)
         .join(Message, QuestionAnalysis.message_id == Message.id)
         .join(Session, Message.session_id == Session.id)
-        .join(Scenario, Session.scenario_id == Scenario.id)
         .order_by(desc(QuestionAnalysis.id))
     )
 
@@ -77,7 +77,7 @@ async def analysis_page(
 
     # Format analyses
     analyses = []
-    for analysis, message, session, scenario in rows:
+    for analysis, message, session in rows:
         analyses.append(
             {
                 "id": analysis.id,
@@ -88,7 +88,7 @@ async def analysis_page(
                 "confidence": analysis.confidence or 0,
                 "reasoning": parse_reasoning(analysis.meta_json),
                 "session_id": session.id,
-                "scenario_title": scenario.title,
+                **session_display(session),
                 "created_at": message.created_at,
             }
         )
@@ -181,10 +181,9 @@ async def analysis_detail_modal(
 
     # Load analysis with related data
     query = (
-        select(QuestionAnalysis, Message, Session, Scenario)
+        select(QuestionAnalysis, Message, Session)
         .join(Message, QuestionAnalysis.message_id == Message.id)
         .join(Session, Message.session_id == Session.id)
-        .join(Scenario, Session.scenario_id == Scenario.id)
         .where(QuestionAnalysis.id == analysis_id)
     )
 
@@ -194,7 +193,7 @@ async def analysis_detail_modal(
     if not row:
         raise HTTPException(status_code=404, detail="분석을 찾을 수 없습니다")
 
-    analysis, message, session, scenario = row
+    analysis, message, session = row
 
     return templates.TemplateResponse(
         "partials/analysis_detail_modal.html",
@@ -209,7 +208,7 @@ async def analysis_detail_modal(
                 "confidence": analysis.confidence,
                 "reasoning": parse_reasoning(analysis.meta_json),
                 "session_id": session.id,
-                "scenario_title": scenario.title,
+                **session_display(session),
                 "created_at": message.created_at,
             },
         },

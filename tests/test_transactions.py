@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from analysis_fixtures import install_analysis_snapshot
 from sqlalchemy import select, text
 from test_regressions import request
 
@@ -9,13 +10,18 @@ from src.models import Session, SessionFeedbackReport, SessionSummary
 from src.services import analysis_pipeline as pipeline
 
 
+@pytest.fixture(autouse=True)
+async def native_configuration(data, monkeypatch):
+    await install_analysis_snapshot(data, monkeypatch)
+
+
 async def test_admin_end_releases_writer_before_analysis(data, monkeypatch):
     sid = data.session.id
     data.session.ended_at = None
     await data.db.commit()
     writes = []
 
-    async def analyze(*args):
+    async def analyze(*args, **kwargs):
         async with data.factory() as other:
             await other.execute(text("PRAGMA busy_timeout=100"))
             await other.execute(
@@ -45,8 +51,6 @@ async def test_analysis_save_failure_is_atomic(data, monkeypatch):
         await pipeline.analyze_session(
             data.session.id,
             data.session,
-            data.scenario,
-            data.framework,
             data.db,
         )
     await data.db.rollback()
@@ -64,7 +68,7 @@ async def test_regeneration_save_failure_preserves_old(data, monkeypatch):
     )
     await data.db.commit()
     monkeypatch.setattr(
-        actions,
+        pipeline,
         "run_llm_pipeline",
         AsyncMock(
             return_value=({}, [], {}, "invalid-status", "test", "hash", [])
@@ -85,7 +89,7 @@ async def test_admin_end_recovers_after_database_failure(data, monkeypatch):
     data.session.ended_at = None
     await data.db.commit()
 
-    async def fail(*args):
+    async def fail(*args, **kwargs):
         data.db.add(
             SessionFeedbackReport(
                 session_id=sid,

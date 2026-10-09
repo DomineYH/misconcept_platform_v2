@@ -202,6 +202,7 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "label",
                 "confidence",
                 "feedback",
+                "classification_status",
             ]
             assert [row[4] for row in rows[1:]] == [
                 "teacher",
@@ -210,7 +211,8 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "summary",
             ]
             assert rows[1][5:8] == ["'=Legacy question", "A", "0.90"]
-            assert rows[-1][-1] == "Preserved feedback"
+            assert rows[-1][8] == "Preserved feedback"
+            assert all(row[-1] == "legacy" for row in rows[1:])
             assert data.owner.username not in exported.text
             login(client, data.other)
             for path in (
@@ -269,6 +271,7 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "confidence",
                 "meta_json",
                 "feedback",
+                "classification_status",
             ]
             assert [row["message_id"] for row in rows[:-1]] == [
                 "41",
@@ -276,6 +279,7 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "43",
             ]
             assert rows[0]["meta_json"] == '{"reasoning":"old"}'
+            assert all(row["classification_status"] == "legacy" for row in rows)
 
             await copy_engine.dispose()
             with sqlite3.connect(copy_path) as copy:

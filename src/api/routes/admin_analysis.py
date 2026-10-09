@@ -16,6 +16,7 @@ from src.models.question_analysis import QuestionAnalysis
 from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.user import User
+from src.services.analysis_results import analysis_display
 from src.utils.analysis_helpers import parse_reasoning
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,9 @@ async def analysis_page(
             {
                 "id": analysis.id,
                 "content": message.content,
-                "label": analysis.label,
+                "label": analysis_display(session)[1].get(
+                    analysis.label, analysis.label
+                ),
                 "confidence": analysis.confidence or 0,
                 "reasoning": parse_reasoning(analysis.meta_json),
                 "session_id": session.id,
@@ -97,8 +100,19 @@ async def analysis_page(
     scenarios = scenarios_result.scalars().all()
 
     # Get available labels for filter
-    labels_result = await db.execute(select(QuestionAnalysis.label).distinct())
-    available_labels = [r[0] for r in labels_result.all()]
+    labels_result = await db.execute(
+        select(QuestionAnalysis.label, Session)
+        .join(Message, QuestionAnalysis.message_id == Message.id)
+        .join(Session, Message.session_id == Session.id)
+        .distinct()
+    )
+    label_names = {}
+    for label_id, lesson in labels_result.all():
+        name = analysis_display(lesson)[1].get(label_id, label_id)
+        label_names.setdefault(label_id, set()).add(name)
+    available_labels = {
+        key: " / ".join(sorted(names)) for key, names in label_names.items()
+    }
 
     # Calculate stats
     avg_conf_result = await db.scalar(
@@ -113,7 +127,11 @@ async def analysis_page(
         .limit(1)
     )
     most_common_row = most_common_result.first()
-    most_common_label = most_common_row[0] if most_common_row else "N/A"
+    most_common_label = (
+        available_labels.get(most_common_row[0], most_common_row[0])
+        if most_common_row
+        else "N/A"
+    )
 
     stats = {
         "total_analyses": total,
@@ -185,7 +203,9 @@ async def analysis_detail_modal(
             "analysis": {
                 "id": analysis.id,
                 "content": message.content,
-                "label": analysis.label,
+                "label": analysis_display(session)[1].get(
+                    analysis.label, analysis.label
+                ),
                 "confidence": analysis.confidence,
                 "reasoning": parse_reasoning(analysis.meta_json),
                 "session_id": session.id,

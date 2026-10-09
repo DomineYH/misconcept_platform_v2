@@ -4,7 +4,7 @@
     {% for label, count in distribution.items() %}
     <div class="chart-row">
         <div class="chart-label">
-            {{ label }}
+            {{ label_names.get(label, label) if label_names is defined else label }}
         </div>
         <div class="chart-bar-wrapper">
             <div class="chart-bar-container">

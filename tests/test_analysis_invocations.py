@@ -4,14 +4,14 @@ import json
 
 import httpx2
 import pytest
-from lesson_fixtures import LESSON_KEY, install_connection
+from analysis_fixtures import install_analysis_snapshot
+from lesson_fixtures import LESSON_KEY
 from openai import AsyncOpenAI
 from sqlalchemy import select
 from test_provider_connections import api as provider_api
 from test_scenario_api import login
 from test_student_probe import response_body
 
-from src.config import config
 from src.models import ApiUsageLog, Message
 
 connection_api = provider_api
@@ -34,7 +34,7 @@ def analysis_transport(monkeypatch, handler):
     async def upstream(request):
         assert request.headers["authorization"] == f"Bearer {LESSON_KEY}"
         body = json.loads(request.content)
-        assert body["model"] == config.ANALYSIS_MODEL and body["store"] is False
+        assert body["model"] == "gpt-5-mini" and body["store"] is False
         calls.append(body)
         return await handler(request, body)
 
@@ -54,12 +54,7 @@ def analysis_transport(monkeypatch, handler):
 
 
 async def prepare_analysis(data, monkeypatch):
-    _, model = await install_connection(data, monkeypatch)
-    model.verification_state = {
-        **model.verification_state,
-        "analysis": dict(model.verification_state["student"]),
-    }
-    monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
+    await install_analysis_snapshot(data, monkeypatch)
     data.db.add(
         Message(session_id=data.session.id, role="teacher", content="Why?")
     )
@@ -87,12 +82,12 @@ async def test_analysis_uses_db_key_and_ledger_and_preserves_degraded(
 
     async def upstream(request, body):
         assert body["text"]["format"]["strict"] is True
-        assert body["reasoning"] == {"effort": config.ANALYSIS_REASONING}
+        assert body["reasoning"] == {"effort": "medium"}
         return httpx2.Response(
             200, json=response_body(json.dumps(result_for(body)), USAGE)
         )
 
-    # Greeting/classification/synthesis preserve their distinct legacy budgets.
+    # Every subcall uses the frozen analysis role options.
     clients, calls = analysis_transport(monkeypatch, upstream)
     response = await api.post(
         f"/sessions/{data.session.id}/analyze",
@@ -101,7 +96,7 @@ async def test_analysis_uses_db_key_and_ledger_and_preserves_degraded(
     assert response.status_code == 200
     assert response.json()["feedback_status"] == "degraded"
     assert len(calls) == 3 and all(client.is_closed() for client in clients)
-    assert [c["max_output_tokens"] for c in calls] == [500, 1500, 2500]
+    assert [c["max_output_tokens"] for c in calls] == [1500, 1500, 1500]
     async with data.factory() as db:
         rows = (
             await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))
@@ -170,7 +165,7 @@ async def test_runtime_preserves_repairs_and_nullable_degraded_feedback(
         value = result_for(body)
         if name == "RuntimeClassification":
             value = {
-                "label": "unknown",
+                "label": "A",
                 "confidence": 9,
                 "reasoning": {"summary": "legacy", "pedagogical": "discarded"},
             }
@@ -213,13 +208,13 @@ async def test_unavailable_analysis_configuration_never_calls_provider_or_enviro
 
     model = await data.db.scalar(select(ModelConfig))
     if blocked == "missing":
-        monkeypatch.setattr(config, "ANALYSIS_MODEL", "missing-exact-model")
+        model.model_id = "changed-identity"
     elif blocked == "unverified":
         model.verification_state = {"analysis": {"status": "unverified"}}
     elif blocked == "disabled":
         model.enabled = False
     else:
-        monkeypatch.setattr(config, "ANALYSIS_REASONING", "unsupported-effort")
+        model.capability_definition_version = "unsupported-definition"
     await data.db.commit()
 
     async def upstream(request, body):
@@ -230,7 +225,8 @@ async def test_unavailable_analysis_configuration_never_calls_provider_or_enviro
         f"/sessions/{data.session.id}/analyze",
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
-    assert response.json()["feedback_status"] == "failed"
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "configuration_unavailable"
     assert calls == clients == []
     async with data.factory() as db:
         assert (await db.scalars(select(ApiUsageLog))).all() == []

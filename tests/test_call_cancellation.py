@@ -27,6 +27,17 @@ async def test_stream_body_prevents_retry_and_generator_close_finalizes_partial_
     request = replace(
         await verified_model(data, api, monkeypatch), role="student"
     )
+    from lesson_fixtures import install_snapshot
+
+    from src.models import ModelConfig, ProviderConnection
+
+    data.session.teacher_id = data.admin.id
+    await install_snapshot(
+        data,
+        await data.db.get(ProviderConnection, 1),
+        await data.db.get(ModelConfig, 1),
+        options=request.validated_options,
+    )
     closed = []
 
     class Partial(httpx2.AsyncByteStream):
@@ -64,7 +75,9 @@ async def test_stream_body_prevents_retry_and_generator_close_finalizes_partial_
 
     clients, calls = sdk_transport(monkeypatch, upstream)
     permit = await ordinary(data, request, operation="student")
-    async with aclosing(execute_call(permit, request, kind="stream")) as events:
+    async with aclosing(
+        execute_call(permit, request, kind="stream", session_id=data.session.id)
+    ) as events:
         async for event in events:
             if event.type == "text_delta":
                 break

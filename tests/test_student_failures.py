@@ -461,12 +461,13 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
     data, client, student, monkeypatch
 ):
     import json
+    from copy import deepcopy
 
     import httpx2
     from test_analysis_invocations import analysis_transport
     from test_student_probe import response_body
 
-    from src.config import config
+    from src.services.lesson_snapshots import canonical_hash
 
     login(client, data.owner)
     student.stream.events = [
@@ -493,7 +494,14 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
         **student.model.verification_state,
         "analysis": dict(student.model.verification_state["student"]),
     }
-    monkeypatch.setattr(config, "ANALYSIS_MODEL", student.model.model_id)
+    envelope = deepcopy(data.session.config_snapshot_json)
+    envelope["config"]["analysis"].update(
+        classification_enabled=True,
+        rubric_name="Test",
+        rubric=[dict(id="A", name="A", criteria="Explore", level=None)],
+    )
+    data.session.config_snapshot_json = envelope
+    data.session.config_hash = canonical_hash(envelope)
     await data.db.commit()
 
     async def analysis_response(request, body):

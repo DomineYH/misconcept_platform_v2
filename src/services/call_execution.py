@@ -177,6 +177,24 @@ async def execute_call(
                         raise InvocationError(
                             "configuration_unavailable"
                         ) from None
+            if (
+                permit.role == "analysis"
+                and not permit.admin
+                and session_id is not None
+            ):
+                from src.services.analysis_pipeline import load_analysis_lesson
+
+                async with permit.factory() as db:
+                    try:
+                        await load_analysis_lesson(
+                            db,
+                            session_id,
+                            request.validation_context["actor_id"],
+                        )
+                    except HTTPException:
+                        raise InvocationError(
+                            "configuration_unavailable"
+                        ) from None
             if deadline.remaining() <= 0:
                 raise InvocationError("timeout_total")
             async with deadline.total():

@@ -32,10 +32,10 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">레이블</label>
                 <select name="label" class="rounded border-gray-300 text-sm">
                     <option value="">모든 레이블</option>
-                    {% for lbl in available_labels %}
+                    {% for lbl, display_name in available_labels.items() %}
                     <option value="{{ lbl }}"
                         {% if current_filters.label == lbl %}selected{% endif %}>
-                        {{ lbl }}
+                        {{ display_name }}
                     </option>
                     {% endfor %}
                 </select>

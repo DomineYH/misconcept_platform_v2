@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,8 +13,6 @@ from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_helpers import load_session, mark_session_ended
 from src.config import config
 from src.models import (
-    AnalysisFramework,
-    Scenario,
     UiEvent,
     User,
 )
@@ -23,6 +20,7 @@ from src.services.analysis_pipeline import (
     analyze_session,
     handle_analysis_failure,
     handle_duplicate_session_state,
+    load_analysis_lesson,
 )
 from src.services.analysis_results import (
     analysis_status,
@@ -85,28 +83,14 @@ async def analyze_session_endpoint(
     ):
         return summary_response(existing_summary, existing_report)
 
-    # Load scenario and framework
-    scenario_result = await db.execute(
-        select(Scenario).where(Scenario.id == session.scenario_id)
+    snapshot = await load_analysis_lesson(db, session_id, user.id)
+    label_names = (
+        [r.id for r in snapshot.config.analysis.rubric]
+        if snapshot.config.analysis.classification_enabled
+        else []
     )
-    scenario = scenario_result.scalar_one_or_none()
-    if not scenario:
-        raise HTTPException(status_code=404, detail="Scenario not found")
-
-    framework_result = await db.execute(
-        select(AnalysisFramework).where(
-            AnalysisFramework.id == scenario.framework_id
-        )
-    )
-    framework = framework_result.scalar_one_or_none()
-    if not framework:
-        raise HTTPException(status_code=404, detail="Framework not found")
-
-    label_names = list(framework.label_names)
     try:
-        return await analyze_session(
-            session_id, session, scenario, framework, db
-        )
+        return await analyze_session(session_id, session, db, actor_id=user.id)
     except IntegrityError as e:
         return await handle_duplicate_session_state(
             session_id, label_names, db, e

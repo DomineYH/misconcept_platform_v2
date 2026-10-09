@@ -3,13 +3,13 @@
 import json
 
 import pytest
+from legacy_models import PromptTemplate
 from test_scenario_api import login
 from test_scenario_drafts import post
 from test_scenario_publication import api as provider_api
 from test_scenario_publication import draft as draft_fixture
 from test_scenario_publication import publishable as publishable_fixture
 
-from src.models import PromptTemplate
 from src.services.scenario_conversion import (
     apply_manifest,
     capture_archive,
@@ -52,7 +52,7 @@ def effective():
 @pytest.fixture
 async def legacy(data, api, publishable):
     async with data.factory() as db:
-        from src.models import Scenario
+        from legacy_models import Scenario
 
         scenario = await db.get(Scenario, data.scenario.id)
         student = PromptTemplate(
@@ -164,7 +164,7 @@ async def test_private_dry_run_and_conversion_preserve_reviewable_source(
 async def test_unsupported_templates_stay_archived_and_block_publication(
     data, api, legacy, effective, template
 ):
-    from src.models import Scenario
+    from legacy_models import Scenario
 
     async with data.factory() as db:
         scenario = await db.get(Scenario, data.scenario.id)
@@ -275,7 +275,7 @@ async def test_reexecution_reports_skip_or_conflict_without_overwriting_native_e
 async def test_damaged_and_missing_source_becomes_minimal_typed_review_draft(
     data, api, legacy, effective, damage
 ):
-    from src.models import Scenario
+    from legacy_models import Scenario
 
     async with data.factory() as db:
         scenario = await db.get(Scenario, data.scenario.id)
@@ -435,12 +435,12 @@ async def test_every_legacy_identity_and_historical_record_survives_conversion(
 ):
     from datetime import datetime
 
+    from legacy_models import Scenario
     from sqlalchemy import select, text
 
     from src.models import (
         Message,
         QuestionAnalysis,
-        Scenario,
         ScenarioGroup,
         Session,
         SessionFeedbackReport,
@@ -530,6 +530,7 @@ async def test_every_legacy_identity_and_historical_record_survives_conversion(
         )
         results = await apply_manifest(db, archive, manifest)
         await db.commit()
+        await db.refresh(hidden)
         assert results == [
             dict(id=data.scenario.id, status="converted"),
             dict(id=hidden.id, status="converted"),
@@ -603,7 +604,7 @@ async def test_utf8_oversize_target_stays_archived_and_can_be_saved_as_minimal_d
 async def test_missing_profile_fallback_is_provenance_not_an_inferred_grade(
     data, api, legacy, effective
 ):
-    from src.models import Scenario
+    from legacy_models import Scenario
 
     async with data.factory() as db:
         scenario = await db.get(Scenario, data.scenario.id)
@@ -636,7 +637,7 @@ async def test_missing_profile_fallback_is_provenance_not_an_inferred_grade(
 async def test_changed_legacy_source_is_reported_as_conflict(
     data, api, legacy, effective
 ):
-    from src.models import Scenario
+    from legacy_models import Scenario
 
     async with data.factory() as db:
         archive = await capture_archive(db)
@@ -661,7 +662,9 @@ async def test_changed_legacy_source_is_reported_as_conflict(
 async def test_exact_student_override_uses_captured_options_and_accurate_source_evidence(
     data, api, legacy, effective
 ):
-    from src.models import ModelConfig, Scenario
+    from legacy_models import Scenario
+
+    from src.models import ModelConfig
 
     async with data.factory() as db:
         model = ModelConfig(

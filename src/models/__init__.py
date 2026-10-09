@@ -1,13 +1,11 @@
 """SQLAlchemy ORM models for dialogue simulator."""
 
-from src.models.analysis_framework import AnalysisFramework
 from src.models.api_usage import ApiUsageLog
 from src.models.contributor import Contributor
 from src.models.generation_run import GenerationRun
 from src.models.message import Message
 from src.models.model_config import AppSetting, ModelConfig
 from src.models.model_probe import ModelProbe
-from src.models.prompt_template import PromptTemplate
 from src.models.provider_connection import ProviderAuditLog, ProviderConnection
 from src.models.question_analysis import QuestionAnalysis
 from src.models.scenario import Scenario
@@ -22,7 +20,6 @@ from src.models.user_group import UserGroup
 __all__ = [
     "User",
     "UserGroup",
-    "AnalysisFramework",
     "Scenario",
     "ScenarioGroup",
     "Session",
@@ -36,7 +33,6 @@ __all__ = [
     "SessionFeedbackReport",
     "UiEvent",
     "ApiUsageLog",
-    "PromptTemplate",
     "ProviderConnection",
     "ProviderAuditLog",
     "Contributor",

@@ -150,13 +150,13 @@ async def test_mixed_history_and_csv_preserve_originals_and_freeze_display(
     import io
     from datetime import datetime
 
+    from legacy_models import Scenario
     from sqlalchemy import select
 
     from src.models import (
         ApiUsageLog,
         Message,
         QuestionAnalysis,
-        Scenario,
         SessionFeedbackReport,
         SessionSummary,
     )
@@ -361,9 +361,9 @@ async def test_mixed_history_and_csv_preserve_originals_and_freeze_display(
 async def test_new_practice_never_resumes_active_legacy_or_overwrites_native(
     data, api, legacy, effective, publishable
 ):
+    from legacy_models import Scenario
     from sqlalchemy import select
 
-    from src.models import Scenario
     from src.services.lesson_snapshots import LessonSnapshot, canonical_hash
 
     async with data.factory() as db:

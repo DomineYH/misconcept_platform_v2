@@ -29,6 +29,12 @@ async def check():
             PROVIDER_SECRET_ENCRYPTION_KEY_VERSION="browser-v1",
         )
         import uvicorn
+        from legacy_models import (
+            AnalysisFramework,
+            PromptTemplate,
+            Scenario,
+            native_writer_defaults,
+        )
         from starlette_csrf import CSRFMiddleware
 
         from src.config import config
@@ -37,13 +43,10 @@ async def check():
         from src.db.migrations.migrate import run_all_migrations
         from src.main import app
         from src.models import (
-            AnalysisFramework,
             Message,
             ModelConfig,
-            PromptTemplate,
             ProviderConnection,
             QuestionAnalysis,
-            Scenario,
             Session,
             SessionSummary,
             User,
@@ -55,7 +58,10 @@ async def check():
         from src.services.model_verification import ROLE_CONTRACT_VERSIONS
         from src.services.provider_secrets import encrypt_key
 
-        await run_all_migrations()
+        await run_all_migrations(through=30)
+        from src.db.connection import engine
+
+        native_writer_defaults(engine.url.database)
         async with AsyncSessionLocal() as db:
             group = UserGroup(name="Draft browser group")
             db.add(group)
@@ -293,6 +299,8 @@ async def check():
                 host="127.0.0.1",
                 port=listener.getsockname()[1],
                 log_level="warning",
+                # Historical conversion fixtures intentionally stop before 031.
+                lifespan="off",
             )
         )
         task = asyncio.create_task(server.serve(sockets=[listener]))

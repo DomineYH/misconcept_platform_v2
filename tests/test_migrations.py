@@ -31,7 +31,7 @@ async def schema(conn):
 async def test_upgrade_preserves_data_history_and_matches_fresh(
     data, tmp_path, monkeypatch
 ):
-    from src.models import PromptTemplate
+    from legacy_models import PromptTemplate
 
     monkeypatch.setattr(migrate, "engine", data.engine)
     async with data.engine.begin() as conn:
@@ -48,8 +48,8 @@ async def test_upgrade_preserves_data_history_and_matches_fresh(
         )
         await conn.exec_driver_sql("DROP TABLE ui_event")
         await conn.exec_driver_sql("DROP TABLE session_feedback_report")
-    await migrate.run_all_migrations()
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
+    await migrate.run_all_migrations(through=30)
     async with data.engine.connect() as conn:
         upgraded = await schema(conn)
         assert (
@@ -63,7 +63,7 @@ async def test_upgrade_preserves_data_history_and_matches_fresh(
         )
     fresh = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'fresh.db'}")
     monkeypatch.setattr(migrate, "engine", fresh)
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
     async with fresh.connect() as conn:
         assert await schema(conn) == upgraded
     await fresh.dispose()
@@ -94,7 +94,7 @@ async def test_legacy_initializer_normalizes_constraints(tmp_path, monkeypatch):
             Path("tests/fixtures/legacy_schema.sql").read_text()
         ):
             await conn.exec_driver_sql(statement)
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
     async with engine.connect() as conn:
         columns = {
             r[1]: r

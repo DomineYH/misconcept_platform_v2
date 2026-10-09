@@ -120,10 +120,11 @@ async def test_group_access_and_active_scenario_checked_before_new_run(
 async def test_student_uses_existing_settings_without_mentor_or_classifier(
     data, client, student, monkeypatch
 ):
+    from legacy_models import PromptTemplate
     from sqlalchemy import select
 
     from src.config import config
-    from src.models import ApiUsageLog, GenerationRun, PromptTemplate
+    from src.models import ApiUsageLog, GenerationRun
 
     tutor = PromptTemplate(
         bot_type="tutor",

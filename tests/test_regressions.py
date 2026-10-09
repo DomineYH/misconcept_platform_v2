@@ -10,7 +10,7 @@ from src.api.routes.session_helpers import (
     load_session,
     validate_scenario_access,
 )
-from src.models import Message, SessionSummary
+from src.models import Message, Scenario, SessionSummary
 from src.services.session_mgr import SessionManager
 
 
@@ -21,6 +21,7 @@ def request():
 
 
 async def test_ownership_and_group_access(data):
+    data.scenario = await data.db.get(Scenario, data.scenario.id)
     assert (
         await load_session(data.session.id, data.owner, data.db) is data.session
     )

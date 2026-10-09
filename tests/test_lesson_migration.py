@@ -93,8 +93,8 @@ async def test_provider_expansion_preserves_references_and_unique_rights(
             assert not await migrate._applied(
                 conn, "028_generation_providers.sql"
             )
-    await migrate.run_all_migrations()
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
+    await migrate.run_all_migrations(through=30)
     async with data.engine.begin() as conn:
         assert (
             await conn.exec_driver_sql("SELECT * FROM generation_run")

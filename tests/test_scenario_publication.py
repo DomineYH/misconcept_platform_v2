@@ -539,17 +539,12 @@ async def test_conversion_blockers_require_a_recognized_field_repair(
 async def test_new_install_seed_publishes_without_templates_or_frameworks(
     data, api, publishable, monkeypatch
 ):
-    from sqlalchemy import delete, select
+    from legacy_models import AnalysisFramework, PromptTemplate
+    from sqlalchemy import delete, select, text
     from test_scenario_api import login
 
     from src.db import seed
-    from src.models import (
-        AnalysisFramework,
-        PromptTemplate,
-        ScenarioGroup,
-        Session,
-        User,
-    )
+    from src.models import ScenarioGroup, Session, User
 
     # Remove only the historical fixture before exercising a new installation.
     async with data.factory() as db:
@@ -565,8 +560,13 @@ async def test_new_install_seed_publishes_without_templates_or_frameworks(
         seeded = (await db.scalars(select(Scenario))).one()
         scenario_id = seeded.id
         admin = await db.scalar(select(User).where(User.username == "admin"))
-        assert (await db.scalars(select(AnalysisFramework))).all() == []
-        assert (await db.scalars(select(PromptTemplate))).all() == []
+        assert (
+            await db.execute(
+                text(
+                    "SELECT name FROM sqlite_master WHERE name IN ('analysis_framework','prompt_template')"
+                )
+            )
+        ).all() == []
     login(api, admin)
     await api.get("/admin/scenarios")
     path = f"/admin/scenarios/{scenario_id}"

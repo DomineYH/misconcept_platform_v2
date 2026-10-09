@@ -97,8 +97,8 @@ async def test_wal_backup_upgrade_readers_and_restore(
                     backup.backup(copy)
 
             monkeypatch.setattr(migrate, "engine", copy_engine)
-            await migrate.run_all_migrations()
-            await migrate.run_all_migrations()
+            await migrate.run_all_migrations(through=30)
+            await migrate.run_all_migrations(through=30)
             with sqlite3.connect(copy_path) as copy:
                 after = snapshot(copy)
                 for table, rows in before.items():
@@ -165,8 +165,8 @@ async def test_wal_backup_upgrade_readers_and_restore(
             async with copy_engine.connect() as conn:
                 upgraded_schema = await schema(conn)
             monkeypatch.setattr(migrate, "engine", fresh_engine)
-            await migrate.run_all_migrations()
-            await migrate.run_all_migrations()
+            await migrate.run_all_migrations(through=30)
+            await migrate.run_all_migrations(through=30)
             async with fresh_engine.connect() as conn:
                 assert await schema(conn) == upgraded_schema
 

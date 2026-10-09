@@ -60,8 +60,8 @@ async def test_config_expansion_preserves_legacy_and_accepts_template_free_draft
             )
             for name in before
         }
-    await migrate.run_all_migrations()
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
+    await migrate.run_all_migrations(through=30)
     async with data.engine.begin() as conn:
         assert {
             index[1]: [

@@ -42,11 +42,9 @@ async def check():
         from src.db.migrations.migrate import run_all_migrations
         from src.main import app
         from src.models import (
-            AnalysisFramework,
             ApiUsageLog,
             GenerationRun,
             ModelConfig,
-            PromptTemplate,
             ProviderConnection,
             Scenario,
             ScenarioGroup,
@@ -61,18 +59,7 @@ async def check():
         await run_all_migrations()
         async with AsyncSessionLocal() as db:
             group = UserGroup(name="Live group")
-            template = PromptTemplate(
-                bot_type="student",
-                template_name="Live",
-                template_text="Student context: {prompt}",
-            )
-            mentor = PromptTemplate(
-                bot_type="tutor",
-                template_name="Enabled mentor",
-                template_text="Coach this completed turn: {prompt}",
-            )
-            framework = AnalysisFramework(name="Live", labels_json='["A","B"]')
-            db.add_all([group, template, mentor, framework])
+            db.add(group)
             await db.flush()
             owner = User(
                 username="live_owner", nickname="Teacher", group_id=group.id
@@ -80,15 +67,7 @@ async def check():
             owner.set_password("BROWSER-PASSWORD-SENTINEL")
             admin = User(username="live_admin", nickname="Admin", role="admin")
             admin.set_password("BROWSER-PASSWORD-SENTINEL")
-            scenario = Scenario(
-                title="Live",
-                prompt="Internal instruction",
-                problem_situation="Public problem",
-                framework_id=framework.id,
-                student_template_id=template.id,
-                tutor_template_id=mentor.id,
-                tutor_sensitivity="high",
-            )
+            scenario = Scenario(title="Live", config_json={})
             db.add_all([owner, admin, scenario])
             await db.flush()
             connection = await db.scalar(
@@ -141,6 +120,20 @@ async def check():
                 connection,
                 model,
             )
+            from copy import deepcopy
+
+            from src.services.lesson_snapshots import canonical_hash
+
+            envelope = deepcopy(session.config_snapshot_json)
+            envelope["config"]["mentor"].update(
+                mode="manual",
+                behavior_instruction="Coach the completed student turn",
+                resolved_model_config=session.config_snapshot_json["config"][
+                    "student"
+                ]["resolved_model_config"],
+            )
+            session.config_snapshot_json = envelope
+            session.config_hash = canonical_hash(session.config_snapshot_json)
             scenario.config_json = session.config_snapshot_json["config"]
             await db.commit()
             session_id, owner_id = session.id, owner.id

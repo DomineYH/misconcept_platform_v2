@@ -1,33 +1,29 @@
 """Scenario model for dialogue situations (T024)."""
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     String,
-    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.connection import Base
 
 if TYPE_CHECKING:
-    from src.models.analysis_framework import AnalysisFramework
-    from src.models.prompt_template import PromptTemplate
     from src.models.scenario_group import ScenarioGroup
     from src.models.session import Session
     from src.models.user import User
 
 
 class Scenario(Base):
-    """Unified scenario; legacy columns remain only for private conversion."""
+    """Unified scenario; config_json is the only educational configuration."""
 
     __tablename__ = "scenario"
 
@@ -36,34 +32,11 @@ class Scenario(Base):
 
     # Scenario identity
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
-    student_profile: Mapped[str | None] = mapped_column(Text, nullable=True)
-    student_name: Mapped[str | None] = mapped_column(
-        String(50),
-        nullable=True,
-        comment="학생 캐릭터 이름 (채팅 UI 표시용)",
-    )
     subject: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="과목명 (채팅 UI 표시용)",
     )
-    problem_situation: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-        comment=(
-            "예비교사에게 노출되는 문제 상황 텍스트 " "(시스템 프롬프트와 분리)"
-        ),
-    )
-    greeting_message: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-        comment="채팅 시작 시 멘토 안내 메시지",
-    )
-
-    # Video fields
-    video_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    video_transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Status
     is_active: Mapped[int] = mapped_column(
@@ -71,10 +44,12 @@ class Scenario(Base):
     )  # Boolean as int
 
     target_grade: Mapped[str | None] = mapped_column(String(100))
-    status: Mapped[str] = mapped_column(String(10), default="published")
+    status: Mapped[str] = mapped_column(String(10), default="draft")
     config_schema_version: Mapped[int] = mapped_column(Integer, default=1)
     config_version: Mapped[int] = mapped_column(Integer, default=1)
-    config_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
+    config_json: Mapped[dict] = mapped_column(
+        JSON(none_as_null=True), nullable=False
+    )
     review_required: Mapped[bool] = mapped_column(Boolean, default=False)
     review_reasons: Mapped[list] = mapped_column(JSON, default=list)
     conversion_provenance_json: Mapped[dict | None] = mapped_column(
@@ -82,61 +57,7 @@ class Scenario(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(DateTime)
 
-    # Phase 2: Scenario-specific chatbot configuration override
-    chat_model: Mapped[Optional[str]] = mapped_column(
-        String(50),
-        nullable=True,
-        comment=(
-            "Override StudentBot model for this scenario " "(NULL = use global)"
-        ),
-    )
-
-    chat_temperature: Mapped[Optional[float]] = mapped_column(
-        Float,
-        nullable=True,
-        comment="Override temperature 0.0-2.0 (NULL = use global)",
-    )
-
-    tutor_intervention_threshold: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        nullable=True,
-        comment=(
-            "Override tutor interventions per 10 questions "
-            "(NULL = use global)"
-        ),
-    )
-
-    tutor_sensitivity: Mapped[str] = mapped_column(
-        String(10),
-        nullable=False,
-        default="medium",
-        comment="Tutor intervention sensitivity: high, medium, low",
-    )
-
-    # Template foreign keys
-    student_template_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("prompt_template.id", ondelete="SET NULL"),
-        nullable=True,
-        comment="StudentBot prompt template for this scenario",
-    )
-
-    tutor_template_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey("prompt_template.id", ondelete="SET NULL"),
-        nullable=True,
-        comment="TutorBot prompt template (NULL = tutor disabled)",
-    )
-
     # Foreign keys
-    framework_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey(
-            "analysis_framework.id",
-            ondelete="RESTRICT",
-        ),
-        nullable=True,
-    )
     created_by: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("user.id"), nullable=True
     )
@@ -150,23 +71,12 @@ class Scenario(Base):
     )
 
     # Relationships
-    framework: Mapped[Optional["AnalysisFramework"]] = relationship(
-        "AnalysisFramework", back_populates="scenarios"
-    )
     creator: Mapped["User"] = relationship("User", back_populates="scenarios")
     sessions: Mapped[list["Session"]] = relationship(
         "Session",
         back_populates="scenario",
         cascade="all, delete-orphan",
         passive_deletes=True,
-    )
-    student_template: Mapped["PromptTemplate"] = relationship(
-        "PromptTemplate",
-        foreign_keys=[student_template_id],
-    )
-    tutor_template: Mapped[Optional["PromptTemplate"]] = relationship(
-        "PromptTemplate",
-        foreign_keys=[tutor_template_id],
     )
 
     # Scenario-group access control
@@ -182,10 +92,6 @@ class Scenario(Base):
         CheckConstraint("config_schema_version = 1"),
         CheckConstraint("config_version >= 1"),
         CheckConstraint("is_active IN (0, 1)", name="ck_scenario_active"),
-        CheckConstraint(
-            "tutor_sensitivity IN ('high', 'medium', 'low')",
-            name="ck_scenario_sensitivity",
-        ),
     )
 
     def __repr__(self) -> str:

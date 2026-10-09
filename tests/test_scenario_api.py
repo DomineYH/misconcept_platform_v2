@@ -9,11 +9,11 @@ from uuid import uuid4
 import httpx
 import pytest
 from itsdangerous import TimestampSigner
+from legacy_models import PromptTemplate
 
 from src.api.dependencies import get_db_session
 from src.config import config
 from src.main import app
-from src.models.prompt_template import PromptTemplate
 
 
 @pytest.fixture

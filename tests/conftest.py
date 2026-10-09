@@ -13,12 +13,13 @@ os.environ.update(
 )
 
 import pytest
+from legacy_models import AnalysisFramework, Scenario
 from sqlalchemy import MetaData, Table, event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import load_only
 
 from src.db.connection import Base, set_sqlite_pragma
-from src.models import AnalysisFramework, Scenario, Session, User
+from src.models import Session, User
 from src.models.scenario_group import ScenarioGroup
 from src.models.user_group import UserGroup
 
@@ -44,7 +45,19 @@ async def data(tmp_path, request):
             ):
                 await conn.exec_driver_sql(statement)
         else:
-            await conn.run_sync(Base.metadata.create_all)
+            from legacy_models import PromptTemplate
+
+            metadata = MetaData()
+            for table in Base.metadata.tables.values():
+                if table.name != "scenario":
+                    table.to_metadata(metadata)
+            for table in (
+                AnalysisFramework.__table__,
+                PromptTemplate.__table__,
+                Scenario.__table__,
+            ):
+                table.to_metadata(metadata)
+            await conn.run_sync(metadata.create_all)
     factory = async_sessionmaker(
         engine, expire_on_commit=False, autoflush=False
     )

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.routes.session_helpers import mark_session_ended
 from src.config import config
 from src.models import Message, Scenario, Session
+from src.services.lesson_snapshots import load_active_lesson
 from src.services.student_bot import StudentBot
 from src.services.turn_context import load_completed_turns
 from src.services.tutor_bot import TutorBot
@@ -37,7 +38,7 @@ class SessionManager:
                 await service.close()
 
     async def initialize(self) -> None:
-        """Load session and initialize StudentBot with scenario."""
+        """Validate the native lesson before initializing its bots."""
         # Load session and scenario
         result = await self.db.execute(
             select(Session).where(
@@ -45,6 +46,7 @@ class SessionManager:
             )
         )
         session = result.scalar_one()
+        await load_active_lesson(self.db, self.session_id, session.teacher_id)
         tutor_intervention_count = session.tutor_intervention_count
         tutor_question_count = session.tutor_question_count
 
@@ -60,14 +62,7 @@ class SessionManager:
         self.student_bot = StudentBot(
             session_id=self.session_id,
             owner_id=session.teacher_id,
-            scenario_prompt=scenario.prompt,
-            scenario_title=scenario.title,
-            student_profile=scenario.student_profile or "Grade 5 student",
             db_session=self.db,
-            template_id=scenario.student_template_id,
-            model=bot_config["student_model"],
-            reasoning_effort=bot_config["student_reasoning"],
-            max_tokens=bot_config["student_max_tokens"],
         )
 
         # Conditionally initialize TutorBot based on scenario setting
@@ -127,7 +122,7 @@ class SessionManager:
         (
             student_content,
             _student_usage,
-        ) = await self.student_bot.generate_response(teacher_content, history)
+        ) = await self.student_bot.generate_response(teacher_content)
 
         tutor_feedback = None
         if self.tutor_bot:
@@ -191,15 +186,10 @@ class SessionManager:
 
         Returns:
             Dictionary with complete bot configuration parameters:
-            - student_model, student_reasoning, student_max_tokens
             - tutor_model, tutor_reasoning, tutor_max_tokens
             - tutor_enabled, tutor_intervention_threshold
         """
         return {
-            # StudentBot configuration
-            "student_model": (scenario.chat_model or config.CHAT_MODEL),
-            "student_reasoning": config.STUDENT_REASONING or "medium",
-            "student_max_tokens": config.STUDENT_MAX_TOKENS or 750,
             # TutorBot configuration
             "tutor_enabled": scenario.tutor_enabled,
             "tutor_model": config.ANALYSIS_MODEL,

@@ -52,6 +52,7 @@ class CallPermit:
     model_id: str | None = None
     capability_version: str | None = None
     contract_version: str | None = None
+    model_options: dict | None = None
 
     def release_slot(self):
         active_calls.discard(self)
@@ -113,6 +114,7 @@ async def admit_call(
     model_config_id=None,
     expected_model_version=None,
     probe_id=None,
+    model_options=None,
 ):
     async with execution_lock():
         permit = None
@@ -145,7 +147,9 @@ async def admit_call(
                         model is None
                         or model.provider_connection_id != connection_id
                         or model.config_version != expected_model_version
-                        or not model_available(model, connection, role)
+                        or not model_available(
+                            model, connection, role, options=model_options
+                        )
                     ):
                         raise InvocationError("configuration_unavailable")
                 elif operation != "model_list":
@@ -159,6 +163,7 @@ async def admit_call(
                     role=role,
                     admin=admin,
                 )
+                permit.model_options = model_options
                 permit.model_config_id = model_config_id
                 permit.config_version = expected_model_version
                 permit.probe_id = probe_id
@@ -223,7 +228,12 @@ async def recheck_call(permit):
                     or (
                         connection.connection_version
                         == permit.connection_version
-                        and not model_available(model, connection, permit.role)
+                        and not model_available(
+                            model,
+                            connection,
+                            permit.role,
+                            options=permit.model_options,
+                        )
                     )
                 ):
                     raise InvocationError("configuration_unavailable")
@@ -242,6 +252,7 @@ async def readmit_call(permit):
         model_config_id=permit.model_config_id,
         expected_model_version=permit.config_version,
         probe_id=permit.probe_id,
+        model_options=permit.model_options,
     )
     current.timeouts = permit.timeouts
     current.admitted_at = permit.admitted_at

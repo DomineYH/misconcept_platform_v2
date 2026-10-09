@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import pytest
+from lesson_fixtures import STUDENT_INSTRUCTION
 from sqlalchemy import event
 from test_scenario_api import login
 from test_student_generation import client, frames, scenario_payload, student
@@ -11,7 +12,6 @@ from test_student_generation import client, frames, scenario_payload, student
 from src.config import config
 from src.db.migrations import migrate
 from src.models import GenerationRun, Message, Session
-from src.services.student_bot import BASE_STUDENT_PROMPT
 
 __all__ = ["client", "scenario_payload", "student"]
 UNFINISHED_TURN = "00000000-0000-0000-0000-000000000061"
@@ -88,6 +88,11 @@ async def test_student_route_receives_n_completed_pairs_and_current_once(
     data, client, student, long_dialogue, monkeypatch
 ):
     monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
+    from lesson_fixtures import install_snapshot
+
+    await install_snapshot(
+        data, student.connection, student.model, context_turn_limit=4
+    )
     login(client, data.owner)
     response = await client.post(
         f"/sessions/{data.session.id}/turns/stream",
@@ -99,8 +104,9 @@ async def test_student_route_receives_n_completed_pairs_and_current_once(
     )
     assert frames(response)[-1][0] == "output.completed"
     actual = student.responses.create.call_args.kwargs["input"]
-    assert student.responses.create.call_args.kwargs["instructions"] == (
-        BASE_STUDENT_PROMPT + "\n\nTest misconception Student profile"
+    assert (
+        student.responses.create.call_args.kwargs["instructions"]
+        == STUDENT_INSTRUCTION
     )
     assert actual == [
         {"role": "user", "content": "Teacher 57"},
@@ -177,7 +183,7 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
     assert "Teacher 51" not in prompt and "Teacher 47" not in prompt
 
 
-async def test_legacy_generation_also_uses_only_completed_pairs(
+async def test_nonstream_generation_also_uses_only_completed_pairs(
     data, scenario_payload, long_dialogue, monkeypatch
 ):
     from src.services.session_mgr import SessionManager
@@ -189,7 +195,10 @@ async def test_legacy_generation_also_uses_only_completed_pairs(
 
     from src.services.invocation_types import InvocationError
 
-    await install_connection(data, monkeypatch)
+    connection, model = await install_connection(data, monkeypatch)
+    from lesson_fixtures import install_snapshot
+
+    await install_snapshot(data, connection, model, context_turn_limit=4)
 
     async def upstream(request, body):
         return httpx2.Response(
@@ -208,10 +217,7 @@ async def test_legacy_generation_also_uses_only_completed_pairs(
             await manager.process_teacher_message("Legacy caller question")
         actual = calls[0]["input"]
         assert len(actual) == 9  # Four pairs and the current question.
-        assert (
-            calls[0]["instructions"]
-            == BASE_STUDENT_PROMPT + "\n\nTest misconception Student profile"
-        )
+        assert calls[0]["instructions"] == STUDENT_INSTRUCTION
         assert actual[0] == {"role": "user", "content": "Teacher 57"}
         assert actual[-2:] == [
             {"role": "assistant", "content": "Student 60"},

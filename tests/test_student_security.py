@@ -136,6 +136,14 @@ async def test_student_uses_existing_settings_without_mentor_or_classifier(
     data.scenario.chat_model = "gpt-5-mini-2025-08-07"
     student.model.model_id = "gpt-5-mini-2025-08-07"
     await data.db.commit()
+    from lesson_fixtures import install_snapshot
+
+    await install_snapshot(
+        data,
+        student.connection,
+        student.model,
+        options={"max_output_tokens": 1234, "reasoning": {"effort": "low"}},
+    )
     monkeypatch.setattr(config, "STUDENT_REASONING", "low")
     monkeypatch.setattr(config, "STUDENT_MAX_TOKENS", 1234)
     login(client, data.owner)
@@ -161,9 +169,9 @@ async def test_student_uses_existing_settings_without_mentor_or_classifier(
     }
     assert sum(m["content"] == "Current question" for m in kwargs["input"]) == 1
     assert "Test misconception" in kwargs["instructions"]
-    from src.services.student_bot import BASE_STUDENT_PROMPT
+    from lesson_fixtures import STUDENT_INSTRUCTION
 
-    assert kwargs["instructions"].startswith(BASE_STUDENT_PROMPT + "\n\n")
+    assert kwargs["instructions"] == STUDENT_INSTRUCTION
     async with data.factory() as reader:
         usage = (await reader.scalars(select(ApiUsageLog))).one()
         assert (

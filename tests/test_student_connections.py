@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import httpx2
 import pytest
-from lesson_fixtures import LESSON_KEY, install_connection
+from lesson_fixtures import LESSON_KEY, install_connection, install_snapshot
 from test_scenario_api import client, login, scenario_payload
 from test_student_generation import student
 from test_student_probe import response_body, sdk_transport, sse
@@ -31,14 +31,14 @@ async def test_missing_db_connection_blocks_before_creating_a_turn(
     ).status_code == 204
 
 
-async def test_missing_student_template_rejects_without_a_turn_or_attempt(
+async def test_missing_student_snapshot_rejects_without_a_turn_or_attempt(
     data, client, student
 ):
     from sqlalchemy import select
 
     from src.models import ApiUsageLog, GenerationRun, Message
 
-    data.scenario.student_template_id = None
+    data.session.config_snapshot_json = None
     await data.db.commit()
     login(client, data.owner)
     response = await client.post(
@@ -67,7 +67,8 @@ async def test_student_uses_db_key_exact_options_and_one_linked_attempt(
     from src.models import ApiUsageLog
     from src.services import openai_generation
 
-    await install_connection(data, monkeypatch)
+    connection, model = await install_connection(data, monkeypatch)
+    await install_snapshot(data, connection, model)
     from src.config import config
 
     monkeypatch.setattr(config, "OPENAI_API_KEY", "")
@@ -142,7 +143,8 @@ async def test_nonstream_student_has_an_invocation_without_a_fake_run(
     from src.models import ApiUsageLog
     from src.services.student_bot import StudentBot
 
-    await install_connection(data, monkeypatch)
+    connection, model = await install_connection(data, monkeypatch)
+    await install_snapshot(data, connection, model)
 
     async def upstream(request, body):
         return httpx2.Response(200, json=response_body("Nonstream student"))
@@ -151,13 +153,9 @@ async def test_nonstream_student_has_an_invocation_without_a_fake_run(
         monkeypatch, upstream, budget=1500, key=LESSON_KEY
     )
     async with StudentBot(
-        data.scenario.prompt,
-        data.scenario.title,
-        "Student profile",
-        data.db,
-        data.scenario.student_template_id,
+        data.db, session_id=data.session.id, owner_id=data.owner.id
     ) as student:
-        content, usage = await student.generate_response("Why?", [])
+        content, usage = await student.generate_response("Why?")
     assert content == "Nonstream student" and usage is None
     assert len(calls) == 1 and all(sdk.is_closed() for sdk in clients)
     async with data.factory() as db:
@@ -192,7 +190,7 @@ async def test_unavailable_student_configuration_has_no_fallback_or_attempt(
     setting = await data.db.get(AppSetting, 1)
     setting.student_model_config_id = student.model.id
     if mode == "different_model":
-        data.scenario.chat_model = "unregistered-exact-model"
+        student.model.model_id = "different-from-frozen-selection"
     elif mode == "model_disabled":
         student.model.enabled = False
     elif mode == "unverified":
@@ -214,7 +212,16 @@ async def test_unavailable_student_configuration_has_no_fallback_or_attempt(
             config, "PROVIDER_SECRET_ENCRYPTION_KEY", SecretStr("")
         )
     else:
-        monkeypatch.setattr(config, "STUDENT_REASONING", "none")
+        import copy
+
+        from src.services.lesson_snapshots import canonical_hash
+
+        envelope = copy.deepcopy(data.session.config_snapshot_json)
+        envelope["config"]["student"]["resolved_model_config"]["options"][
+            "reasoning"
+        ]["effort"] = "none"
+        data.session.config_snapshot_json = envelope
+        data.session.config_hash = canonical_hash(envelope)
     await data.db.commit()
     login(client, data.owner)
     result = await client.post(
@@ -231,8 +238,9 @@ async def test_unavailable_student_configuration_has_no_fallback_or_attempt(
         await client.get(f"/sessions/{data.session.id}/messages/updates")
     ).status_code == 204
     screen = await client.get(f"/scenarios/{data.scenario.id}")
-    assert screen.status_code == 400
-    assert screen.json()["detail"] == {"code": "configuration_unavailable"}
+    assert screen.status_code == 200
+    assert "Public problem" in screen.text
+    assert "PRIVATE ANALYSIS" not in screen.text
     async with data.factory() as db:
         assert (await db.scalars(select(ApiUsageLog))).all() == []
 
@@ -255,7 +263,18 @@ async def test_shared_capacity_rejects_before_reserving_a_student_turn(
     sessions = [data.session]
     for _ in range(2):
         session = Session(
-            scenario_id=data.scenario.id, teacher_id=data.owner.id
+            scenario_id=data.scenario.id,
+            teacher_id=data.owner.id,
+            **{
+                key: getattr(data.session, key)
+                for key in (
+                    "config_snapshot_json",
+                    "config_hash",
+                    "source_scenario_version",
+                    "snapshot_origin",
+                    "snapshot_created_at",
+                )
+            },
         )
         data.db.add(session)
         sessions.append(session)

@@ -129,6 +129,20 @@ async def check():
                 ]
             )
             await db.commit()
+            from types import SimpleNamespace
+
+            from lesson_fixtures import install_snapshot
+
+            model = await db.scalar(
+                select(ModelConfig).where(ModelConfig.model_id == "gpt-5-mini")
+            )
+            await install_snapshot(
+                SimpleNamespace(db=db, session=session, scenario=scenario),
+                connection,
+                model,
+            )
+            scenario.config_json = session.config_snapshot_json["config"]
+            await db.commit()
             session_id, owner_id = session.id, owner.id
 
         release = asyncio.Event()

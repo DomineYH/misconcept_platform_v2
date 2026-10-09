@@ -70,6 +70,9 @@ def parameters(request):
     except ValueError:
         raise InvocationError("configuration_unavailable") from None
     maximum = options.pop("max_output_tokens", 1024)
+    # The pinned SDK accepts this validated API option through extra_body.
+    if "temperature" in options:
+        options["extra_body"] = {"temperature": options.pop("temperature")}
     values = dict(
         model=request.model_id,
         system=request.system_instruction,

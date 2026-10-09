@@ -104,6 +104,22 @@ async def test_template_free_draft_round_trip_and_hidden_values(
         ).group(1)
     )
     assert bootstrap["config"] == draft["config"]
+    from src.api.schemas.scenario_config import ScenarioConfig
+    from src.services.lesson_snapshots import ScenarioContext, public_lesson
+
+    projected = public_lesson(
+        ScenarioContext(
+            **{
+                key: bootstrap[key]
+                for key in ("title", "subject", "target_grade")
+            }
+        ),
+        ScenarioConfig.model_validate(bootstrap["config"]),
+    )
+    assert set(bootstrap["public_lesson_fields"]) == set(projected)
+    assert set(re.findall(r'data-preview="([^"]+)"', editor.text)) == set(
+        projected
+    )
 
 
 @pytest.mark.parametrize(

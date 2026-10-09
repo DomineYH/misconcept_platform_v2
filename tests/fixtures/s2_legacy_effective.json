@@ -1,0 +1,13 @@
+{
+  "source": "Synthetic deployment capture for offline conversion tests",
+  "captured_at": "2026-10-09T00:00:00Z",
+  "student_base_rules": "BASE: 존댓말을 사용하고 되묻지 마세요.",
+  "student": {"model_id": "gpt-5.2", "options": {"max_output_tokens": 1600, "reasoning": {"effort": "none"}, "temperature": 0.7}},
+  "mentor_coaching": {"model_id": "gpt-5.2", "options": {"max_output_tokens": 1600, "reasoning": {"effort": "none"}, "temperature": 0.7}},
+  "mentor_judgment": {"model_id": "gpt-5.2", "options": {"max_output_tokens": 200}},
+  "analysis_synthesis": {"model_id": "gpt-5.2", "options": {"max_output_tokens": 1600, "reasoning": {"effort": "none"}, "temperature": 0.7}},
+  "analysis_greeting": {"model_id": "gpt-5.2", "options": {"max_output_tokens": 500}},
+  "analysis_classification": {"model_id": "gpt-5.2", "options": {"max_output_tokens": 2500}},
+  "tutor_intervention_threshold": 3,
+  "context_turn_limit": 10
+}

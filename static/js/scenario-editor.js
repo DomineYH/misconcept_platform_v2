@@ -176,6 +176,7 @@ async function save(action) {
       data.id = result.id ?? data.id;
       data.config_version = result.version;
       data.status = result.status;
+      if (window.location.pathname === '/admin/scenarios/new') window.history.replaceState(null, '', `/admin/scenarios/${data.id}/edit`);
       dirty = edits !== submittedEdits;
       if (action === 'publish') data.review_required = false;
       publicationStatus();
@@ -208,7 +209,7 @@ window.addEventListener('beforeunload', event => {
 function reviewState() {
   const blocked = data.review_required && data.review_reasons.some(reason => reason.blocking);
   const acknowledged = !data.review_required || document.getElementById('acknowledge-review').checked;
-  publish.disabled = busy || blocked || !acknowledged;
+  publish.disabled = busy || data.publication_available === false || blocked || !acknowledged;
   const note = document.getElementById('review-publication-status');
   if (note) note.textContent = blocked ? '게시 불가 · 필수 내용을 보완하고 서버에서 다시 검증해야 합니다.' : acknowledged ? '검토 확인됨 · 게시 시 필수 내용과 모델을 다시 검증합니다.' : '게시 불가 · 변환 경고 검토 확인이 필요합니다.';
 }

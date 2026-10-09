@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_helpers import (
-    validate_public_problem,
+    validate_new_session,
     validate_scenario_access,
 )
 from src.models import Scenario, Session, User
@@ -46,6 +46,7 @@ async def list_scenarios(
         select(Scenario)
         .where(Scenario.is_active == 1)
         .where(Scenario.deleted_at.is_(None))
+        .where(Scenario.status == "published")
     )
 
     # Admin sees all scenarios
@@ -102,7 +103,7 @@ async def get_scenario_detail(
     session = existing_result.scalars().first()
 
     if not session:
-        validate_public_problem(scenario)
+        validate_new_session(scenario)
         session = Session(
             scenario_id=scenario.id,
             teacher_id=user.id,

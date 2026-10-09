@@ -113,6 +113,17 @@ Browser setup (Node 24): `npm ci` and `npx playwright install --with-deps chromi
 Browser checks: `npm run test:browser` (optional filename filters: `npm run test:browser -- student_stream`).
 Live streaming check (localhost, no paid calls): `uv run --frozen python tests/check_student_live.py`.
 
+S2-02 draft authoring (#59): open `/admin/scenarios/new` as an administrator.
+The existing create/update URLs store typed v1 drafts, and `/admin/scenarios/{id}`
+returns the saved administrator envelope; `/admin/scenarios/{id}/edit` reopens it.
+Drafts preserve hidden mentor/rubric values and unavailable model selections;
+updates and deletions require `expected_version`. Drafts cannot start lessons.
+`npm run test:browser -- s2_draft_live` rehearses the real form, login, CSRF,
+save and reopen against migrated temporary SQLite, with external sockets blocked.
+Migration 029 preserves legacy rows and adds snapshot storage only. Publication,
+explicit legacy conversion and native lesson snapshots belong to following S2
+tickets; this intermediate change is not a production cutover.
+
 S2-01 screen fixtures (#58): `npm run test:browser -- s2_` exercises the five-step
 editor, public preview, model options, synthetic save errors/conflicts, conversion
 review and teacher help. To inspect the screens, run

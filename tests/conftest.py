@@ -13,8 +13,9 @@ os.environ.update(
 )
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import MetaData, Table, event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import load_only
 
 from src.db.connection import Base, set_sqlite_pragma
 from src.models import AnalysisFramework, Scenario, Session, User
@@ -60,17 +61,44 @@ async def data(tmp_path, request):
         scenario = Scenario(
             title="Test", prompt="Test misconception", framework_id=framework.id
         )
-        db.add(scenario)
-        await db.flush()
+        if getattr(request, "param", None) == "baseline":
+            scenario = await legacy_record(
+                db,
+                Scenario,
+                dict(
+                    title="Test",
+                    prompt="Test misconception",
+                    framework_id=framework.id,
+                    is_active=1,
+                    tutor_sensitivity="medium",
+                    created_at=datetime(2026, 1, 1),
+                ),
+            )
+        else:
+            db.add(scenario)
+            await db.flush()
         session = Session(
             scenario_id=scenario.id,
             teacher_id=owner.id,
             ended_at=datetime(2026, 1, 2),
             started_at=datetime(2026, 1, 1),
         )
-        db.add_all(
-            [session, ScenarioGroup(scenario_id=scenario.id, group_id=group.id)]
-        )
+        if getattr(request, "param", None) == "baseline":
+            session = await legacy_record(
+                db,
+                Session,
+                dict(
+                    scenario_id=scenario.id,
+                    teacher_id=owner.id,
+                    ended_at=datetime(2026, 1, 2),
+                    started_at=datetime(2026, 1, 1),
+                    tutor_intervention_count=0,
+                    tutor_question_count=0,
+                ),
+            )
+        else:
+            db.add(session)
+        db.add(ScenarioGroup(scenario_id=scenario.id, group_id=group.id))
         await db.commit()
         yield SimpleNamespace(
             db=db,
@@ -84,3 +112,21 @@ async def data(tmp_path, request):
             session=session,
         )
     await engine.dispose()
+
+
+async def legacy_record(db, model, values):
+    """Seed the immutable deployed schema without new ORM expansion columns."""
+    conn = await db.connection()
+    table = await conn.run_sync(
+        lambda conn: Table(model.__tablename__, MetaData(), autoload_with=conn)
+    )
+    result = await db.execute(table.insert().values(**values))
+    return await db.scalar(
+        select(model)
+        .where(model.id == result.inserted_primary_key[0])
+        .options(
+            load_only(
+                *(getattr(model, column.name) for column in table.columns)
+            )
+        )
+    )

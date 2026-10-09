@@ -82,9 +82,7 @@ async def test_judgment_and_coaching_share_frozen_model_and_options(
     from lesson_fixtures import configure_mentor
 
     await configure_mentor(data, mentor, "auto", start_turn=1)
-    monkeypatch.setattr(
-        config, "DIALOGUE_ANALYSIS_MODEL", "unregistered-hidden-model"
-    )
+    monkeypatch.setenv("DIALOGUE_ANALYSIS_MODEL", "unregistered-hidden-model")
     login(client, data.owner)
     await complete_turn(client, data, "Explain how you solved the problem")
     mentor.stream.events[-1].response.output_text = "Entirely distinct solution"

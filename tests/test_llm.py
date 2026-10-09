@@ -251,7 +251,7 @@ async def test_classification_and_synthesis_parse_errors_do_not_retry(
         owner_id=data.owner.id,
     )
     _, status = await synth.synthesize(
-        messages=[], framework=snapshot.config.analysis
+        messages=[], analysis=snapshot.config.analysis
     )
     assert status == "failed"
     async with data.factory() as db:

@@ -21,13 +21,6 @@ class Config(BaseSettings):
     OPENAI_API_KEY: str = ""
     PROVIDER_SECRET_ENCRYPTION_KEY: SecretStr = SecretStr("")
     PROVIDER_SECRET_ENCRYPTION_KEY_VERSION: str = ""
-    # Supported: gpt-5 (Responses API with reasoning)
-    # Recommended: gpt-5 (latest, Aug 2025)
-    CHAT_MODEL: str = "gpt-5-mini"
-    ANALYSIS_MODEL: str = "gpt-5.2"
-    # Model for dialogue similarity analysis
-    DIALOGUE_ANALYSIS_MODEL: str = "gpt-5.2"
-
     # ===== GPT-5 Reasoning Effort Configuration =====
     # GPT-5.6: none, low, medium, high, xhigh, max.
     # Earlier models may also support minimal; supported values vary by model.
@@ -35,12 +28,6 @@ class Config(BaseSettings):
     STUDENT_REASONING: str = "medium"
     TUTOR_REASONING: str = "low"
 
-    # ===== Bot Token Limits =====
-    # Note: GPT-5 reasoning tokens count toward max_output_tokens.
-    # gpt-5-mini "low" can use ~450 reasoning tokens alone.
-    # Minimum recommended: 500 (reasoning) + 500 (text) = 1000
-    STUDENT_MAX_TOKENS: int = 1500
-    TUTOR_MAX_TOKENS: int = 1500
     TUTOR_INTERVENTION_THRESHOLD: int = 3
 
     # Number of completed teacher–student pairs preceding the current turn.
@@ -145,14 +132,6 @@ class Config(BaseSettings):
             )
         return v
 
-    @field_validator("STUDENT_MAX_TOKENS", "TUTOR_MAX_TOKENS")
-    @classmethod
-    def validate_positive_tokens(cls, v, info):
-        """Validate token limits are positive."""
-        if v <= 0:
-            raise ValueError(f"{info.field_name} must be positive, got {v}")
-        return v
-
     @field_validator("TUTOR_INTERVENTION_THRESHOLD")
     @classmethod
     def validate_intervention_threshold(cls, v):
@@ -163,18 +142,6 @@ class Config(BaseSettings):
                 f"10, got {v}"
             )
         return v
-
-    @field_validator("CHAT_MODEL", "ANALYSIS_MODEL", "DIALOGUE_ANALYSIS_MODEL")
-    @classmethod
-    def validate_model_name(cls, v, info):
-        """Validate model names are from supported families."""
-        if not v:
-            return v
-        if v.startswith("gpt-4") or v.startswith("gpt-5"):
-            return v
-        raise ValueError(
-            f"{info.field_name} must be a gpt-4 or gpt-5 " f"model, got {v}"
-        )
 
     @field_validator("CONTEXT_WINDOW_TURNS")
     @classmethod

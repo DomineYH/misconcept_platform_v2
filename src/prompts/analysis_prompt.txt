@@ -15,12 +15,12 @@ and student context when classifying.
 
 ## Classification Framework
 
-Framework: {framework_name}
+Framework: {rubric_name}
 
 Classification Labels and Criteria:
-{framework_labels_with_criteria}
+{rubric_labels_with_criteria}
 
-Allowed Labels: {framework_labels}
+Allowed Labels: {rubric_labels}
 
 **IMPORTANT**: You MUST use ONLY the labels listed above.
 Do NOT use any other labels.

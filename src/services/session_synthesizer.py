@@ -52,7 +52,7 @@ class SessionSynthesizer(AnalysisCaller):
             question_analyses=[...],
             scenario="분수 덧셈 탐색",
             misconception="분모 통분 불가",
-            framework=analysis,
+            analysis=analysis,
             student_profile="초등학교 5학년",
         )
     """
@@ -65,7 +65,7 @@ class SessionSynthesizer(AnalysisCaller):
     async def synthesize(
         self,
         messages: list[dict[str, Any]],
-        framework: AnalysisConfig,
+        analysis: AnalysisConfig,
         question_analyses: Optional[list[dict]] = None,
         scenario: str = "",
         misconception: str = "",
@@ -81,22 +81,22 @@ class SessionSynthesizer(AnalysisCaller):
             scenario: Scenario title.
             misconception: Target misconception text.
             student_profile: Student profile description.
-            framework: Frozen evaluation settings and rubric.
+            analysis: Frozen evaluation settings and rubric.
 
         Returns:
             (payload, status) where status is "ok", "degraded",
             or "failed".
         """
         dialogue = self._format_dialogue(messages)
-        labels_section = self._format_labels(framework)
+        labels_section = self._format_labels(analysis)
         question_analyses_section = self._format_question_analyses(
             question_analyses
         )
 
         prompt = self._template.format(
-            framework_name=framework.rubric_name,
-            framework_labels_with_criteria=labels_section,
-            framework_labels=self._format_label_names(framework),
+            rubric_name=analysis.rubric_name,
+            rubric_labels_with_criteria=labels_section,
+            rubric_labels=self._format_label_names(analysis),
             question_analyses_section=question_analyses_section,
             scenario_title=scenario,
             misconception=misconception,
@@ -105,11 +105,11 @@ class SessionSynthesizer(AnalysisCaller):
         )
 
         prompt += (
-            f"\n평가 맥락\n{framework.context}\n기대 이해\n{framework.expected_understanding}"
-            f"\n평가 지시\n{framework.instruction}\n분류 설명\n{framework.rubric_description}"
-            f"\n분류 범주\n{framework.category_name}"
+            f"\n평가 맥락\n{analysis.context}\n기대 이해\n{analysis.expected_understanding}"
+            f"\n평가 지시\n{analysis.instruction}\n분류 설명\n{analysis.rubric_description}"
+            f"\n분류 범주\n{analysis.category_name}"
         )
-        if not framework.classification_enabled:
+        if not analysis.classification_enabled:
             prompt += "\n분류 미사용: 분류 결과 없이 전체 대화에서 총평, 강점, 개선점과 대안 질문을 작성하세요."
 
         status = None
@@ -137,7 +137,7 @@ class SessionSynthesizer(AnalysisCaller):
         role_map = {
             "teacher": "선생님",
             "student": "지수(학생)",
-            "tutor": "엔토(멘토)",
+            "tutor": "멘토",
         }
         lines = []
         for msg in messages:
@@ -147,11 +147,11 @@ class SessionSynthesizer(AnalysisCaller):
             )
         return "\n".join(lines)
 
-    def _format_labels(self, framework: AnalysisConfig) -> str:
-        """Format framework labels with criteria."""
+    def _format_labels(self, analysis: AnalysisConfig) -> str:
+        """Format rubric labels with criteria."""
         criteria_map = (
-            {r.id: f"{r.name}: {r.criteria}" for r in framework.rubric}
-            if framework.classification_enabled
+            {r.id: f"{r.name}: {r.criteria}" for r in analysis.rubric}
+            if analysis.classification_enabled
             else {}
         )
         return "\n".join(
@@ -159,11 +159,11 @@ class SessionSynthesizer(AnalysisCaller):
             for name, criteria in criteria_map.items()
         )
 
-    def _format_label_names(self, framework: AnalysisConfig) -> str:
-        """Format framework label names as comma-separated list."""
+    def _format_label_names(self, analysis: AnalysisConfig) -> str:
+        """Format rubric label names as comma-separated list."""
         names = (
-            [r.id for r in framework.rubric]
-            if framework.classification_enabled
+            [r.id for r in analysis.rubric]
+            if analysis.classification_enabled
             else []
         )
         return ", ".join(names)

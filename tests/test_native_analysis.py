@@ -343,7 +343,7 @@ async def test_reanalysis_keeps_frozen_inputs_and_preserves_good_result_on_failu
     data.framework.labels = ["Changed", "Labels"]
     model.default_options_json = {"unsupported_current_option": True}
     model.config_version += 1
-    monkeypatch.setattr(config, "ANALYSIS_MODEL", "unregistered-env-model")
+    monkeypatch.setenv("ANALYSIS_MODEL", "unregistered-env-model")
     monkeypatch.setattr(config, "ANALYSIS_REASONING", "unsupported-env-effort")
     await data.db.commit()
     login(api, data.admin)

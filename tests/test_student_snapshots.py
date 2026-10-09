@@ -121,7 +121,7 @@ async def test_retry_keeps_snapshot_hash_options_and_completed_turn_window(
     data.scenario.chat_model = "changed-model"
     data.scenario.status = "draft"
     monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 1)
-    monkeypatch.setattr(config, "STUDENT_MAX_TOKENS", 99)
+    monkeypatch.setenv("STUDENT_MAX_TOKENS", "99")
     await data.db.commit()
     retry = await client.post(
         url, json=dict(body, request_id=str(uuid4()), turn_id=turn_id)

@@ -1,7 +1,7 @@
 """
 Analyzer service for teacher question classification (T060).
 
-Stateless LLM-based classification using framework-specific
+Stateless LLM-based classification using rubric-specific
 prompts with structured JSON output.
 """
 
@@ -58,18 +58,18 @@ class Analyzer(AnalysisCaller):
     async def classify_question(
         self,
         question: str,
-        framework: AnalysisConfig,
+        analysis: AnalysisConfig,
         context: Optional[str] = None,
         scenario_title: Optional[str] = None,
         misconception_prompt: Optional[str] = None,
         student_profile: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Classify a teacher question using the analysis framework.
+        Classify a teacher question using the frozen rubric.
 
         Args:
             question: Teacher's question text
-            framework: Analysis framework with labels
+            analysis: Frozen evaluation settings and rubric
             context: Optional conversation context (previous messages)
             scenario_title: Optional scenario title for context
             misconception_prompt: Optional misconception being addressed
@@ -86,18 +86,18 @@ class Analyzer(AnalysisCaller):
         few_shot_examples = generate_examples(
             [
                 dict(name=r.id, criteria=r.criteria, level=r.level)
-                for r in framework.rubric
+                for r in analysis.rubric
             ],
-            framework.rubric_description,
+            analysis.rubric_description,
         )
 
         # Build criteria-formatted labels for prompt.
         # Issue #33: include `level` in the prompt so the LLM knows which
         # labels need an `improved_sentence`.
         criteria_map = {
-            r.id: f"{r.name}: {r.criteria}" for r in framework.rubric
+            r.id: f"{r.name}: {r.criteria}" for r in analysis.rubric
         }
-        level_map = {r.id: r.level for r in framework.rubric}
+        level_map = {r.id: r.level for r in analysis.rubric}
 
         def _format_label(name: str, criteria: str) -> str:
             level = level_map.get(name)
@@ -109,14 +109,14 @@ class Analyzer(AnalysisCaller):
             _format_label(name, criteria)
             for name, criteria in criteria_map.items()
         )
-        label_names = [r.id for r in framework.rubric]
+        label_names = [r.id for r in analysis.rubric]
 
-        # Format prompt with framework and scenario context
+        # Format prompt with analysis and scenario context
         prompt = self.prompt_template.format(
-            framework_name=framework.rubric_name,
-            framework_description=(framework.rubric_description),
-            framework_labels=", ".join(label_names),
-            framework_labels_with_criteria=(labels_with_criteria),
+            rubric_name=analysis.rubric_name,
+            rubric_description=(analysis.rubric_description),
+            rubric_labels=", ".join(label_names),
+            rubric_labels_with_criteria=(labels_with_criteria),
             few_shot_examples=few_shot_examples,
             scenario_title=(scenario_title or "Not specified"),
             misconception_prompt=(misconception_prompt or "Not specified"),
@@ -126,9 +126,9 @@ class Analyzer(AnalysisCaller):
         )
 
         prompt += (
-            f"\n평가 맥락\n{framework.context}\n기대 이해\n{framework.expected_understanding}"
-            f"\n평가 지시\n{framework.instruction}\n분류 설명\n{framework.rubric_description}"
-            f"\n분류 범주\n{framework.category_name}"
+            f"\n평가 맥락\n{analysis.context}\n기대 이해\n{analysis.expected_understanding}"
+            f"\n평가 지시\n{analysis.instruction}\n분류 설명\n{analysis.rubric_description}"
+            f"\n분류 범주\n{analysis.category_name}"
         )
 
         def normalize(result):
@@ -138,7 +138,7 @@ class Analyzer(AnalysisCaller):
                     "Invalid response format: missing required fields"
                 )
 
-            # Validate label is in framework
+            # Validate label is in the rubric
             if result["label"] not in label_names:
                 raise ValueError("Unknown rubric ID")
 
@@ -175,7 +175,7 @@ class Analyzer(AnalysisCaller):
     async def batch_classify(
         self,
         questions: list[str],
-        framework: AnalysisConfig,
+        analysis: AnalysisConfig,
         context: Optional[str] = None,
         scenario_title: Optional[str] = None,
         misconception_prompt: Optional[str] = None,
@@ -186,7 +186,7 @@ class Analyzer(AnalysisCaller):
 
         Args:
             questions: List of teacher questions
-            framework: Analysis framework
+            analysis: Frozen evaluation settings and rubric
             context: Optional shared context
             scenario_title: Optional scenario title for context
             misconception_prompt: Optional misconception being addressed
@@ -200,7 +200,7 @@ class Analyzer(AnalysisCaller):
             try:
                 result = await self.classify_question(
                     question=question,
-                    framework=framework,
+                    analysis=analysis,
                     context=context,
                     scenario_title=scenario_title,
                     misconception_prompt=misconception_prompt,
@@ -214,7 +214,7 @@ class Analyzer(AnalysisCaller):
                 # Return default classification on failure
                 results.append(
                     {
-                        "label": framework.rubric[0].id,
+                        "label": analysis.rubric[0].id,
                         "confidence": 0.0,
                         "reasoning": (f"Classification failed: {e}"),
                     }

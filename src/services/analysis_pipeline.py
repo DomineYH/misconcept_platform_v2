@@ -131,10 +131,10 @@ async def run_llm_pipeline(
         Tuple of (distribution, question_analyses, payload,
         synthesis_status, model, prompt_hash, empty legacy usage list).
     """
-    framework = snapshot.config.analysis
+    analysis = snapshot.config.analysis
     scenario = snapshot.scenario_context
     student = snapshot.config.student
-    selection = framework.resolved_model_config
+    selection = analysis.resolved_model_config
     analyzer = Analyzer(
         factory,
         selection=selection,
@@ -144,7 +144,7 @@ async def run_llm_pipeline(
     )
 
     # Step 1: Filter greeting messages
-    if not framework.classification_enabled:
+    if not analysis.classification_enabled:
         teacher_messages = []
     if teacher_messages:
         teacher_messages = await _filter_greetings(
@@ -153,8 +153,8 @@ async def run_llm_pipeline(
 
     # Step 2: Parallel classification with bounded semaphore
     distribution = (
-        {r.id: 0 for r in framework.rubric}
-        if framework.classification_enabled
+        {r.id: 0 for r in analysis.rubric}
+        if analysis.classification_enabled
         else {}
     )
     parallelism = 1
@@ -170,7 +170,7 @@ async def run_llm_pipeline(
             context = "\n".join(f"{m.role}: {m.content}" for m in all_messages)
             return await analyzer.classify_question(
                 question=msg.content,
-                framework=framework,
+                analysis=analysis,
                 context=context,
                 scenario_title=scenario.title,
                 misconception_prompt=student.misconception,
@@ -204,7 +204,7 @@ async def run_llm_pipeline(
                 grade={"high": "우수", "low": "개선"}.get(
                     next(
                         r.level
-                        for r in framework.rubric
+                        for r in analysis.rubric
                         if r.id == result["label"]
                     )
                 ),
@@ -241,7 +241,7 @@ async def run_llm_pipeline(
             scenario=scenario.title,
             misconception=student.misconception,
             student_profile=student.internal_profile,
-            framework=framework,
+            analysis=analysis,
         )
         synth_model = synthesizer.model
         synth_hash = synthesizer._hash

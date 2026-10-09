@@ -1,8 +1,6 @@
 """Offline, deterministic legacy conversion; artifacts are administrator only."""
 
-import json
 from datetime import datetime, timezone
-from hashlib import sha256
 
 from sqlalchemy import select, text, update
 
@@ -16,6 +14,7 @@ from src.services.legacy_conversion_values import (
     EffectiveSettings,
     convert_values,
 )
+from src.services.lesson_snapshots import canonical_hash
 from src.services.session_history import reconstruct_sessions
 
 LEGACY_COLUMNS = (
@@ -42,18 +41,6 @@ LEGACY_COLUMNS = (
     "is_active",
     "config_version",
 )
-
-
-def checksum(value):
-    return sha256(
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode()
-    ).hexdigest()
 
 
 async def capture_archive(db):
@@ -146,11 +133,11 @@ async def conversion_manifest(db, archive, effective, archive_ref):
         .mappings()
         .all()
     )
-    archive_hash = checksum(archive)
+    archive_hash = canonical_hash(archive)
     rows = []
     for source in archive["scenarios"]:
         target, reasons, evidence = convert_values(source, settings, models)
-        target_hash = checksum(target)
+        target_hash = canonical_hash(target)
         provenance = [
             dict(
                 field="원문 archive",
@@ -158,7 +145,7 @@ async def conversion_manifest(db, archive, effective, archive_ref):
                 target="",
                 archive_ref=archive_ref,
                 archive_hash=archive_hash,
-                source_hash=checksum(source),
+                source_hash=canonical_hash(source),
                 target_hash=target_hash,
                 captured_at=settings.captured_at,
                 settings_source=settings.source,
@@ -168,7 +155,7 @@ async def conversion_manifest(db, archive, effective, archive_ref):
             dict(
                 id=source["id"],
                 source_version=source["config_version"],
-                source_hash=checksum(source),
+                source_hash=canonical_hash(source),
                 target_hash=target_hash,
                 target=target,
                 review_reasons=reasons,
@@ -213,13 +200,13 @@ async def apply_manifest(db, archive, manifest):
             )
             status = (
                 "skipped"
-                if checksum(actual) == row["target_hash"]
+                if canonical_hash(actual) == row["target_hash"]
                 and scenario.conversion_provenance_json
                 == row["conversion_provenance"]
                 and scenario.config_version == row["source_version"] + 1
                 else "conflict"
             )
-        elif checksum(current[row["id"]]) != row["source_hash"]:
+        elif canonical_hash(current[row["id"]]) != row["source_hash"]:
             status = "conflict"
         else:
             target = row["target"]

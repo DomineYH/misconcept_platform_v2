@@ -113,6 +113,18 @@ Browser setup (Node 24): `npm ci` and `npx playwright install --with-deps chromi
 Browser checks: `npm run test:browser` (optional filename filters: `npm run test:browser -- student_stream`).
 Live streaming check (localhost, no paid calls): `uv run --frozen python tests/check_student_live.py`.
 
+S2-01 screen fixtures (#58): `npm run test:browser -- s2_` exercises the five-step
+editor, public preview, model options, synthetic save errors/conflicts, conversion
+review and teacher help. To inspect the screens, run
+`uv run --frozen python tests/browser_server.py` and open
+`http://127.0.0.1:8765/fixtures/s2/editor` (also `?new=1`, `?published=1`,
+`?legacy=blocked` or `?legacy=review`) or `/fixtures/s2/lesson?mode=off|manual|auto`.
+Teacher fixtures also accept `help=running|failed|rate_limited|limit`,
+`classification=off` and `legacy=1`. Use one value per parameter.
+The isolated server never writes a database or calls a provider; save/help
+responses are intercepted only by browser tests. These fixture routes and query
+switches do not exist in the application. Runtime wiring follows in #59–#66.
+
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it
 contains the original product code, without credentials, databases or caches.

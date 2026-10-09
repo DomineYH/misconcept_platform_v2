@@ -15,13 +15,46 @@ os.environ.update(
     OPENAI_API_KEY="test",
 )
 from src.api.dependencies import templates  # noqa: E402
+from tests.s2_screen_fixtures import (
+    editor_fixture,
+    lesson_fixture,
+)  # noqa: E402
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path)
         query = parse_qs(path.query)
-        if path.path in {"/chat", "/scenarios", "/admin/scenarios-page"}:
+        if path.path == "/fixtures/s2/lesson":
+            body = (
+                templates.env.from_string(
+                    Path("tests/fixtures/s2_lesson.html").read_text()
+                )
+                .render(
+                    user=SimpleNamespace(nickname="Teacher", role="teacher"),
+                    lesson=lesson_fixture(query),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/s2/lesson-controller.js":
+            body = Path("tests/fixtures/s2_lesson_controller.js").read_bytes()
+            mime = "text/javascript"
+        elif path.path == "/fixtures/s2/editor":
+            body = (
+                templates.get_template("admin/scenario_editor.html")
+                .render(
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    editor=editor_fixture(
+                        new="new" in query,
+                        published="published" in query,
+                        legacy=query.get("legacy", [""])[0],
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path in {"/chat", "/scenarios", "/admin/scenarios-page"}:
             framework = SimpleNamespace(id=1, name="Framework")
             student_template = SimpleNamespace(
                 id=1, template_name="Student template", version=1

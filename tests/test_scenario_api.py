@@ -46,6 +46,31 @@ def login(client, user):
     )
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/fixtures/s2/editor",
+        "/fixtures/s2/lesson",
+        "/fixtures/s2/lesson-controller.js",
+    ],
+)
+async def test_s2_browser_fixtures_are_not_application_routes(
+    data, client, path
+):
+    login(client, data.admin)
+    response = await client.get(path)
+    assert response.status_code == 404
+
+
+async def test_mock_query_flags_do_not_replace_production_screen(data, client):
+    login(client, data.admin)
+    response = await client.get("/admin/scenarios?variant=C&mock=1")
+    assert response.status_code == 200
+    assert 'id="create-form"' in response.text
+    assert 'id="scenario-form"' not in response.text
+    assert "INTERNAL_STUDENT_SENTINEL" not in response.text
+
+
 @pytest.fixture
 async def scenario_payload(data):
     template = PromptTemplate(

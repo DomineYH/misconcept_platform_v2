@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import httpx2 as httpx
 import pytest
-from lesson_fixtures import install_connection
+from lesson_fixtures import install_connection, install_snapshot
 from test_analysis_invocations import analysis_transport
 from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_probe import response_body
@@ -37,7 +37,7 @@ async def test_student_success_settings_and_input_failure(data, monkeypatch):
 
     from src.services.invocation_types import InvocationError
 
-    await install_connection(data, monkeypatch)
+    connection, model = await install_connection(data, monkeypatch)
 
     async def upstream(request, body):
         return httpx.Response(200, json=response_body("Student answer", USAGE))
@@ -45,23 +45,35 @@ async def test_student_success_settings_and_input_failure(data, monkeypatch):
     clients, calls = sdk_transport(
         monkeypatch, upstream, budget=1234, key=LESSON_KEY
     )
+    await install_snapshot(
+        data,
+        connection,
+        model,
+        options={"max_output_tokens": 1234, "reasoning": {"effort": "low"}},
+    )
+    data.db.add_all(
+        [
+            Message(
+                session_id=data.session.id,
+                role="teacher",
+                turn_id="prior",
+                turn_index=1,
+                content="Earlier",
+            ),
+            Message(
+                session_id=data.session.id,
+                role="student",
+                turn_id="prior",
+                turn_index=1,
+                content="Answer",
+            ),
+        ]
+    )
+    await data.db.commit()
     async with StudentBot(
-        "Misconception",
-        "Scenario",
-        "Profile",
-        data.db,
-        1,
-        model="gpt-5-mini",
-        reasoning_effort="low",
-        max_tokens=1234,
+        data.db, session_id=data.session.id, owner_id=data.owner.id
     ) as bot:
-        content, usage = await bot.generate_response(
-            "Why?",
-            [
-                {"role": "teacher", "content": "Earlier"},
-                {"role": "student", "content": "Answer"},
-            ],
-        )
+        content, usage = await bot.generate_response("Why?")
         assert content == "Student answer"
         assert usage == {
             "prompt_tokens": 10,
@@ -79,17 +91,16 @@ async def test_student_success_settings_and_input_failure(data, monkeypatch):
             {"role": "assistant", "content": "Answer"},
             {"role": "user", "content": "Why?"},
         ]
-        PromptManager.get_template_text_by_id.side_effect = ValueError(
-            "Invalid template"
-        )
+        data.session.config_hash = "0" * 64
+        await data.db.commit()
         with pytest.raises(InvocationError, match="configuration_unavailable"):
-            await bot.generate_response("Why?", [])
+            await bot.generate_response("Why?")
         assert len(calls) == 1
     assert all(sdk.is_closed() for sdk in clients)
 
 
 @pytest.mark.parametrize("with_mentor", [False, True])
-async def test_legacy_session_uses_db_calls_without_per_turn_analysis(
+async def test_session_manager_uses_native_student_without_per_turn_analysis(
     data, scenario_payload, monkeypatch, with_mentor
 ):
     from lesson_fixtures import LESSON_KEY
@@ -100,7 +111,8 @@ async def test_legacy_session_uses_db_calls_without_per_turn_analysis(
     from src.models import ApiUsageLog
     from src.services.session_mgr import SessionManager
 
-    _, model = await install_connection(data, monkeypatch)
+    connection, model = await install_connection(data, monkeypatch)
+    await install_snapshot(data, connection, model)
     monkeypatch.setattr(config, "OPENAI_API_KEY", "")
     if with_mentor:
         model.verification_state = {
@@ -345,7 +357,8 @@ async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
 
     from src.api.routes.student_generation import StudentRequest, student_turn
 
-    await install_connection(data, monkeypatch)
+    connection, model = await install_connection(data, monkeypatch)
+    await install_snapshot(data, connection, model)
     sid = data.session.id
     data.scenario.problem_situation = "Public problem"
     data.session.ended_at = None

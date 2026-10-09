@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import httpx2
 import pytest
-from lesson_fixtures import LESSON_KEY, install_connection
+from lesson_fixtures import LESSON_KEY, install_connection, install_snapshot
 from openai import AsyncOpenAI
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
@@ -55,6 +55,8 @@ class FakeStream:
 @pytest.fixture
 async def student(data, scenario_payload, monkeypatch):
     connection, model = await install_connection(data, monkeypatch)
+    await install_snapshot(data, connection, model)
+    data.scenario.config_json = data.session.config_snapshot_json["config"]
     data.scenario.problem_situation = "Public problem"
     data.session.ended_at = None
     await data.db.commit()

@@ -9,9 +9,12 @@ from pydantic import Field, StrictInt, ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.api.routes.session_helpers import validate_scenario_access
+from src.api.routes.session_helpers import (
+    load_session,
+    validate_scenario_access,
+)
 from src.api.schemas.scenario_config import ConfigValue, ScenarioConfig
-from src.models import Session
+from src.models import Session, User
 from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
 from src.services.scenario_publication import publication_errors
@@ -63,6 +66,18 @@ def read_lesson_snapshot(session):
         return snapshot
     except (ValidationError, ValueError, TypeError, UnicodeError):
         raise configuration_error() from None
+
+
+async def load_active_lesson(db, session_id, owner_id):
+    """Live access gates frozen student inputs, including after admission."""
+    user = await db.get(User, owner_id)
+    if user is None:
+        raise configuration_error()
+    session = await load_session(session_id, user, db)
+    scenario = await validate_scenario_access(session.scenario_id, user, db)
+    if session.ended_at or not scenario.is_active:
+        raise configuration_error()
+    return read_lesson_snapshot(session)
 
 
 def public_lesson(context, config):

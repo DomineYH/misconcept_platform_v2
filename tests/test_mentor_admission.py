@@ -31,7 +31,18 @@ async def test_capacity_refusal_has_no_run_counter_or_attempt_and_can_be_retried
     sessions = [data.session]
     for _ in range(2):
         session = Session(
-            scenario_id=data.scenario.id, teacher_id=data.owner.id
+            scenario_id=data.scenario.id,
+            teacher_id=data.owner.id,
+            **{
+                key: getattr(data.session, key)
+                for key in (
+                    "config_snapshot_json",
+                    "config_hash",
+                    "source_scenario_version",
+                    "snapshot_origin",
+                    "snapshot_created_at",
+                )
+            },
         )
         data.db.add(session)
         sessions.append(session)

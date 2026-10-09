@@ -204,7 +204,10 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
                 yield frame("output.delta", text=event.text)
             elif event.type == "completed":
                 try:
-                    result = await finish("completed", content=event.text)
+                    # Some adapters complete with metadata after emitting all text deltas.
+                    result = await finish(
+                        "completed", content=event.text or partial
+                    )
                 except Exception:
                     logger.error("Student final commit failed")
                     raise StudentStreamError("storage_error") from None

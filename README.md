@@ -133,8 +133,12 @@ assignment and role-model checks, atomically storing a native configuration
 snapshot and canonical hash. Reopening a lesson preserves its public problem,
 student introduction and title; current activation and assignment still apply.
 Missing/corrupt native snapshots fail closed. Unconverted scenarios cannot start
-new lessons. Student/mentor/analysis execution wiring remains
-for following S2 tickets; this intermediate change is not a production cutover.
+new lessons. S2-06 (#63) executes student streaming, nonstreaming and explicit
+failed-turn retries from that snapshot's literal student instructions, exact
+provider/model/options and completed-turn context limit. Runs use the session's
+configuration hash. Current access and S1 role authorization still gate calls;
+model defaults never replace saved options. Mentor/analysis execution wiring
+remains for following S2 tickets; this is not a production cutover.
 
 S2-04 legacy review (#61) runs only on an explicitly selected consistent DB copy
 with migration 029 already applied. Capture actual deployment inputs in a private

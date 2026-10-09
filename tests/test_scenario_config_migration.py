@@ -14,7 +14,18 @@ async def test_config_expansion_preserves_legacy_and_accepts_template_free_draft
     for path in sorted(migrate.DIRECTORY.glob("[0-9]*.sql")):
         if 24 <= int(path.name.split("_")[0]) <= 28:
             await migrate.run_migration(path)
+    scenario_indexes = {
+        "idx_scenario_active": ["is_active"],
+        "idx_scenario_deleted": ["deleted_at"],
+        "idx_scenario_framework": ["framework_id"],
+        "idx_scenario_student_template": ["student_template_id"],
+        "idx_scenario_tutor_template": ["tutor_template_id"],
+    }
     async with data.engine.begin() as conn:
+        for name, columns in scenario_indexes.items():
+            await conn.exec_driver_sql(
+                f"CREATE INDEX IF NOT EXISTS {name} ON scenario({columns[0]})"
+            )
         await conn.exec_driver_sql(
             "INSERT INTO message(id,session_id,role,content,created_at) "
             "VALUES (42,1,'teacher','Preserved dialogue {x}','2026-01-01')"
@@ -52,6 +63,17 @@ async def test_config_expansion_preserves_legacy_and_accepts_template_free_draft
     await migrate.run_all_migrations()
     await migrate.run_all_migrations()
     async with data.engine.begin() as conn:
+        assert {
+            index[1]: [
+                column[2]
+                for column in await conn.exec_driver_sql(
+                    f"PRAGMA index_info({index[1]})"
+                )
+            ]
+            for index in await conn.exec_driver_sql(
+                "PRAGMA index_list(scenario)"
+            )
+        } == scenario_indexes
         for name, rows in before.items():
             columns = old_columns[name]
             assert (

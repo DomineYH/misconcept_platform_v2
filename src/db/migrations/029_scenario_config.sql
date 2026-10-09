@@ -42,6 +42,12 @@ INSERT INTO scenario_new (id,title,prompt,student_profile,student_name,subject,p
 DROP TABLE scenario;
 ALTER TABLE scenario_new RENAME TO scenario;
 
+CREATE INDEX IF NOT EXISTS idx_scenario_active ON scenario(is_active);
+CREATE INDEX IF NOT EXISTS idx_scenario_deleted ON scenario(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_scenario_framework ON scenario(framework_id);
+CREATE INDEX IF NOT EXISTS idx_scenario_student_template ON scenario(student_template_id);
+CREATE INDEX IF NOT EXISTS idx_scenario_tutor_template ON scenario(tutor_template_id);
+
 ALTER TABLE session ADD COLUMN config_snapshot_json JSON;
 ALTER TABLE session ADD COLUMN config_hash VARCHAR(64);
 ALTER TABLE session ADD COLUMN source_scenario_version INTEGER;

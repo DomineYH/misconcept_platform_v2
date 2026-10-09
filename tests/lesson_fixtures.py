@@ -170,3 +170,33 @@ async def install_snapshot(
     data.session.snapshot_created_at = datetime.now(timezone.utc)
     data.session.ended_at = None
     await data.db.commit()
+
+
+async def configure_mentor(data, mentor, mode="manual", **policy):
+    from copy import deepcopy
+
+    from src.services.lesson_snapshots import canonical_hash
+
+    envelope = deepcopy(data.session.config_snapshot_json)
+    envelope["config"]["mentor"].update(
+        mode=mode,
+        name="Snapshot mentor",
+        welcome_message="Welcome snapshot",
+        behavior_instruction='Coach {literal} {{braces}} {"json":true}',
+        resolved_model_config=dict(
+            model_config_id=mentor.mentor_model.id,
+            provider_connection_id=mentor.connection.id,
+            provider="openai",
+            model_id="gpt-5.2",
+            options={
+                "max_output_tokens": 1500,
+                "reasoning": {"effort": "medium"},
+            },
+        ),
+    )
+    envelope["config"]["mentor"]["intervention_policy"].update(
+        condition="PRIVATE CONDITION {literal}", **policy
+    )
+    data.session.config_snapshot_json = envelope
+    data.session.config_hash = canonical_hash(envelope)
+    await data.db.commit()

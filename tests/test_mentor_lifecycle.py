@@ -56,7 +56,8 @@ async def test_mentor_deadline_heartbeats_and_cleanup(
     await data.db.commit()
     monkeypatch.setattr(mentor_stream, "HEARTBEAT_SECONDS", 0.02)
     response = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
     assert entered.is_set()
     assert ": ping\n\n" in response.text
@@ -102,7 +103,7 @@ async def test_end_cancels_waiting_mentor_without_coaching_or_increment(
 ):
     turn, entered, cancelled = await waiting_mentor(data, client, mentor)
     login(client, data.owner)
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "manual"}
     pending = asyncio.create_task(
         client.post(mentor_url(data, turn), json=payload)
     )
@@ -174,7 +175,8 @@ async def test_coaching_commit_failure_rolls_back_intervention_count(
     sql_event.listen(data.engine.sync_engine, "commit", reject_commit)
     try:
         response = await client.post(
-            mentor_url(data, turn), json={"request_id": str(uuid4())}
+            mentor_url(data, turn),
+            json={"request_id": str(uuid4()), "trigger": "manual"},
         )
     finally:
         sql_event.remove(
@@ -191,7 +193,8 @@ async def test_coaching_commit_failure_rolls_back_intervention_count(
     ).json()
     assert snapshot["message"] is None
     retry = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
     assert frames(retry)[-1][0] == "output.completed"
     await data.db.refresh(data.session)
@@ -210,7 +213,7 @@ async def test_disconnect_interrupts_mentor_and_closes_sdk(
 
     turn, entered, cancelled = await waiting_mentor(data, client, mentor)
     login(client, data.owner)
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "manual"}
     import json
 
     body = json.dumps(payload).encode()
@@ -292,6 +295,7 @@ async def test_end_committed_before_handoff_never_opens_mentor_sdk(
         turn["turn_id"],
         data.owner,
         str(uuid4()),
+        "manual",
     )
     await client.post(f"/sessions/{data.session.id}/close")
     mentor.responses.create.reset_mock()
@@ -341,7 +345,7 @@ async def test_persisted_end_wins_even_when_live_cancel_signal_is_missed(
         return SimpleNamespace(output_text="Too late coaching", usage=None)
 
     mentor.responses.create.side_effect = create
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "manual"}
     pending = asyncio.create_task(
         client.post(mentor_url(data, turn), json=payload)
     )

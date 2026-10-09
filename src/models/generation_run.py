@@ -30,6 +30,7 @@ class GenerationRun(Base):
     )
     turn_id: Mapped[str] = mapped_column(String(36))
     operation: Mapped[str] = mapped_column(String(20))
+    mentor_trigger: Mapped[str | None] = mapped_column(String(10))
     request_id: Mapped[str] = mapped_column(String(36))
     input_hash: Mapped[str] = mapped_column(String(64))
     config_hash: Mapped[str] = mapped_column(String(64))
@@ -55,6 +56,7 @@ class GenerationRun(Base):
             "status IN ('running','completed','failed',"
             "'cancelled','interrupted')"
         ),
+        CheckConstraint("mentor_trigger IN ('manual','auto')"),
         CheckConstraint("result_kind IN ('message','no_intervention')"),
         Index(
             "uq_run_running_student",
@@ -74,7 +76,10 @@ class GenerationRun(Base):
             "turn_id",
             "operation",
             unique=True,
-            sqlite_where=text("status = 'completed'"),
+            sqlite_where=text(
+                "status = 'completed' AND "
+                "(operation = 'student' OR result_kind = 'message')"
+            ),
         ),
         Index("ix_run_turn", "session_id", "turn_id", "operation"),
     )

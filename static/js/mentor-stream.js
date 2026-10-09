@@ -5,6 +5,8 @@ export function mountMentorStream(ui) {
   if (container.dataset.mentorStream) return;
   container.dataset.mentorStream = 'true';
   const turns = new Map();
+  const help = document.getElementById('request-mentor');
+  const helpStatus = document.getElementById('mentor-help-status');
   const storageKey = `chat-mentor-${ui.sessionId}`;
   let saved = {};
   try { saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}'); } catch {}
@@ -13,14 +15,14 @@ export function mountMentorStream(ui) {
   function persist() {
     const records = {};
     for (const [id, turn] of turns) records[id] = {
-      requestId:turn.requestId, runId:turn.runId, state:turn.state,
+      trigger:turn.trigger, requestId:turn.requestId, runId:turn.runId, state:turn.state,
       statusText:turn.status.textContent, retryable:turn.retryable,
       resend:turn.resend, result:turn.result
     };
     sessionStorage.setItem(storageKey, JSON.stringify(records));
   }
 
-  function start(row, turnId, restored) {
+  function start(row, turnId, restored, trigger = 'auto') {
     if (ui.isLocked() || turns.has(turnId)) return;
     const existing = Array.from(container.querySelectorAll('.message-tutor[data-turn-id]'))
       .find(el => el.dataset.turnId === turnId);
@@ -32,7 +34,7 @@ export function mountMentorStream(ui) {
     wrapper.className = 'message-content-wrapper';
     const sender = document.createElement('div');
     sender.className = 'message-sender';
-    sender.textContent = '멘토';
+    sender.textContent = ui.mentorName || '멘토';
     const status = document.createElement('div');
     status.className = 'message-meta mentor-run-status';
     status.setAttribute('role', 'status');
@@ -53,7 +55,7 @@ export function mountMentorStream(ui) {
     wrapper.append(sender, bubble, status, retry, check);
     slot.append(wrapper);
     row.after(slot);
-    const turn = {slot, status, bubble, retry, check, ...restored};
+    const turn = {slot, status, bubble, retry, check, trigger, ...restored};
     turns.set(turnId, turn);
     retry.addEventListener('click', () => {
       if (!turn.running && !ui.isLocked()) void send(turnId, turn);
@@ -73,6 +75,7 @@ export function mountMentorStream(ui) {
     turn.retry.hidden = !retryable || ui.isLocked();
     turn.check.hidden = true;
     persist();
+    refreshHelp();
   }
 
   function apply(turn, data) {
@@ -149,7 +152,10 @@ export function mountMentorStream(ui) {
 
   async function send(turnId, turn) {
     if (ui.isLocked() || leftPage) return;
-    if (!turn.resend) turn.requestId = crypto.randomUUID();
+    if (!turn.resend) {
+      turn.requestId = crypto.randomUUID();
+      if (turn.state) turn.trigger = 'manual';
+    }
     turn.resend = false;
     turn.retry.textContent = '멘토 다시 요청';
     const requestId = turn.requestId;
@@ -160,9 +166,10 @@ export function mountMentorStream(ui) {
     turn.status.textContent = '멘토 처리 중';
     turn.controller = new AbortController();
     persist();
+    refreshHelp();
     try {
       const response = await ui.fetch(`/sessions/${ui.sessionId}/turns/${turnId}/mentor/stream`, {
-        method:'POST', headers:ui.headers(), body:JSON.stringify({request_id:requestId}), signal:turn.controller.signal
+        method:'POST', headers:ui.headers(), body:JSON.stringify({request_id:requestId, trigger:turn.trigger}), signal:turn.controller.signal
       });
       if (turn.requestId !== requestId || !turn.running || ui.isLocked()) {
         await response.body?.cancel();
@@ -173,8 +180,14 @@ export function mountMentorStream(ui) {
         const data = payload.detail || payload;
         if (data.code === 'mentor_busy') {
           finish(turn, 'busy', '이전 코칭 처리 중 — 이후 다시 요청 가능', true);
+        } else if (data.code === 'mentor_limit') {
+          finish(turn, 'limit', '최근 완료 턴의 개입 상한에 도달했습니다.');
+        } else if (['mentor_start_turn', 'mentor_interval'].includes(data.code)) {
+          finish(turn, 'ready', '자동 검사 간격 대기 중 — 도움 버튼으로 요청할 수 있습니다.');
+        } else if (data.code === 'mentor_disabled' || data.code === 'mentor_auto_disabled') {
+          finish(turn, 'unavailable', '현재 멘토 도움을 사용할 수 없습니다.');
         } else if (data.code === 'mentor_turn_obsolete') {
-          finish(turn, 'obsolete', '더 최신 턴의 멘토 요청이 있어 이 턴은 더 이상 재요청할 수 없습니다.');
+          finish(turn, 'obsolete', '더 최신 학생 턴이 완료되어 이 턴은 더 이상 재요청할 수 없습니다.');
         } else if (data.code === 'session_ended') {
           finish(turn, 'cancelled', '대화가 종료되어 멘토를 다시 요청할 수 없습니다.');
           ui.end();
@@ -212,12 +225,32 @@ export function mountMentorStream(ui) {
   }
 
   function stop(state, message) {
+    if (help) help.disabled = true;
     for (const turn of turns.values()) {
       const running = turn.running;
       clearTimeout(turn.timer);
       if (!leftPage && (running || !['completed', 'obsolete'].includes(turn.state))) finish(turn, state, message);
       turn.retry.hidden = turn.check.hidden = true;
       if (running) turn.controller?.abort();
+    }
+  }
+
+  function latestRow() {
+    return Array.from(container.querySelectorAll('.message-student[data-turn-id][data-message-id]')).at(-1);
+  }
+
+  function refreshHelp() {
+    if (!help) return;
+    const row = latestRow();
+    const turn = row && turns.get(row.dataset.turnId);
+    const coached = row && Array.from(container.querySelectorAll('.message-tutor[data-turn-id], .mentor-slot[data-message-id]'))
+      .some(item => item.dataset.turnId === row.dataset.turnId);
+    const busy = Array.from(turns.values()).some(item => item.running);
+    help.disabled = ui.isLocked() || !row || busy || coached ||
+      (turn && (turn.result?.result_kind === 'message' || ['limit', 'unavailable', 'obsolete'].includes(turn.state)));
+    helpStatus.textContent = turn?.status.textContent || (coached ? '멘토 코칭 완료' : '완료된 학생 턴에 도움을 요청할 수 있습니다.');
+    for (const [id, old] of turns) {
+      if (id !== row?.dataset.turnId && !old.running) old.retry.hidden = true;
     }
   }
 
@@ -230,7 +263,18 @@ export function mountMentorStream(ui) {
   for (const row of container.querySelectorAll('.message-student[data-turn-id]')) {
     if (saved[row.dataset.turnId]) start(row, row.dataset.turnId, saved[row.dataset.turnId]);
   }
-  container.addEventListener('student:completed', e => start(e.detail.row, e.detail.turn_id));
+  help?.addEventListener('click', () => {
+    const row = latestRow();
+    if (!row || help.disabled) return;
+    const turn = turns.get(row.dataset.turnId);
+    if (turn) { turn.resend = false; void send(row.dataset.turnId, turn); }
+    else start(row, row.dataset.turnId, null, 'manual');
+  });
+  container.addEventListener('student:completed', e => {
+    if (ui.mentorMode === 'auto') start(e.detail.row, e.detail.turn_id);
+    refreshHelp();
+  });
+  refreshHelp();
   document.addEventListener('chat:locked', e => stop('cancelled', e.detail.authExpired ?
     '로그인이 만료되어 멘토를 다시 요청할 수 없습니다.' : '대화가 종료되어 멘토를 다시 요청할 수 없습니다.'));
   window.addEventListener('pagehide', () => {

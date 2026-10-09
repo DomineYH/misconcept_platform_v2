@@ -137,8 +137,16 @@ new lessons. S2-06 (#63) executes student streaming, nonstreaming and explicit
 failed-turn retries from that snapshot's literal student instructions, exact
 provider/model/options and completed-turn context limit. Runs use the session's
 configuration hash. Current access and S1 role authorization still gate calls;
-model defaults never replace saved options. Mentor/analysis execution wiring
-remains for following S2 tickets; this is not a production cutover.
+model defaults never replace saved options. S2-07 (#64) executes mentor help from the same snapshot: off blocks requests
+and welcome, manual sends one coaching call, and auto checks the authored
+condition before optional coaching. Both auto subcalls share the saved
+provider/model/options and the first overall deadline. Automatic admission uses
+completed-pair start/interval positions and a rolling coaching cap; negative
+checks and failures remain replayable without preventing explicit manual help.
+Migration 030 adjusts run uniqueness and records explicit manual/auto triggers.
+The teacher help button and automatic events follow snapshot mode; slow or failed
+coaching leaves the next student turn available. Analysis execution wiring remains
+for the following ticket; this is not a production cutover.
 
 S2-04 legacy review (#61) runs only on an explicitly selected consistent DB copy
 with migration 029 already applied. Capture actual deployment inputs in a private

@@ -90,6 +90,7 @@ async def test_024_preserves_legacy_and_matches_fresh(tmp_path, monkeypatch):
             "027_probe_attempts.sql",
             "028_generation_providers.sql",
             "029_scenario_config.sql",
+            "030_mentor_policy.sql",
         ]
     await engine.dispose()
     await fresh.dispose()

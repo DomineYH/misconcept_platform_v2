@@ -44,7 +44,7 @@ async def test_mentor_rejects_invalid_or_unauthorized_target_before_sdk(
 ):
     login(client, data.owner)
     turn = await complete_turn(client, data)
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "manual"}
     if state == "auth":
         client.cookies.clear()
     elif state in {"other", "admin"}:
@@ -89,16 +89,16 @@ async def test_mentor_replay_survives_settings_and_end_and_rejects_key_conflict(
 ):
     login(client, data.owner)
     first = await complete_turn(client, data)
-    second = await complete_turn(client, data)
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "manual"}
     result = await client.post(mentor_url(data, first), json=payload)
     saved = frames(result)[0][1]["run_id"]
+    second = await complete_turn(client, data)
     conflict = await client.post(mentor_url(data, second), json=payload)
     assert conflict.status_code == 409
     assert conflict.json()["detail"]["code"] == "request_conflict"
     collision = await client.post(
         mentor_url(data, second),
-        json={"request_id": second["request_id"]},
+        json={"request_id": second["request_id"], "trigger": "manual"},
     )
     assert collision.status_code == 409
     assert collision.json()["detail"]["code"] == "request_conflict"
@@ -106,13 +106,14 @@ async def test_mentor_replay_survives_settings_and_end_and_rejects_key_conflict(
     data.scenario.is_active = 0
     await data.db.commit()
     await client.post(f"/sessions/{data.session.id}/close")
-    for request in (payload, {"request_id": str(uuid4())}):
+    for request in (payload, {"request_id": str(uuid4()), "trigger": "manual"}):
         replay = await client.post(mentor_url(data, first), json=request)
         assert replay.json()["run_id"] == saved
         assert replay.json()["status"] == "completed"
     mentor.responses.create.reset_mock()
     denied = await client.post(
-        mentor_url(data, second), json={"request_id": str(uuid4())}
+        mentor_url(data, second),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
     assert denied.status_code == 400
     mentor.responses.create.assert_not_awaited()
@@ -148,13 +149,13 @@ async def test_mentor_post_requires_signed_csrf_token(data, client, mentor):
         mentor.responses.create.reset_mock()
         denied = await browser.post(
             mentor_url(data, turn),
-            json={"request_id": str(uuid4())},
+            json={"request_id": str(uuid4()), "trigger": "manual"},
         )
         assert denied.status_code == 403
         mentor.responses.create.assert_not_awaited()
         accepted = await browser.post(
             mentor_url(data, turn),
-            json={"request_id": str(uuid4())},
+            json={"request_id": str(uuid4()), "trigger": "manual"},
             headers={"x-csrf-token": browser.cookies.get("csrftoken")},
         )
-        assert frames(accepted)[-1][1]["result_kind"] == "no_intervention"
+        assert frames(accepted)[-1][1]["result_kind"] == "message"

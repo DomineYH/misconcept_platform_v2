@@ -127,7 +127,7 @@
 
       <!-- Messages container -->
       <div id="messages-container" class="messages-container">
-        {% if scenario.greeting_message %}
+        {% if scenario.mentor_mode != 'off' and scenario.greeting_message %}
         <div class="message message-mentor greeting-message">
           <div class="avatar mentor">멘</div>
           <div class="message-content-wrapper">
@@ -140,6 +140,13 @@
         {% include 'partials/message.html' %}
         {% endfor %}
       </div>
+
+      {% if scenario.mentor_mode != 'off' %}
+      <div class="lesson-controls" aria-label="멘토 도움">
+        <p id="mentor-help-status" role="status" aria-live="polite">완료된 학생 턴에 도움을 요청할 수 있습니다.</p>
+        <button type="button" class="btn-secondary" id="request-mentor" disabled>멘토 도움 요청</button>
+      </div>
+      {% endif %}
 
       <!-- Teacher input form -->
       <form id="teacher-form" class="teacher-form">
@@ -175,6 +182,8 @@
   'sessionId': session_id,
   'studentName': student_name or 'S',
   'mentorEnabled': scenario.mentor_mode|default('off') != 'off',
+  'mentorMode': scenario.mentor_mode|default('off'),
+  'mentorName': scenario.mentor_name|default('멘토'),
   'ended': session_ended|default(false)
 }|tojson }}</script>
 <script src="/static/js/chat.js"></script>

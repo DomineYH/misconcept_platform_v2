@@ -25,7 +25,7 @@ export default async function checkScenarioScreens(page) {
 
   for (const width of [1280, 390]) {
     await page.setViewportSize({width, height:900});
-    await page.goto(`${base}/chat`);
+    await page.goto(`${base}/chat?mentor_manual=1`);
     await noLegacyVideo();
     assert(await page.locator('.greeting-message .message-bubble').innerText() === 'Hello', 'mentor greeting retained');
     if (width === 390) await page.locator('[data-panel="scenario"]').click();

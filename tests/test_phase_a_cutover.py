@@ -102,8 +102,31 @@ async def test_wal_backup_upgrade_readers_and_restore(
             with sqlite3.connect(copy_path) as copy:
                 after = snapshot(copy)
                 for table, rows in before.items():
-                    if table not in {"message", "api_usage_log", "_migrations"}:
+                    if table not in {
+                        "scenario",
+                        "session",
+                        "message",
+                        "api_usage_log",
+                        "_migrations",
+                    }:
                         assert after[table] == rows
+                scenario_width = len(before["scenario"][0])
+                assert [
+                    row[:scenario_width] for row in after["scenario"]
+                ] == before["scenario"]
+                assert all(
+                    row[scenario_width:]
+                    == (None, "published", 1, 1, None, 0, "[]", None, None)
+                    for row in after["scenario"]
+                )
+                session_width = len(before["session"][0])
+                assert [
+                    row[:session_width] for row in after["session"]
+                ] == before["session"]
+                assert all(
+                    row[session_width:] == (None, None, None, None, None)
+                    for row in after["session"]
+                )
                 width = len(before["message"][0])
                 assert [row[:width] for row in after["message"]] == before[
                     "message"
@@ -122,7 +145,7 @@ async def test_wal_backup_upgrade_readers_and_restore(
                     all(value is None for value in row[usage_width:])
                     for row in after["api_usage_log"]
                 )
-                assert len(after["_migrations"]) == 6
+                assert len(after["_migrations"]) == 7
                 assert copy.execute(
                     "SELECT count(*) FROM _migrations "
                     "WHERE filename='025_provider_connection.sql'"

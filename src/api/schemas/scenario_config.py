@@ -195,7 +195,8 @@ class DraftCreate(ConfigValue):
     )
     config_schema_version: StrictInt = Field(ge=1, le=1)
     config: ScenarioConfig
-    action: Literal["save_draft"]
+    action: Literal["save_draft", "publish"]
+    acknowledge_review: bool = False
 
     @field_validator("title")
     @classmethod
@@ -216,4 +217,6 @@ class RevisionInput(ConfigValue):
 class DraftSaved(ConfigValue):
     id: int
     version: int
-    status: Literal["draft"]
+    status: Literal["draft", "published"]
+    review_required: bool
+    review_reasons: list[dict]

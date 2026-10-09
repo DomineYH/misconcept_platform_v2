@@ -178,7 +178,14 @@ async function save(action) {
       data.status = result.status;
       if (window.location.pathname === '/admin/scenarios/new') window.history.replaceState(null, '', `/admin/scenarios/${data.id}/edit`);
       dirty = edits !== submittedEdits;
-      if (action === 'publish') data.review_required = false;
+      data.review_required = result.review_required ?? (action === 'publish' ? false : data.review_required);
+      data.review_reasons = result.review_reasons ?? (action === 'publish' ? [] : data.review_reasons);
+      const review = document.getElementById('conversion-review');
+      if (review) {
+        review.hidden = !data.review_required;
+        document.getElementById('acknowledge-review').checked = false;
+        if (data.review_required) showErrors(data.review_reasons);
+      }
       publicationStatus();
       status.textContent = action === 'save_draft' ? '초안을 저장했습니다.' : '게시했습니다.';
     } else {
@@ -215,6 +222,6 @@ function reviewState() {
 }
 if (data.review_required) {
   showErrors(data.review_reasons);
-  document.getElementById('acknowledge-review').addEventListener('change', () => { dirty = true; reviewState(); });
+  document.getElementById('acknowledge-review').addEventListener('change', () => { markDirty(); reviewState(); });
 }
 reviewState();

@@ -92,7 +92,7 @@ def effective_roles(model, connection):
     return states
 
 
-def model_available(model, connection, role):
+def model_available(model, connection, role, options=None):
     if (
         not model.enabled
         or metadata_conflict(model.model_id, connection)
@@ -101,7 +101,9 @@ def model_available(model, connection, role):
         return False
     try:
         validate_model_and_options(
-            connection.provider, model.model_id, model.default_options_json
+            connection.provider,
+            model.model_id,
+            model.default_options_json if options is None else options,
         )
         return True
     except ValueError:

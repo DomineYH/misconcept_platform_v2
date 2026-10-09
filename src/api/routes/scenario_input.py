@@ -4,6 +4,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
+from src.api.dependencies import AuthenticationRequired
+
 REQUEST_LIMIT = 1024 * 1024
 
 
@@ -51,6 +53,12 @@ class ScenarioRoute(APIRoute):
                 request._body = b"".join(chunks)
             try:
                 return await handler(request)
+            except AuthenticationRequired:
+                if request.method != "POST":
+                    raise
+                return JSONResponse(
+                    {"detail": "Authentication required"}, status_code=401
+                )
             except RequestValidationError as exc:
                 return JSONResponse(
                     {

@@ -1,6 +1,8 @@
 """Real authoring HTTP/CSRF/SQLite browser rehearsal, with no external sockets."""
 
 import asyncio
+import base64
+import json
 import os
 import re
 import socket
@@ -20,6 +22,10 @@ async def check():
             SESSION_SECRET="s2-browser-only",
             OPENAI_API_KEY="test-only",
             DATABASE_URL=f"sqlite+aiosqlite:///{directory}/draft.db",
+            PROVIDER_SECRET_ENCRYPTION_KEY=base64.b64encode(
+                bytes(range(32))
+            ).decode(),
+            PROVIDER_SECRET_ENCRYPTION_KEY_VERSION="browser-v1",
         )
         import uvicorn
         from starlette_csrf import CSRFMiddleware
@@ -28,7 +34,17 @@ async def check():
         from src.db.connection import AsyncSessionLocal
         from src.db.migrations.migrate import run_all_migrations
         from src.main import app
-        from src.models import ModelConfig, User, UserGroup
+        from src.models import (
+            ModelConfig,
+            ProviderConnection,
+            Scenario,
+            User,
+            UserGroup,
+        )
+        from src.models.model_config import AppSetting
+        from src.services.model_capabilities import capabilities
+        from src.services.model_verification import ROLE_CONTRACT_VERSIONS
+        from src.services.provider_secrets import encrypt_key
 
         await run_all_migrations()
         async with AsyncSessionLocal() as db:
@@ -56,6 +72,96 @@ async def check():
                         "max_output_tokens": 900,
                         "reasoning": {"effort": "medium"},
                     },
+                )
+            )
+            connection = await db.get(ProviderConnection, 1)
+            connection.encrypted_key, connection.nonce = encrypt_key(
+                connection, "browser-synthetic-key", 1
+            )
+            connection.encryption_key_version = "browser-v1"
+            connection.masked_hint = "****test"
+            connection.credential_revision = 1
+            connection.enabled = True
+            definition = capabilities("openai", "gpt-5.2")["definition_version"]
+            model = ModelConfig(
+                provider_connection_id=1,
+                model_id="gpt-5.2",
+                display_name="Verified browser model",
+                enabled=True,
+                capability_definition_version=definition,
+                default_options_json={
+                    "max_output_tokens": 1600,
+                    "reasoning": {"effort": "none"},
+                    "temperature": 0.7,
+                },
+                verification_state={
+                    role: dict(
+                        status="succeeded",
+                        credential_revision=1,
+                        connection_version=connection.connection_version,
+                        capability_definition_version=definition,
+                        role_contract_version=ROLE_CONTRACT_VERSIONS[role],
+                    )
+                    for role in ("student", "mentor", "analysis")
+                },
+            )
+            db.add(model)
+            await db.flush()
+            setting = await db.get(AppSetting, 1)
+            setting.student_model_config_id = model.id
+            setting.analysis_model_config_id = model.id
+            review_config = json.loads(
+                (ROOT / "tests/fixtures/s2_draft.json").read_text()
+            )["config"]
+            selection = dict(
+                model_config_id=model.id,
+                provider_connection_id=1,
+                provider="openai",
+                model_id=model.model_id,
+                options=model.default_options_json,
+            )
+            review_config["problem"].update(
+                public_text="", learning_objective="분수 비교"
+            )
+            review_config["student"].update(
+                name="민수",
+                misconception="분모 크기",
+                behavior_instruction="생각을 말한다",
+                resolved_model_config=selection,
+            )
+            review_config["analysis"].update(
+                context="질문",
+                expected_understanding="같은 전체",
+                instruction="이유",
+                resolved_model_config=selection,
+            )
+            db.add(
+                Scenario(
+                    title="Live conversion review",
+                    status="draft",
+                    config_json=review_config,
+                    review_required=True,
+                    review_reasons=[
+                        dict(
+                            path="problem.public_text",
+                            code="required",
+                            message="공개 문제 상황 보완 필요",
+                            blocking=True,
+                        ),
+                        dict(
+                            path="student.public_profile",
+                            code="privacy_change",
+                            message="공개 소개 검토",
+                            blocking=False,
+                        ),
+                    ],
+                    conversion_provenance_json=[
+                        dict(
+                            field="학생 지시",
+                            source="PRIVATE-LEGACY",
+                            target="생각을 말한다",
+                        )
+                    ],
                 )
             )
             await db.commit()

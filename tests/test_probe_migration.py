@@ -38,8 +38,8 @@ async def test_probe_attempt_schema_fresh_upgrade_and_rerun(
                 await db.exec_driver_sql(
                     "INSERT INTO api_usage_log VALUES (7,1,'tutor','old-model',10,2,12,0.012345,'2026-01-01','greeting')"
                 )
-        await migrate.run_all_migrations()
-        await migrate.run_all_migrations()
+        await migrate.run_all_migrations(through=30)
+        await migrate.run_all_migrations(through=30)
         async with engine.begin() as db:
             columns = (
                 (await db.exec_driver_sql("PRAGMA table_info(model_probe)"))

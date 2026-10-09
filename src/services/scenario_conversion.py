@@ -7,9 +7,7 @@ from hashlib import sha256
 from sqlalchemy import select, text, update
 
 from src.models import (
-    AnalysisFramework,
     ModelConfig,
-    PromptTemplate,
     ProviderConnection,
     Scenario,
     ScenarioGroup,
@@ -59,13 +57,45 @@ def checksum(value):
 
 
 async def capture_archive(db):
-    """Allowlisted source only: never read users, credentials or app settings."""
+    """Read the pre-contract schema explicitly; never users/secrets/app settings."""
+
+    def dates(row, keys):
+        row = dict(row)
+        for key in keys:
+            if row[key] is not None:
+                row[key] = datetime.fromisoformat(row[key]).isoformat()
+        return row
+
+    templates = [
+        dates(row, ("created_at", "updated_at"))
+        for row in (
+            await db.execute(
+                text(
+                    "SELECT id,bot_type,template_name,template_text,version,created_at,updated_at,updated_by FROM prompt_template ORDER BY id"
+                )
+            )
+        ).mappings()
+    ]
+    frameworks = [
+        dates(row, ("created_at",))
+        for row in (
+            await db.execute(
+                text(
+                    "SELECT id,name,description,category_name,labels_json,created_at FROM analysis_framework ORDER BY id"
+                )
+            )
+        ).mappings()
+    ]
+    template_map = {row["id"]: row for row in templates}
+    framework_map = {row["id"]: row for row in frameworks}
     rows = (
         (
             await db.execute(
-                select(
-                    *(getattr(Scenario, key) for key in LEGACY_COLUMNS)
-                ).order_by(Scenario.id)
+                text(
+                    "SELECT "
+                    + ",".join(LEGACY_COLUMNS)
+                    + " FROM scenario ORDER BY id"
+                )
             )
         )
         .mappings()
@@ -73,10 +103,7 @@ async def capture_archive(db):
     )
     sources = []
     for row in rows:
-        source = dict(row)
-        for key in ("created_at", "deleted_at"):
-            if source[key] is not None:
-                source[key] = source[key].isoformat()
+        source = dates(row, ("created_at", "deleted_at"))
         source["groups"] = list(
             (
                 await db.scalars(
@@ -86,50 +113,18 @@ async def capture_archive(db):
                 )
             ).all()
         )
-        for role, key in (
-            ("student", "student_template_id"),
-            ("mentor", "tutor_template_id"),
-        ):
-            template = (
-                await db.get(PromptTemplate, row[key], populate_existing=True)
-                if row[key]
-                else None
-            )
-            source[role + "_template"] = (
-                None
-                if template is None
-                else dict(
-                    id=template.id,
-                    bot_type=template.bot_type,
-                    version=template.version,
-                    template_name=template.template_name,
-                    template_text=template.template_text,
-                    updated_by=template.updated_by,
-                    created_at=template.created_at.isoformat(),
-                    updated_at=template.updated_at.isoformat(),
-                )
-            )
-        framework = (
-            await db.get(
-                AnalysisFramework, row["framework_id"], populate_existing=True
-            )
-            if row["framework_id"]
-            else None
+        source["student_template"] = template_map.get(
+            row["student_template_id"]
         )
-        source["framework"] = (
-            None
-            if framework is None
-            else dict(
-                id=framework.id,
-                name=framework.name,
-                description=framework.description,
-                category_name=framework.category_name,
-                labels_json=framework.labels_json,
-                created_at=framework.created_at.isoformat(),
-            )
-        )
+        source["mentor_template"] = template_map.get(row["tutor_template_id"])
+        source["framework"] = framework_map.get(row["framework_id"])
         sources.append(source)
-    return dict(schema_version=1, scenarios=sources)
+    return dict(
+        schema_version=1,
+        scenarios=sources,
+        prompt_templates=templates,
+        analysis_frameworks=frameworks,
+    )
 
 
 async def conversion_manifest(db, archive, effective, archive_ref):

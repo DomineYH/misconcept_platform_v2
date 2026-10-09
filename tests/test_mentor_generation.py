@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from legacy_models import PromptTemplate
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
 from test_scenario_api import scenario_payload as scenario_fixture
@@ -11,7 +12,6 @@ from test_student_generation import frames
 from test_student_generation import student as student_fixture
 
 from src.config import config
-from src.models.prompt_template import PromptTemplate
 
 client = client_fixture
 scenario_payload = scenario_fixture

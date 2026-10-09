@@ -37,7 +37,7 @@ async def install_connection(data, monkeypatch):
         )
     if not installed:
         monkeypatch.setattr(migrate, "engine", data.engine)
-        await migrate.run_all_migrations()
+        await migrate.run_all_migrations(through=30)
     connection = await data.db.scalar(
         select(ProviderConnection).where(
             ProviderConnection.provider == "openai"

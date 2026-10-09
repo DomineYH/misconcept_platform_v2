@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.db import seed
 from src.db.connection import set_sqlite_pragma
 from src.db.migrations import migrate
-from src.models import AnalysisFramework, PromptTemplate, Scenario, User
+from src.models import Scenario, User
 
 
 @pytest.mark.parametrize("legacy", [False, True], ids=["fresh", "legacy"])
@@ -41,15 +41,13 @@ async def test_seed_installs_and_repeats_without_changing_data(
             assert admin.is_admin and admin.verify_password(
                 "seed-test-password"
             )
-            assert (await db.scalars(select(AnalysisFramework))).all() == []
-            assert (await db.scalars(select(PromptTemplate))).all() == []
             assert scenario.created_by == admin.id
             assert scenario.status == "draft" and scenario.config_version == 1
-            assert scenario.framework_id is None
-            assert (
-                scenario.student_template_id is None
-                and scenario.tutor_template_id is None
-            )
+            assert not {
+                "framework_id",
+                "student_template_id",
+                "tutor_template_id",
+            } & set(Scenario.__table__.columns.keys())
             assert (
                 scenario.config_json["problem"]["public_text"]
                 == "1/4 + 1/2은 얼마인가요?"
@@ -61,12 +59,17 @@ async def test_seed_installs_and_repeats_without_changing_data(
             )
             assert scenario.created_at
 
+        async with engine.connect() as conn:
+            assert (
+                await conn.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE name IN ('analysis_framework','prompt_template')"
+                )
+            ).all() == []
+
         tables = [
             "user_group",
             "user",
-            "analysis_framework",
             "scenario",
-            "prompt_template",
         ]
         async with engine.connect() as conn:
             before = {

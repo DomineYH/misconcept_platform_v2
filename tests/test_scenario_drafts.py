@@ -27,7 +27,10 @@ def draft():
 @pytest.fixture
 async def api(data, monkeypatch):
     monkeypatch.setattr(migrate, "engine", data.engine)
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
+    from legacy_models import native_writer_defaults
+
+    native_writer_defaults(data.engine.url.database)
 
     async def database():
         async with data.factory() as db:

@@ -38,8 +38,8 @@ async def test_provider_migration_fresh_upgrade_and_rerun(
                 await conn.exec_driver_sql(
                     "INSERT INTO message (id,session_id,role,content,created_at) VALUES (9,1,'student','Stored text','2026-01-01')"
                 )
-        await migrate.run_all_migrations()
-        await migrate.run_all_migrations()
+        await migrate.run_all_migrations(through=30)
+        await migrate.run_all_migrations(through=30)
         async with engine.connect() as conn:
             rows = (
                 await conn.exec_driver_sql(

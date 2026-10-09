@@ -34,8 +34,8 @@ async def test_model_settings_fresh_upgrade_rerun(
                         "SELECT * FROM provider_connection ORDER BY id"
                     )
                 ).all()
-        await migrate.run_all_migrations()
-        await migrate.run_all_migrations()
+        await migrate.run_all_migrations(through=30)
+        await migrate.run_all_migrations(through=30)
         async with engine.connect() as conn:
             assert (
                 await conn.exec_driver_sql("SELECT count(*) FROM model_config")

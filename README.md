@@ -226,3 +226,10 @@ The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it
 contains the original product code, without credentials, databases or caches.
 See [refactoring checks](docs/refactoring.md) for subsequent verification.
+
+S2-11 (#68) preparation: see [the S2 cutover runbook](docs/s2-cutover.md).
+`python -m src.db.s2_cutover --source-copy COPY --workspace PRIVATE_DIR
+--settings EFFECTIVE_JSON` defaults to dry-run; `--apply` converts, verifies,
+restores and contracts only the rehearsal copy. Populated installations require
+validated preservation evidence before final migration 031. Existing 030 mentor
+policy SQL stays unchanged. No operating deployment is performed by this tool.

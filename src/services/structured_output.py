@@ -1,6 +1,7 @@
 """Strict transport structure is separate from authoritative server validation."""
 
 import json
+from dataclasses import replace
 
 from pydantic import BaseModel, ValidationError
 
@@ -77,3 +78,13 @@ def validate_output(request, content):
         ).model_dump()
     except ValidationError:
         raise InvocationError("invalid_output") from None
+
+
+def structured_event(request, event):
+    if event.type != "completed":
+        return event
+    try:
+        value = validate_output(request, event.text)
+    except InvocationError as error:
+        return replace(event, type="error", text="", error_code=error.code)
+    return replace(event, text="", structured=value)

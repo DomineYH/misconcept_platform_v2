@@ -12,8 +12,10 @@ export default async function checkAIBoundaries(page) {
     await route.fulfill({status:409, json:{detail:'PRIVATE-SENTINEL', input:route.request().postDataJSON()}});
   });
   data.master_key_available = false;
+  data.providers[0].error_code = 'authentication';
   await page.goto(`${base}/admin/ai`);
   await page.getByText('마스터 키 설정 필요', {exact:false}).waitFor();
+  assert(await page.getByText('최근 비생성 확인 실패. 연결 설정과 접근 권한을 확인하세요.', {exact:true}).isVisible());
   assert(await page.locator('[data-provider=openai]').getByRole('button', {name:'키 교체', exact:true}).isDisabled());
   assert(await page.locator('[data-model="1"]').getByRole('button', {name:'학생봇 시험', exact:true}).isDisabled());
   assert(await page.locator('[data-provider=google]').getByRole('button', {name:'키 교체', exact:true}).isDisabled(), 'decryption failure blocks key replacement');

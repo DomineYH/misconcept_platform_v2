@@ -41,3 +41,19 @@ class InvocationError(Exception):
     def __init__(self, code):
         self.code = code
         super().__init__(code)
+
+
+def empty_usage():
+    return dict(
+        input_tokens=None,
+        output_tokens=None,
+        total_tokens=None,
+        cache_read_tokens=None,
+        reasoning_tokens=None,
+        cache_write_tokens=None,
+        usage_complete=False,
+        raw_usage_json=None,
+        estimated_cost_usd=None,
+        pricing_as_of=None,
+        pricing_source=None,
+    )

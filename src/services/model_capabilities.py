@@ -6,6 +6,11 @@ from datetime import date
 
 from src.services import anthropic_capabilities, google_capabilities
 
+PROVIDER_CAPABILITIES = {
+    "anthropic": anthropic_capabilities,
+    "google": google_capabilities,
+}
+
 DEFINITION_VERSION = "openai-2026-10-09-v1"
 MODEL_PAGES = "https://developers.openai.com/api/docs/models/"
 PARAMETER_SOURCE = (
@@ -48,10 +53,9 @@ def metadata_conflict(model_id, connection):
 
 
 def capabilities(provider, model_id):
-    if provider == "anthropic":
-        return anthropic_capabilities.capabilities(model_id)
-    if provider == "google":
-        return google_capabilities.capabilities(model_id)
+    adapter = PROVIDER_CAPABILITIES.get(provider)
+    if adapter is not None:
+        return adapter.capabilities(model_id)
     name = SNAPSHOTS.get(model_id, model_id)
     if provider != "openai" or name not in DEFINITIONS:
         return None
@@ -99,12 +103,9 @@ def capabilities(provider, model_id):
 
 
 def validate_model_and_options(provider, model_id, options):
-    if provider == "anthropic":
-        return anthropic_capabilities.validate_model_and_options(
-            model_id, options
-        )
-    if provider == "google":
-        return google_capabilities.validate_options(model_id, options)
+    adapter = PROVIDER_CAPABILITIES.get(provider)
+    if adapter is not None:
+        return adapter.validate_model_and_options(model_id, options)
     definition = capabilities(provider, model_id)
     if definition is None:
         raise ValueError("capability_definition_required")

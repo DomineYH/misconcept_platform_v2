@@ -54,7 +54,7 @@ export function render(state, actions) {
       node('p', `키 ${p.key_registered ? '등록됨' : '미등록'} ${p.masked_hint || ''} · ${p.enabled ? '활성' : '비활성'} · ${states[p.status] || '사용 불가'}`),
       node('p', `최근 비생성 확인: ${p.verified_at || '없음'}`));
     if (p.status === 'decryption_failed') card.append(node('p', '원래 마스터 키·버전을 복원하세요. 복구할 수 없다면 현재 비밀번호로 키를 삭제한 후 재등록하세요.'));
-    if (p.error_code) card.append(node('p', '최근 연결 확인 실패. 연결 설정과 접근 권한을 확인하세요.'));
+    if (p.error_code) card.append(node('p', '최근 비생성 확인 실패. 연결 설정과 접근 권한을 확인하세요.'));
     const row = node('div', null, {class:'ai-actions'});
     row.append(button(p.key_registered ? '키 교체' : '키 저장', () => actions.connection(p, 'key'), !state.master_key_available || p.status === 'decryption_failed'),
       button(p.enabled ? '비활성화' : '재활성화', () => actions.connection(p, 'enabled'), !p.key_registered || (!p.enabled && (!state.master_key_available || p.status === 'decryption_failed'))),

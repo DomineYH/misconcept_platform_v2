@@ -22,7 +22,7 @@ from src.services.invocation_types import (
 from src.services.model_capabilities import validate_model_and_options
 from src.services.openai_catalog import status_code
 from src.services.openai_usage import normalize_usage
-from src.services.structured_output import strict_schema, validate_output
+from src.services.structured_output import strict_schema, structured_event
 
 
 def parameters(request):
@@ -67,13 +67,7 @@ async def generate_structured(request, secret, timeouts, *, deadline=None):
     except (InvocationError, TypeError, ValueError, AttributeError) as error:
         return CallEvent("error", error_code=exception_code(error))
     event = await generate_text(request, secret, timeouts, deadline=deadline)
-    if event.type != "completed":
-        return event
-    try:
-        value = validate_output(request, event.text)
-    except InvocationError as error:
-        return replace(event, type="error", text="", error_code=error.code)
-    return replace(event, text="", structured=value)
+    return structured_event(request, event)
 
 
 def response_error(code):

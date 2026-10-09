@@ -9,11 +9,13 @@ from test_student_probe import response_body
 
 from src.services import openai_generation
 from src.services.invocation_types import (
+    CallEvent,
     InvocationError,
     StructuredRequest,
     TextRequest,
 )
 from src.services.role_probe_contract import probe_steps
+from src.services.structured_output import structured_event
 
 
 class Judgment(BaseModel):
@@ -39,6 +41,46 @@ def request(schema=Judgment):
         "structured-contract",
         schema,
     )
+
+
+@pytest.mark.parametrize(
+    "content,code",
+    [
+        (
+            '{"is_repetitive":false,"is_inappropriate":true,"reason":"반복"}',
+            None,
+        ),
+        ('{"private":', "invalid_json"),
+        (
+            '{"is_repetitive":"false","is_inappropriate":true,"reason":"반복"}',
+            "invalid_output",
+        ),
+    ],
+)
+def test_structured_event_preserves_attempt_metadata(content, code):
+    event = CallEvent(
+        "completed",
+        text=content,
+        usage={"total_tokens": 15},
+        response_received=True,
+        retry_after_seconds=2,
+    )
+    result = structured_event(request(), event)
+    assert result.type == ("error" if code else "completed")
+    assert result.error_code == code and result.text == ""
+    assert result.structured == (
+        None
+        if code
+        else {
+            "is_repetitive": False,
+            "is_inappropriate": True,
+            "reason": "반복",
+        }
+    )
+    assert result.usage is event.usage
+    assert result.response_received and result.retry_after_seconds == 2
+    refused = CallEvent("refused", error_code="refused", usage=event.usage)
+    assert structured_event(request(), refused) is refused
 
 
 async def test_structured_result_is_validated_and_never_exposes_raw_json(

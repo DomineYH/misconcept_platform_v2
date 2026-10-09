@@ -137,8 +137,14 @@ new lessons. S2-06 (#63) executes student streaming, nonstreaming and explicit
 failed-turn retries from that snapshot's literal student instructions, exact
 provider/model/options and completed-turn context limit. Runs use the session's
 configuration hash. Current access and S1 role authorization still gate calls;
-model defaults never replace saved options. Mentor/analysis execution wiring
-remains for following S2 tickets; this is not a production cutover.
+model defaults never replace saved options. S2-08 (#65) also executes native
+post-session analysis from frozen evaluation text and rubric IDs using the same
+saved provider/model/options for every subcall and the full teacher–student
+dialogue. Classification off skips greeting/classification and keeps narrative
+feedback; reports and CSV explicitly show its disabled state. CSV appends a
+`classification_status` column and maps native IDs to frozen display names.
+Mentor execution wiring remains for following S2 tickets; this is not a
+production cutover.
 
 S2-04 legacy review (#61) runs only on an explicitly selected consistent DB copy
 with migration 029 already applied. Capture actual deployment inputs in a private

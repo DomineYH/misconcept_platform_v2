@@ -58,6 +58,11 @@ async def test_teacher_message_survives_bot_failure(data):
 
 
 async def test_regeneration_failure_preserves_summary(data, monkeypatch):
+    from analysis_fixtures import install_analysis_snapshot
+
+    from src.services import analysis_pipeline
+
+    await install_analysis_snapshot(data, monkeypatch)
     sid = data.session.id
     data.db.add(
         SessionSummary(
@@ -66,7 +71,7 @@ async def test_regeneration_failure_preserves_summary(data, monkeypatch):
     )
     await data.db.commit()
     fake = AsyncMock(side_effect=RuntimeError("offline"))
-    monkeypatch.setattr(admin_actions, "run_llm_pipeline", fake)
+    monkeypatch.setattr(analysis_pipeline, "run_llm_pipeline", fake)
     with pytest.raises(HTTPException) as failed:
         await admin_actions.regenerate_analysis(
             request(), sid, data.admin, data.db
@@ -107,6 +112,10 @@ async def test_http_permissions_retry_and_ended_message_guard(
     def cookie(user):
         payload = base64.b64encode(json.dumps({"user_id": user.id}).encode())
         return TimestampSigner(config.SESSION_SECRET).sign(payload).decode()
+
+    from analysis_fixtures import install_analysis_snapshot
+
+    await install_analysis_snapshot(data, monkeypatch)
 
     sid = data.session.id
     await analysis_pipeline.create_fallback_summary(sid, ["A", "B"], data.db)

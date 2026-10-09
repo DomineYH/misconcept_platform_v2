@@ -6,20 +6,31 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import (
-    AnalysisFramework,
     Message,
     QuestionAnalysis,
-    Scenario,
     Session,
     SessionFeedbackReport,
     SessionSummary,
 )
+from src.services.lesson_snapshots import read_lesson_snapshot
 from src.utils.analysis_helpers import parse_reasoning
 from src.utils.session_feedback import (
     FALLBACK_FEEDBACK,
     derive_plain_feedback,
     load_feedback_sections,
 )
+
+
+def analysis_display(session):
+    """Native IDs use frozen names; historical strings retain their meaning."""
+    if session.snapshot_origin != "native":
+        return None, {}
+    analysis = read_lesson_snapshot(session).config.analysis
+    if not analysis.classification_enabled:
+        return False, {}
+    return analysis.classification_enabled, {
+        r.id: r.name for r in analysis.rubric
+    }
 
 
 def analysis_status(summary, report):
@@ -159,6 +170,8 @@ async def load_analysis_response(
     )
     session = session_result.scalar_one()
 
+    classification_enabled, label_names = analysis_display(session)
+
     stats_result = await db.execute(
         select(Message.role, func.count())
         .where(Message.session_id == session_id)
@@ -197,6 +210,7 @@ async def load_analysis_response(
             {
                 "content": msg.content,
                 "label": label or "Unclassified",
+                "label_name": label_names.get(label, label) or "Unclassified",
                 "grade": grade,
                 "confidence": analysis.confidence if analysis else None,
                 "reasoning": reasoning,
@@ -214,12 +228,6 @@ async def load_analysis_response(
     # Issue #33: derive level from persisted grade (not framework lookup) so
     # historical sessions stay consistent across framework edits.
     framework_label_criteria: dict[str, str] = {}
-    scenario = await db.get(Scenario, session.scenario_id)
-    if scenario and scenario.framework_id:
-        framework = await db.get(AnalysisFramework, scenario.framework_id)
-        if framework:
-            framework_label_criteria = dict(framework.label_criteria_map)
-
     grade_to_level = {"우수": "high", "개선": "low"}
 
     all_messages_result = await db.execute(
@@ -247,6 +255,8 @@ async def load_analysis_response(
 
     return {
         "distribution": summary.distribution,
+        "label_names": label_names,
+        "classification_enabled": classification_enabled,
         "feedback": summary.feedback,
         "feedback_status": feedback_status,
         "retryable": feedback_status == "failed",

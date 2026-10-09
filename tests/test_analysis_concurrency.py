@@ -128,6 +128,11 @@ async def test_competing_analysis_keeps_per_question_admission_failure(
         scenario_id=data.scenario.id,
         teacher_id=data.owner.id,
         ended_at=data.session.ended_at,
+        config_snapshot_json=data.session.config_snapshot_json,
+        config_hash=data.session.config_hash,
+        source_scenario_version=data.session.source_scenario_version,
+        snapshot_origin=data.session.snapshot_origin,
+        snapshot_created_at=data.session.snapshot_created_at,
     )
     data.db.add(other_session)
     await data.db.flush()

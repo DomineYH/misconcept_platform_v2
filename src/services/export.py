@@ -21,6 +21,7 @@ from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.session_summary import SessionSummary
 from src.models.user import User
+from src.services.analysis_results import analysis_display
 from src.services.lesson_snapshots import read_lesson_snapshot
 
 
@@ -109,7 +110,15 @@ class CSVExporter:
             select(Scenario).where(Scenario.id == session.scenario_id)
         )
         scenario = scenario_result.scalar_one()
-        scenario_title = _session_title(session, scenario)
+        scenario_title = self._sanitize_csv_value(
+            _session_title(session, scenario)
+        )
+        classification_enabled, label_names = analysis_display(session)
+        classification_status = {
+            False: "classification_disabled",
+            True: "enabled",
+            None: "legacy",
+        }[classification_enabled]
 
         messages_result = await db.execute(
             select(Message)
@@ -148,6 +157,7 @@ class CSVExporter:
                 "label",
                 "confidence",
                 "feedback",
+                "classification_status",
             ],
         )
         writer.writeheader()
@@ -167,7 +177,14 @@ class CSVExporter:
                     "timestamp": msg.created_at.isoformat(),
                     "role": msg.role,
                     "content": self._sanitize_csv_value(msg.content),
-                    "label": analysis.label if analysis else "",
+                    "label": (
+                        self._sanitize_csv_value(
+                            label_names.get(analysis.label, analysis.label)
+                        )
+                        if analysis
+                        else ""
+                    ),
+                    "classification_status": classification_status,
                     "confidence": (
                         f"{analysis.confidence:.2f}"
                         if analysis and analysis.confidence
@@ -188,6 +205,7 @@ class CSVExporter:
                     "role": "summary",
                     "content": "Session Summary",
                     "label": "",
+                    "classification_status": classification_status,
                     "confidence": "",
                     "feedback": self._sanitize_csv_value(
                         summary.feedback or ""
@@ -247,7 +265,15 @@ class CSVExporter:
             select(Scenario).where(Scenario.id == session.scenario_id)
         )
         scenario = scenario_result.scalar_one()
-        scenario_title = _session_title(session, scenario)
+        scenario_title = self._sanitize_csv_value(
+            _session_title(session, scenario)
+        )
+        classification_enabled, label_names = analysis_display(session)
+        classification_status = {
+            False: "classification_disabled",
+            True: "enabled",
+            None: "legacy",
+        }[classification_enabled]
 
         messages_result = await db.execute(
             select(Message)
@@ -288,6 +314,7 @@ class CSVExporter:
             "confidence",
             "meta_json",
             "feedback",
+            "classification_status",
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -314,7 +341,14 @@ class CSVExporter:
                     "message_created_at": msg.created_at.isoformat(),
                     "role": msg.role,
                     "content": self._sanitize_csv_value(msg.content),
-                    "label": analysis.label if analysis else "",
+                    "label": (
+                        self._sanitize_csv_value(
+                            label_names.get(analysis.label, analysis.label)
+                        )
+                        if analysis
+                        else ""
+                    ),
+                    "classification_status": classification_status,
                     "confidence": (
                         f"{analysis.confidence:.2f}"
                         if analysis and analysis.confidence
@@ -347,6 +381,7 @@ class CSVExporter:
                     "role": "summary",
                     "content": "Session Summary",
                     "label": "",
+                    "classification_status": classification_status,
                     "confidence": "",
                     "meta_json": "",
                     "feedback": self._sanitize_csv_value(
@@ -435,6 +470,7 @@ class CSVExporter:
             "confidence",
             "meta_json",
             "feedback",
+            "classification_status",
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -448,7 +484,15 @@ class CSVExporter:
 
             teacher = session.teacher
             scenario = session.scenario
-            scenario_title = _session_title(session, scenario)
+            scenario_title = self._sanitize_csv_value(
+                _session_title(session, scenario)
+            )
+            classification_enabled, label_names = analysis_display(session)
+            classification_status = {
+                False: "classification_disabled",
+                True: "enabled",
+                None: "legacy",
+            }[classification_enabled]
             session_messages = messages_by_session.get(session_id, [])
 
             for msg in session_messages:
@@ -475,7 +519,14 @@ class CSVExporter:
                         "message_created_at": (msg.created_at.isoformat()),
                         "role": msg.role,
                         "content": self._sanitize_csv_value(msg.content),
-                        "label": analysis.label if analysis else "",
+                        "label": (
+                            self._sanitize_csv_value(
+                                label_names.get(analysis.label, analysis.label)
+                            )
+                            if analysis
+                            else ""
+                        ),
+                        "classification_status": classification_status,
                         "confidence": (
                             f"{analysis.confidence:.2f}"
                             if analysis and analysis.confidence
@@ -512,6 +563,7 @@ class CSVExporter:
                         "role": "summary",
                         "content": "Session Summary",
                         "label": "",
+                        "classification_status": classification_status,
                         "confidence": "",
                         "meta_json": "",
                         "feedback": self._sanitize_csv_value(

@@ -198,19 +198,15 @@ async def test_explicit_tutor_retry_keeps_state_and_one_attempt_per_invocation(
 async def test_classification_and_synthesis_parse_errors_do_not_retry(
     data, monkeypatch
 ):
+    from analysis_fixtures import install_analysis_snapshot
     from sqlalchemy import select
 
-    from src.config import config
     from src.models import ApiUsageLog
     from src.services.invocation_types import InvocationError
+    from src.services.lesson_snapshots import read_lesson_snapshot
 
-    _, model = await install_connection(data, monkeypatch)
-    model.verification_state = {
-        **model.verification_state,
-        "analysis": dict(model.verification_state["student"]),
-    }
-    monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
-    await data.db.commit()
+    await install_analysis_snapshot(data, monkeypatch)
+    snapshot = read_lesson_snapshot(data.session)
     contents = iter(
         [
             '{"label":"A","confidence":0.8,"reasoning":"because"}',
@@ -223,18 +219,30 @@ async def test_classification_and_synthesis_parse_errors_do_not_retry(
         return httpx.Response(200, json=response_body(next(contents), USAGE))
 
     clients, calls = analysis_transport(monkeypatch, upstream)
-    analyzer = Analyzer(data.factory)
-    result = await analyzer.classify_question("Why?", data.framework)
+    analyzer = Analyzer(
+        data.factory,
+        selection=snapshot.config.analysis.resolved_model_config,
+        session_id=data.session.id,
+        owner_id=data.owner.id,
+    )
+    result = await analyzer.classify_question("Why?", snapshot.config.analysis)
     assert (
         result["label"] == "A" and result["reasoning"]["summary"] == "because"
     )
     assert result["_api_usage"]["total_tokens"] == 15
     assert calls[0]["max_output_tokens"] == 1500
     with pytest.raises(InvocationError, match="invalid_json"):
-        await analyzer.classify_question("Why?", data.framework)
+        await analyzer.classify_question("Why?", snapshot.config.analysis)
     assert len(calls) == 2
-    synth = SessionSynthesizer(data.factory)
-    _, status = await synth.synthesize(messages=[], framework=data.framework)
+    synth = SessionSynthesizer(
+        data.factory,
+        selection=snapshot.config.analysis.resolved_model_config,
+        session_id=data.session.id,
+        owner_id=data.owner.id,
+    )
+    _, status = await synth.synthesize(
+        messages=[], framework=snapshot.config.analysis
+    )
     assert status == "failed"
     async with data.factory() as db:
         row = await db.scalar(
@@ -242,25 +250,21 @@ async def test_classification_and_synthesis_parse_errors_do_not_retry(
         )
     assert row.total_tokens == 15
     assert row.status == "failed" and row.error_code == "invalid_json"
-    assert len(calls) == 3 and calls[-1]["max_output_tokens"] == 2500
+    assert len(calls) == 3 and calls[-1]["max_output_tokens"] == 1500
     assert all(sdk.is_closed() for sdk in clients)
 
 
 async def test_pipeline_with_injected_client_preserves_usage_and_formats(
     data, monkeypatch
 ):
+    from analysis_fixtures import install_analysis_snapshot
     from sqlalchemy import select
 
-    from src.config import config
     from src.models import ApiUsageLog
+    from src.services.lesson_snapshots import read_lesson_snapshot
 
-    _, model = await install_connection(data, monkeypatch)
-    model.verification_state = {
-        **model.verification_state,
-        "analysis": dict(model.verification_state["student"]),
-    }
-    monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
-    await data.db.commit()
+    await install_analysis_snapshot(data, monkeypatch)
+    snapshot = read_lesson_snapshot(data.session)
     teacher = Message(
         id=100, session_id=data.session.id, role="teacher", content="Why?"
     )
@@ -286,8 +290,7 @@ async def test_pipeline_with_injected_client_preserves_usage_and_formats(
         data.session.id,
         [teacher],
         [teacher],
-        data.scenario,
-        data.framework,
+        snapshot,
         data.factory,
         data.owner.id,
     )
@@ -321,15 +324,13 @@ async def test_pipeline_with_injected_client_preserves_usage_and_formats(
 
 
 async def test_pipeline_failure_closes_owned_clients(data, monkeypatch):
-    from src.config import config
 
-    _, model = await install_connection(data, monkeypatch)
-    model.verification_state = {
-        **model.verification_state,
-        "analysis": dict(model.verification_state["student"]),
-    }
-    monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
-    await data.db.commit()
+    from analysis_fixtures import install_analysis_snapshot
+
+    from src.services.lesson_snapshots import read_lesson_snapshot
+
+    await install_analysis_snapshot(data, monkeypatch)
+    snapshot = read_lesson_snapshot(data.session)
 
     async def upstream(request, body):
         raise httpx.ConnectError(
@@ -341,9 +342,9 @@ async def test_pipeline_failure_closes_owned_clients(data, monkeypatch):
         data.session.id,
         [],
         [],
-        data.scenario,
-        data.framework,
+        snapshot,
         data.factory,
+        data.owner.id,
     )
     assert result[3] == "failed"
     assert len(created) == len(calls) == 2

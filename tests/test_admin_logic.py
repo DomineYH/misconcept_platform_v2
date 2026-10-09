@@ -60,6 +60,8 @@ async def test_user_and_admin_analysis_contract(data):
     assert normal == admin
     assert set(normal) == {
         "distribution",
+        "classification_enabled",
+        "label_names",
         "feedback",
         "feedback_status",
         "retryable",

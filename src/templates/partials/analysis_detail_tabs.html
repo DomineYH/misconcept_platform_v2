@@ -18,7 +18,11 @@
 <div id="analysis-detail-panel" hidden>
     <section class="analysis-section">
         <h3>질문 유형 분포</h3>
+        {% if classification_enabled is defined and classification_enabled == false %}
+        <p class="empty-state">분류 미사용</p>
+        {% else %}
         {% include "partials/analysis_bar.html" %}
+        {% endif %}
     </section>
 
     <div role="tablist" class="analysis-tabs" aria-label="상세 분석 탭">
@@ -74,6 +78,16 @@
 
     <section role="tabpanel" id="panel-strong" aria-labelledby="tab-strong"
              class="analysis-tab-panel" hidden>
+        {% if classification_enabled is defined and classification_enabled == false %}
+        {% for item in feedback_sections.strengths | default([], true) %}
+        <article class="strong-card">
+            <p class="strong-card__q">{{ item.quote }}</p>
+            <p class="strong-card__reason">{{ item.reason }}</p>
+        </article>
+        {% else %}
+        <p class="empty-state">우수한 점이 없습니다.</p>
+        {% endfor %}
+        {% else %}
         {% set high_qs = [] %}
         {% for q in questions %}
             {% if q.grade == '우수' %}{% set _ = high_qs.append(q) %}{% endif %}
@@ -84,7 +98,7 @@
             <article class="strong-card">
                 <p class="strong-card__q">{{ q.content }}</p>
                 <p class="strong-card__label">
-                    <strong>[{{ q.label }}]</strong>
+                    <strong>[{{ q.label_name | default(q.label) }}]</strong>
                     {% if framework_label_criteria and framework_label_criteria.get(q.label) %}
                     <span class="strong-card__criteria">
                         {{ framework_label_criteria.get(q.label) }}
@@ -100,10 +114,23 @@
         {% else %}
         <p class="empty-state">우수한 질문이 없습니다.</p>
         {% endif %}
+        {% endif %}
     </section>
 
     <section role="tabpanel" id="panel-improve" aria-labelledby="tab-improve"
              class="analysis-tab-panel" hidden>
+        {% if classification_enabled is defined and classification_enabled == false %}
+        {% for item in feedback_sections.improvements | default([], true) %}
+        <article class="improve-card">
+            <p class="improve-card__q">{{ item.student_quote }}</p>
+            <p class="improve-card__why">{{ item.missed_reason }}</p>
+            <p class="improve-card__rewrite"><strong>대안 질문:</strong> {{ item.alternative_question }}</p>
+            <p>{{ item.alternative_reason }}</p>
+        </article>
+        {% else %}
+        <p class="empty-state">개선할 점이 없습니다.</p>
+        {% endfor %}
+        {% else %}
         {% set low_qs = [] %}
         {% for q in questions %}
             {% if q.grade == '개선' %}{% set _ = low_qs.append(q) %}{% endif %}
@@ -114,7 +141,7 @@
             <article class="improve-card">
                 <p class="improve-card__q">{{ q.content }}</p>
                 <p class="improve-card__label">
-                    <strong>[{{ q.label }}]</strong>
+                    <strong>[{{ q.label_name | default(q.label) }}]</strong>
                     {% if framework_label_criteria and framework_label_criteria.get(q.label) %}
                     <span class="improve-card__criteria">
                         {{ framework_label_criteria.get(q.label) }}
@@ -139,6 +166,7 @@
         </div>
         {% else %}
         <p class="empty-state">개선할 점이 없습니다.</p>
+        {% endif %}
         {% endif %}
     </section>
 </div>

@@ -54,6 +54,66 @@ class Handler(BaseHTTPRequestHandler):
                 .encode()
             )
             mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/s2/analysis":
+            enabled = "off" not in query
+            body = (
+                templates.get_template("analysis.html")
+                .render(
+                    user=SimpleNamespace(nickname="Teacher", role="teacher"),
+                    session_id=1,
+                    feedback="Narrative feedback",
+                    feedback_status="ok",
+                    classification_enabled=enabled,
+                    label_names={"stable_1": "Frozen display name"},
+                    distribution={"stable_1": 1} if enabled else {},
+                    framework_label_criteria={},
+                    grade_counts={"우수": 1 if enabled else 0, "개선": 0},
+                    stats=dict(
+                        duration_seconds=60,
+                        teacher_question_count=1,
+                        student_response_count=1,
+                        tutor_intervention_count=0,
+                    ),
+                    messages=[
+                        dict(
+                            role="teacher",
+                            content="Why?",
+                            turn_index=1,
+                            level="high" if enabled else None,
+                        )
+                    ],
+                    questions=(
+                        [
+                            dict(
+                                content="Why?",
+                                label="stable_1",
+                                label_name="Frozen display name",
+                                grade="우수",
+                                reasoning=dict(summary="Classified reason"),
+                            )
+                        ]
+                        if enabled
+                        else []
+                    ),
+                    feedback_sections=dict(
+                        brief_feedback=["Narrative feedback"],
+                        strengths=[
+                            dict(quote="Why?", reason="Narrative strength")
+                        ],
+                        improvements=[
+                            dict(
+                                student_quote="Two thirds",
+                                missed_reason="Narrative improvement",
+                                alternative_question="What about halves?",
+                                alternative_reason="Compare parts",
+                            )
+                        ],
+                        dialogue_coaching=[],
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
         elif path.path in {"/chat", "/scenarios", "/admin/scenarios-page"}:
             framework = SimpleNamespace(id=1, name="Framework")
             student_template = SimpleNamespace(

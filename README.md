@@ -120,9 +120,16 @@ Drafts preserve hidden mentor/rubric values and unavailable model selections;
 updates and deletions require `expected_version`. Drafts cannot start lessons.
 `npm run test:browser -- s2_draft_live` rehearses the real form, login, CSRF,
 save and reopen against migrated temporary SQLite, with external sockets blocked.
-Migration 029 preserves legacy rows and adds snapshot storage only. Publication,
-explicit legacy conversion and native lesson snapshots belong to following S2
-tickets; this intermediate change is not a production cutover.
+S2-03 publication (#60) uses the same form and save URLs with `action=publish`.
+Active roles require current S1 authorization and supported saved options;
+publication never probes a model or merges its current defaults. Converted
+drafts keep server-managed review reasons: repair blocking fields, save the
+draft, then acknowledge the remaining warnings for that exact revision.
+Failed publication and stale writes preserve the stored revision and browser
+input. Every successful edit, activation, group change or deletion advances the
+revision once. Migration 029 preserves legacy rows and adds snapshot storage
+only. Explicit legacy conversion and native lesson snapshots belong to following
+S2 tickets; this intermediate change is not a production cutover.
 
 S2-01 screen fixtures (#58): `npm run test:browser -- s2_` exercises the five-step
 editor, public preview, model options, synthetic save errors/conflicts, conversion

@@ -32,7 +32,7 @@ try {
   await page.getByRole('button', {name:'분류 기준 추가', exact:true}).click();
   await page.getByLabel('분류 1 판정 기준', {exact:true}).fill('숨긴 기준');
   await page.getByLabel('발화 분류 사용', {exact:true}).uncheck();
-  assert(await page.getByRole('button', {name:'게시', exact:true}).isDisabled());
+  assert(await page.getByRole('button', {name:'게시', exact:true}).isEnabled());
   const [created] = await Promise.all([
     page.waitForResponse(response => response.url() === `${base}/admin/scenarios` && response.request().method() === 'POST'),
     page.getByRole('button', {name:'초안으로 저장', exact:true}).click()
@@ -100,6 +100,8 @@ try {
   await page.getByText('현재 상태: 초안 · 버전 4', {exact:true}).waitFor();
   assert.equal(await page.getByLabel('제목', {exact:true}).inputValue(), 'Remote');
   assert.equal(await page.locator('#public-preview script').count(), 0);
+  const {default: checkPublication} = await import('./check_s2_publication_browser.mjs');
+  await checkPublication(page, base);
   assert.deepEqual(errors, []);
   console.log('PASS: real draft browser saved and reopened hidden values and model options');
 } finally {

@@ -45,7 +45,7 @@ from src.services.scenario_drafts import (
     draft_view,
     field_error,
     native_scenario,
-    save_draft,
+    save_scenario,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,7 +154,7 @@ async def create_scenario(
     """POST /admin/scenarios - Create new scenario (T078)."""
 
     if isinstance(scenario_data, DraftCreate):
-        return await save_draft(db, scenario_data, user.id)
+        return await save_scenario(db, scenario_data, user.id)
 
     # Verify framework exists
     framework = await db.get(AnalysisFramework, scenario_data.framework_id)
@@ -238,7 +238,7 @@ async def update_scenario(
     """POST /admin/scenarios/{id}/update - Update scenario (T079, T080)."""
 
     if isinstance(scenario_data, DraftUpdate):
-        return await save_draft(db, scenario_data, user.id, scenario_id)
+        return await save_scenario(db, scenario_data, user.id, scenario_id)
     scenario = await db.get(Scenario, scenario_id)
     if scenario and scenario.config_json is not None:
         raise field_error("expected_version", "native_input_required")
@@ -324,7 +324,7 @@ async def render_editor(request, user, db, editor):
             await db.scalars(select(UserGroup).order_by(UserGroup.name))
         ).all()
     ]
-    editor["publication_available"] = False
+    editor["publication_available"] = True
     return templates.TemplateResponse(
         "admin/scenario_editor.html",
         dict(request=request, user=user, editor=editor),

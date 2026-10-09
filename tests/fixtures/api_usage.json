@@ -22,7 +22,7 @@
       "role": "analysis", "operation": "classification", "status": "succeeded", "attempt_no": 2,
       "started_at": "2026-10-01 09:01:11", "first_output_at": "2026-10-01 09:01:12", "finished_at": "2026-10-01 09:01:13", "retry_wait_ms": 1000,
       "input_tokens": 100, "output_tokens": 20, "cache_read_tokens": 30, "cache_write_tokens": 10, "reasoning_tokens": null, "total_tokens": 120,
-      "estimated_cost_usd": 0.25, "pricing_as_of": "2026-10-01", "usage_complete": true
+      "estimated_cost_usd": 0.25, "pricing_as_of": "2026-10-01", "pricing_source": "https://platform.claude.com/docs/en/about-claude/pricing", "usage_complete": true
     },
     {
       "id": 4, "bot_type": "tutor", "model": "legacy-model", "operation": null,

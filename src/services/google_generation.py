@@ -55,7 +55,9 @@ def parameters(request):
 
 
 def result(response, previous_usage=None, *, streaming=False, displayed=False):
-    usage = normalize_usage(response.usage_metadata, previous_usage)
+    usage = normalize_usage(
+        response.usage_metadata, previous_usage, model_id=response.model_version
+    )
     feedback = response.prompt_feedback
     block = getattr(feedback, "block_reason", None)
     code = None
@@ -150,7 +152,9 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
                             received = True
                             if response.usage_metadata is not None:
                                 usage = normalize_usage(
-                                    response.usage_metadata, usage
+                                    response.usage_metadata,
+                                    usage,
+                                    model_id=response.model_version,
                                 )
                                 yield CallEvent("usage", usage=usage)
                             if (

@@ -22,6 +22,32 @@ REQUEST = TextRequest(
 TIMEOUTS = dict(connect=5, student_total=3, student_first_output=1)
 
 
+async def test_price_fixture_keeps_cache_write_durations_and_thinking_distinct(
+    monkeypatch,
+):
+    import json
+    from pathlib import Path
+
+    fixture = json.loads(Path("tests/fixtures/usage_pricing.json").read_text())[
+        "anthropic"
+    ]
+    payload = response_body()
+    payload["usage"] = fixture["usage"]
+    clients, calls = install(
+        monkeypatch, lambda request: httpx2.Response(200, json=payload)
+    )
+    event = await anthropic_generation.generate_text(REQUEST, "fake", TIMEOUTS)
+    assert event.type == "completed"
+    assert event.usage["estimated_cost_usd"] == pytest.approx(fixture["cost"])
+    assert event.usage["input_tokens"] == 160
+    assert event.usage["output_tokens"] == 20
+    assert event.usage["cache_read_tokens"] == 40
+    assert event.usage["cache_write_tokens"] == 20
+    assert event.usage["reasoning_tokens"] == 8
+    assert event.usage["total_tokens"] == 180
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
+
+
 def install(monkeypatch, handler):
     clients, calls = [], []
 

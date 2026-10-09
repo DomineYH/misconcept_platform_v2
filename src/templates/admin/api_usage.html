@@ -16,7 +16,7 @@
     <caption id="{{ name }}-caption">{{ caption }}</caption>
     <thead>
       <tr>
-        {% for heading in ['기록', '제공자', '모델', '역할', '목적', '상태', '시도', '시간 (UTC)', '입력 토큰', '출력 토큰', '캐시 읽기 토큰', '캐시 쓰기 토큰', '추론 토큰', '총 토큰', '추정 비용 (USD)', '단가 기준일'] %}
+        {% for heading in ['기록', '제공자', '모델', '역할', '목적', '상태', '시도', '시간 (UTC)', '입력 토큰', '출력 토큰', '캐시 읽기 토큰', '캐시 쓰기 토큰', '추론 토큰', '총 토큰', '추정 비용 (USD)', '단가 기준일·근거'] %}
         <th scope="col">{{ heading }}</th>
         {% endfor %}
       </tr>
@@ -51,7 +51,7 @@
         <td>{{ observed(log.reasoning_tokens) }}</td>
         <td>{{ observed(log.total_tokens) }}</td>
         <td>{{ cost(log.estimated_cost_usd) }}</td>
-        <td>{{ observed(log.pricing_as_of) }}</td>
+        <td>{{ observed(log.pricing_as_of) }}{% if log.pricing_source is defined and log.pricing_source %}<div>근거: {{ log.pricing_source }}</div>{% endif %}</td>
       </tr>
       {% else %}
       <tr><td colspan="16">기록이 없습니다.</td></tr>
@@ -75,12 +75,14 @@
       <div><dt>비생성 목록 호출 수</dt><dd id="model-list-calls">{{ observed(model_list_calls) }}</dd></div>
     </dl>
     <p>생성 호출의 알려진 추정 비용만 더한 부분 합계이며, 전체 과금액이 아닙니다. 미산정 비용과 비생성 목록 호출은 합계에서 제외합니다.</p>
-    {% if unpriced_generation_attempts is not defined or unpriced_generation_attempts is none %}
+    <p>새 추정 비용은 확인된 공시 유료 단가 기준입니다. 무료 이용·크레딧·개별 할인·세금에 따른 실제 청구액은 다를 수 있습니다.</p>
+    {% if has_legacy_records|default(false) or unpriced_generation_attempts is not defined or unpriced_generation_attempts is none %}
     <p>기존 기록의 비용을 보존합니다. 기존 기록만으로는 실패·재시도를 포함한 전체 시도 수와 미산정 건수를 확인할 수 없습니다.</p>
     {% endif %}
+    <p>미산정 생성 시도 수는 호출 원장에 기록된 시도만 셉니다. 시도 정보가 없는 기존 기록은 이 건수에 포함하지 않습니다.</p>
   </section>
 
-  <p>합계·건수는 전체 기록 기준이며, 아래 표는 최근 100건입니다. 알 수 없는 값은 0으로 대체하지 않습니다.</p>
+  <p>합계·건수는 전체 기록 기준이며, 아래 표는 최근 100건입니다. 관측되지 않은 값은 ‘알 수 없음’으로 표시하며 0으로 대체하지 않습니다.</p>
   <p>캐시·추론 토큰은 상세 항목이며 총량에 다시 더하지 않습니다. 취소·중단은 제공자의 과금 중단을 보장하지 않습니다.</p>
   <p id="usage-scroll-help">표에 초점을 두고 좌우 방향키로 모든 열을 확인할 수 있습니다.</p>
   {{ usage_table(logs|rejectattr('operation', 'equalto', 'model_list'), 'generation-usage', '생성 호출 및 기존 기록') }}

@@ -1,6 +1,7 @@
 """Admin scenario management routes (T077-T080)."""
 
 import logging
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -10,14 +11,23 @@ from fastapi import (
     status,
 )
 from fastapi.responses import HTMLResponse
+from pydantic import Discriminator, Tag
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
+from src.api.routes.scenario_input import ScenarioRoute, input_kind
 from src.api.schemas import (
     AdminScenarioResponse,
     ScenarioCreate,
     ScenarioUpdate,
+)
+from src.api.schemas.scenario_config import (
+    DraftCreate,
+    DraftSaved,
+    DraftUpdate,
+    RevisionInput,
+    ScenarioConfig,
 )
 from src.models.analysis_framework import AnalysisFramework
 from src.models.prompt_template import PromptTemplate
@@ -30,10 +40,28 @@ from src.services.admin_scenario_ops import (
     soft_delete_scenario_record,
     update_scenario_record,
 )
+from src.services.scenario_drafts import (
+    delete_draft,
+    draft_view,
+    field_error,
+    native_scenario,
+    save_draft,
+)
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Admin Scenarios"])
+router = APIRouter(tags=["Admin Scenarios"], route_class=ScenarioRoute)
+
+CreateInput = Annotated[
+    Annotated[DraftCreate, Tag("draft")]
+    | Annotated[ScenarioCreate, Tag("legacy")],
+    Discriminator(input_kind),
+]
+UpdateInput = Annotated[
+    Annotated[DraftUpdate, Tag("draft")]
+    | Annotated[ScenarioUpdate, Tag("legacy")],
+    Discriminator(input_kind),
+]
 
 
 @router.get("/admin/scenarios", response_class=HTMLResponse)
@@ -46,7 +74,7 @@ async def list_all_scenarios(
 
     query = (
         select(Scenario)
-        .join(AnalysisFramework)
+        .outerjoin(AnalysisFramework)
         .where(Scenario.deleted_at.is_(None))
         .order_by(Scenario.id.desc())
     )
@@ -115,15 +143,18 @@ async def list_all_scenarios(
 
 @router.post(
     "/admin/scenarios",
-    response_model=AdminScenarioResponse,
+    response_model=DraftSaved | AdminScenarioResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_scenario(
-    scenario_data: ScenarioCreate,
+    scenario_data: CreateInput,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """POST /admin/scenarios - Create new scenario (T078)."""
+
+    if isinstance(scenario_data, DraftCreate):
+        return await save_draft(db, scenario_data, user.id)
 
     # Verify framework exists
     framework = await db.get(AnalysisFramework, scenario_data.framework_id)
@@ -196,17 +227,108 @@ async def create_scenario(
 
 @router.post(
     "/admin/scenarios/{scenario_id}/update",
-    response_model=AdminScenarioResponse,
+    response_model=DraftSaved | AdminScenarioResponse,
 )
 async def update_scenario(
     scenario_id: int,
-    scenario_data: ScenarioUpdate,
+    scenario_data: UpdateInput,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """POST /admin/scenarios/{id}/update - Update scenario (T079, T080)."""
 
+    if isinstance(scenario_data, DraftUpdate):
+        return await save_draft(db, scenario_data, user.id, scenario_id)
+    scenario = await db.get(Scenario, scenario_id)
+    if scenario and scenario.config_json is not None:
+        raise field_error("expected_version", "native_input_required")
+
     return await update_scenario_record(db, scenario_id, scenario_data, logger)
+
+
+@router.get("/admin/scenarios/new", response_class=HTMLResponse)
+async def new_scenario_editor(
+    request: Request,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    editor = dict(
+        id=None,
+        title="",
+        subject="",
+        target_grade="",
+        is_active=True,
+        groups=[],
+        config_schema_version=1,
+        config_version=1,
+        status="draft",
+        review_required=False,
+        review_reasons=[],
+        config=ScenarioConfig(
+            problem={}, student={}, mentor={}, analysis={}, runtime={}
+        ).model_dump(),
+    )
+    return await render_editor(request, user, db, editor)
+
+
+@router.get("/admin/scenarios/{scenario_id}")
+async def get_scenario_draft(
+    scenario_id: int,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await draft_view(db, await native_scenario(db, scenario_id))
+
+
+@router.get("/admin/scenarios/{scenario_id}/edit", response_class=HTMLResponse)
+async def edit_scenario_draft(
+    request: Request,
+    scenario_id: int,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await render_editor(
+        request,
+        user,
+        db,
+        await draft_view(db, await native_scenario(db, scenario_id)),
+    )
+
+
+async def render_editor(request, user, db, editor):
+    from src.models.provider_connection import ProviderConnection
+    from src.services.model_configuration import configuration_state
+    from src.services.model_verification import connection_ready
+
+    connections = {
+        c.provider: c
+        for c in (await db.scalars(select(ProviderConnection))).all()
+    }
+    state = await configuration_state(db, connections)
+    editor["model_choices"] = [
+        dict(
+            model,
+            provider_connection_id=connections[model["provider"]].id,
+            connection_available=connection_ready(
+                connections[model["provider"]]
+            ),
+        )
+        for model in state["models"]
+    ]
+    editor["role_defaults"] = (
+        state["settings"]["defaults"] if state["settings"] else {}
+    )
+    editor["available_groups"] = [
+        dict(id=g.id, name=g.name)
+        for g in (
+            await db.scalars(select(UserGroup).order_by(UserGroup.name))
+        ).all()
+    ]
+    editor["publication_available"] = False
+    return templates.TemplateResponse(
+        "admin/scenario_editor.html",
+        dict(request=request, user=user, editor=editor),
+    )
 
 
 @router.post("/admin/scenarios/{scenario_id}/delete")
@@ -214,10 +336,19 @@ async def delete_scenario(
     scenario_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    data: RevisionInput | None = None,
 ):
     """DELETE /admin/scenarios/{id} - Soft delete scenario and sessions.
 
     Policy: Soft delete all related sessions along with the scenario.
     """
+
+    scenario = await db.get(Scenario, scenario_id)
+    if scenario and scenario.config_json is not None:
+        if data is None:
+            raise field_error("expected_version", "version_required")
+        return await delete_draft(
+            db, scenario_id, data.expected_version, user.id, logger
+        )
 
     return await soft_delete_scenario_record(db, scenario_id, user.id, logger)

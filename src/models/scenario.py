@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
+    JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -38,7 +40,7 @@ class Scenario(Base):
 
     # Scenario identity
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    prompt: Mapped[str] = mapped_column(Text, nullable=False)  # System prompt
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     student_profile: Mapped[str | None] = mapped_column(Text, nullable=True)
     student_name: Mapped[str | None] = mapped_column(
         String(50),
@@ -71,6 +73,18 @@ class Scenario(Base):
     is_active: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1
     )  # Boolean as int
+
+    target_grade: Mapped[str | None] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(10), default="published")
+    config_schema_version: Mapped[int] = mapped_column(Integer, default=1)
+    config_version: Mapped[int] = mapped_column(Integer, default=1)
+    config_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
+    review_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_reasons: Mapped[list] = mapped_column(JSON, default=list)
+    conversion_provenance_json: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Phase 2: Scenario-specific chatbot configuration override
     chat_model: Mapped[Optional[str]] = mapped_column(
@@ -119,13 +133,13 @@ class Scenario(Base):
     )
 
     # Foreign keys
-    framework_id: Mapped[int] = mapped_column(
+    framework_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
             "analysis_framework.id",
             ondelete="RESTRICT",
         ),
-        nullable=False,
+        nullable=True,
     )
     created_by: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("user.id"), nullable=True
@@ -140,7 +154,7 @@ class Scenario(Base):
     )
 
     # Relationships
-    framework: Mapped["AnalysisFramework"] = relationship(
+    framework: Mapped[Optional["AnalysisFramework"]] = relationship(
         "AnalysisFramework", back_populates="scenarios"
     )
     creator: Mapped["User"] = relationship("User", back_populates="scenarios")
@@ -170,6 +184,9 @@ class Scenario(Base):
 
     # Constraints
     __table_args__ = (
+        CheckConstraint("status IN ('draft', 'published')"),
+        CheckConstraint("config_schema_version = 1"),
+        CheckConstraint("config_version >= 1"),
         CheckConstraint("is_active IN (0, 1)", name="ck_scenario_active"),
         CheckConstraint(
             "tutor_sensitivity IN ('high', 'medium', 'low')",

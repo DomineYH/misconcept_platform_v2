@@ -56,7 +56,10 @@ async def _record(conn, filename):
 async def run_migration(migration_file: Path):
     """DDL and history commit together, with an explicit SQLite transaction."""
     async with engine.connect() as conn:
-        rebuild_runs = migration_file.name == "028_generation_providers.sql"
+        rebuild_runs = migration_file.name in (
+            "028_generation_providers.sql",
+            "029_scenario_config.sql",
+        )
         try:
             if rebuild_runs:
                 # Dropping a referenced table with FKs enabled would mutate children.
@@ -74,7 +77,7 @@ async def run_migration(migration_file: Path):
                     ).all()
                 ):
                     raise ValueError(
-                        "Foreign key violations during run rebuild"
+                        "Foreign key violations during table rebuild"
                     )
                 await _record(conn, migration_file.name)
             await conn.commit()

@@ -54,6 +54,7 @@
         {{ text_field('title', '제목', limit=200) }}
         {{ text_field('subject', '교과', limit=100) }}
         {{ text_field('target_grade', '대상 학년', limit=100) }}
+        {% if editor.is_active is defined %}<label><input id="is_active" data-field="is_active" type="checkbox"> 활성</label>{% endif %}
         {{ text_field('runtime.context_turn_limit', '최근 완료 턴 문맥 상한', 'number', hint='학생봇·멘토의 문맥 1–100턴. 분석에는 전체 대화를 사용합니다.') }}
         <fieldset id="scenario-groups"><legend>배정 그룹</legend>{% for group in editor.available_groups|default([]) %}<label><input type="checkbox" name="groups" value="{{ group.id }}"> {{ group.name }}</label>{% endfor %}</fieldset>
       </section>
@@ -116,7 +117,7 @@
         <span id="step-position"></span>
         <button type="button" id="next-step" class="btn btn-secondary">다음 단계</button>
         <button type="button" id="save-draft" class="btn btn-secondary">초안으로 저장</button>
-        <button type="submit" id="publish-scenario" class="btn btn-primary">게시</button>
+        <button type="submit" id="publish-scenario" class="btn btn-primary" {% if editor.publication_available is sameas false %}disabled title="게시 기능 준비 중"{% endif %}>게시</button>
       </div>
     </form>
     <aside class="scenario-preview">

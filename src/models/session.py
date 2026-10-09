@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.connection import Base
@@ -36,6 +36,14 @@ class Session(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, default=None
     )
+
+    config_snapshot_json: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True)
+    )
+    config_hash: Mapped[str | None] = mapped_column(String(64))
+    source_scenario_version: Mapped[int | None] = mapped_column(Integer)
+    snapshot_origin: Mapped[str | None] = mapped_column(String(24))
+    snapshot_created_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # TutorBot state persistence
     tutor_intervention_count: Mapped[int] = mapped_column(

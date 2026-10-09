@@ -10,6 +10,7 @@
       <h1>시나리오 관리</h1>
       <p class="subtitle">대화 시나리오 생성, 수정 및 관리</p>
     </div>
+    <a href="/admin/scenarios/new" class="btn btn-primary">통합 초안 작성</a>
     <button type="button" class="btn btn-primary" id="open-create-modal">
       + 새 시나리오
     </button>
@@ -64,6 +65,7 @@
               class="status-toggle"
               data-id="{{ scenario.id }}"
               {% if scenario.is_active == 1 %}checked{% endif %}
+              {% if scenario.config_json %}disabled title="작성 화면에서 활성 상태를 변경하세요."{% endif %}
             />
             <span class="badge-text">
               {% if scenario.is_active == 1 %}활성{% else %}비활성{% endif %}
@@ -77,7 +79,7 @@
 
           <div class="card-meta">
             <span class="meta-tag framework">
-              {{ scenario.framework.name }}
+              {{ scenario.framework.name if scenario.framework else '통합 초안' }}
             </span>
             {% if scenario.tutor_template %}
             <span class="meta-tag tutor-active">{{ scenario.tutor_template.template_name }}</span>
@@ -90,7 +92,7 @@
           </div>
 
           <p class="card-description">
-            {{ scenario.prompt[:120] }}{% if scenario.prompt|length > 120 %}...{% endif %}
+            {{ (scenario.prompt or '')[:120] }}{% if (scenario.prompt or '')|length > 120 %}...{% endif %}
           </p>
         </div>
 
@@ -102,6 +104,9 @@
           >
             대화목록
           </a>
+          {% if scenario.config_json %}
+          <a href="/admin/scenarios/{{ scenario.id }}/edit" class="btn btn-sm btn-secondary">수정</a>
+          {% else %}
           <button
             type="button"
             class="btn btn-sm btn-secondary edit-btn"
@@ -109,12 +114,14 @@
           >
             수정
           </button>
+          {% endif %}
           <button
             type="button"
             class="btn btn-sm btn-danger delete-btn"
             data-id="{{ scenario.id }}"
             data-title="{{ scenario.title }}"
             data-session-count="{{ session_counts[scenario.id] }}"
+            {% if scenario.config_json %}data-version="{{ scenario.config_version }}"{% endif %}
           >
             삭제
           </button>
@@ -491,15 +498,15 @@ const scenariosData = {
   {% for scenario in scenarios %}
   "{{ scenario.id }}": {
     id: {{ scenario.id }},
-    title: "{{ scenario.title|e }}",
-    framework_id: {{ scenario.framework_id }},
-    prompt: `{{ scenario.prompt|replace('\n', '\\n')|replace('\r', '')|e }}`,
+    title: {{ scenario.title|tojson }},
+    framework_id: {{ scenario.framework_id|tojson }},
+    prompt: `{{ (scenario.prompt or '')|replace('\n', '\\n')|replace('\r', '')|e }}`,
     problem_situation: {{ (scenario.problem_situation or '')|tojson }},
     greeting_message: {{ (scenario.greeting_message or '')|tojson }},
-    student_profile: `{{ scenario.student_profile|replace('\n', '\\n')|replace('\r', '')|e }}`,
+    student_profile: `{{ (scenario.student_profile or '')|replace('\n', '\\n')|replace('\r', '')|e }}`,
     student_name: "{{ (scenario.student_name or '')|e }}",
-    subject: "{{ (scenario.subject or '')|e }}",
-    student_template_id: {{ scenario.student_template_id }},
+    subject: {{ (scenario.subject or '')|tojson }},
+    student_template_id: {{ scenario.student_template_id|tojson }},
     tutor_template_id: {{ scenario.tutor_template_id|default('null', true) }},
     tutor_sensitivity: "{{ scenario.tutor_sensitivity|default('medium', true)|e }}",
     group_ids: {{ scenario_group_map.get(scenario.id, [])|tojson }}
@@ -755,7 +762,8 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
     try {
       const response = await fetch(`/admin/scenarios/${id}/delete`, {
         method: 'POST',
-        headers: { 'x-csrf-token': getCsrfToken() }
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+        body: btn.dataset.version ? JSON.stringify({expected_version:Number(btn.dataset.version)}) : undefined
       });
 
       if (response.ok) {

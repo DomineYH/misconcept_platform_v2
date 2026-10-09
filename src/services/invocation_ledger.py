@@ -8,8 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.models import ApiUsageLog
 from src.models.provider_connection import now
-from src.services.invocation_types import InvocationError
-from src.services.openai_usage import normalize_usage
+from src.services.invocation_types import InvocationError, empty_usage
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ async def finish_attempt(
                     error_code=error_code,
                     first_output_at=first_output_at,
                     finished_at=now(),
-                    **(usage or normalize_usage(None)),
+                    **(usage or empty_usage()),
                 )
             )
             await db.commit()

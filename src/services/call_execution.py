@@ -5,7 +5,14 @@ from contextlib import aclosing
 from uuid import uuid4
 
 from src.models.provider_connection import now
-from src.services import openai_catalog, openai_generation
+from src.services import (
+    anthropic_catalog,
+    anthropic_generation,
+    google_catalog,
+    google_generation,
+    openai_catalog,
+    openai_generation,
+)
 from src.services.call_admission import (
     readmit_call,
     recheck_call,
@@ -15,27 +22,16 @@ from src.services.call_policy import CallDeadline, retry_limit
 from src.services.invocation_ledger import finish_attempt, start_attempt
 from src.services.invocation_types import CallEvent, InvocationError
 
+PROVIDER_ADAPTERS = {
+    "openai": (openai_catalog, openai_generation),
+    "anthropic": (anthropic_catalog, anthropic_generation),
+    "google": (google_catalog, google_generation),
+}
+
 
 async def sdk_events(permit, request, kind, deadline):
-    generation = openai_generation
-    if permit.provider == "anthropic" and kind != "catalog":
-        from src.services import anthropic_generation
-
-        generation = anthropic_generation
-    elif permit.provider == "google" and kind != "catalog":
-        from src.services import google_generation
-
-        generation = google_generation
+    catalog, generation = PROVIDER_ADAPTERS[permit.provider]
     if kind == "catalog":
-        catalog = openai_catalog
-        if permit.provider == "anthropic":
-            from src.services import anthropic_catalog
-
-            catalog = anthropic_catalog
-        elif permit.provider == "google":
-            from src.services import google_catalog
-
-            catalog = google_catalog
         try:
             models = await catalog.list_models(
                 permit.secret,
@@ -117,7 +113,7 @@ async def execute_call(
     wait_ms = None
     try:
         if (
-            permit.provider not in ("openai", "anthropic", "google")
+            permit.provider not in PROVIDER_ADAPTERS
             or permit not in registered_calls
             or permit.task is not asyncio.current_task()
         ):

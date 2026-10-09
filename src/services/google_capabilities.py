@@ -47,7 +47,7 @@ def capabilities(model_id):
     return deepcopy(DEFINITION) if model_id == "gemini-2.5-flash" else None
 
 
-def validate_options(model_id, options):
+def validate_model_and_options(model_id, options):
     definition = capabilities(model_id)
     if definition is None:
         raise ValueError("capability_definition_required")

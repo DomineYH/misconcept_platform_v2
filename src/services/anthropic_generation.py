@@ -17,7 +17,7 @@ from src.services.invocation_types import (
     StructuredRequest,
 )
 from src.services.model_capabilities import validate_model_and_options
-from src.services.structured_output import strict_schema, validate_output
+from src.services.structured_output import strict_schema, structured_event
 
 logging.getLogger("anthropic").setLevel(logging.WARNING)
 logging.getLogger("httpx2").setLevel(logging.WARNING)
@@ -93,13 +93,7 @@ async def generate_structured(request, secret, timeouts, *, deadline=None):
     except Exception as error:
         return error_event(error)
     event = await generate_text(request, secret, timeouts, deadline=deadline)
-    if event.type != "completed":
-        return event
-    try:
-        value = validate_output(request, event.text)
-    except InvocationError as error:
-        return replace(event, type="error", text="", error_code=error.code)
-    return replace(event, text="", structured=value)
+    return structured_event(request, event)
 
 
 def terminal(reason, text, usage):

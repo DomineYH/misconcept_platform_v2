@@ -52,17 +52,15 @@ def test_teacher_sees_public_problem_profile_and_mentor_without_video(scenario):
 
 def test_admin_forms_do_not_expose_legacy_video(scenario):
     scenario.is_active = 1
-    scenario.framework_id = 1
-    scenario.framework = SimpleNamespace(name="Framework")
-    scenario.student_template_id = 1
-    scenario.tutor_template_id = None
-    scenario.tutor_template = None
+    scenario.config_json = {
+        "problem": {"public_text": scenario.problem_situation}
+    }
+    scenario.status = "draft"
+    scenario.config_version = 1
+    scenario.review_required = True
     html = templates.get_template("admin/scenarios.html").render(
         user=SimpleNamespace(nickname="Admin", role="admin"),
         scenarios=[scenario],
-        frameworks=[SimpleNamespace(id=1, name="Framework")],
-        student_templates=[],
-        tutor_templates=[],
         groups=[],
         scenario_group_map={},
         session_counts={1: 0},
@@ -76,10 +74,17 @@ def test_admin_forms_do_not_expose_legacy_video(scenario):
         scenario.video_transcript,
     ):
         assert removed not in html
-    assert 'id="new-problem-situation"' in html
-    assert 'id="edit-problem-situation"' in html
-    assert 'id="new-greeting-message"' in html
-    assert 'id="edit-greeting-message"' in html
+    assert 'href="/admin/scenarios/new"' in html
+    assert 'href="/admin/scenarios/1/edit"' in html
+    assert 'data-version="1"' in html
+    for retired in (
+        "framework_id",
+        "student_template_id",
+        "tutor_template_id",
+        'id="create-form"',
+        scenario.prompt,
+    ):
+        assert retired not in html
 
 
 @pytest.mark.parametrize("problem", [None, "", " \n\t "])

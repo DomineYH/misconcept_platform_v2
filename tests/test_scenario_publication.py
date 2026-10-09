@@ -534,3 +534,64 @@ async def test_conversion_blockers_require_a_recognized_field_repair(
         assert (await api.get(path)).json() == before
     else:
         assert response.json()["review_required"] is False
+
+
+async def test_new_install_seed_publishes_without_templates_or_frameworks(
+    data, api, publishable, monkeypatch
+):
+    from sqlalchemy import delete, select
+    from test_scenario_api import login
+
+    from src.db import seed
+    from src.models import (
+        AnalysisFramework,
+        PromptTemplate,
+        ScenarioGroup,
+        Session,
+        User,
+    )
+
+    # Remove only the historical fixture before exercising a new installation.
+    async with data.factory() as db:
+        await db.execute(delete(Session))
+        await db.execute(delete(ScenarioGroup))
+        await db.execute(delete(Scenario))
+        await db.execute(delete(AnalysisFramework))
+        await db.execute(delete(PromptTemplate))
+        await db.commit()
+    monkeypatch.setattr(seed, "AsyncSessionLocal", data.factory)
+    await seed.seed_database()
+    async with data.factory() as db:
+        seeded = (await db.scalars(select(Scenario))).one()
+        scenario_id = seeded.id
+        admin = await db.scalar(select(User).where(User.username == "admin"))
+        assert (await db.scalars(select(AnalysisFramework))).all() == []
+        assert (await db.scalars(select(PromptTemplate))).all() == []
+    login(api, admin)
+    await api.get("/admin/scenarios")
+    path = f"/admin/scenarios/{scenario_id}"
+    saved = (await api.get(path)).json()
+    assert saved["status"] == "draft"
+    for role in ("student", "analysis"):
+        saved["config"][role]["resolved_model_config"] = publishable["config"][
+            role
+        ]["resolved_model_config"]
+    response = await post(
+        api,
+        path + "/update",
+        dict(
+            title=saved["title"],
+            subject=saved["subject"],
+            target_grade=saved["target_grade"],
+            groups=saved["groups"],
+            config=saved["config"],
+            config_schema_version=1,
+            expected_version=1,
+            action="publish",
+        ),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "published"
+    assert response.json()["version"] == 2
+    listing = await api.get("/scenarios")
+    assert saved["title"] in listing.text

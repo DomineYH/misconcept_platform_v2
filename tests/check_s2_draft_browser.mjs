@@ -45,6 +45,16 @@ try {
   await page.getByText('현재 상태: 초안 · 버전 1', {exact:true}).waitFor();
   assert.equal(await page.getByLabel('제목', {exact:true}).inputValue(), fixture.title);
   await page.goto(`${base}/admin/scenarios`);
+  assert.equal(await page.locator('[name="framework_id"], [name="student_template_id"], [name="tutor_template_id"], #create-form, #edit-form').count(), 0);
+  assert(!(await page.content()).includes(fixture.config.student.internal_profile));
+  await page.goto(`${base}/admin/ai`);
+  await page.getByRole('heading', {name:'AI 연결·모델', exact:true}).waitFor();
+  await page.locator('[data-provider="openai"]').getByRole('button', {name:'키 교체', exact:true}).click();
+  const impact = page.getByText(`시나리오 #${savedUrl.pathname.split('/')[3]} ${fixture.title} · student`, {exact:false});
+  await impact.waitFor();
+  assert((await impact.innerText()).includes('초안'));
+  assert((await impact.innerText()).includes('새 수업 실행 제외'));
+  await page.goto(`${base}/admin/scenarios`);
   await page.locator(`a[href="${savedUrl.pathname}"]`).click();
   await page.getByText('현재 상태: 초안 · 버전 1', {exact:true}).waitFor();
   await page.locator('[data-step="2"]').click();
@@ -95,6 +105,7 @@ try {
   const inactive = await (await page.request.get(base + path)).json();
   assert.equal(inactive.config_version, 4);
   assert.equal(inactive.is_active, false);
+  await page.goto(`${base}/admin/scenarios`);
   await page.goto(`${base}/admin/scenarios`);
   await page.locator(`a[href="${savedUrl.pathname}"]`).click();
   await page.getByText('현재 상태: 초안 · 버전 4', {exact:true}).waitFor();

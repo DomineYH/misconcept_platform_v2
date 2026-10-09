@@ -153,9 +153,7 @@ class SecurityHeadersMiddleware:
             b"style-src 'self' 'unsafe-inline'; "
             b"img-src 'self' data:; "
             b"connect-src 'self'; "
-            b"frame-src 'self' "
-            b"https://www.youtube.com "
-            b"https://www.youtube-nocookie.com; "
+            b"frame-src 'none'; "
             b"object-src 'none'; "
             b"base-uri 'self'",
         ),
@@ -372,7 +370,6 @@ from src.api.routes import (  # noqa: E402
     admin,
     admin_analysis,
     admin_api_usage,
-    admin_prompts,
     admin_session_actions,
     admin_session_export,
     admin_session_stats,
@@ -390,7 +387,6 @@ app.include_router(about.router)
 app.include_router(admin.router)
 app.include_router(admin_analysis.router)
 app.include_router(admin_api_usage.router)
-app.include_router(admin_prompts.router)
 app.include_router(admin_session_export.router)
 app.include_router(admin_session_actions.router)
 app.include_router(admin_session_stats.router)

@@ -27,11 +27,7 @@ if TYPE_CHECKING:
 
 
 class Scenario(Base):
-    """Dialogue scenario with misconception and problem context.
-
-    Phase 2 Extension: Supports per-scenario chatbot configuration override.
-    NULL values in chat_* and tutor_* fields mean "use global config".
-    """
+    """Unified scenario; legacy columns remain only for private conversion."""
 
     __tablename__ = "scenario"
 
@@ -167,12 +163,10 @@ class Scenario(Base):
     student_template: Mapped["PromptTemplate"] = relationship(
         "PromptTemplate",
         foreign_keys=[student_template_id],
-        lazy="joined",
     )
     tutor_template: Mapped[Optional["PromptTemplate"]] = relationship(
         "PromptTemplate",
         foreign_keys=[tutor_template_id],
-        lazy="joined",
     )
 
     # Scenario-group access control
@@ -194,22 +188,8 @@ class Scenario(Base):
         ),
     )
 
-    @property
-    def tutor_enabled(self) -> bool:
-        """Backward compatibility: tutor enabled if template is assigned."""
-        return self.tutor_template_id is not None
-
     def __repr__(self) -> str:
-        config = (
-            f"model={self.chat_model or 'global'}, "
-            f"tutor={'on' if self.tutor_enabled else 'off'}"
-        )
-        status = "deleted" if self.deleted_at else "active"
-        return (
-            f"<Scenario(id={self.id}, "
-            f"title={self.title[:30]}, "
-            f"{config}, {status})>"
-        )
+        return f"<Scenario(id={self.id}, title={self.title[:30]}, status={self.status})>"
 
     def mark_deleted(self) -> None:
         """Mark scenario as soft-deleted with UTC timestamp."""

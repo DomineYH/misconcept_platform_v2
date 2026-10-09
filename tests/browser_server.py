@@ -115,10 +115,6 @@ class Handler(BaseHTTPRequestHandler):
             )
             mime = "text/html; charset=utf-8"
         elif path.path in {"/chat", "/scenarios", "/admin/scenarios-page"}:
-            framework = SimpleNamespace(id=1, name="Framework")
-            student_template = SimpleNamespace(
-                id=1, template_name="Student template", version=1
-            )
             scenario = SimpleNamespace(
                 id=1,
                 title="Browser regression",
@@ -139,11 +135,10 @@ class Handler(BaseHTTPRequestHandler):
                 video_url="https://www.youtube.com/watch?v=legacy-secret",
                 video_transcript="PRIVATE LEGACY TRANSCRIPT",
                 is_active=1,
-                framework_id=1,
-                framework=framework,
-                student_template_id=1,
-                tutor_template_id=2 if "mentor" in query else None,
-                tutor_template=None,
+                status="draft",
+                config_version=1,
+                config_json={"problem": {"public_text": "Problem"}},
+                review_required=False,
             )
             template = {
                 "/chat": "chat.html",
@@ -208,9 +203,6 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                     messages=messages,
                     session_ended="ended" in query,
-                    frameworks=[framework],
-                    student_templates=[student_template],
-                    tutor_templates=[],
                     groups=[],
                     scenario_group_map={},
                     session_counts={1: 0},

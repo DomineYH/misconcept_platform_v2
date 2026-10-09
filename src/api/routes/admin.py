@@ -13,7 +13,6 @@ from src.api.dependencies import get_admin_user, get_current_user, templates
 from src.api.routes.admin_about import router as about_router
 from src.api.routes.admin_ai_settings import router as ai_settings_router
 from src.api.routes.admin_catalog import router as catalog_router
-from src.api.routes.admin_frameworks import router as frameworks_router
 from src.api.routes.admin_groups import router as groups_router
 from src.api.routes.admin_models import router as models_router
 from src.api.routes.admin_probes import router as probes_router
@@ -26,7 +25,6 @@ from src.models.user import User
 router = APIRouter(tags=["Admin"])
 
 router.include_router(scenarios_router)
-router.include_router(frameworks_router)
 router.include_router(sessions_router)
 router.include_router(users_router)
 router.include_router(groups_router)

@@ -1,4 +1,4 @@
-"""Legacy mentor judgment, counter, and request ordering contracts."""
+"""Snapshot mentor policy replaces legacy heuristics without fallback."""
 
 from uuid import uuid4
 
@@ -21,54 +21,40 @@ __all__ = ["client", "mentor", "scenario_payload", "student"]
 
 
 @pytest.mark.parametrize(
-    "sensitivity,question_count,intervention_count,threshold,kind,calls,counts",
-    [
-        ("high", 0, 0, 3, "message", 1, (1, 1)),
-        ("medium", 0, 0, 3, "no_intervention", 0, (1, 0)),
-        ("low", 0, 0, 3, "no_intervention", 0, (1, 0)),
-        ("high", 4, 2, 2, "no_intervention", 0, (5, 2)),
-        ("high", 10, 2, 2, "message", 1, (0, 1)),
-    ],
+    "sensitivity,count", [("high", 0), ("medium", 10), ("low", 100)]
 )
-async def test_sensitivity_cap_and_question_reset_keep_legacy_policy(
-    data,
-    client,
-    mentor,
-    sensitivity,
-    question_count,
-    intervention_count,
-    threshold,
-    kind,
-    calls,
-    counts,
+async def test_manual_help_ignores_legacy_sensitivity_and_session_cap(
+    data, client, mentor, sensitivity, count
 ):
     data.scenario.tutor_sensitivity = sensitivity
-    data.scenario.tutor_intervention_threshold = threshold
-    data.session.tutor_question_count = question_count
-    data.session.tutor_intervention_count = intervention_count
+    data.scenario.tutor_intervention_threshold = 1
+    data.session.tutor_question_count = count
+    data.session.tutor_intervention_count = count
     await data.db.commit()
     login(client, data.owner)
     turn = await complete_turn(client, data)
     mentor.responses.create.reset_mock()
     response = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
-    assert frames(response)[-1][1]["result_kind"] == kind
-    assert mentor.responses.create.await_count == calls
+    assert frames(response)[-1][1]["result_kind"] == "message"
+    assert mentor.responses.create.await_count == 1
     await data.db.refresh(data.session)
-    assert (
-        data.session.tutor_question_count,
-        data.session.tutor_intervention_count,
-    ) == counts
+    assert data.session.tutor_question_count == count + 1
+    assert data.session.tutor_intervention_count == count + 1
 
 
 @pytest.mark.parametrize("semantic", ["intervene", "fallback", "invalid_json"])
-async def test_semantic_judgment_and_fallback_preserve_policy(
+async def test_auto_judgment_errors_fail_without_heuristic_coaching(
     data, client, mentor, semantic, caplog
 ):
     from types import SimpleNamespace
     from uuid import uuid4
 
+    from lesson_fixtures import configure_mentor
+
+    await configure_mentor(data, mentor, "auto", start_turn=1)
     data.scenario.tutor_sensitivity = "high"
     await data.db.commit()
     login(client, data.owner)
@@ -93,20 +79,26 @@ async def test_semantic_judgment_and_fallback_preserve_policy(
             if semantic == "invalid_json":
                 return SimpleNamespace(output_text="not JSON", usage=None)
             return SimpleNamespace(
-                output_text='{"is_repetitive":true,"reason":"Semantic loop"}',
+                output_text='{"is_repetitive":true,"is_inappropriate":false,"reason":"Semantic loop"}',
                 usage=None,
             )
         return SimpleNamespace(output_text="Semantic coaching", usage=None)
 
     mentor.responses.create.side_effect = create
     result = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "auto"},
     )
-    expected = "message" if semantic == "intervene" else "no_intervention"
-    assert frames(result)[-1][1]["result_kind"] == expected
+    if semantic == "intervene":
+        assert frames(result)[-1][1]["result_kind"] == "message"
+    else:
+        assert frames(result)[-1][0] == "run.failed"
+        assert frames(result)[-1][1]["code"] == (
+            "invalid_json" if semantic == "invalid_json" else "invalid_output"
+        )
     assert len(calls) == (2 if semantic == "intervene" else 1)
     assert "SECRET" not in result.text + caplog.text
-    assert calls[0]["max_output_tokens"] == 200
+    assert calls[0]["max_output_tokens"] == 1500
     from sqlalchemy import select
 
     from src.models import ApiUsageLog
@@ -145,7 +137,7 @@ async def test_newer_accepted_mentor_makes_failed_old_turn_obsolete(
     await data.db.commit()
     login(client, data.owner)
     old = await complete_turn(client, data)
-    old_key = {"request_id": str(uuid4())}
+    old_key = {"request_id": str(uuid4()), "trigger": "manual"}
     mentor.responses.create.side_effect = RuntimeError("Failed feedback")
     failed = await client.post(mentor_url(data, old), json=old_key)
     assert frames(failed)[-1][0] == "run.failed"
@@ -156,12 +148,14 @@ async def test_newer_accepted_mentor_makes_failed_old_turn_obsolete(
         output_text="Newer coaching", usage=None
     )
     completed = await client.post(
-        mentor_url(data, new), json={"request_id": str(uuid4())}
+        mentor_url(data, new),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
     assert frames(completed)[-1][0] == "output.completed"
     before = mentor.responses.create.await_count
     obsolete = await client.post(
-        mentor_url(data, old), json={"request_id": str(uuid4())}
+        mentor_url(data, old),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
     assert obsolete.status_code == 409
     assert obsolete.json()["detail"]["code"] == "mentor_turn_obsolete"
@@ -174,20 +168,27 @@ async def test_newer_accepted_mentor_makes_failed_old_turn_obsolete(
     assert data.session.tutor_intervention_count == 1
 
 
-async def test_low_sensitivity_repetition_uses_jaccard_without_semantic_call(
-    data,
-    client,
-    mentor,
+async def test_repetition_does_not_bypass_author_condition(
+    data, client, mentor
 ):
+    from types import SimpleNamespace
+
+    from lesson_fixtures import configure_mentor
+
+    await configure_mentor(data, mentor, "auto", start_turn=1)
     login(client, data.owner)
     await complete_turn(client, data, "Same question")
     turn = await complete_turn(client, data, "Same question")
     mentor.responses.create.reset_mock()
+    mentor.responses.create.side_effect = None
+    mentor.responses.create.return_value = SimpleNamespace(
+        output_text='{"is_repetitive":false,"is_inappropriate":false,"reason":"Condition not met"}',
+        usage=None,
+    )
     result = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "auto"},
     )
-    assert frames(result)[-1][1]["result_kind"] == "message"
+    assert frames(result)[-1][1]["result_kind"] == "no_intervention"
     assert mentor.responses.create.await_count == 1
-    assert "반복적인 대화 패턴" in str(
-        mentor.responses.create.call_args.kwargs["input"]
-    )
+    assert "PRIVATE CONDITION" in str(mentor.responses.create.call_args.kwargs)

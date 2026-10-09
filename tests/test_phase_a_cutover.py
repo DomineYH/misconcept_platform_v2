@@ -108,6 +108,7 @@ async def test_wal_backup_upgrade_readers_and_restore(
                         "message",
                         "api_usage_log",
                         "_migrations",
+                        "generation_run",
                     }:
                         assert after[table] == rows
                 scenario_width = len(before["scenario"][0])
@@ -134,9 +135,10 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 assert all(
                     row[6:] == (None, None, None) for row in after["message"]
                 )
-                assert after["generation_run"] == before.get(
-                    "generation_run", []
-                )
+                assert after["generation_run"] == [
+                    tuple(row) + (None,)
+                    for row in before.get("generation_run", [])
+                ]
                 usage_width = len(before["api_usage_log"][0])
                 assert [
                     row[:usage_width] for row in after["api_usage_log"]
@@ -145,7 +147,8 @@ async def test_wal_backup_upgrade_readers_and_restore(
                     all(value is None for value in row[usage_width:])
                     for row in after["api_usage_log"]
                 )
-                assert len(after["_migrations"]) == 7
+                assert len(after["_migrations"]) == 8
+                assert after["_migrations"][-1][1] == "030_mentor_policy.sql"
                 assert copy.execute(
                     "SELECT count(*) FROM _migrations "
                     "WHERE filename='025_provider_connection.sql'"

@@ -24,9 +24,15 @@ from src.services.call_admission import active_calls, registered_calls
 __all__ = ["client", "mentor", "scenario_payload", "student"]
 
 
+@pytest.mark.parametrize("trigger", ["manual", "auto"])
 async def test_capacity_refusal_has_no_run_counter_or_attempt_and_can_be_retried(
-    data, client, mentor
+    data, client, mentor, trigger
 ):
+    from lesson_fixtures import configure_mentor
+
+    await configure_mentor(
+        data, mentor, "auto" if trigger == "auto" else "manual", start_turn=1
+    )
     data.scenario.tutor_sensitivity = "high"
     sessions = [data.session]
     for _ in range(2):
@@ -63,17 +69,25 @@ async def test_capacity_refusal_has_no_run_counter_or_attempt_and_can_be_retried
             return mentor.stream
         entered.set()
         await gate.wait()
-        return SimpleNamespace(output_text="Capacity coaching", usage=None)
+        return SimpleNamespace(
+            output_text=(
+                '{"is_repetitive":true,"is_inappropriate":false,"reason":"Condition met"}'
+                if "text" in body
+                else "Capacity coaching"
+            ),
+            usage=None,
+        )
 
     mentor.responses.create.side_effect = upstream
     tasks = [
         asyncio.create_task(
             client.post(
-                mentor_url(data, first), json={"request_id": str(uuid4())}
+                mentor_url(data, first),
+                json={"request_id": str(uuid4()), "trigger": trigger},
             )
         )
     ]
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": trigger}
     try:
         await asyncio.wait_for(entered.wait(), 5)
         calls_before = mentor.responses.create.await_count
@@ -135,6 +149,9 @@ async def test_disabling_connection_cancels_mentor_and_finalizes_unknown_usage(
     if operation == "mentor":
         turn, entered, cancelled = await waiting_mentor(data, client, mentor)
     else:
+        from lesson_fixtures import configure_mentor
+
+        await configure_mentor(data, mentor, "auto", start_turn=1)
         data.scenario.tutor_sensitivity = "high"
         await data.db.commit()
         login(client, data.owner)
@@ -148,7 +165,7 @@ async def test_disabling_connection_cancels_mentor_and_finalizes_unknown_usage(
         entered, cancelled = asyncio.Event(), asyncio.Event()
 
         async def upstream(**body):
-            assert body["max_output_tokens"] == 200
+            assert body["max_output_tokens"] == 1500
             entered.set()
             try:
                 await asyncio.Event().wait()
@@ -160,7 +177,10 @@ async def test_disabling_connection_cancels_mentor_and_finalizes_unknown_usage(
         mentor.close.reset_mock()
     data.admin.set_password("A13-admin-password")
     await data.db.commit()
-    payload = {"request_id": str(uuid4())}
+    payload = {
+        "request_id": str(uuid4()),
+        "trigger": "manual" if operation == "mentor" else "auto",
+    }
     pending = asyncio.create_task(
         client.post(mentor_url(data, turn), json=payload)
     )

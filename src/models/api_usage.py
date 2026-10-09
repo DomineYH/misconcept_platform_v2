@@ -4,12 +4,15 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
     String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,27 +32,31 @@ class ApiUsageLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     # Foreign key to session
-    session_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("session.id"), nullable=False
+    session_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("session.id"), nullable=True
     )
 
     # Bot identification
-    bot_type: Mapped[str] = mapped_column(
-        String(20), nullable=False
+    bot_type: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
     )  # 'student' or 'tutor'
 
     # Model information
-    model: Mapped[str] = mapped_column(
-        String(50), nullable=False
+    model: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
     )  # e.g., 'gpt-4o', 'gpt-4o-mini'
 
     # Token usage
-    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
-    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
-    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Cost tracking (USD)
-    estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    estimated_cost_usd: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
 
     # Timestamp (timezone-aware UTC)
     timestamp: Mapped[datetime] = mapped_column(
@@ -64,6 +71,34 @@ class ApiUsageLog(Base):
         String(32), nullable=True, default=None
     )
 
+    # Nullable metadata distinguishes legacy rows from invocation attempts.
+    invocation_id: Mapped[str | None] = mapped_column(Text)
+    request_id: Mapped[str | None] = mapped_column(Text)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("generation_run.id"))
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL")
+    )
+    attempt_no: Mapped[int | None] = mapped_column(Integer)
+    provider: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str | None] = mapped_column(Text)
+    probe_step: Mapped[str | None] = mapped_column(Text)
+    credential_revision: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str | None] = mapped_column(Text)
+    error_code: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    first_output_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    retry_wait_ms: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_read_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_write_tokens: Mapped[int | None] = mapped_column(Integer)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
+    raw_usage_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
+    pricing_as_of: Mapped[str | None] = mapped_column(Text)
+    pricing_source: Mapped[str | None] = mapped_column(Text)
+    usage_complete: Mapped[bool | None] = mapped_column()
+
     # Relationship to session
     session: Mapped["Session"] = relationship(  # noqa: F821
         "Session", back_populates="api_usage_logs"
@@ -71,6 +106,7 @@ class ApiUsageLog(Base):
 
     # Indexes for query optimization
     __table_args__ = (
+        UniqueConstraint("invocation_id", "attempt_no"),
         Index("ix_api_usage_session_id", "session_id"),
         Index("ix_api_usage_timestamp", "timestamp"),
         Index("ix_api_usage_bot_type", "bot_type"),
@@ -84,57 +120,5 @@ class ApiUsageLog(Base):
             f"bot={self.bot_type}, "
             f"model={self.model}, "
             f"tokens={self.total_tokens}, "
-            f"cost=${self.estimated_cost_usd:.6f})>"
+            f"cost={self.estimated_cost_usd})>"
         )
-
-
-def calculate_cost(
-    model: str,
-    prompt_tokens: int,
-    completion_tokens: int,
-) -> float:
-    """Calculate estimated API cost in USD.
-
-    Pricing as of 2025-06 (per 1M tokens):
-    - gpt-5: $5.00 input, $15.00 output
-    - gpt-5-mini: $0.30 input, $1.20 output
-    - gpt-5.1: $2.00 input, $8.00 output
-    - gpt-5.1-chat-latest: $2.00 input, $8.00 output
-    - gpt-5.2: $10.00 input, $30.00 output
-    - gpt-4o: $5.00 input, $15.00 output
-    - gpt-4o-mini: $0.15 input, $0.60 output
-    - gpt-4-turbo: $10.00 input, $30.00 output
-    - gpt-3.5-turbo: $0.50 input, $1.50 output
-
-    Args:
-        model: OpenAI model name
-        prompt_tokens: Number of prompt tokens
-        completion_tokens: Number of completion tokens
-
-    Returns:
-        Estimated cost in USD (6 decimal places)
-    """
-    # Pricing table (USD per 1M tokens)
-    pricing_table = {
-        # GPT-5 family (pricing as of 2025-06)
-        "gpt-5": {"input": 5.00, "output": 15.00},
-        "gpt-5-mini": {"input": 0.30, "output": 1.20},
-        "gpt-5.1": {"input": 2.00, "output": 8.00},
-        "gpt-5.1-chat-latest": {"input": 2.00, "output": 8.00},
-        "gpt-5.2": {"input": 10.00, "output": 30.00},
-        # GPT-4 family
-        "gpt-4o": {"input": 5.00, "output": 15.00},
-        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-        "gpt-4-turbo": {"input": 10.00, "output": 30.00},
-        # GPT-3.5 family (Legacy: kept for historical records)
-        "gpt-3.5-turbo": {"input": 0.50, "output": 1.50},
-    }
-
-    # Default to gpt-5-mini pricing if model not found
-    pricing = pricing_table.get(model, pricing_table["gpt-5-mini"])
-
-    # Calculate cost (tokens / 1M * price per 1M)
-    input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
-    output_cost = (completion_tokens / 1_000_000) * pricing["output"]
-
-    return round(input_cost + output_cost, 6)

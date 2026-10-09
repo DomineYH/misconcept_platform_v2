@@ -6,12 +6,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import httpx2
 import pytest
+from lesson_fixtures import LESSON_KEY, install_connection
+from openai import AsyncOpenAI
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
 from test_scenario_api import scenario_payload as scenario_fixture
 
-from src.services import base
+from src.services import openai_generation
 
 client = client_fixture
 scenario_payload = scenario_fixture
@@ -51,6 +54,7 @@ class FakeStream:
 
 @pytest.fixture
 async def student(data, scenario_payload, monkeypatch):
+    connection, model = await install_connection(data, monkeypatch)
     data.scenario.problem_situation = "Public problem"
     data.session.ended_at = None
     await data.db.commit()
@@ -76,8 +80,78 @@ async def student(data, scenario_payload, monkeypatch):
         close=AsyncMock(),
         max_retries=0,
         stream=stream,
+        connection=connection,
+        model=model,
+        sdk_options=[],
     )
-    monkeypatch.setattr(base, "AsyncOpenAI", lambda **kw: fake)
+
+    def serializable(value):
+        if isinstance(value, SimpleNamespace):
+            return {k: serializable(v) for k, v in vars(value).items()}
+        if isinstance(value, list):
+            return [serializable(v) for v in value]
+        return value
+
+    class TransportStream(httpx2.AsyncByteStream):
+        def __init__(self, source):
+            self.source = source
+
+        async def __aiter__(self):
+            async for item in self.source:
+                values = serializable(item)
+                values.setdefault("sequence_number", 1)
+                values.setdefault("item_id", "msg")
+                values.setdefault("output_index", 0)
+                values.setdefault("content_index", 0)
+                response = values.get("response")
+                if response is not None:
+                    from test_student_probe import response_body
+
+                    body = response_body(response.pop("output_text", ""))
+                    output = response.pop("output", [])
+                    if output:
+                        body["output"] = output
+                    body.update(response)
+                    values["response"] = body
+                yield (
+                    f"event: {item.type}\ndata: {json.dumps(values)}\n\n"
+                ).encode()
+
+        async def aclose(self):
+            await self.source.close()
+
+    async def upstream(request):
+        assert request.headers["authorization"] == f"Bearer {LESSON_KEY}"
+        body = json.loads(request.content)
+        source = await fake.responses.create(**body)
+        if not body.get("stream"):
+            from test_student_probe import response_body
+
+            result = response_body(source.output_text)
+            result["usage"] = serializable(source.usage)
+            return httpx2.Response(200, json=result)
+        return httpx2.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=TransportStream(source),
+        )
+
+    class SDK(AsyncOpenAI):
+        async def close(self):
+            await super().close()
+            await fake.close()
+
+    def sdk(**kwargs):
+        fake.sdk_options.append(kwargs)
+        assert kwargs["max_retries"] == 0
+        return SDK(
+            **kwargs,
+            http_client=httpx2.AsyncClient(
+                transport=httpx2.MockTransport(upstream)
+            ),
+        )
+
+    monkeypatch.setattr(openai_generation, "AsyncOpenAI", sdk)
     return fake
 
 
@@ -190,7 +264,7 @@ async def test_failed_turn_retry_preserves_teacher_and_blocks_new_question(
     failure = await client.post(url, json=payload)
     accepted, terminal = frames(failure)[0][1], frames(failure)[-1]
     assert terminal[0] == "run.failed"
-    assert terminal[1]["code"] == "provider_error"
+    assert terminal[1]["code"] == "invalid_output"
     assert "secret provider failure" not in failure.text
     state = await client.get(f"/runs/{accepted['run_id']}")
     assert state.json()["partial_text"] == "Partial"

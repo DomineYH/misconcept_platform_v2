@@ -1,17 +1,13 @@
 """SessionManager service for orchestrating dialogue flow."""
 
-import asyncio
-import json
 import logging
-from typing import Literal, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.routes.session_helpers import mark_session_ended
 from src.config import config
-from src.models import ApiUsageLog, Message, Scenario, Session, calculate_cost
-from src.services.misconception_analyzer import MisconceptionAnalyzer
+from src.models import Message, Scenario, Session
 from src.services.student_bot import StudentBot
 from src.services.turn_context import load_completed_turns
 from src.services.tutor_bot import TutorBot
@@ -22,30 +18,21 @@ logger = logging.getLogger(__name__)
 class SessionManager:
     """Orchestrates teacher-student-tutor dialogue interactions."""
 
-    def __init__(
-        self, db_session: AsyncSession, session_id: int, *, client=None
-    ):
+    def __init__(self, db_session: AsyncSession, session_id: int):
         """Initialize SessionManager for specific session.
 
         Args:
             db_session: Database session
             session_id: Dialogue session ID
         """
-        self.client = client
         self.db = db_session
         self.session_id = session_id
         self.student_bot = None
         self.tutor_bot = None  # Initialized conditionally in initialize()
-        self.misconception_analyzer = None  # Initialized in initialize()
-        self.scenario = None  # Store scenario for analyzer
 
     async def close(self):
         """Close all owned clients, including partial initialization."""
-        for service in (
-            self.student_bot,
-            self.tutor_bot,
-            self.misconception_analyzer,
-        ):
+        for service in (self.student_bot, self.tutor_bot):
             if service is not None:
                 await service.close()
 
@@ -65,14 +52,14 @@ class SessionManager:
             select(Scenario).where(Scenario.id == session.scenario_id)
         )
         scenario = result.scalar_one()
-        self.scenario = scenario  # Store for misconception analysis
 
         # Load bot configuration from .env and scenario overrides
         bot_config = self._load_bot_config(scenario)
 
         # Initialize StudentBot with scenario context and configuration
         self.student_bot = StudentBot(
-            client=self.client,
+            session_id=self.session_id,
+            owner_id=session.teacher_id,
             scenario_prompt=scenario.prompt,
             scenario_title=scenario.title,
             student_profile=scenario.student_profile or "Grade 5 student",
@@ -86,7 +73,8 @@ class SessionManager:
         # Conditionally initialize TutorBot based on scenario setting
         if bot_config["tutor_enabled"] and scenario.tutor_template_id:
             self.tutor_bot = TutorBot(
-                client=self.client,
+                session_id=self.session_id,
+                owner_id=session.teacher_id,
                 db_session=self.db,
                 template_id=scenario.tutor_template_id,
                 scenario_title=scenario.title,
@@ -104,14 +92,6 @@ class SessionManager:
             )
         else:
             self.tutor_bot = None  # TutorBot disabled for this scenario
-
-        # Initialize MisconceptionAnalyzer for tracking student responses
-        self.misconception_analyzer = MisconceptionAnalyzer(
-            client=self.client,
-            db_session=self.db,
-            model=config.ANALYSIS_MODEL,  # Use analysis model
-            reasoning_effort="low",  # Low effort for consistent analysis
-        )
 
     async def process_teacher_message(
         self, teacher_content: str
@@ -146,78 +126,38 @@ class SessionManager:
         # 3. Generate student response (must be sequential - needed by others)
         (
             student_content,
-            student_usage,
+            _student_usage,
         ) = await self.student_bot.generate_response(teacher_content, history)
 
-        # 3.1. Run MisconceptionAnalyzer and TutorBot in PARALLEL
-        # Both depend on student_content but NOT on each other
-        # Performance: saves ~2 seconds by avoiding sequential API calls
-        analysis_coro = self.misconception_analyzer.analyze_student_response(
-            student_message=student_content,
-            scenario_prompt=self.scenario.prompt,
-            student_profile=self.scenario.student_profile or "Grade 5 student",
-            scenario_title=self.scenario.title,
-        )
-
-        parallel_tasks: list = [analysis_coro]
-        tutor_task_idx: int | None = None
+        tutor_feedback = None
         if self.tutor_bot:
-            parallel_tasks.append(
-                self.tutor_bot.generate_feedback(
+            try:
+                tutor_feedback, _ = await self.tutor_bot.generate_feedback(
                     teacher_content, student_content, history
                 )
-            )
-            tutor_task_idx = 1
+            except Exception:
+                logger.warning("TutorBot feedback failed")
 
-        results = await asyncio.gather(*parallel_tasks, return_exceptions=True)
-
-        misconception_data = None
-        if not isinstance(results[0], Exception) and results[0] is not None:
-            misconception_data = json.dumps(results[0])
-        elif isinstance(results[0], Exception):
-            logger.warning("Misconception analysis failed: %s", results[0])
-
-        # 3.2. Save student message with metadata
+        # Turn-level misconception calls are retired (ADR-0003).
         student_msg = Message(
             session_id=self.session_id,
             role="student",
             content=student_content,
-            analysis_metadata=misconception_data,
         )
         self.db.add(student_msg)
         await self.db.flush()
         new_messages.append(student_msg)
 
-        # Log StudentBot API usage
-        await self._log_api_usage(
-            bot_type="student",
-            model=self.student_bot.model,
-            usage_dict=student_usage,
-        )
-
-        # 4. Process TutorBot result (from parallel execution)
-        if tutor_task_idx is not None:
-            tutor_result = results[tutor_task_idx]
-            if not isinstance(tutor_result, Exception):
-                tutor_feedback, tutor_usage = tutor_result
-                if tutor_feedback:
-                    tutor_msg = Message(
-                        session_id=self.session_id,
-                        role="tutor",
-                        content=tutor_feedback,
-                    )
-                    self.db.add(tutor_msg)
-                    await self.db.flush()
-                    new_messages.append(tutor_msg)
-
-                    # Log TutorBot API usage (only if intervention occurred)
-                    await self._log_api_usage(
-                        bot_type="tutor",
-                        model=self.tutor_bot.model,
-                        usage_dict=tutor_usage,
-                    )
-            else:
-                logger.warning("TutorBot feedback failed: %s", tutor_result)
+        # 4. Save optional mentor feedback after its independently logged call.
+        if tutor_feedback:
+            tutor_msg = Message(
+                session_id=self.session_id,
+                role="tutor",
+                content=tutor_feedback,
+            )
+            self.db.add(tutor_msg)
+            await self.db.flush()
+            new_messages.append(tutor_msg)
 
         # 5. Refresh to get created_at timestamps (dependency auto-commits)
         for msg in new_messages:
@@ -280,59 +220,6 @@ class SessionManager:
     async def _get_conversation_history(self) -> list[dict]:
         """Retrieve only the last N completed teacher–student pairs."""
         return await load_completed_turns(self.db, self.session_id)
-
-    async def _log_api_usage(
-        self,
-        bot_type: Literal["student", "tutor"],
-        model: str,
-        usage_dict: Optional[dict],
-    ) -> None:
-        """Log OpenAI API usage to database.
-
-        Args:
-            bot_type: Type of bot ('student' or 'tutor')
-            model: OpenAI model name used
-            usage_dict: Dictionary with prompt_tokens, completion_tokens,
-                total_tokens. None if no usage info available.
-        """
-        if usage_dict is None:
-            logger.warning(
-                "No usage info for %s bot (model: %s)", bot_type, model
-            )
-            return
-
-        try:
-            # Calculate cost using pricing table
-            cost = calculate_cost(
-                model=model,
-                prompt_tokens=usage_dict["prompt_tokens"],
-                completion_tokens=usage_dict["completion_tokens"],
-            )
-
-            # Create log entry
-            log_entry = ApiUsageLog(
-                session_id=self.session_id,
-                bot_type=bot_type,
-                model=model,
-                prompt_tokens=usage_dict["prompt_tokens"],
-                completion_tokens=usage_dict["completion_tokens"],
-                total_tokens=usage_dict["total_tokens"],
-                estimated_cost_usd=cost,
-            )
-
-            self.db.add(log_entry)
-            await self.db.flush()  # Persist immediately
-
-            logger.debug(
-                f"API usage logged: {bot_type} bot, "
-                f"{usage_dict['total_tokens']} tokens, ${cost:.6f}"
-            )
-
-        except Exception as e:
-            # Log error but don't fail the entire process
-            logger.error(
-                "Failed to log API usage for %s bot: %s", bot_type, str(e)
-            )
 
     async def end_session(self) -> None:
         """Mark session as ended."""

@@ -15,14 +15,17 @@ from src.api.routes.session_helpers import (
 )
 from src.config import config
 from src.models import (
-    ApiUsageLog,
+    AppSetting,
     GenerationRun,
     Message,
     Scenario,
     Session,
-    calculate_cost,
 )
 from src.models.scenario_group import ScenarioGroup
+from src.services.call_admission import approve_call, execution_lock
+from src.services.invocation_types import InvocationError, TextRequest
+from src.services.lesson_connections import resolve_lesson_model
+from src.services.model_verification import ROLE_CONTRACT_VERSIONS
 from src.services.prompt_manager import PromptManager
 from src.services.student_bot import build_student_input
 from src.services.turn_context import load_completed_turns
@@ -82,6 +85,11 @@ async def snapshot(db, run):
 
 
 async def reserve_student(factory, session_id, user, request):
+    async with execution_lock():
+        return await _reserve_student(factory, session_id, user, request)
+
+
+async def _reserve_student(factory, session_id, user, request):
     input_hash = digest(
         {
             "owner": user.id,
@@ -152,6 +160,30 @@ async def reserve_student(factory, session_id, user, request):
         )
         if busy:
             conflict("student_busy", run_id=busy.id)
+        try:
+            connection, model, options = await resolve_lesson_model(
+                db,
+                scenario.chat_model or config.CHAT_MODEL,
+                "student",
+                {
+                    "reasoning": {"effort": config.STUDENT_REASONING},
+                    "max_output_tokens": config.STUDENT_MAX_TOKENS,
+                },
+            )
+            try:
+                template = await PromptManager.get_template_text_by_id(
+                    db, scenario.student_template_id
+                )
+            except (ValueError, KeyError):
+                raise InvocationError("configuration_unavailable") from None
+        except InvocationError:
+            raise HTTPException(
+                503,
+                detail={
+                    "code": "configuration_unavailable",
+                    "message": "관리자에게 AI 연결과 학생 모델 검증을 요청해주세요.",
+                },
+            ) from None
         if teacher is None:
             answered = select(GenerationRun.turn_id).where(
                 GenerationRun.session_id == session_id,
@@ -182,9 +214,6 @@ async def reserve_student(factory, session_id, user, request):
             )
             db.add(teacher)
             await db.flush()
-        template = await PromptManager.get_template_text_by_id(
-            db, scenario.student_template_id
-        )
         history = await load_completed_turns(
             db, session_id, before_turn_index=teacher.turn_index
         )
@@ -226,8 +255,49 @@ async def reserve_student(factory, session_id, user, request):
         db.add(run)
         await db.flush()
         accepted = await snapshot(db, run)
-        await db.commit()
-        return accepted, kwargs
+        setting = await db.get(AppSetting, 1)
+        if setting is None:
+            raise HTTPException(
+                503, detail={"code": "configuration_unavailable"}
+            )
+        try:
+            permit = approve_call(
+                factory,
+                connection,
+                setting,
+                owner_id=user.id,
+                operation="student",
+                role="student",
+                admin=False,
+            )
+        except InvocationError as error:
+            raise HTTPException(
+                429 if error.code == "call_limit_reached" else 503,
+                detail={
+                    "code": error.code,
+                    "message": "관리자에게 AI 설정을 확인하거나 잠시 후 다시 시도해주세요.",
+                },
+            ) from None
+        permit.model_config_id = model.id
+        permit.config_version = model.config_version
+        permit.model_id = model.model_id
+        permit.capability_version = model.capability_definition_version
+        permit.contract_version = ROLE_CONTRACT_VERSIONS["student"]
+        call = TextRequest(
+            "openai",
+            model.model_id,
+            "student",
+            "\n\n".join(m["content"] for m in kwargs["input"][:2]),
+            kwargs["input"][2:],
+            options,
+            request.request_id,
+        )
+        try:
+            await db.commit()
+        except BaseException:
+            permit.release()
+            raise
+        return accepted, {"request": call, "permit": permit}
 
 
 async def finish_student(
@@ -239,7 +309,6 @@ async def finish_student(
     partial_text=None,
     error_code=None,
     first_output_at=None,
-    usage=None,
 ):
     async with factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
@@ -273,20 +342,6 @@ async def finish_student(
                 )
             )
             run.result_kind = "message"
-        if usage:
-            db.add(
-                ApiUsageLog(
-                    session_id=run.session_id,
-                    bot_type="student",
-                    model=run.model,
-                    **usage,
-                    estimated_cost_usd=calculate_cost(
-                        run.model,
-                        usage["prompt_tokens"],
-                        usage["completion_tokens"],
-                    ),
-                )
-            )
         await db.flush()
         result = await snapshot(db, run)
         try:

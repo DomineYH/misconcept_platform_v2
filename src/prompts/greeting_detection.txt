@@ -28,15 +28,16 @@ These types of messages should NOT be marked as greetings:
 
 ## Response Format
 
-Return your analysis as a JSON array. Each item should have:
+Return your analysis as a JSON object with a "results" array. Each item in
+"results" should have:
 - "index": The message number (0-based)
 - "is_greeting": true if greeting/non-educational, false otherwise
 - "reason": Brief explanation of your decision
 
 Example response:
-[
+{{"results": [
   {{"index": 0, "is_greeting": true, "reason": "Opening greeting"}},
   {{"index": 1, "is_greeting": false, "reason": "Conceptual question about fractions"}}
-]
+]}}
 
 Analyze the messages now:

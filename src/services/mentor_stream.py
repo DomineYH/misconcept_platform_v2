@@ -11,11 +11,11 @@ import anyio
 from src.models import GenerationRun
 from src.services.generation_lifecycle import active_runs
 from src.services.generation_runs import snapshot
+from src.services.invocation_types import InvocationError
 from src.services.mentor_generation import finish_mentor
 from src.services.student_stream import (
     CLEANUP_SECONDS,
     HEARTBEAT_SECONDS,
-    RUN_SECONDS,
     StudentStreamError,
     StudentStreamingResponse,
 )
@@ -93,7 +93,16 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
             return
         if cancelled.is_set():
             raise StudentStreamError("session_ended")
-        bot = TutorBot(None, **execution["options"])
+        bot = TutorBot(
+            None,
+            factory=factory,
+            owner_id=execution["owner_id"],
+            session_id=accepted["session_id"],
+            run_id=accepted["run_id"],
+            request_id=accepted["request_id"],
+            permit=execution["permit"],
+            **execution["options"],
+        )
         history = execution["history"]
         task = asyncio.create_task(
             bot.generate_feedback(
@@ -105,9 +114,13 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
             )
         )
         while True:
-            remaining = started + RUN_SECONDS - time.monotonic()
+            remaining = (
+                execution["deadline"] - time.monotonic()
+                if execution["deadline"] is not None
+                else float("inf")
+            )
             if remaining <= 0:
-                raise StudentStreamError("run_timeout")
+                raise StudentStreamError("timeout_total")
             idle = HEARTBEAT_SECONDS - (time.monotonic() - last_sent)
             if idle <= 0:
                 last_sent = time.monotonic()
@@ -122,17 +135,16 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                 raise StudentStreamError("session_ended")
             if task not in done:
                 continue
-            content, usage = task.result()
+            content, _ = task.result()
             try:
                 result = await finish_mentor(
                     factory,
                     accepted["run_id"],
                     status="completed",
                     content=content,
-                    usage=usage,
                 )
             except Exception:
-                logger.exception("Mentor final commit failed")
+                logger.error("Mentor final commit failed")
                 raise StudentStreamError("storage_error") from None
             terminal = True
             yield terminal_frame(result)
@@ -142,20 +154,24 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
     except Exception as error:
         code = (
             error.code
-            if isinstance(error, StudentStreamError)
-            else "provider_error"
+            if isinstance(error, (StudentStreamError, InvocationError))
+            else "configuration_unavailable"
         )
         try:
             result = await finish_mentor(
                 factory,
                 accepted["run_id"],
-                status="cancelled" if code == "session_ended" else "failed",
+                status=(
+                    "cancelled"
+                    if code == "session_ended"
+                    else "interrupted" if code == "interrupted" else "failed"
+                ),
                 error_code=code,
             )
             terminal = True
             yield terminal_frame(result)
         except Exception:
-            logger.exception("Unable to persist mentor failure")
+            logger.error("Unable to persist mentor failure")
             yield frame(
                 "run.interrupted",
                 status="interrupted",
@@ -188,7 +204,7 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                     error_code="disconnected",
                 )
             except Exception:
-                logger.exception("Unable to record interrupted mentor")
+                logger.error("Unable to record interrupted mentor")
 
         with anyio.CancelScope(shield=True):
             with anyio.move_on_after(CLEANUP_SECONDS):

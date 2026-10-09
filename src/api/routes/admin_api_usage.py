@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import desc, func, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
@@ -25,9 +25,29 @@ async def api_usage_dashboard(
     result = await db.execute(query)
     logs = result.scalars().all()
 
-    # Calculate total cost
-    total_cost_query = select(func.sum(ApiUsageLog.estimated_cost_usd))
-    total_cost = await db.scalar(total_cost_query) or 0.0
+    # Preserve recorded generation estimates; list calls are not generation.
+    generation = ApiUsageLog.operation.is_(None) | (
+        ApiUsageLog.operation != "model_list"
+    )
+    summary = (
+        await db.execute(
+            select(
+                func.sum(case((generation, ApiUsageLog.estimated_cost_usd))),
+                func.count(
+                    case(
+                        (
+                            generation
+                            & ApiUsageLog.invocation_id.is_not(None)
+                            & ApiUsageLog.estimated_cost_usd.is_(None),
+                            1,
+                        )
+                    )
+                ),
+                func.count(case((ApiUsageLog.operation == "model_list", 1))),
+                func.count(case((ApiUsageLog.invocation_id.is_(None), 1))),
+            )
+        )
+    ).one()
 
     return templates.TemplateResponse(
         "admin/api_usage.html",
@@ -35,6 +55,9 @@ async def api_usage_dashboard(
             "request": request,
             "user": user,
             "logs": logs,
-            "total_cost": round(total_cost, 4),
+            "total_cost": summary[0] or 0.0,
+            "unpriced_generation_attempts": summary[1],
+            "model_list_calls": summary[2],
+            "has_legacy_records": summary[3] > 0,
         },
     )

@@ -13,7 +13,7 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.6",
-    "openai>=1.68.0",
+    "openai==3.26.0",
     "httpx>=0.25.0",
     "aiosqlite>=0.19.0",
     "itsdangerous>=2.1.0",
@@ -23,6 +23,10 @@ dependencies = [
     "bcrypt>=4.0.0",
     "starlette-csrf>=3.0.0",
     "markdown>=3.5.0",
+    "cryptography==50.0.2",
+    "limits==5.6.0",
+    "google-genai==2.29.0",
+    "anthropic==1.12.1",
 ]
 
 [project.optional-dependencies]

@@ -22,9 +22,9 @@ student = student_fixture
         ("refusal", "refused"),
         ("final_refusal", "refused"),
         ("incomplete", "incomplete_response"),
-        ("failed", "provider_error"),
-        ("error", "provider_error"),
-        ("eof", "incomplete_response"),
+        ("failed", "transient"),
+        ("error", "transient"),
+        ("eof", "invalid_output"),
     ],
 )
 async def test_provider_failures_never_become_student_messages(
@@ -49,12 +49,21 @@ async def test_provider_failures_never_become_student_messages(
         events.append(event("response.completed", response=response))
     elif mode == "incomplete":
         response.status = "incomplete"
+        response.incomplete_details = SimpleNamespace(
+            reason="max_output_tokens"
+        )
         response.output_text = "Incomplete answer"
         events.append(event("response.incomplete", response=response))
     elif mode == "failed":
+        response.status = "failed"
+        response.error = SimpleNamespace(code="server_error", message="Private")
         events.append(event("response.failed", response=response))
     elif mode == "error":
-        events.append(event("error", message="private upstream details"))
+        events.append(
+            event(
+                "error", code="server_error", message="private upstream details"
+            )
+        )
     student.stream.events = events
     payload = {"request_id": str(uuid4()), "content": "Why?"}
     result = await client.post(
@@ -140,10 +149,16 @@ async def test_deadlines_release_execution_without_saving_partial(
 
     from test_student_generation import FakeStream
 
+    from src.models import AppSetting
     from src.services import student_stream
 
-    monkeypatch.setattr(student_stream, "FIRST_OUTPUT_SECONDS", 0.4)
-    monkeypatch.setattr(student_stream, "RUN_SECONDS", 0.8)
+    setting = await data.db.get(AppSetting, 1)
+    setting.timeouts_json = {
+        **setting.timeouts_json,
+        "student_first_output": 1,
+        "student_total": 2,
+    }
+    await data.db.commit()
     monkeypatch.setattr(student_stream, "HEARTBEAT_SECONDS", 0.02)
     student.stream = FakeStream(
         (
@@ -191,7 +206,11 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
                     delta="PRIVATE REASONING",
                 )
 
-    monkeypatch.setattr(student_stream, "FIRST_OUTPUT_SECONDS", 0.4)
+    from src.models import AppSetting
+
+    setting = await data.db.get(AppSetting, 1)
+    setting.timeouts_json = {**setting.timeouts_json, "student_first_output": 1}
+    await data.db.commit()
     monkeypatch.setattr(student_stream, "HEARTBEAT_SECONDS", 0.02)
     student.stream = ReasoningStream([])
     student.responses.create.return_value = student.stream
@@ -420,7 +439,7 @@ async def test_disconnect_cancels_sdk_read_and_preserves_teacher(
 async def test_transient_creation_error_has_no_automatic_retry(
     data, client, student
 ):
-    import httpx
+    import httpx2 as httpx
     from openai import APIConnectionError
 
     student.responses.create.side_effect = APIConnectionError(
@@ -432,16 +451,22 @@ async def test_transient_creation_error_has_no_automatic_retry(
         f"/sessions/{data.session.id}/turns/stream",
         json={"request_id": str(uuid4()), "content": "Keep on network failure"},
     )
-    assert frames(result)[-1][1]["code"] == "provider_error"
+    assert frames(result)[-1][1]["code"] == "transient"
     assert "Private connection error" not in result.text
     assert student.responses.create.await_count == 1
     student.close.assert_awaited_once()
 
 
 async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
-    data, client, student
+    data, client, student, monkeypatch
 ):
     import json
+
+    import httpx2
+    from test_analysis_invocations import analysis_transport
+    from test_student_probe import response_body
+
+    from src.config import config
 
     login(client, data.owner)
     student.stream.events = [
@@ -464,11 +489,18 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
     assert (await client.post(f"{path}/end")).status_code == 200
     inputs = []
 
-    async def analysis_response(**kwargs):
-        inputs.append(kwargs["input"])
-        raise ValueError("Fake analysis failure")
+    student.model.verification_state = {
+        **student.model.verification_state,
+        "analysis": dict(student.model.verification_state["student"]),
+    }
+    monkeypatch.setattr(config, "ANALYSIS_MODEL", student.model.model_id)
+    await data.db.commit()
 
-    student.responses.create.side_effect = analysis_response
+    async def analysis_response(request, body):
+        inputs.append(body["input"])
+        return httpx2.Response(200, json=response_body("not json"))
+
+    analysis_transport(monkeypatch, analysis_response)
     analyzed = await client.post(f"{path}/analyze")
     assert analyzed.status_code == 200
     assert analyzed.json()["feedback_status"] == "failed"

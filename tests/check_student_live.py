@@ -7,6 +7,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -24,9 +25,12 @@ async def check():
             TESTING="true",
             OPENAI_API_KEY="test-only",
             SESSION_SECRET="live-test",
+            PROVIDER_SECRET_ENCRYPTION_KEY=base64.b64encode(b"k" * 32).decode(),
+            PROVIDER_SECRET_ENCRYPTION_KEY_VERSION="live-v1",
             DATABASE_URL=f"sqlite+aiosqlite:///{directory}/live.db",
         )
         import httpx
+        import httpx2
         import uvicorn
         from itsdangerous import TimestampSigner
         from openai import AsyncOpenAI
@@ -39,15 +43,20 @@ async def check():
         from src.main import app
         from src.models import (
             AnalysisFramework,
+            ApiUsageLog,
             GenerationRun,
+            ModelConfig,
             PromptTemplate,
+            ProviderConnection,
             Scenario,
             ScenarioGroup,
             Session,
             User,
             UserGroup,
         )
-        from src.services import base
+        from src.services import openai_generation
+        from src.services.model_capabilities import DEFINITION_VERSION
+        from src.services.provider_secrets import encrypt_key
 
         await run_all_migrations()
         async with AsyncSessionLocal() as db:
@@ -66,8 +75,11 @@ async def check():
             db.add_all([group, template, mentor, framework])
             await db.flush()
             owner = User(
-                username="live-owner", nickname="Teacher", group_id=group.id
+                username="live_owner", nickname="Teacher", group_id=group.id
             )
+            owner.set_password("BROWSER-PASSWORD-SENTINEL")
+            admin = User(username="live_admin", nickname="Admin", role="admin")
+            admin.set_password("BROWSER-PASSWORD-SENTINEL")
             scenario = Scenario(
                 title="Live",
                 prompt="Internal instruction",
@@ -77,8 +89,38 @@ async def check():
                 tutor_template_id=mentor.id,
                 tutor_sensitivity="high",
             )
-            db.add_all([owner, scenario])
+            db.add_all([owner, admin, scenario])
             await db.flush()
+            connection = await db.scalar(
+                select(ProviderConnection).where(
+                    ProviderConnection.provider == "openai"
+                )
+            )
+            connection.credential_revision = 1
+            connection.encrypted_key, connection.nonce = encrypt_key(
+                connection, "sk-live-db-key", 1
+            )
+            connection.encryption_key_version = "live-v1"
+            connection.masked_hint = "-key"
+            connection.enabled = True
+            db.add(
+                ModelConfig(
+                    provider_connection_id=connection.id,
+                    model_id="gpt-5-mini",
+                    display_name="Live student",
+                    enabled=True,
+                    capability_definition_version=DEFINITION_VERSION,
+                    verification_state={
+                        "student": {
+                            "status": "succeeded",
+                            "credential_revision": 1,
+                            "connection_version": connection.connection_version,
+                            "capability_definition_version": DEFINITION_VERSION,
+                            "role_contract_version": "s1-v1",
+                        }
+                    },
+                )
+            )
             session = Session(teacher_id=owner.id, scenario_id=scenario.id)
             db.add_all(
                 [
@@ -90,9 +132,11 @@ async def check():
             session_id, owner_id = session.id, owner.id
 
         release = asyncio.Event()
+        if sys.argv[1:] == ["--browser"]:
+            release.set()
         calls, owned_clients = [], []
 
-        class Upstream(httpx.AsyncByteStream):
+        class Upstream(httpx2.AsyncByteStream):
             async def __aiter__(self):
                 yield b"event: response.output_text.delta\ndata: " + json.dumps(
                     {
@@ -142,8 +186,37 @@ async def check():
                 ).encode() + b"\n\n"
 
         async def upstream(request):
-            calls.append(json.loads(request.content))
-            return httpx.Response(
+            assert request.headers["authorization"] == "Bearer sk-live-db-key"
+            body = json.loads(request.content)
+            calls.append(body)
+            if not body.get("stream"):
+                return httpx2.Response(
+                    200,
+                    json={
+                        "id": "resp",
+                        "object": "response",
+                        "created_at": 1,
+                        "status": "completed",
+                        "model": "gpt-5-mini",
+                        "output": [
+                            {
+                                "id": "msg",
+                                "type": "message",
+                                "role": "assistant",
+                                "status": "completed",
+                                "content": [
+                                    {
+                                        "type": "output_text",
+                                        "text": "Saved body",
+                                        "annotations": [],
+                                    }
+                                ],
+                            }
+                        ],
+                        "usage": None,
+                    },
+                )
+            return httpx2.Response(
                 200,
                 headers={"Content-Type": "text/event-stream"},
                 stream=Upstream(),
@@ -153,14 +226,14 @@ async def check():
             assert kwargs["max_retries"] == 0
             sdk = AsyncOpenAI(
                 **kwargs,
-                http_client=httpx.AsyncClient(
-                    transport=httpx.MockTransport(upstream)
+                http_client=httpx2.AsyncClient(
+                    transport=httpx2.MockTransport(upstream)
                 ),
             )
             owned_clients.append(sdk)
             return sdk
 
-        base.AsyncOpenAI = client_factory
+        openai_generation.AsyncOpenAI = client_factory
         original_connect = socket.socket.connect
 
         def localhost_only(sock, address):
@@ -179,6 +252,7 @@ async def check():
                 CSRFMiddleware(
                     app,
                     secret=config.SESSION_SECRET,
+                    exempt_urls=[re.compile(r"/health"), re.compile(r"/login")],
                     cookie_name="csrftoken",
                     header_name="x-csrf-token",
                 ),
@@ -192,6 +266,40 @@ async def check():
             async with asyncio.timeout(30):
                 while not server.started:
                     await asyncio.sleep(0.01)
+            if sys.argv[1:] == ["--browser"]:
+                process = await asyncio.create_subprocess_exec(
+                    "node",
+                    "tests/check_s1_browser.mjs",
+                    str(port),
+                    cwd=ROOT,
+                )
+                try:
+                    async with asyncio.timeout(60):
+                        assert await process.wait() == 0
+                finally:
+                    if process.returncode is None:
+                        process.kill()
+                        await process.wait()
+                assert len(calls) == 3 and all(
+                    sdk.is_closed() for sdk in owned_clients
+                )
+                assert [body["max_output_tokens"] for body in calls] == [
+                    1024,
+                    1024,
+                    1500,
+                ]
+                assert all(body["model"] == "gpt-5-mini" for body in calls)
+                async with AsyncSessionLocal() as db:
+                    attempts = (await db.scalars(select(ApiUsageLog))).all()
+                    assert len(attempts) == 3
+                    assert all(row.status == "completed" for row in attempts)
+                    assert all(
+                        row.estimated_cost_usd is None for row in attempts
+                    )
+                print(
+                    "PASS: real administrator/teacher browser HTTP, three-provider key storage, role invalidation/probe/replay, exact lesson model, unpriced ledger"
+                )
+                return
             async with httpx.AsyncClient(
                 base_url=f"http://127.0.0.1:{port}", timeout=30
             ) as http:
@@ -263,6 +371,16 @@ async def check():
                 assert all(sdk.is_closed() for sdk in owned_clients)
                 async with AsyncSessionLocal() as db:
                     run = (await db.scalars(select(GenerationRun))).one()
+                    attempt = (await db.scalars(select(ApiUsageLog))).one()
+                    assert (
+                        attempt.run_id == run.id
+                        and attempt.session_id == session_id
+                    )
+                    assert (
+                        attempt.status == "completed"
+                        and attempt.attempt_no == 1
+                    )
+                    assert attempt.request_id == payload["request_id"]
                     assert (
                         run.started_at <= run.first_output_at <= run.finished_at
                     )

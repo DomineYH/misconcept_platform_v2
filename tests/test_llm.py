@@ -1,14 +1,15 @@
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
+import httpx2 as httpx
 import pytest
-from openai import APIConnectionError, AsyncOpenAI
-from tenacity import wait_none
+from lesson_fixtures import install_connection
+from test_analysis_invocations import analysis_transport
+from test_scenario_api import scenario_payload as scenario_fixture
+from test_student_probe import response_body
 
 from src.models import Message
-from src.services import analysis_pipeline, base
+from src.services import analysis_pipeline
 from src.services.analyzer import Analyzer
 from src.services.prompt_manager import PromptManager
 from src.services.session_synthesizer import SessionSynthesizer
@@ -16,27 +17,11 @@ from src.services.student_bot import StudentBot
 from src.services.tutor_bot import TutorBot
 
 USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
-
-
-def response(content):
-    return SimpleNamespace(output_text=content, usage=SimpleNamespace(**USAGE))
-
-
-def client(*responses):
-    return SimpleNamespace(
-        responses=SimpleNamespace(
-            create=AsyncMock(side_effect=list(responses))
-        ),
-        close=AsyncMock(),
-        max_retries=0,
-    )
+scenario_payload = scenario_fixture
 
 
 @pytest.fixture(autouse=True)
-def fast_retry(monkeypatch):
-    monkeypatch.setattr(
-        base.OpenAIBaseService.create_response.retry, "wait", wait_none()
-    )
+def prompt_template(monkeypatch):
     monkeypatch.setattr(
         PromptManager,
         "get_template_text_by_id",
@@ -46,8 +31,20 @@ def fast_retry(monkeypatch):
     )
 
 
-async def test_student_success_settings_and_input_failure(data):
-    fake = client(response("Student answer"))
+async def test_student_success_settings_and_input_failure(data, monkeypatch):
+    from lesson_fixtures import LESSON_KEY, install_connection
+    from test_student_probe import response_body, sdk_transport
+
+    from src.services.invocation_types import InvocationError
+
+    await install_connection(data, monkeypatch)
+
+    async def upstream(request, body):
+        return httpx.Response(200, json=response_body("Student answer", USAGE))
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=1234, key=LESSON_KEY
+    )
     async with StudentBot(
         "Misconception",
         "Scenario",
@@ -57,7 +54,6 @@ async def test_student_success_settings_and_input_failure(data):
         model="gpt-5-mini",
         reasoning_effort="low",
         max_tokens=1234,
-        client=fake,
     ) as bot:
         content, usage = await bot.generate_response(
             "Why?",
@@ -72,7 +68,7 @@ async def test_student_success_settings_and_input_failure(data):
             "completion_tokens": 5,
             "total_tokens": 15,
         }
-        kwargs = fake.responses.create.call_args.kwargs
+        kwargs = calls[0]
         assert (
             kwargs["model"],
             kwargs["reasoning"],
@@ -86,92 +82,173 @@ async def test_student_success_settings_and_input_failure(data):
         PromptManager.get_template_text_by_id.side_effect = ValueError(
             "Invalid template"
         )
-        with pytest.raises(RuntimeError, match="Invalid template"):
+        with pytest.raises(InvocationError, match="configuration_unavailable"):
             await bot.generate_response("Why?", [])
-        assert fake.responses.create.await_count == 1
-    fake.close.assert_not_awaited()
+        assert len(calls) == 1
+    assert all(sdk.is_closed() for sdk in clients)
 
 
-@pytest.mark.parametrize(
-    "status, attempts",
-    [
-        (429, 3),
-        (500, 3),
-        (408, 3),
-        (409, 3),
-        (400, 1),
-        (401, 1),
-        (403, 1),
-        (422, 1),
-    ],
-)
-async def test_real_sdk_transport_attempt_count_and_owned_close(
-    status, attempts, monkeypatch
+@pytest.mark.parametrize("with_mentor", [False, True])
+async def test_legacy_session_uses_db_calls_without_per_turn_analysis(
+    data, scenario_payload, monkeypatch, with_mentor
 ):
-    calls = []
+    from lesson_fixtures import LESSON_KEY
+    from sqlalchemy import select
+    from test_student_probe import sdk_transport
 
-    def transport(request):
-        calls.append(request)
-        return httpx.Response(
-            status, json={"error": {"message": "test", "type": "test"}}
+    from src.config import config
+    from src.models import ApiUsageLog
+    from src.services.session_mgr import SessionManager
+
+    _, model = await install_connection(data, monkeypatch)
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
+    if with_mentor:
+        model.verification_state = {
+            **model.verification_state,
+            "mentor": dict(model.verification_state["student"]),
+        }
+        monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
+        data.scenario.tutor_template_id = data.scenario.student_template_id
+        data.scenario.tutor_sensitivity = "high"
+        await data.db.commit()
+
+    async def upstream(request, body):
+        content = "Student answer" if len(calls) == 1 else "Mentor coaching"
+        return httpx.Response(200, json=response_body(content, USAGE))
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=1500, key=LESSON_KEY
+    )
+    manager = SessionManager(data.db, data.session.id)
+    try:
+        messages = await manager.process_teacher_message("Why?")
+        expected = [
+            ("teacher", "Why?"),
+            ("student", "Student answer"),
+        ]
+        if with_mentor:
+            expected.append(("tutor", "Mentor coaching"))
+        assert [(m.role, m.content) for m in messages] == expected
+        assert messages[1].analysis_metadata is None
+        async with data.factory() as db:
+            attempts = (await db.scalars(select(ApiUsageLog))).all()
+        assert len(attempts) == len(calls) == (2 if with_mentor else 1)
+        assert [a.operation for a in attempts] == (
+            ["student", "mentor"] if with_mentor else ["student"]
         )
+        assert all(a.session_id == data.session.id for a in attempts)
+    finally:
+        await manager.close()
+    assert all(sdk.is_closed() for sdk in clients)
 
-    owned = AsyncOpenAI(
-        api_key="fake",
-        max_retries=0,
-        http_client=httpx.AsyncClient(transport=httpx.MockTransport(transport)),
+
+async def test_explicit_tutor_retry_keeps_state_and_one_attempt_per_invocation(
+    data, monkeypatch
+):
+    from lesson_fixtures import (
+        LESSON_KEY,
+        install_connection,
+        install_mentor_model,
+    )
+    from test_student_probe import response_body, sdk_transport
+
+    from src.services.invocation_types import InvocationError
+
+    connection, _ = await install_connection(data, monkeypatch)
+    await install_mentor_model(data, connection)
+
+    async def upstream(request, body):
+        if len(calls) == 1:
+            raise httpx.ConnectError(
+                "SECRET connection failure", request=request
+            )
+        return httpx.Response(200, json=response_body("Feedback", USAGE))
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=1500, key=LESSON_KEY, model="gpt-5.2"
+    )
+    async with TutorBot(
+        data.db, 1, sensitivity="high", initial_question_count=1
+    ) as bot:
+        with pytest.raises(InvocationError, match="transient"):
+            await bot.generate_feedback(
+                "Why?", "Answer", [], question_counted=True
+            )
+        assert len(calls) == 1 and bot.intervention_count == 0
+        content, _ = await bot.generate_feedback(
+            "Why?", "Answer", [], question_counted=True
+        )
+        assert content == "Feedback" and bot.intervention_count == 1
+        assert bot.question_count == 1
+    assert len(calls) == 2 and all(sdk.is_closed() for sdk in clients)
+
+
+async def test_classification_and_synthesis_parse_errors_do_not_retry(
+    data, monkeypatch
+):
+    from sqlalchemy import select
+
+    from src.config import config
+    from src.models import ApiUsageLog
+    from src.services.invocation_types import InvocationError
+
+    _, model = await install_connection(data, monkeypatch)
+    model.verification_state = {
+        **model.verification_state,
+        "analysis": dict(model.verification_state["student"]),
+    }
+    monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
+    await data.db.commit()
+    contents = iter(
+        [
+            '{"label":"A","confidence":0.8,"reasoning":"because"}',
+            "not json",
+            "not json",
+        ]
     )
 
-    def factory(**kwargs):
-        assert kwargs["max_retries"] == 0
-        return owned
+    async def upstream(request, body):
+        return httpx.Response(200, json=response_body(next(contents), USAGE))
 
-    monkeypatch.setattr(base, "AsyncOpenAI", factory)
-    with pytest.raises(Exception):
-        async with base.OpenAIBaseService() as service:
-            await service.create_response(model="gpt-5-mini", input="test")
-    assert len(calls) == attempts
-    assert owned.is_closed()
-
-
-async def test_retry_success_does_not_repeat_tutor_state(data):
-    error = APIConnectionError(
-        request=httpx.Request("POST", "https://example.test")
-    )
-    fake = client(error, response("Feedback"))
-    bot = TutorBot(data.db, 1, client=fake)
-    bot.analyze_conversation = AsyncMock(return_value=(True, "low_leverage"))
-    content, _ = await bot.generate_feedback("Question", "Answer", [])
-    assert content == "Feedback" and bot.intervention_count == 1
-    assert fake.responses.create.await_count == 2
-    bot.analyze_conversation.assert_awaited_once()
-
-
-async def test_classification_and_synthesis_parse_errors_do_not_retry(data):
-    fake = client(
-        response('{"label":"A","confidence":0.8,"reasoning":"because"}'),
-        response("not json"),
-    )
-    analyzer = Analyzer(client=fake)
+    clients, calls = analysis_transport(monkeypatch, upstream)
+    analyzer = Analyzer(data.factory)
     result = await analyzer.classify_question("Why?", data.framework)
     assert (
         result["label"] == "A" and result["reasoning"]["summary"] == "because"
     )
     assert result["_api_usage"]["total_tokens"] == 15
-    assert fake.responses.create.call_args.kwargs["max_output_tokens"] == 1500
-    with pytest.raises(ValueError, match="Invalid JSON"):
+    assert calls[0]["max_output_tokens"] == 1500
+    with pytest.raises(InvocationError, match="invalid_json"):
         await analyzer.classify_question("Why?", data.framework)
-    assert fake.responses.create.await_count == 2
-    fake = client(response("not json"))
-    synth = SessionSynthesizer(client=fake)
+    assert len(calls) == 2
+    synth = SessionSynthesizer(data.factory)
     _, status = await synth.synthesize(messages=[], framework=data.framework)
     assert status == "failed"
-    assert synth.last_usage["total_tokens"] == 15
-    assert fake.responses.create.await_count == 1
-    assert fake.responses.create.call_args.kwargs["max_output_tokens"] == 2500
+    async with data.factory() as db:
+        row = await db.scalar(
+            select(ApiUsageLog).where(ApiUsageLog.operation == "synthesis")
+        )
+    assert row.total_tokens == 15
+    assert row.status == "failed" and row.error_code == "invalid_json"
+    assert len(calls) == 3 and calls[-1]["max_output_tokens"] == 2500
+    assert all(sdk.is_closed() for sdk in clients)
 
 
-async def test_pipeline_with_injected_client_preserves_usage_and_formats(data):
+async def test_pipeline_with_injected_client_preserves_usage_and_formats(
+    data, monkeypatch
+):
+    from sqlalchemy import select
+
+    from src.config import config
+    from src.models import ApiUsageLog
+
+    _, model = await install_connection(data, monkeypatch)
+    model.verification_state = {
+        **model.verification_state,
+        "analysis": dict(model.verification_state["student"]),
+    }
+    monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
+    await data.db.commit()
     teacher = Message(
         id=100, session_id=data.session.id, role="teacher", content="Why?"
     )
@@ -181,80 +258,106 @@ async def test_pipeline_with_injected_client_preserves_usage_and_formats(data):
         "improvements": [],
         "dialogue_coaching": [],
     }
-    fake = client(
-        response('[{"index":0,"is_greeting":false}]'),
-        response('{"label":"A","confidence":0.9}'),
-        response(json.dumps(payload)),
+    contents = iter(
+        [
+            '{"results":[{"index":0,"is_greeting":false}]}',
+            '{"label":"A","confidence":0.9}',
+            json.dumps(payload),
+        ]
     )
+
+    async def upstream(request, body):
+        return httpx.Response(200, json=response_body(next(contents), USAGE))
+
+    clients, calls = analysis_transport(monkeypatch, upstream)
     result = await analysis_pipeline.run_llm_pipeline(
         data.session.id,
         [teacher],
         [teacher],
         data.scenario,
         data.framework,
-        client=fake,
+        data.factory,
+        data.owner.id,
     )
-    distribution, questions, report, status, model, prompt_hash, usage = result
+    (
+        distribution,
+        questions,
+        report,
+        status,
+        model,
+        prompt_hash,
+        pending_usage,
+    ) = result
     assert distribution == {"A": 1, "B": 0}
     assert questions[0].message_id == 100
     assert report["brief_feedback"] == ["Good question"] and status == "ok"
     assert len(prompt_hash) == 64
+    async with data.factory() as db:
+        usage = (
+            await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))
+        ).all()
     assert [row.operation for row in usage] == [
         "greeting",
         "classification",
         "synthesis",
     ]
     assert all(row.total_tokens == 15 for row in usage)
-    fake.close.assert_not_awaited()
+    assert (
+        pending_usage == []
+    )  # Common boundary already committed these attempts.
+    assert len(calls) == 3 and all(sdk.is_closed() for sdk in clients)
 
 
 async def test_pipeline_failure_closes_owned_clients(data, monkeypatch):
-    created = []
+    from src.config import config
 
-    def factory(**kwargs):
-        fake = client(
-            APIConnectionError(
-                request=httpx.Request("POST", "https://example.test")
-            ),
-            APIConnectionError(
-                request=httpx.Request("POST", "https://example.test")
-            ),
-            APIConnectionError(
-                request=httpx.Request("POST", "https://example.test")
-            ),
+    _, model = await install_connection(data, monkeypatch)
+    model.verification_state = {
+        **model.verification_state,
+        "analysis": dict(model.verification_state["student"]),
+    }
+    monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
+    await data.db.commit()
+
+    async def upstream(request, body):
+        raise httpx.ConnectError(
+            "Synthetic connection failure", request=request
         )
-        created.append(fake)
-        return fake
 
-    monkeypatch.setattr(base, "AsyncOpenAI", factory)
+    created, calls = analysis_transport(monkeypatch, upstream)
     result = await analysis_pipeline.run_llm_pipeline(
-        data.session.id, [], [], data.scenario, data.framework
+        data.session.id,
+        [],
+        [],
+        data.scenario,
+        data.framework,
+        data.factory,
     )
     assert result[3] == "failed"
-    assert len(created) == 2
-    assert created[1].responses.create.await_count == 3
-    for fake in created:
-        fake.close.assert_awaited_once()
+    assert len(created) == len(calls) == 2
+    assert all(sdk.is_closed() for sdk in created)
 
 
 async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
+    from lesson_fixtures import LESSON_KEY, install_connection
     from test_regressions import request
+    from test_student_probe import sdk_transport
 
     from src.api.routes.student_generation import StudentRequest, student_turn
 
+    await install_connection(data, monkeypatch)
     sid = data.session.id
     data.scenario.problem_situation = "Public problem"
     data.session.ended_at = None
     await data.db.commit()
-    created = []
 
-    def factory(**kwargs):
-        fake = client(ValueError("invalid response"))
-        created.append(fake)
-        return fake
+    async def upstream(request, body):
+        return httpx.Response(500, json={"error": {"code": "server_error"}})
 
-    monkeypatch.setattr(base, "AsyncOpenAI", factory)
-    response = await student_turn(
+    created, calls = sdk_transport(
+        monkeypatch, upstream, budget=1500, key=LESSON_KEY
+    )
+    result = await student_turn(
         request(),
         sid,
         StudentRequest(
@@ -263,26 +366,8 @@ async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
         data.owner,
         data.db,
     )
-    body = "".join([chunk async for chunk in response.body_iterator])
+    body = "".join([chunk async for chunk in result.body_iterator])
     assert "event: run.failed" in body
     assert "event: output.completed" not in body
-    for fake in created:
-        fake.close.assert_awaited_once()
-    assert len(created) == 1  # Student path owns only the student client.
-
-
-async def test_injected_sdk_retry_policy_is_explicit():
-    async with AsyncOpenAI(api_key="fake", max_retries=2) as sdk:
-        with pytest.raises(ValueError, match="max_retries=0"):
-            Analyzer(client=sdk)
-
-
-async def test_owned_client_closes_after_success(monkeypatch):
-    fake = client(response("ok"))
-    monkeypatch.setattr(base, "AsyncOpenAI", lambda **kwargs: fake)
-    async with base.OpenAIBaseService() as service:
-        assert (
-            await service.create_response(model="gpt-5-mini", input="test")
-        ).output_text == "ok"
-    await service.close()
-    fake.close.assert_awaited_once()
+    assert all(sdk.is_closed() for sdk in created)
+    assert len(created) == len(calls) == 1

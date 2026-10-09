@@ -35,6 +35,9 @@ export default async function checkMentorRecovery(page) {
         }
         if (fixture.mode === 'busy') return new Response(JSON.stringify({detail:{code:'mentor_busy'}}),
           {status:409, headers:{'Content-Type':'application/json'}});
+        if (['configuration', 'capacity'].includes(fixture.mode)) return new Response(JSON.stringify({detail:{
+          code:fixture.mode === 'configuration' ? 'configuration_unavailable' : 'call_limit_reached'
+        }}), {status:fixture.mode === 'configuration' ? 503 : 429, headers:{'Content-Type':'application/json'}});
         const accepted = {...snapshot(request.request_id), status:'running', seq:0};
         return new Response(fixture.mode === 'lost' || fixture.mode === 'missing' ? '' :
           `event: run.accepted\ndata: ${JSON.stringify(accepted)}\n\n`,
@@ -95,6 +98,21 @@ export default async function checkMentorRecovery(page) {
   await slot.getByText('멘토 미개입', {exact:true}).waitFor();
   assert(await page.evaluate(() => mentorRecovery.posts.length === 2 &&
     mentorRecovery.posts[0].request_id === mentorRecovery.posts[1].request_id), 'uncertain acceptance is explicitly retransmitted with the same key');
+
+  for (const mode of ['configuration', 'capacity']) {
+    await load(mode);
+    await send();
+    await slot.getByText(mode === 'configuration' ?
+      '관리자에게 AI 연결과 멘토 모델 검증을 요청해주세요.' :
+      'AI 호출이 많습니다. 잠시 후 멘토를 다시 요청해주세요.', {exact:true}).waitFor({timeout:3000});
+    assert(await page.locator('#teacher-input').isEnabled(), 'mentor admission refusal leaves student input enabled');
+    assert(await page.evaluate(() => mentorRecovery.posts.length === 1 && mentorRecovery.reads.length === 0),
+      'admission refusal does not poll or automatically retry');
+    await page.evaluate(() => { mentorRecovery.mode = 'replay'; });
+    await slot.getByRole('button', {name:'멘토 다시 요청'}).click();
+    await slot.getByText('멘토 미개입', {exact:true}).waitFor({timeout:3000});
+    assert(await page.evaluate(() => mentorRecovery.posts.length === 2), 'mentor admission retry is explicit');
+  }
 
   await load('busy');
   await send();

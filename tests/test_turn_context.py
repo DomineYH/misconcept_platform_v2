@@ -1,8 +1,6 @@
 """Generation inputs use bounded pairs, independent of storage order."""
 
 from datetime import datetime
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -101,11 +99,10 @@ async def test_student_route_receives_n_completed_pairs_and_current_once(
     )
     assert frames(response)[-1][0] == "output.completed"
     actual = student.responses.create.call_args.kwargs["input"]
-    assert actual[:2] == [
-        {"role": "developer", "content": BASE_STUDENT_PROMPT},
-        {"role": "developer", "content": "Test misconception Student profile"},
-    ]
-    assert actual[2:] == [
+    assert student.responses.create.call_args.kwargs["instructions"] == (
+        BASE_STUDENT_PROMPT + "\n\nTest misconception Student profile"
+    )
+    assert actual == [
         {"role": "user", "content": "Teacher 57"},
         {"role": "assistant", "content": "Student 57"},
         {"role": "user", "content": "Teacher 58"},
@@ -145,28 +142,35 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
         {"role": "teacher", "content": "Teacher 50"},
         {"role": "student", "content": "Student 50"},
     ]
-    fake = SimpleNamespace(
-        max_retries=0,
-        close=AsyncMock(),
-        responses=SimpleNamespace(
-            create=AsyncMock(
-                return_value=(
-                    SimpleNamespace(
-                        output_text='{"is_repetitive": false, '
-                        '"is_inappropriate": false}',
-                        usage=None,
-                    )
-                )
-            )
-        ),
+    import httpx2
+    from lesson_fixtures import (
+        LESSON_KEY,
+        install_connection,
+        install_mentor_model,
     )
-    async with TutorBot(data.db, 1, client=fake) as mentor:
+    from test_student_probe import response_body, sdk_transport
+
+    connection, _ = await install_connection(data, monkeypatch)
+    await install_mentor_model(data, connection)
+
+    async def upstream(request, body):
+        return httpx2.Response(
+            200,
+            json=response_body(
+                '{"is_repetitive": false, "is_inappropriate": false}'
+            ),
+        )
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=200, key=LESSON_KEY, model="gpt-5.2"
+    )
+    async with TutorBot(data.db, 1) as mentor:
         result = await mentor.generate_feedback(
             context[-2]["content"], context[-1]["content"], context[:-2]
         )
     assert result == (None, None)
-    assert fake.responses.create.await_count == 1
-    prompt = fake.responses.create.call_args.kwargs["input"][0]["content"]
+    assert len(calls) == 1 and all(sdk.is_closed() for sdk in clients)
+    prompt = calls[0]["input"][0]["content"]
     assert "교사: Teacher 48\n학생: Student 48" in prompt
     assert "교사: Teacher 49\n학생: Student 49" in prompt
     assert "교사: Teacher 50\n학생: Student 50" in prompt
@@ -179,24 +183,41 @@ async def test_legacy_generation_also_uses_only_completed_pairs(
     from src.services.session_mgr import SessionManager
 
     monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
-    fake = SimpleNamespace(
-        max_retries=0,
-        close=AsyncMock(),
-        responses=SimpleNamespace(
-            create=AsyncMock(side_effect=RuntimeError("provider offline"))
-        ),
+    import httpx2
+    from lesson_fixtures import LESSON_KEY, install_connection
+    from test_student_probe import sdk_transport
+
+    from src.services.invocation_types import InvocationError
+
+    await install_connection(data, monkeypatch)
+
+    async def upstream(request, body):
+        return httpx2.Response(
+            500,
+            json={
+                "error": {"code": "server_error", "message": "provider offline"}
+            },
+        )
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=1500, key=LESSON_KEY
     )
-    manager = SessionManager(data.db, data.session.id, client=fake)
+    manager = SessionManager(data.db, data.session.id)
     try:
-        with pytest.raises(RuntimeError, match="provider offline"):
+        with pytest.raises(InvocationError, match="transient"):
             await manager.process_teacher_message("Legacy caller question")
-        actual = fake.responses.create.call_args.kwargs["input"]
-        assert len(actual) == 11  # Two instructions, four pairs, one question.
-        assert actual[2] == {"role": "user", "content": "Teacher 57"}
+        actual = calls[0]["input"]
+        assert len(actual) == 9  # Four pairs and the current question.
+        assert (
+            calls[0]["instructions"]
+            == BASE_STUDENT_PROMPT + "\n\nTest misconception Student profile"
+        )
+        assert actual[0] == {"role": "user", "content": "Teacher 57"}
         assert actual[-2:] == [
             {"role": "assistant", "content": "Student 60"},
             {"role": "user", "content": "Legacy caller question"},
         ]
+        assert len(calls) == 1 and all(sdk.is_closed() for sdk in clients)
     finally:
         await manager.close()
 

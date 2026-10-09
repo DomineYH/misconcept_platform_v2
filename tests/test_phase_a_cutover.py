@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from test_migrations import schema
 from test_scenario_api import assert_no_video, login
 from test_scenario_api import client as client_fixture
 
@@ -27,12 +28,16 @@ def snapshot(db):
 
 
 @pytest.mark.parametrize("data", ["baseline"], indirect=True)
+@pytest.mark.parametrize("revision", [23, 24])
 async def test_wal_backup_upgrade_readers_and_restore(
-    data, client, tmp_path, monkeypatch
+    data, client, tmp_path, monkeypatch, revision
 ):
     source_path = Path(data.engine.url.database)
     backup_path, copy_path = tmp_path / "backup.db", tmp_path / "upgrade.db"
     copy_engine = create_async_engine(f"sqlite+aiosqlite:///{copy_path}")
+    fresh_engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'fresh.db'}"
+    )
     try:
         # Keep this connection open: the committed fixture must remain in WAL.
         with sqlite3.connect(source_path) as source:
@@ -61,7 +66,24 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "(9,1,1,'old-model','old-hash','ok',"
                 '\'{"brief_feedback":["Preserved feedback"]}\','
                 "'2026-01-02');"
+                "INSERT INTO api_usage_log "
+                "(id,session_id,bot_type,model,prompt_tokens,completion_tokens,"
+                "total_tokens,estimated_cost_usd,timestamp,operation) VALUES "
+                "(50,1,'student','legacy-model',10,5,15,0.012345,'2026-01-01',NULL),"
+                "(51,1,'tutor','unknown-model',2,3,5,0,'2026-01-02',NULL);"
             )
+            if revision == 24:
+                monkeypatch.setattr(migrate, "engine", data.engine)
+                await migrate.run_migration(
+                    migrate.DIRECTORY / "024_generation_run.sql"
+                )
+                source.execute(
+                    "INSERT INTO generation_run VALUES "
+                    "('preserved-run',1,1,'preserved-turn','student',"
+                    "'preserved-request','input','config','openai','gpt-5-mini',"
+                    "'failed',NULL,NULL,'transient','2026-01-01',NULL,'2026-01-01')"
+                )
+                source.commit()
             before = snapshot(source)
             old_schema = source.execute(
                 "SELECT type,name,sql FROM sqlite_master "
@@ -80,20 +102,47 @@ async def test_wal_backup_upgrade_readers_and_restore(
             with sqlite3.connect(copy_path) as copy:
                 after = snapshot(copy)
                 for table, rows in before.items():
-                    if table not in {"message", "_migrations"}:
+                    if table not in {"message", "api_usage_log", "_migrations"}:
                         assert after[table] == rows
-                assert [row[:6] for row in after["message"]] == before[
+                width = len(before["message"][0])
+                assert [row[:width] for row in after["message"]] == before[
                     "message"
                 ]
                 assert all(
                     row[6:] == (None, None, None) for row in after["message"]
                 )
-                assert after["generation_run"] == []
-                assert len(after["_migrations"]) == 2
+                assert after["generation_run"] == before.get(
+                    "generation_run", []
+                )
+                usage_width = len(before["api_usage_log"][0])
+                assert [
+                    row[:usage_width] for row in after["api_usage_log"]
+                ] == before["api_usage_log"]
+                assert all(
+                    all(value is None for value in row[usage_width:])
+                    for row in after["api_usage_log"]
+                )
+                assert len(after["_migrations"]) == 6
+                assert copy.execute(
+                    "SELECT count(*) FROM _migrations "
+                    "WHERE filename='025_provider_connection.sql'"
+                ).fetchone() == (1,)
+                assert copy.execute(
+                    "SELECT count(*) FROM _migrations "
+                    "WHERE filename='026_model_settings.sql'"
+                ).fetchone() == (1,)
                 assert copy.execute("PRAGMA integrity_check").fetchone() == (
                     "ok",
                 )
                 assert copy.execute("PRAGMA foreign_key_check").fetchall() == []
+
+            async with copy_engine.connect() as conn:
+                upgraded_schema = await schema(conn)
+            monkeypatch.setattr(migrate, "engine", fresh_engine)
+            await migrate.run_all_migrations()
+            await migrate.run_all_migrations()
+            async with fresh_engine.connect() as conn:
+                assert await schema(conn) == upgraded_schema
 
             data.factory = async_sessionmaker(
                 copy_engine, expire_on_commit=False, autoflush=False
@@ -150,6 +199,21 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 await client.get("/admin/sessions/1/download")
             ).status_code == 403
             login(client, data.admin)
+            for _ in range(2):
+                usage = await client.get("/admin/api-usage")
+                assert usage.status_code == 200 and "$0.012345" in usage.text
+                assert (
+                    "legacy-model" in usage.text
+                    and "unknown-model" in usage.text
+                )
+            with sqlite3.connect(copy_path) as copy:
+                assert copy.execute(
+                    "SELECT id,estimated_cost_usd,invocation_id,pricing_as_of,pricing_source "
+                    "FROM api_usage_log ORDER BY id"
+                ).fetchall() == [
+                    (50, 0.012345, None, None, None),
+                    (51, 0.0, None, None, None),
+                ]
             for path in ("/admin/scenarios", "/scenarios"):
                 screen = await client.get(path)
                 assert screen.status_code == 200
@@ -213,3 +277,4 @@ async def test_wal_backup_upgrade_readers_and_restore(
             assert snapshot(source) == before
     finally:
         await copy_engine.dispose()
+        await fresh_engine.dispose()

@@ -2,58 +2,113 @@
 
 {% block title %}API 사용량 - 관리자{% endblock %}
 
-{% block content %}
-<div class="container">
-  <header class="page-header">
-    <h1>API 사용량</h1>
-    <p class="subtitle">OpenAI API 호출 비용 및 토큰 사용량</p>
-  </header>
+{% macro observed(value) -%}
+  {{ value if value is defined and value is not none else '알 수 없음' }}
+{%- endmacro %}
 
-  <div class="summary-card">
-    <h3>총 예상 비용</h3>
-    <p class="total-cost">${{ total_cost }}</p>
-  </div>
+{% macro cost(value) -%}
+  {% if value is defined and value is not none %}${{ "%.6f"|format(value) }}{% else %}산정 불가{% endif %}
+{%- endmacro %}
 
-  <div class="table-container">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>시간</th>
-          <th>Bot 유형</th>
-          <th>모델</th>
-          <th>총 토큰</th>
-          <th>비용($)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for log in logs %}
-        <tr>
-          <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-          <td>{{ log.bot_type }}</td>
-          <td>{{ log.model }}</td>
-          <td>{{ log.total_tokens }}</td>
-          <td>${{ "%.4f"|format(log.cost) }}</td>
-        </tr>
+{% macro usage_table(rows, name, caption) %}
+<div class="table-container" role="region" tabindex="0" aria-labelledby="{{ name }}-caption">
+  <table class="data-table" id="{{ name }}">
+    <caption id="{{ name }}-caption">{{ caption }}</caption>
+    <thead>
+      <tr>
+        {% for heading in ['기록', '제공자', '모델', '역할', '목적', '상태', '시도', '시간 (UTC)', '입력 토큰', '출력 토큰', '캐시 읽기 토큰', '캐시 쓰기 토큰', '추론 토큰', '총 토큰', '추정 비용 (USD)', '단가 기준일·근거'] %}
+        <th scope="col">{{ heading }}</th>
         {% endfor %}
-      </tbody>
-    </table>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in rows %}
+      {% set legacy = log.invocation_id is not defined or log.invocation_id is none %}
+      {% set role = log.bot_type|default(none) if legacy else log.role|default(none) %}
+      {% set status = log.status|default(none) %}
+      <tr id="usage-row-{{ log.id }}">
+        <td>{{ '기존 기록' if legacy else '호출 시도' }}</td>
+        <td>{{ 'openai' if legacy else observed(log.provider) }}</td>
+        <td>{{ observed(log.model) }}</td>
+        <td>{{ {'student': '학생봇', 'tutor': '멘토', 'mentor': '멘토', 'analysis': '사후 분석'}.get(role, observed(role)) }}{% if role %} ({{ role }}){% endif %}</td>
+        <td>{{ observed(log.operation) }}</td>
+        <td>
+          {{ {'succeeded': '성공', 'completed': '성공', 'failed': '실패', 'refused': '거절', 'cancelled': '취소', 'timed_out': '시간 초과', 'interrupted': '중단', 'running': '진행 중'}.get(status, observed(status)) }}
+          {% if log.error_code is defined and log.error_code %}<div>오류: {{ log.error_code }}</div>{% endif %}
+          <div>사용량: {% if log.usage_complete is not defined or log.usage_complete is none %}알 수 없음{% elif log.usage_complete %}완전{% else %}일부 / 알 수 없음{% endif %}</div>
+        </td>
+        <td>{{ observed(log.attempt_no) }}</td>
+        <td>
+          <div>시작: {{ observed(log.timestamp if legacy else log.started_at) }}</div>
+          <div>첫 출력: {{ observed(log.first_output_at) }}</div>
+          <div>종료: {{ observed(log.finished_at) }}</div>
+          <div>재시도 대기 (ms): {{ observed(log.retry_wait_ms) }}</div>
+        </td>
+        <td>{{ observed(log.prompt_tokens if legacy else log.input_tokens) }}</td>
+        <td>{{ observed(log.completion_tokens if legacy else log.output_tokens) }}</td>
+        <td>{{ observed(log.cache_read_tokens) }}</td>
+        <td>{{ observed(log.cache_write_tokens) }}</td>
+        <td>{{ observed(log.reasoning_tokens) }}</td>
+        <td>{{ observed(log.total_tokens) }}</td>
+        <td>{{ cost(log.estimated_cost_usd) }}</td>
+        <td>{{ observed(log.pricing_as_of) }}{% if log.pricing_source is defined and log.pricing_source %}<div>근거: {{ log.pricing_source }}</div>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="16">기록이 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="container api-usage">
+  <div class="page-header">
+    <h1>API 사용량</h1>
+    <p class="subtitle">제공자별 호출 시도·토큰 사용량·알려진 추정 비용</p>
   </div>
+
+  <section class="summary-card" aria-label="사용량 요약">
+    <dl>
+      <div><dt>알려진 추정 비용 합계</dt><dd id="known-cost">{{ cost(total_cost) }}</dd></div>
+      <div><dt>미산정 생성 시도 수</dt><dd id="unpriced-attempts">{{ observed(unpriced_generation_attempts) }}</dd></div>
+      <div><dt>비생성 목록 호출 수</dt><dd id="model-list-calls">{{ observed(model_list_calls) }}</dd></div>
+    </dl>
+    <p>생성 호출의 알려진 추정 비용만 더한 부분 합계이며, 전체 과금액이 아닙니다. 미산정 비용과 비생성 목록 호출은 합계에서 제외합니다.</p>
+    <p>새 추정 비용은 확인된 공시 유료 단가 기준입니다. 무료 이용·크레딧·개별 할인·세금에 따른 실제 청구액은 다를 수 있습니다.</p>
+    {% if has_legacy_records|default(false) or unpriced_generation_attempts is not defined or unpriced_generation_attempts is none %}
+    <p>기존 기록의 비용을 보존합니다. 기존 기록만으로는 실패·재시도를 포함한 전체 시도 수와 미산정 건수를 확인할 수 없습니다.</p>
+    {% endif %}
+    <p>미산정 생성 시도 수는 호출 원장에 기록된 시도만 셉니다. 시도 정보가 없는 기존 기록은 이 건수에 포함하지 않습니다.</p>
+  </section>
+
+  <p>합계·건수는 전체 기록 기준이며, 아래 표는 최근 100건입니다. 관측되지 않은 값은 ‘알 수 없음’으로 표시하며 0으로 대체하지 않습니다.</p>
+  <p>캐시·추론 토큰은 상세 항목이며 총량에 다시 더하지 않습니다. 취소·중단은 제공자의 과금 중단을 보장하지 않습니다.</p>
+  <p id="usage-scroll-help">표에 초점을 두고 좌우 방향키로 모든 열을 확인할 수 있습니다.</p>
+  {{ usage_table(logs|rejectattr('operation', 'equalto', 'model_list'), 'generation-usage', '생성 호출 및 기존 기록') }}
+  {{ usage_table(logs|selectattr('operation', 'equalto', 'model_list'), 'model-list-usage', '비생성 목록 호출 — 생성 비용 집계에서 제외') }}
 </div>
 
 <style>
-  .summary-card {
+  .api-usage .summary-card {
     background: white;
     padding: 1.5rem;
     border-radius: 8px;
     border: 1px solid #e5e7eb;
     margin-bottom: 2rem;
-    text-align: center;
   }
-  .total-cost {
-    font-size: 2.5rem;
+  .api-usage dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+  }
+  .api-usage dd {
+    margin: 0.5rem 0;
+    font-size: 1.5rem;
     font-weight: bold;
-    color: #059669;
-    margin: 0.5rem 0 0 0;
   }
+  .api-usage .table-container { margin-bottom: 2rem; }
+  .api-usage .table-container:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+  .api-usage caption { text-align: left; padding: 1rem; font-weight: bold; }
 </style>
 {% endblock %}

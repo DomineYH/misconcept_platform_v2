@@ -1,15 +1,16 @@
 """TutorBot service for pedagogical feedback and intervention."""
 
-import json
+import asyncio
 import logging
-import re
+from contextlib import aclosing
 from typing import Optional
+from uuid import uuid4
 
-from openai import APIConnectionError, APIError, RateLimitError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config import config
-from src.services.base import OpenAIBaseService
+from src.services.call_admission import admit_call
+from src.services.call_execution import execute_call
 from src.services.dialogue_analysis import (
     SENSITIVITY_PRESETS,
     check_low_leverage_patterns,
@@ -17,8 +18,14 @@ from src.services.dialogue_analysis import (
     detect_repetitive_dialogue_simple,
     extract_recent_pairs,
 )
+from src.services.invocation_types import (
+    InvocationError,
+    StructuredRequest,
+    TextRequest,
+)
+from src.services.lesson_connections import resolve_lesson_model
 from src.services.prompt_manager import PromptManager
-from src.utils.openai_helpers import extract_response_text, extract_usage_dict
+from src.services.role_output_contracts import LessonInterventionJudgment
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +37,7 @@ def advance_question_count(question_count, intervention_count):
     )
 
 
-class TutorBot(OpenAIBaseService):
+class TutorBot:
     """Chatbot providing real-time pedagogical feedback."""
 
     def __init__(
@@ -48,7 +55,13 @@ class TutorBot(OpenAIBaseService):
         initial_question_count: int = 0,
         sensitivity: str = "medium",
         *,
-        client=None,
+        factory=None,
+        owner_id=None,
+        session_id=None,
+        run_id=None,
+        request_id=None,
+        permit=None,
+        judgment_model=None,
     ):
         """Initialize TutorBot with scenario context and optional config.
 
@@ -66,7 +79,13 @@ class TutorBot(OpenAIBaseService):
             initial_question_count: Restored count from prior session
             sensitivity: Tutor sensitivity level (high/medium/low)
         """
-        super().__init__(client=client)
+        self.factory = factory or async_sessionmaker(
+            db_session.bind, expire_on_commit=False, autoflush=False
+        )
+        self.owner_id, self.session_id = owner_id, session_id
+        self.run_id, self.request_id = run_id, request_id
+        self.permit = permit
+        self.judgment_model = judgment_model or config.DIALOGUE_ANALYSIS_MODEL
         self.db_session = db_session
         self.template_id = template_id
         self.model = model or config.ANALYSIS_MODEL
@@ -83,6 +102,68 @@ class TutorBot(OpenAIBaseService):
         self.sensitivity_config = SENSITIVITY_PRESETS.get(
             sensitivity, SENSITIVITY_PRESETS["medium"]
         )
+
+    async def invoke(self, operation, model_id, options, instruction, messages):
+        if self.permit is not None:
+            permit, self.permit = self.permit, None
+            permit.task = asyncio.current_task()
+        else:
+            async with self.factory() as db:
+                connection, model, options = await resolve_lesson_model(
+                    db, model_id, "mentor", options
+                )
+            permit = await admit_call(
+                self.factory,
+                connection_id=connection.id,
+                owner_id=self.owner_id,
+                operation=operation,
+                role="mentor",
+                admin=False,
+                model_config_id=model.id,
+                expected_model_version=model.config_version,
+            )
+        values = dict(
+            provider="openai",
+            model_id=model_id,
+            role="mentor",
+            system_instruction=instruction,
+            messages=messages,
+            validated_options=options,
+            request_id=self.request_id or str(uuid4()),
+        )
+        judgment = operation == "mentor_judgment"
+        request = (
+            StructuredRequest(
+                **values, output_schema=LessonInterventionJudgment
+            )
+            if judgment
+            else TextRequest(**values)
+        )
+        async with aclosing(
+            execute_call(
+                permit,
+                request,
+                kind="structured" if judgment else "text",
+                run_id=self.run_id,
+                session_id=self.session_id,
+            )
+        ) as events:
+            async for event in events:
+                if event.type == "completed":
+                    return event
+                if event.type in ("error", "refused", "interrupted"):
+                    raise InvocationError(event.error_code or event.type)
+
+    async def close(self):
+        if self.permit is not None:
+            self.permit.release()
+            self.permit = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        await self.close()
 
     def should_intervene(self, recent_teacher_questions: list[str]) -> bool:
         """Determine if tutor should provide feedback (legacy method)."""
@@ -136,25 +217,24 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
 "reason": "판단 근거"}}"""
 
         try:
-            response = await self.create_response(
-                model=config.DIALOGUE_ANALYSIS_MODEL,
-                input=[{"role": "user", "content": analysis_prompt}],
-                max_output_tokens=200,
+            response = await self.invoke(
+                "mentor_judgment",
+                self.judgment_model,
+                {"max_output_tokens": 200},
+                "",
+                [{"role": "user", "content": analysis_prompt}],
             )
-
-            content = extract_response_text(response)
-
-            json_match = re.search(r"\{[^}]+\}", content)
-            if json_match:
-                result = json.loads(json_match.group())
-                return {
-                    "is_repetitive": result.get("is_repetitive", False),
-                    "is_inappropriate": result.get("is_inappropriate", False),
-                    "reason": result.get("reason", ""),
-                }
-
-        except (json.JSONDecodeError, APIError) as e:
-            logger.warning("LLM analysis failed, using fallback: %s", e)
+            return response.structured
+        except InvocationError as error:
+            if error.code in (
+                "configuration_unavailable",
+                "call_limit_reached",
+                "interrupted",
+                "timeout_total",
+                "timeout_first_output",
+            ):
+                raise
+            logger.warning("Mentor judgment fallback: %s", error.code)
 
         # Fallback to simple Jaccard similarity
         is_repetitive = detect_repetitive_dialogue_simple(pairs)
@@ -173,6 +253,35 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
         question_counted: bool = False,
     ) -> tuple[bool, str | None]:
         """Analyze conversation pairs to determine intervention need."""
+        decision, reason = self.intervention_decision(
+            recent_exchanges,
+            current_teacher,
+            current_student,
+            question_counted=question_counted,
+        )
+        if decision is not None:
+            return decision, reason
+        pairs = extract_recent_pairs(recent_exchanges, max_pairs=2)
+        pairs.append((current_teacher, current_student))
+        judgment = await self.analyze_conversation_with_llm(pairs)
+        return self.intervention_decision(
+            recent_exchanges,
+            current_teacher,
+            current_student,
+            question_counted=True,
+            judgment=judgment,
+        )
+
+    def intervention_decision(
+        self,
+        recent_exchanges,
+        current_teacher,
+        current_student,
+        *,
+        question_counted=False,
+        judgment=None,
+    ):
+        """None means the unchanged policy needs a semantic judgment call."""
         sc = self.sensitivity_config
 
         # Rate limiting
@@ -215,11 +324,12 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
 
         # LLM semantic analysis (skipped if sensitivity disables it)
         if sc["use_llm"]:
-            analysis = await self.analyze_conversation_with_llm(pairs)
-            if analysis["is_repetitive"]:
-                return True, (analysis["reason"] or "반복적인 대화 패턴 감지")
-            if analysis["is_inappropriate"]:
-                return True, (analysis["reason"] or "대화 진전 없음")
+            if judgment is None:
+                return None, None
+            if judgment["is_repetitive"]:
+                return True, (judgment["reason"] or "반복적인 대화 패턴 감지")
+            if judgment["is_inappropriate"]:
+                return True, (judgment["reason"] or "대화 진전 없음")
 
         # Check vague patterns with sensitivity min_matches
         all_teacher_questions = teacher_questions + [current_teacher]
@@ -293,25 +403,17 @@ JSON 형식으로만 응답하세요 (다른 텍스트 없이):
                 },
             ]
 
-            response = await self.create_response(
-                model=self.model,
-                input=input_messages,
-                max_output_tokens=self.max_tokens,
-                reasoning={"effort": self.reasoning_effort},
+            response = await self.invoke(
+                "mentor",
+                self.model,
+                {
+                    "max_output_tokens": self.max_tokens,
+                    "reasoning": {"effort": self.reasoning_effort},
+                },
+                input_messages[0]["content"],
+                input_messages[1:],
             )
-
-            content = extract_response_text(response)
-
-            usage_dict = extract_usage_dict(response)
-
             self.intervention_count += 1
-            return content, usage_dict
-
-        except (APIConnectionError, RateLimitError, APIError) as e:
-            logger.error("TutorBot API error: %s: %s", type(e).__name__, str(e))
-            raise
-        except Exception as e:
-            logger.error("Unexpected error in TutorBot: %s", str(e))
-            raise RuntimeError(
-                f"Tutor feedback generation failed: {str(e)}"
-            ) from e
+            return response.text, None
+        except (ValueError, KeyError):
+            raise InvocationError("configuration_unavailable") from None

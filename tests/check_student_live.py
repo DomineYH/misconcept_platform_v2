@@ -7,6 +7,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -74,8 +75,11 @@ async def check():
             db.add_all([group, template, mentor, framework])
             await db.flush()
             owner = User(
-                username="live-owner", nickname="Teacher", group_id=group.id
+                username="live_owner", nickname="Teacher", group_id=group.id
             )
+            owner.set_password("BROWSER-PASSWORD-SENTINEL")
+            admin = User(username="live_admin", nickname="Admin", role="admin")
+            admin.set_password("BROWSER-PASSWORD-SENTINEL")
             scenario = Scenario(
                 title="Live",
                 prompt="Internal instruction",
@@ -85,7 +89,7 @@ async def check():
                 tutor_template_id=mentor.id,
                 tutor_sensitivity="high",
             )
-            db.add_all([owner, scenario])
+            db.add_all([owner, admin, scenario])
             await db.flush()
             connection = await db.scalar(
                 select(ProviderConnection).where(
@@ -128,6 +132,8 @@ async def check():
             session_id, owner_id = session.id, owner.id
 
         release = asyncio.Event()
+        if sys.argv[1:] == ["--browser"]:
+            release.set()
         calls, owned_clients = [], []
 
         class Upstream(httpx2.AsyncByteStream):
@@ -181,7 +187,35 @@ async def check():
 
         async def upstream(request):
             assert request.headers["authorization"] == "Bearer sk-live-db-key"
-            calls.append(json.loads(request.content))
+            body = json.loads(request.content)
+            calls.append(body)
+            if not body.get("stream"):
+                return httpx2.Response(
+                    200,
+                    json={
+                        "id": "resp",
+                        "object": "response",
+                        "created_at": 1,
+                        "status": "completed",
+                        "model": "gpt-5-mini",
+                        "output": [
+                            {
+                                "id": "msg",
+                                "type": "message",
+                                "role": "assistant",
+                                "status": "completed",
+                                "content": [
+                                    {
+                                        "type": "output_text",
+                                        "text": "Saved body",
+                                        "annotations": [],
+                                    }
+                                ],
+                            }
+                        ],
+                        "usage": None,
+                    },
+                )
             return httpx2.Response(
                 200,
                 headers={"Content-Type": "text/event-stream"},
@@ -218,6 +252,7 @@ async def check():
                 CSRFMiddleware(
                     app,
                     secret=config.SESSION_SECRET,
+                    exempt_urls=[re.compile(r"/health"), re.compile(r"/login")],
                     cookie_name="csrftoken",
                     header_name="x-csrf-token",
                 ),
@@ -231,6 +266,40 @@ async def check():
             async with asyncio.timeout(30):
                 while not server.started:
                     await asyncio.sleep(0.01)
+            if sys.argv[1:] == ["--browser"]:
+                process = await asyncio.create_subprocess_exec(
+                    "node",
+                    "tests/check_s1_browser.mjs",
+                    str(port),
+                    cwd=ROOT,
+                )
+                try:
+                    async with asyncio.timeout(60):
+                        assert await process.wait() == 0
+                finally:
+                    if process.returncode is None:
+                        process.kill()
+                        await process.wait()
+                assert len(calls) == 3 and all(
+                    sdk.is_closed() for sdk in owned_clients
+                )
+                assert [body["max_output_tokens"] for body in calls] == [
+                    1024,
+                    1024,
+                    1500,
+                ]
+                assert all(body["model"] == "gpt-5-mini" for body in calls)
+                async with AsyncSessionLocal() as db:
+                    attempts = (await db.scalars(select(ApiUsageLog))).all()
+                    assert len(attempts) == 3
+                    assert all(row.status == "completed" for row in attempts)
+                    assert all(
+                        row.estimated_cost_usd is None for row in attempts
+                    )
+                print(
+                    "PASS: real administrator/teacher browser HTTP, three-provider key storage, role invalidation/probe/replay, exact lesson model, unpriced ledger"
+                )
+                return
             async with httpx.AsyncClient(
                 base_url=f"http://127.0.0.1:{port}", timeout=30
             ) as http:

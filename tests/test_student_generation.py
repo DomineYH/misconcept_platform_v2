@@ -14,7 +14,7 @@ from test_scenario_api import client as client_fixture
 from test_scenario_api import login
 from test_scenario_api import scenario_payload as scenario_fixture
 
-from src.services import base, openai_generation
+from src.services import openai_generation
 
 client = client_fixture
 scenario_payload = scenario_fixture
@@ -84,7 +84,6 @@ async def student(data, scenario_payload, monkeypatch):
         model=model,
         sdk_options=[],
     )
-    monkeypatch.setattr(base, "AsyncOpenAI", lambda **kw: fake)
 
     def serializable(value):
         if isinstance(value, SimpleNamespace):

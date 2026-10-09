@@ -235,6 +235,57 @@ async def test_model_version_is_rechecked_after_slot_approval(
         ).one() == ("failed", "configuration_unavailable")
 
 
+async def test_catalog_conflict_after_activation_blocks_admission_and_recheck(
+    data, api, monkeypatch
+):
+    request = await verified_model(data, api, monkeypatch)
+    permit = await ordinary(data, request)
+
+    async def catalog(request):
+        return httpx2.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {
+                        "id": "gpt-5-mini",
+                        "object": "model",
+                        "created": 1,
+                        "owned_by": "openai",
+                        "shutdown_date": "2020-01-01",
+                    }
+                ],
+            },
+        )
+
+    catalog_clients, lists = catalog_transport(monkeypatch, catalog)
+    assert (
+        await write(api, "providers/openai/catalog", expected_version=2)
+    ).status_code == 200
+
+    async def upstream(request, payload):
+        pytest.fail("Conflicting catalog metadata must block generation")
+
+    clients, calls = sdk_transport(monkeypatch, upstream)
+    try:
+        with pytest.raises(InvocationError, match="configuration_unavailable"):
+            await ordinary(data, request)
+        result = await consume(permit, request)
+        assert result[-1].error_code == "configuration_unavailable"
+        assert not clients and not calls
+        assert len(lists) == 1 and all(c.is_closed() for c in catalog_clients)
+        async with data.engine.connect() as db:
+            assert (
+                await db.execute(
+                    text(
+                        "SELECT status,error_code FROM api_usage_log WHERE operation='classification'"
+                    )
+                )
+            ).one() == ("failed", "configuration_unavailable")
+    finally:
+        permit.release()
+
+
 async def test_cancel_successful_probe_is_idempotent_noop(
     data, api, monkeypatch
 ):

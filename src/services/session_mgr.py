@@ -1,7 +1,5 @@
 """SessionManager service for orchestrating dialogue flow."""
 
-import asyncio
-import json
 import logging
 
 from sqlalchemy import select
@@ -10,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.routes.session_helpers import mark_session_ended
 from src.config import config
 from src.models import Message, Scenario, Session
-from src.services.misconception_analyzer import MisconceptionAnalyzer
 from src.services.student_bot import StudentBot
 from src.services.turn_context import load_completed_turns
 from src.services.tutor_bot import TutorBot
@@ -21,30 +18,21 @@ logger = logging.getLogger(__name__)
 class SessionManager:
     """Orchestrates teacher-student-tutor dialogue interactions."""
 
-    def __init__(
-        self, db_session: AsyncSession, session_id: int, *, client=None
-    ):
+    def __init__(self, db_session: AsyncSession, session_id: int):
         """Initialize SessionManager for specific session.
 
         Args:
             db_session: Database session
             session_id: Dialogue session ID
         """
-        self.client = client
         self.db = db_session
         self.session_id = session_id
         self.student_bot = None
         self.tutor_bot = None  # Initialized conditionally in initialize()
-        self.misconception_analyzer = None  # Initialized in initialize()
-        self.scenario = None  # Store scenario for analyzer
 
     async def close(self):
         """Close all owned clients, including partial initialization."""
-        for service in (
-            self.student_bot,
-            self.tutor_bot,
-            self.misconception_analyzer,
-        ):
+        for service in (self.student_bot, self.tutor_bot):
             if service is not None:
                 await service.close()
 
@@ -64,7 +52,6 @@ class SessionManager:
             select(Scenario).where(Scenario.id == session.scenario_id)
         )
         scenario = result.scalar_one()
-        self.scenario = scenario  # Store for misconception analysis
 
         # Load bot configuration from .env and scenario overrides
         bot_config = self._load_bot_config(scenario)
@@ -106,14 +93,6 @@ class SessionManager:
         else:
             self.tutor_bot = None  # TutorBot disabled for this scenario
 
-        # Initialize MisconceptionAnalyzer for tracking student responses
-        self.misconception_analyzer = MisconceptionAnalyzer(
-            client=self.client,
-            db_session=self.db,
-            model=config.ANALYSIS_MODEL,  # Use analysis model
-            reasoning_effort="low",  # Low effort for consistent analysis
-        )
-
     async def process_teacher_message(
         self, teacher_content: str
     ) -> list[Message]:
@@ -150,62 +129,35 @@ class SessionManager:
             _student_usage,
         ) = await self.student_bot.generate_response(teacher_content, history)
 
-        # 3.1. Run MisconceptionAnalyzer and TutorBot in PARALLEL
-        # Both depend on student_content but NOT on each other
-        # Performance: saves ~2 seconds by avoiding sequential API calls
-        analysis_coro = self.misconception_analyzer.analyze_student_response(
-            student_message=student_content,
-            scenario_prompt=self.scenario.prompt,
-            student_profile=self.scenario.student_profile or "Grade 5 student",
-            scenario_title=self.scenario.title,
-        )
-
-        parallel_tasks: list = [analysis_coro]
-        tutor_task_idx: int | None = None
+        tutor_feedback = None
         if self.tutor_bot:
-            parallel_tasks.append(
-                self.tutor_bot.generate_feedback(
+            try:
+                tutor_feedback, _ = await self.tutor_bot.generate_feedback(
                     teacher_content, student_content, history
                 )
-            )
-            tutor_task_idx = 1
+            except Exception:
+                logger.warning("TutorBot feedback failed")
 
-        results = await asyncio.gather(*parallel_tasks, return_exceptions=True)
-
-        misconception_data = None
-        if not isinstance(results[0], Exception) and results[0] is not None:
-            misconception_data = json.dumps(results[0])
-        elif isinstance(results[0], Exception):
-            logger.warning("Misconception analysis failed: %s", results[0])
-
-        # 3.2. Save student message with metadata
+        # Turn-level misconception calls are retired (ADR-0003).
         student_msg = Message(
             session_id=self.session_id,
             role="student",
             content=student_content,
-            analysis_metadata=misconception_data,
         )
         self.db.add(student_msg)
         await self.db.flush()
         new_messages.append(student_msg)
 
-        # 4. Process TutorBot result (from parallel execution)
-        if tutor_task_idx is not None:
-            tutor_result = results[tutor_task_idx]
-            if not isinstance(tutor_result, Exception):
-                tutor_feedback, _ = tutor_result
-                if tutor_feedback:
-                    tutor_msg = Message(
-                        session_id=self.session_id,
-                        role="tutor",
-                        content=tutor_feedback,
-                    )
-                    self.db.add(tutor_msg)
-                    await self.db.flush()
-                    new_messages.append(tutor_msg)
-
-            else:
-                logger.warning("TutorBot feedback failed: %s", tutor_result)
+        # 4. Save optional mentor feedback after its independently logged call.
+        if tutor_feedback:
+            tutor_msg = Message(
+                session_id=self.session_id,
+                role="tutor",
+                content=tutor_feedback,
+            )
+            self.db.add(tutor_msg)
+            await self.db.flush()
+            new_messages.append(tutor_msg)
 
         # 5. Refresh to get created_at timestamps (dependency auto-commits)
         for msg in new_messages:

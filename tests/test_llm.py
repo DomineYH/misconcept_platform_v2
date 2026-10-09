@@ -5,6 +5,8 @@ import httpx2 as httpx
 import pytest
 from lesson_fixtures import install_connection, install_snapshot
 from test_analysis_invocations import analysis_transport
+from test_scenario_api import client as client_fixture
+from test_scenario_api import login
 from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_probe import response_body
 
@@ -14,10 +16,10 @@ from src.services.analyzer import Analyzer
 from src.services.prompt_manager import PromptManager
 from src.services.session_synthesizer import SessionSynthesizer
 from src.services.student_bot import StudentBot
-from src.services.tutor_bot import TutorBot
 
 USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
 scenario_payload = scenario_fixture
+client = client_fixture
 
 
 @pytest.fixture(autouse=True)
@@ -115,14 +117,15 @@ async def test_session_manager_uses_native_student_without_per_turn_analysis(
     await install_snapshot(data, connection, model)
     monkeypatch.setattr(config, "OPENAI_API_KEY", "")
     if with_mentor:
-        model.verification_state = {
-            **model.verification_state,
-            "mentor": dict(model.verification_state["student"]),
-        }
-        monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
-        data.scenario.tutor_template_id = data.scenario.student_template_id
-        data.scenario.tutor_sensitivity = "high"
-        await data.db.commit()
+        from types import SimpleNamespace
+
+        from lesson_fixtures import configure_mentor, install_mentor_model
+
+        mentor_model = await install_mentor_model(data, connection)
+        await configure_mentor(
+            data,
+            SimpleNamespace(connection=connection, mentor_model=mentor_model),
+        )
 
     async def upstream(request, body):
         content = "Student answer" if len(calls) == 1 else "Mentor coaching"
@@ -138,36 +141,52 @@ async def test_session_manager_uses_native_student_without_per_turn_analysis(
             ("teacher", "Why?"),
             ("student", "Student answer"),
         ]
-        if with_mentor:
-            expected.append(("tutor", "Mentor coaching"))
         assert [(m.role, m.content) for m in messages] == expected
         assert messages[1].analysis_metadata is None
         async with data.factory() as db:
             attempts = (await db.scalars(select(ApiUsageLog))).all()
-        assert len(attempts) == len(calls) == (2 if with_mentor else 1)
-        assert [a.operation for a in attempts] == (
-            ["student", "mentor"] if with_mentor else ["student"]
-        )
+        assert len(attempts) == len(calls) == 1
+        assert [a.operation for a in attempts] == ["student"]
         assert all(a.session_id == data.session.id for a in attempts)
     finally:
         await manager.close()
     assert all(sdk.is_closed() for sdk in clients)
 
 
-async def test_explicit_tutor_retry_keeps_state_and_one_attempt_per_invocation(
-    data, monkeypatch
+async def test_explicit_mentor_retry_keeps_state_and_one_attempt_per_invocation(
+    data, client, monkeypatch
 ):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
     from lesson_fixtures import (
         LESSON_KEY,
-        install_connection,
+        configure_mentor,
         install_mentor_model,
     )
-    from test_student_probe import response_body, sdk_transport
+    from test_student_generation import frames
+    from test_student_probe import sdk_transport
 
-    from src.services.invocation_types import InvocationError
-
-    connection, _ = await install_connection(data, monkeypatch)
-    await install_mentor_model(data, connection)
+    connection, model = await install_connection(data, monkeypatch)
+    await install_snapshot(data, connection, model)
+    mentor_model = await install_mentor_model(data, connection)
+    await configure_mentor(
+        data, SimpleNamespace(connection=connection, mentor_model=mentor_model)
+    )
+    turn_id = str(uuid4())
+    data.db.add_all(
+        [
+            Message(
+                session_id=data.session.id,
+                role=role,
+                content=content,
+                turn_id=turn_id,
+                turn_index=1,
+            )
+            for role, content in [("teacher", "Why?"), ("student", "Answer")]
+        ]
+    )
+    await data.db.commit()
 
     async def upstream(request, body):
         if len(calls) == 1:
@@ -179,19 +198,23 @@ async def test_explicit_tutor_retry_keeps_state_and_one_attempt_per_invocation(
     clients, calls = sdk_transport(
         monkeypatch, upstream, budget=1500, key=LESSON_KEY, model="gpt-5.2"
     )
-    async with TutorBot(
-        data.db, 1, sensitivity="high", initial_question_count=1
-    ) as bot:
-        with pytest.raises(InvocationError, match="transient"):
-            await bot.generate_feedback(
-                "Why?", "Answer", [], question_counted=True
-            )
-        assert len(calls) == 1 and bot.intervention_count == 0
-        content, _ = await bot.generate_feedback(
-            "Why?", "Answer", [], question_counted=True
-        )
-        assert content == "Feedback" and bot.intervention_count == 1
-        assert bot.question_count == 1
+    login(client, data.owner)
+    url = f"/sessions/{data.session.id}/turns/{turn_id}/mentor/stream"
+    failed = await client.post(
+        url, json={"request_id": str(uuid4()), "trigger": "manual"}
+    )
+    assert frames(failed)[-1][1]["code"] == "transient"
+    await data.db.refresh(data.session)
+    assert len(calls) == 1 and data.session.tutor_intervention_count == 0
+    completed = await client.post(
+        url, json={"request_id": str(uuid4()), "trigger": "manual"}
+    )
+    assert frames(completed)[-1][1]["message"]["content"] == "Feedback"
+    await data.db.refresh(data.session)
+    assert (
+        data.session.tutor_intervention_count == 1
+        and data.session.tutor_question_count == 1
+    )
     assert len(calls) == 2 and all(sdk.is_closed() for sdk in clients)
 
 

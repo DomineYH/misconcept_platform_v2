@@ -968,6 +968,8 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     sessionId: chatConfig.sessionId,
     studentName: chatConfig.studentName,
     mentorEnabled: chatConfig.mentorEnabled,
+    mentorMode: chatConfig.mentorMode,
+    mentorName: chatConfig.mentorName,
     fetch: fetchWithAuthGuard,
     headers: getCsrfHeaders,
     stopPolling: disablePolling,

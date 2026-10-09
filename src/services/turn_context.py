@@ -43,7 +43,7 @@ async def load_completed_turns(
     ]
 
 
-async def load_mentor_context(db, session_id, turn_id):
+async def load_mentor_context(db, session_id, turn_id, *, limit=None):
     """Return N preceding completed pairs plus the completed target pair.
 
     Pass the last pair as current teacher/student and the rest as history to
@@ -68,7 +68,7 @@ async def load_mentor_context(db, session_id, turn_id):
         )
     ).one()
     history = await load_completed_turns(
-        db, session_id, before_turn_index=turn_index
+        db, session_id, before_turn_index=turn_index, limit=limit
     )
     return history + [
         {"role": "teacher", "content": teacher},

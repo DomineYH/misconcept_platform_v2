@@ -132,7 +132,6 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
     data, long_dialogue, monkeypatch
 ):
     from src.services.turn_context import load_mentor_context
-    from src.services.tutor_bot import TutorBot
 
     monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
     context = await load_mentor_context(data.db, data.session.id, "turn-50")
@@ -148,39 +147,36 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
         {"role": "teacher", "content": "Teacher 50"},
         {"role": "student", "content": "Student 50"},
     ]
-    import httpx2
+    # New paid generation for an older target is forbidden, even without a newer mentor run.
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
     from lesson_fixtures import (
-        LESSON_KEY,
+        configure_mentor,
         install_connection,
         install_mentor_model,
+        install_snapshot,
     )
-    from test_student_probe import response_body, sdk_transport
 
-    connection, _ = await install_connection(data, monkeypatch)
-    await install_mentor_model(data, connection)
+    from src.services.mentor_generation import reserve_mentor
 
-    async def upstream(request, body):
-        return httpx2.Response(
-            200,
-            json=response_body(
-                '{"is_repetitive": false, "is_inappropriate": false}'
-            ),
-        )
-
-    clients, calls = sdk_transport(
-        monkeypatch, upstream, budget=200, key=LESSON_KEY, model="gpt-5.2"
+    connection, model = await install_connection(data, monkeypatch)
+    await install_snapshot(data, connection, model)
+    mentor_model = await install_mentor_model(data, connection)
+    await configure_mentor(
+        data, SimpleNamespace(connection=connection, mentor_model=mentor_model)
     )
-    async with TutorBot(data.db, 1) as mentor:
-        result = await mentor.generate_feedback(
-            context[-2]["content"], context[-1]["content"], context[:-2]
+    with pytest.raises(HTTPException) as denied:
+        await reserve_mentor(
+            data.factory,
+            data.session.id,
+            "turn-50",
+            data.owner,
+            str(uuid4()),
+            "manual",
         )
-    assert result == (None, None)
-    assert len(calls) == 1 and all(sdk.is_closed() for sdk in clients)
-    prompt = calls[0]["input"][0]["content"]
-    assert "교사: Teacher 48\n학생: Student 48" in prompt
-    assert "교사: Teacher 49\n학생: Student 49" in prompt
-    assert "교사: Teacher 50\n학생: Student 50" in prompt
-    assert "Teacher 51" not in prompt and "Teacher 47" not in prompt
+    assert denied.value.status_code == 409
+    assert denied.value.detail == {"code": "mentor_turn_obsolete"}
 
 
 async def test_nonstream_generation_also_uses_only_completed_pairs(

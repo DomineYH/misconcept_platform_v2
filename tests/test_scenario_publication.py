@@ -501,6 +501,58 @@ async def test_missing_conversion_model_is_resolved_by_a_valid_replacement(
     assert (await post(api, path + "/update", publishable)).status_code == 200
 
 
+@pytest.mark.parametrize("keep_valid_row", [True, False])
+async def test_review_revalidates_rubric_after_removing_incomplete_row(
+    data, api, publishable, keep_valid_row
+):
+    valid = dict(
+        id="A", name="Explore", criteria="Ask for reasoning", level="high"
+    )
+    publishable["config"]["analysis"].update(
+        classification_enabled=True,
+        rubric_name="Questions",
+        rubric=[valid, dict(id="B", name="Recall", criteria="", level=None)],
+    )
+    publishable["action"] = "save_draft"
+    created = await post(api, "/admin/scenarios", publishable)
+    path = f"/admin/scenarios/{created.json()['id']}"
+    async with data.factory() as db:
+        scenario = await db.get(Scenario, created.json()["id"])
+        scenario.review_required = True
+        scenario.review_reasons = [
+            dict(
+                path="config.analysis.rubric.1.criteria",
+                code="required",
+                message="분류 2 판정 기준 보완 필요",
+                blocking=True,
+            )
+        ]
+        await db.commit()
+    publishable.update(expected_version=1)
+    publishable["config"]["analysis"]["rubric"] = (
+        [valid] if keep_valid_row else []
+    )
+    repaired = await post(api, path + "/update", publishable)
+    assert repaired.status_code == 200, repaired.text
+    assert not any(
+        r["path"] == "config.analysis.rubric.1.criteria"
+        for r in repaired.json()["review_reasons"]
+    )
+    publishable.update(
+        expected_version=2, action="publish", acknowledge_review=True
+    )
+    published = await post(api, path + "/update", publishable)
+    assert published.status_code == (
+        200 if keep_valid_row else 422
+    ), published.text
+    if not keep_valid_row:
+        assert any(
+            error["path"] == "config.analysis.rubric"
+            and error["code"] == "required"
+            for error in published.json()["detail"]
+        )
+
+
 @pytest.mark.parametrize(
     "field,code,new_title,expected",
     [

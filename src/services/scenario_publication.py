@@ -37,9 +37,12 @@ def review_reasons(scenario, data, errors):
             if path.split(".")[0] in data["config"]:
                 path = "config." + path
             replacement = field_value(data, path)
-            if (
-                reason["code"] in REVALIDATED_REASONS
-                and replacement is not MISSING_FIELD
+            if reason["code"] in REVALIDATED_REASONS and (
+                replacement is not MISSING_FIELD
+                or re.fullmatch(
+                    r"config\.analysis\.rubric\.\d+\.(id|name|criteria)",
+                    path,
+                )
             ):
                 continue
             # Conversion fields need an actual replacement, never just acknowledgement.

@@ -1,17 +1,15 @@
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx2 as httpx
 import pytest
 from lesson_fixtures import install_connection
-from openai import AsyncOpenAI
-from tenacity import wait_none
 from test_analysis_invocations import analysis_transport
+from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_probe import response_body
 
 from src.models import Message
-from src.services import analysis_pipeline, base
+from src.services import analysis_pipeline
 from src.services.analyzer import Analyzer
 from src.services.prompt_manager import PromptManager
 from src.services.session_synthesizer import SessionSynthesizer
@@ -19,27 +17,11 @@ from src.services.student_bot import StudentBot
 from src.services.tutor_bot import TutorBot
 
 USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
-
-
-def response(content):
-    return SimpleNamespace(output_text=content, usage=SimpleNamespace(**USAGE))
-
-
-def client(*responses):
-    return SimpleNamespace(
-        responses=SimpleNamespace(
-            create=AsyncMock(side_effect=list(responses))
-        ),
-        close=AsyncMock(),
-        max_retries=0,
-    )
+scenario_payload = scenario_fixture
 
 
 @pytest.fixture(autouse=True)
-def fast_retry(monkeypatch):
-    monkeypatch.setattr(
-        base.OpenAIBaseService.create_response.retry, "wait", wait_none()
-    )
+def prompt_template(monkeypatch):
     monkeypatch.setattr(
         PromptManager,
         "get_template_text_by_id",
@@ -106,46 +88,58 @@ async def test_student_success_settings_and_input_failure(data, monkeypatch):
     assert all(sdk.is_closed() for sdk in clients)
 
 
-@pytest.mark.parametrize(
-    "status, attempts",
-    [
-        (429, 3),
-        (500, 3),
-        (408, 3),
-        (409, 3),
-        (400, 1),
-        (401, 1),
-        (403, 1),
-        (422, 1),
-    ],
-)
-async def test_real_sdk_transport_attempt_count_and_owned_close(
-    status, attempts, monkeypatch
+@pytest.mark.parametrize("with_mentor", [False, True])
+async def test_legacy_session_uses_db_calls_without_per_turn_analysis(
+    data, scenario_payload, monkeypatch, with_mentor
 ):
-    calls = []
+    from lesson_fixtures import LESSON_KEY
+    from sqlalchemy import select
+    from test_student_probe import sdk_transport
 
-    def transport(request):
-        calls.append(request)
-        return httpx.Response(
-            status, json={"error": {"message": "test", "type": "test"}}
-        )
+    from src.config import config
+    from src.models import ApiUsageLog
+    from src.services.session_mgr import SessionManager
 
-    owned = AsyncOpenAI(
-        api_key="fake",
-        max_retries=0,
-        http_client=httpx.AsyncClient(transport=httpx.MockTransport(transport)),
+    _, model = await install_connection(data, monkeypatch)
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
+    if with_mentor:
+        model.verification_state = {
+            **model.verification_state,
+            "mentor": dict(model.verification_state["student"]),
+        }
+        monkeypatch.setattr(config, "ANALYSIS_MODEL", model.model_id)
+        data.scenario.tutor_template_id = data.scenario.student_template_id
+        data.scenario.tutor_sensitivity = "high"
+        await data.db.commit()
+
+    async def upstream(request, body):
+        content = "Student answer" if len(calls) == 1 else "Mentor coaching"
+        return httpx.Response(200, json=response_body(content, USAGE))
+
+    clients, calls = sdk_transport(
+        monkeypatch, upstream, budget=1500, key=LESSON_KEY
     )
-
-    def factory(**kwargs):
-        assert kwargs["max_retries"] == 0
-        return owned
-
-    monkeypatch.setattr(base, "AsyncOpenAI", factory)
-    with pytest.raises(Exception):
-        async with base.OpenAIBaseService() as service:
-            await service.create_response(model="gpt-5-mini", input="test")
-    assert len(calls) == attempts
-    assert owned.is_closed()
+    manager = SessionManager(data.db, data.session.id)
+    try:
+        messages = await manager.process_teacher_message("Why?")
+        expected = [
+            ("teacher", "Why?"),
+            ("student", "Student answer"),
+        ]
+        if with_mentor:
+            expected.append(("tutor", "Mentor coaching"))
+        assert [(m.role, m.content) for m in messages] == expected
+        assert messages[1].analysis_metadata is None
+        async with data.factory() as db:
+            attempts = (await db.scalars(select(ApiUsageLog))).all()
+        assert len(attempts) == len(calls) == (2 if with_mentor else 1)
+        assert [a.operation for a in attempts] == (
+            ["student", "mentor"] if with_mentor else ["student"]
+        )
+        assert all(a.session_id == data.session.id for a in attempts)
+    finally:
+        await manager.close()
+    assert all(sdk.is_closed() for sdk in clients)
 
 
 async def test_explicit_tutor_retry_keeps_state_and_one_attempt_per_invocation(
@@ -377,20 +371,3 @@ async def test_message_route_closes_clients_on_bot_failure(data, monkeypatch):
     assert "event: output.completed" not in body
     assert all(sdk.is_closed() for sdk in created)
     assert len(created) == len(calls) == 1
-
-
-async def test_injected_sdk_retry_policy_is_explicit():
-    async with AsyncOpenAI(api_key="fake", max_retries=2) as sdk:
-        with pytest.raises(ValueError, match="max_retries=0"):
-            base.OpenAIBaseService(client=sdk)
-
-
-async def test_owned_client_closes_after_success(monkeypatch):
-    fake = client(response("ok"))
-    monkeypatch.setattr(base, "AsyncOpenAI", lambda **kwargs: fake)
-    async with base.OpenAIBaseService() as service:
-        assert (
-            await service.create_response(model="gpt-5-mini", input="test")
-        ).output_text == "ok"
-    await service.close()
-    fake.close.assert_awaited_once()

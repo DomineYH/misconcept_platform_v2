@@ -102,6 +102,8 @@ try {
   assert.equal(await page.locator('#public-preview script').count(), 0);
   const {default: checkPublication} = await import('./check_s2_publication_browser.mjs');
   await checkPublication(page, base);
+  const {default: checkSnapshots} = await import('./check_s2_snapshots_browser.mjs');
+  await checkSnapshots(page, base);
   assert.deepEqual(errors, []);
   console.log('PASS: real draft browser saved and reopened hidden values and model options');
 } finally {

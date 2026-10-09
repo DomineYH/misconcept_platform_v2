@@ -69,6 +69,8 @@ class Handler(BaseHTTPRequestHandler):
                     " " if "missing_problem" in query else "Problem"
                 ),
                 greeting_message="Hello",
+                mentor_mode="manual" if "mentor" in query else "off",
+                mentor_name="멘토",
                 prompt="PRIVATE STUDENT PROMPT",
                 video_url="https://www.youtube.com/watch?v=legacy-secret",
                 video_transcript="PRIVATE LEGACY TRANSCRIPT",

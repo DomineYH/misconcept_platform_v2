@@ -21,13 +21,6 @@ def validate_public_problem(scenario: Scenario) -> None:
         )
 
 
-def validate_new_session(scenario: Scenario) -> None:
-    """Draft saves stop new lessons without revoking existing session history."""
-    if scenario.status != "published":
-        raise HTTPException(400, detail={"code": "scenario_not_published"})
-    validate_public_problem(scenario)
-
-
 async def load_session(
     session_id: int,
     user: User,

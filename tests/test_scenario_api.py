@@ -118,7 +118,7 @@ async def test_retired_video_fields_rejected(
 
 @pytest.mark.parametrize("problem", [None, "", " \n\t "])
 @pytest.mark.parametrize("entry", ["api", "detail"])
-async def test_missing_public_problem_blocks_new_session(
+async def test_unconverted_scenario_blocks_new_session_without_legacy_fallback(
     data, client, scenario_payload, problem, entry
 ):
     data.scenario.problem_situation = problem
@@ -131,8 +131,7 @@ async def test_missing_public_problem_blocks_new_session(
     else:
         response = await client.get(f"/scenarios/{data.scenario.id}")
     assert response.status_code == 400
-    assert "문제 상황 보완 필요" in response.json()["detail"]
-    assert "관리자" in response.json()["detail"]
+    assert response.json()["detail"] == {"code": "configuration_unavailable"}
 
 
 @pytest.fixture
@@ -208,7 +207,7 @@ def test_public_scenario_schemas_do_not_include_video():
         assert_no_video(json.dumps(schemas[name]))
 
 
-async def test_text_scenario_crud_and_rendering_preserve_legacy_data(
+async def test_legacy_crud_preserves_data_but_cannot_start_native_lesson(
     data, client, scenario_payload
 ):
     login(client, data.admin)
@@ -247,19 +246,21 @@ async def test_text_scenario_crud_and_rendering_preserve_legacy_data(
     assert listing.status_code == 200
     assert_no_video(listing.text)
     chat = await client.get(f"/scenarios/{sid}")
-    assert chat.status_code == 200
-    assert "Public problem &lt;script&gt;unsafe()&lt;/script&gt;" in chat.text
-    assert "Mentor greeting" in chat.text
+    assert chat.status_code == 400
+    assert chat.json()["detail"] == {"code": "configuration_unavailable"}
     assert scenario_payload["prompt"] not in chat.text
     assert_no_video(chat.text)
     session = await client.post("/sessions", json={"scenario_id": sid})
-    assert session.status_code == 201
+    assert session.status_code == 400
+    assert session.json()["detail"] == {"code": "configuration_unavailable"}
 
 
-async def test_missing_problem_allows_existing_dialogue_and_admin_completion(
+async def test_legacy_history_is_preserved_without_reconstructing_lesson(
     data, client, scenario_payload
 ):
-    from src.models import Message
+    from sqlalchemy import func, select
+
+    from src.models import Message, Session
 
     data.session.ended_at = None
     data.db.add(
@@ -272,9 +273,8 @@ async def test_missing_problem_allows_existing_dialogue_and_admin_completion(
     await data.db.commit()
     login(client, data.owner)
     chat = await client.get(f"/scenarios/{data.scenario.id}")
-    assert chat.status_code == 200
-    assert "Historical answer" in chat.text
-    assert "문제 상황 보완 필요" in chat.text
+    assert chat.status_code == 400
+    assert chat.json()["detail"] == {"code": "configuration_unavailable"}
     assert data.scenario.prompt not in chat.text
     assert_no_video(chat.text)
     updates = await client.get(f"/sessions/{data.session.id}/messages/updates")
@@ -298,8 +298,9 @@ async def test_missing_problem_allows_existing_dialogue_and_admin_completion(
     session = await client.post(
         "/sessions", json={"scenario_id": data.scenario.id}
     )
-    assert session.status_code == 201
-    assert session.json()["id"] != data.session.id
+    assert session.status_code == 400
+    assert session.json()["detail"] == {"code": "configuration_unavailable"}
+    assert await data.db.scalar(select(func.count(Session.id))) == 1
     # Ending a historical session does not make its saved messages unreadable.
     closed = await client.post(f"/sessions/{data.session.id}/close")
     assert closed.status_code == 200

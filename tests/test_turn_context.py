@@ -25,6 +25,8 @@ async def long_dialogue(data, monkeypatch):
     await migrate.run_migration(
         migrate.DIRECTORY / "032_mentor_reason_summary.sql"
     )
+    await migrate.run_migration(migrate.DIRECTORY / "033_context_budget.sql")
+    await migrate.run_migration(migrate.DIRECTORY / "034_analysis_run.sql")
     # Timestamps tie and insertion order opposes turn order deliberately.
     for index in range(60, 0, -1):
         for role in ("student", "tutor", "teacher"):

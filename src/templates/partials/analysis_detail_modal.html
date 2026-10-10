@@ -27,10 +27,12 @@
                     {{ analysis.label }}
                 </span>
             </div>
+            {% if analysis.confidence is not none %}
             <div>
                 <h4 class="font-medium text-gray-700 mb-1">신뢰도</h4>
                 <span class="text-gray-800">{{ "%.0f"|format((analysis.confidence or 0) * 100) }}%</span>
             </div>
+            {% endif %}
         </div>
 
         <!-- Detailed Reasoning -->

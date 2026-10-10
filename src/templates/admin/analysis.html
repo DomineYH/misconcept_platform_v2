@@ -75,7 +75,7 @@
         </div>
         <div class="bg-white rounded-lg shadow p-4">
             <h3 class="text-sm text-gray-600">평균 신뢰도</h3>
-            <p class="text-2xl font-bold text-gray-800">{{ "%.0f"|format(stats.avg_confidence * 100) }}%</p>
+            <p class="text-2xl font-bold text-gray-800">{% if stats.avg_confidence is not none %}{{ "%.0f"|format(stats.avg_confidence * 100) }}%{% else %}산정 불가{% endif %}</p>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
             <h3 class="text-sm text-gray-600">가장 많은 유형</h3>
@@ -116,7 +116,7 @@
                                 {{ item.label }}
                             </span>
                         </td>
-                        <td class="px-4 py-3 text-sm text-gray-900">{{ "%.0f"|format(item.confidence * 100) }}%</td>
+                        <td class="px-4 py-3 text-sm text-gray-900">{% if item.confidence is not none %}{{ "%.0f"|format(item.confidence * 100) }}%{% else %}—{% endif %}</td>
                         <td class="px-4 py-3 text-sm text-gray-900">{{ item.session_id }}</td>
                         <td class="px-4 py-3 text-sm text-gray-900">{{ item.scenario_title }}{% if item.snapshot_provenance.snapshot_origin != 'native' %} · 과거 자료 · 읽기 전용{% endif %}</td>
                         <td class="px-4 py-3 text-sm text-gray-500">{{ item.created_at.strftime('%Y-%m-%d %H:%M') }}</td>

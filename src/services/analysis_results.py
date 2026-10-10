@@ -6,12 +6,14 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import (
+    ApiUsageLog,
     Message,
     QuestionAnalysis,
     Session,
     SessionFeedbackReport,
     SessionSummary,
 )
+from src.services.analysis_projection import public_analysis
 from src.services.lesson_snapshots import read_lesson_snapshot
 from src.services.session_history import session_display
 from src.utils.analysis_helpers import parse_reasoning
@@ -36,6 +38,14 @@ def analysis_display(session):
 
 def analysis_status(summary, report):
     if report is not None:
+        if (
+            report.version == 2
+            and json.loads(report.payload_json)
+            .get("metadata", {})
+            .get("outcome")
+            == "no_dialogue"
+        ):
+            return "no_dialogue"
         return report.status
     # Compatibility only: old fallback rows predate explicit report status.
     return "failed" if summary.feedback == FALLBACK_FEEDBACK else "legacy"
@@ -75,7 +85,11 @@ async def load_summary(session_id, db):
 async def save_analysis(session_id, result, db, *, regenerate=False):
     distribution, questions, payload, status, model, prompt_hash, usage = result
     feedback = (
-        derive_plain_feedback(payload)
+        (
+            payload["brief_feedback"][0]
+            if payload.get("schema_version") == 2
+            else derive_plain_feedback(payload)
+        )
         if status != "failed"
         else FALLBACK_FEEDBACK
     )
@@ -123,7 +137,7 @@ async def save_analysis(session_id, result, db, *, regenerate=False):
         )
         report = SessionFeedbackReport(
             session_id=session_id,
-            version=1,
+            version=payload.get("schema_version", 1),
             model=model,
             prompt_hash=prompt_hash,
             status=status,
@@ -148,6 +162,8 @@ async def save_analysis(session_id, result, db, *, regenerate=False):
 async def load_analysis_response(
     session_id: int,
     db: AsyncSession,
+    *,
+    admin=False,
 ) -> dict | None:
     """Load the current persisted analysis in response/modal shape."""
     summary_result = await db.execute(
@@ -194,7 +210,7 @@ async def load_analysis_response(
         )
         .where(Message.session_id == session_id)
         .where(Message.role == "teacher")
-        .order_by(Message.created_at)
+        .order_by(Message.created_at, Message.id)
     )
     teacher_rows = teacher_rows_result.all()
 
@@ -234,7 +250,7 @@ async def load_analysis_response(
     all_messages_result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)
-        .order_by(Message.created_at)
+        .order_by(Message.created_at, Message.id)
     )
     messages_payload = []
     for m in all_messages_result.scalars().all():
@@ -244,6 +260,7 @@ async def load_analysis_response(
             level = grade_to_level.get(grade)
         messages_payload.append(
             {
+                "id": m.id,
                 "role": m.role,
                 "content": m.content,
                 "created_at": m.created_at.isoformat(),
@@ -254,7 +271,7 @@ async def load_analysis_response(
             }
         )
 
-    return {
+    response = {
         "distribution": summary.distribution,
         "label_names": label_names,
         "classification_enabled": classification_enabled,
@@ -278,3 +295,26 @@ async def load_analysis_response(
             session.ended_at.isoformat() if session.ended_at else None
         ),
     }
+    if feedback_report is not None and feedback_report.version == 2:
+        latest = await db.scalar(
+            select(ApiUsageLog)
+            .where(
+                ApiUsageLog.session_id == session_id,
+                ApiUsageLog.operation == "analysis_unified",
+            )
+            .order_by(ApiUsageLog.id.desc())
+            .limit(1)
+        )
+        response.update(
+            public_analysis(
+                session,
+                summary,
+                feedback_report,
+                messages_payload,
+                label_names,
+                classification_enabled,
+                latest,
+                admin=admin,
+            )
+        )
+    return response

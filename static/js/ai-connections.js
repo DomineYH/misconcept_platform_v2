@@ -157,7 +157,7 @@ const actions = {
         expected_version:m.config_version}, '역할 시험을 시작했습니다. 진행 조회 또는 명시적 취소를 사용할 수 있습니다.');
       if (result) f.querySelector('button[type=submit]').disabled = true;
     });
-    const contracts = {student:'일반 텍스트와 스트리밍', mentor:'수동 코칭과 자동 미개입을 각각 단일 구조화 응답으로 확인', analysis:'분류 JSON과 종합 결과 JSON'};
+    const contracts = {student:'일반 텍스트와 스트리밍', mentor:'수동 코칭과 자동 미개입을 각각 단일 구조화 응답으로 확인', analysis:'v2 단일 분석과 근거 부분집합 종합 JSON'};
     f.append(node('p', `${roles[role]} · ${contracts[role]} · 최대 2회 생성 호출 · 각 호출 최대 출력 ${m.probe_budgets[role]} 토큰 · 자동 재시도 0회`),
       node('p', '유료 비용이 발생할 수 있습니다. 고정 합성 입력을 사용하며 시험 성공은 교육적 품질 보증이 아닙니다. 첫 단계 실패 시 다음 호출은 하지 않습니다.'),
       node('p', '관리자당 시험은 한 묶음만 진행할 수 있습니다. 한도 부족 시 대기하지 않으므로 잠시 후 다시 시도하세요. 페이지를 닫아도 시험은 재시작하거나 중단되지 않습니다. 진행 조회와 시험 취소를 사용하세요.'));

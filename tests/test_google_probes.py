@@ -136,7 +136,7 @@ async def test_google_role_probe_is_versioned_idempotent_and_has_two_attempts(
     assert evidence[
         "capability_definition_version"
     ] == "google-2026-10-10-v2" and evidence["role_contract_version"] == (
-        "s3-v1" if role == "mentor" else "s1-v1"
+        {"student": "s1-v1", "mentor": "s3-v1", "analysis": "s4-v2"}[role]
     )
     assert all(
         value["status"] == "unverified"
@@ -190,11 +190,11 @@ async def test_structured_google_probe_uses_server_validation_and_stops_on_failu
         if mode == "type":
             value["should_intervene"] = "false"
         if mode == "label":
-            value["label"] = "PRIVATE-OUTPUT"
+            value["message_classifications"][0]["rubric_id"] = "PRIVATE-OUTPUT"
         if mode == "quote" and len(calls) == 2:
             value["strengths"][0]["quote"] = "PRIVATE-OUTPUT"
         if mode == "length" and len(calls) == 2:
-            value["improvements"][0]["alternative_question"] = "가" * 61
+            value["improvements"][0]["alternative_question"] = "가" * 201
         content = '{"PRIVATE-OUTPUT":' if mode == "json" else json.dumps(value)
         return httpx.Response(
             200,

@@ -1,14 +1,11 @@
 """Session analysis pipeline service.
 
-Handles the analysis of teacher messages in a session, including
-greeting detection, question classification, synthesis, and summary
-generation.
+Reviews the full frozen dialogue in one structured provider call.
 
 All LLM calls complete before result writes; attempts use separate transactions.
-On synthesis failure, rows are still persisted with status='failed'.
+Failed attempts preserve an existing accepted report.
 """
 
-import asyncio
 import json
 import logging
 from typing import Any
@@ -24,26 +21,29 @@ from src.api.routes.session_helpers import (
 )
 from src.models import (
     ApiUsageLog,
-    AppSetting,
     Message,
     QuestionAnalysis,
     Session,
     User,
 )
+from src.models.provider_connection import now
+from src.services.analysis_invocations import AnalysisCaller
+from src.services.analysis_output_contract import UnifiedAnalysisOutput
 from src.services.analysis_results import (
     load_summary,
     save_analysis,
     summary_response,
 )
-from src.services.analyzer import Analyzer
+from src.services.analysis_statistics import analysis_statistics
 from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
 from src.services.lesson_snapshots import (
+    canonical_hash,
     configuration_error,
     read_lesson_snapshot,
 )
-from src.services.model_configuration import settings_values
-from src.services.session_synthesizer import FAILED_PAYLOAD, SessionSynthesizer
+from src.services.session_synthesizer import FAILED_PAYLOAD, prompt_hash
+from src.utils.cache import load_prompt_template
 
 logger = logging.getLogger(__name__)
 
@@ -123,185 +123,89 @@ async def run_llm_pipeline(
     str,
     list[ApiUsageLog],
 ]:
-    """Run greeting, classification and synthesis before writing results.
-
-    The common boundary independently commits and finalizes attempt rows.
-
-    Returns:
-        Tuple of (distribution, question_analyses, payload,
-        synthesis_status, model, prompt_hash, empty legacy usage list).
-    """
+    """One strict call reviews the full stored teacher/student transcript."""
     analysis = snapshot.config.analysis
-    scenario = snapshot.scenario_context
-    student = snapshot.config.student
     selection = analysis.resolved_model_config
-    analyzer = Analyzer(
+    caller = AnalysisCaller(
         factory,
         selection=selection,
         session_id=session_id,
         owner_id=owner_id,
         actor_id=actor_id,
     )
-
-    # Step 1: Filter greeting messages
-    if not analysis.classification_enabled:
-        teacher_messages = []
-    if teacher_messages:
-        teacher_messages = await _filter_greetings(
-            session_id, teacher_messages, analyzer
-        )
-
-    # Step 2: Parallel classification with bounded semaphore
-    distribution = (
-        {r.id: 0 for r in analysis.rubric}
-        if analysis.classification_enabled
-        else {}
-    )
-    parallelism = 1
-    async with factory() as settings_db:
-        setting = await settings_db.get(AppSetting, 1)
-        if setting is not None:
-            limits, _ = settings_values(setting)
-            parallelism = min(5, limits["total"], limits[selection.provider])
-    semaphore = asyncio.Semaphore(parallelism)
-
-    async def _classify_with_semaphore(msg: Message) -> dict:
-        async with semaphore:
-            context = "\n".join(f"{m.role}: {m.content}" for m in all_messages)
-            return await analyzer.classify_question(
-                question=msg.content,
-                analysis=analysis,
-                context=context,
-                scenario_title=scenario.title,
-                misconception_prompt=student.misconception,
-                student_profile=student.internal_profile,
-            )
-
-    classification_results = await asyncio.gather(
-        *[_classify_with_semaphore(msg) for msg in teacher_messages],
-        return_exceptions=True,
-    )
-
-    question_analyses: list[QuestionAnalysis] = []
-    for msg, result in zip(teacher_messages, classification_results):
-        if isinstance(result, asyncio.CancelledError):
-            raise result
-        if isinstance(result, Exception):
-            logger.warning(f"Failed to analyze message {msg.id}: {result}")
-            continue
-        reasoning = result.get("reasoning")
-        reasoning_json = (
-            json.dumps(reasoning, ensure_ascii=False)
-            if isinstance(reasoning, dict)
-            else reasoning
-        )
-        question_analyses.append(
-            QuestionAnalysis(
-                message_id=msg.id,
-                label=result["label"],
-                confidence=result.get("confidence"),
-                meta_json=reasoning_json,
-                grade={"high": "우수", "low": "개선"}.get(
-                    next(
-                        r.level
-                        for r in analysis.rubric
-                        if r.id == result["label"]
-                    )
-                ),
-            )
-        )
-        distribution[result["label"]] += 1
-
-    # Step 3: Synthesize session feedback
-    messages_for_synthesis = [
-        {"id": m.id, "role": m.role, "content": m.content} for m in all_messages
+    messages = [
+        dict(id=m.id, role=m.role, content=m.content) for m in all_messages
     ]
-    qa_for_synthesis = [
-        {
-            "message_id": qa.message_id,
-            "label": qa.label,
-            "confidence": qa.confidence,
-            "reasoning": qa.meta_json,
-        }
-        for qa in question_analyses
-    ]
-
-    try:
-        synthesizer = SessionSynthesizer(
-            factory,
-            selection=selection,
-            actor_id=actor_id,
-            session_id=session_id,
-            owner_id=owner_id,
-            request_id=analyzer.request_id,
-        )
-        payload, synthesis_status = await synthesizer.synthesize(
-            messages=messages_for_synthesis,
-            question_analyses=qa_for_synthesis,
-            scenario=scenario.title,
-            misconception=student.misconception,
-            student_profile=student.internal_profile,
-            analysis=analysis,
-        )
-        synth_model = synthesizer.model
-        synth_hash = synthesizer._hash
-    except Exception as e:
-        logger.error(
-            "Session %d: synthesis failed: %s",
-            session_id,
-            e,
-            exc_info=True,
-        )
-        payload = dict(FAILED_PAYLOAD)
-        synthesis_status = "failed"
-        synth_model = "unknown"
-        synth_hash = "unknown"
-
-    if (
-        analyzer.greeting_failed
-        or any(isinstance(r, Exception) for r in classification_results)
-    ) and synthesis_status != "failed":
-        synthesis_status = "degraded"
-
+    template = load_prompt_template("analysis_v2.txt")
+    source_hash = prompt_hash(template)
+    context = dict(
+        messages=messages,
+        labels={r.id: r.level for r in analysis.rubric},
+        classification_enabled=analysis.classification_enabled,
+    )
+    inputs = dict(
+        messages=messages,
+        scenario=snapshot.scenario_context.model_dump(),
+        problem=snapshot.config.problem.model_dump(),
+        student=snapshot.config.student.model_dump(
+            exclude={"resolved_model_config"}
+        ),
+        analysis=analysis.model_dump(exclude={"resolved_model_config"}),
+    )
+    payload = dict(
+        schema_version=2,
+        message_classifications=[],
+        misconception_findings=[],
+        brief_feedback=["대화가 없어 분석할 수 없습니다."],
+        strengths=[],
+        improvements=[],
+        dialogue_coaching=[],
+    )
+    status, error_code = "ok", None
+    if messages:
+        try:
+            payload, _ = await caller.structured(
+                template
+                + "\n입력 JSON\n"
+                + json.dumps(inputs, ensure_ascii=False),
+                UnifiedAnalysisOutput,
+                "analysis_unified",
+                validation_context=context,
+            )
+        except InvocationError as error:
+            error_code = error.code
+            payload["brief_feedback"] = [FALLBACK_FEEDBACK]
+            status = "failed"
+    distribution, questions, coverage, status, error_code = analysis_statistics(
+        all_messages,
+        payload,
+        analysis,
+        context,
+        status,
+        error_code,
+    )
+    payload["metadata"] = dict(
+        coverage=coverage,
+        mode="single",
+        estimator_version=None,
+        request_id=caller.request_id,
+        run_id=None,
+        config_hash=canonical_hash(snapshot.model_dump()),
+        prompt_version=source_hash,
+        schema_version=2,
+        generated_at=now().isoformat(),
+        error_code=error_code,
+        outcome="no_dialogue" if not messages else status,
+    )
     return (
         distribution,
-        question_analyses,
+        questions,
         payload,
-        synthesis_status,
-        synth_model,
-        synth_hash,
+        status,
+        selection.model_id,
+        source_hash,
         [],
     )
-
-
-async def _filter_greetings(
-    session_id: int,
-    teacher_messages: list[Message],
-    analyzer: Analyzer,
-) -> list[Message]:
-    """Filter greeting messages from analysis."""
-    greeting_results = await analyzer.detect_greetings(
-        [m.content for m in teacher_messages]
-    )
-
-    filtered_messages = []
-    for msg, result in zip(teacher_messages, greeting_results):
-        if not result.get("is_greeting", False):
-            filtered_messages.append(msg)
-        else:
-            logger.info(
-                f"Filtered greeting message {msg.id}: "
-                f"{result.get('reason', 'greeting')}"
-            )
-
-    filtered_count = len(teacher_messages) - len(filtered_messages)
-    if filtered_count > 0:
-        logger.info(
-            f"Session {session_id}: Filtered {filtered_count} "
-            f"greeting messages from analysis"
-        )
-
-    return filtered_messages
 
 
 async def handle_duplicate_session_state(

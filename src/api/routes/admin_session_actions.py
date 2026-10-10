@@ -193,7 +193,7 @@ async def analysis_modal(
             detail=("Session must be ended before viewing analysis"),
         )
 
-    analysis_data = await _load_analysis_response(session_id, db)
+    analysis_data = await _load_analysis_response(session_id, db, admin=True)
     if analysis_data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -207,9 +207,35 @@ async def analysis_modal(
             "user": user,
             "session_id": session_id,
             "is_admin": True,
+            **(
+                {
+                    "analysis_result_url": f"/admin/sessions/{session_id}/analysis"
+                }
+                if "accepted_report" in analysis_data
+                else {}
+            ),
             **analysis_data,
         },
     )
+
+
+@router.get("/admin/sessions/{session_id}/analysis")
+async def get_admin_analysis(
+    session_id: int,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    session = await db.get(Session, session_id)
+    if session is None:
+        raise HTTPException(404, detail="Session not found")
+    if not session.ended_at:
+        raise HTTPException(
+            400, detail="Session must be ended before viewing analysis"
+        )
+    result = await _load_analysis_response(session_id, db, admin=True)
+    if result is None:
+        raise HTTPException(404, detail="Analysis not found")
+    return result
 
 
 @router.post("/admin/sessions/{session_id}/analyze_regenerate")
@@ -259,7 +285,7 @@ async def regenerate_analysis(
         raise HTTPException(
             500, detail="Analysis regeneration failed"
         ) from None
-    analysis_data = await _load_analysis_response(session_id, db)
+    analysis_data = await _load_analysis_response(session_id, db, admin=True)
     if analysis_data is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -1,12 +1,12 @@
 """Analysis subcalls retain native options and the selected provider's limit."""
 
-import asyncio
 import copy
 import json
 
 import httpx
 import httpx2
 import pytest
+from s4_analysis_fixtures import analysis_reply
 from sqlalchemy import select
 from test_native_analysis import api as analysis_api
 from test_native_analysis import connection_api as provider_api
@@ -51,7 +51,7 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
         credential_revision=1,
         connection_version=connection.connection_version,
         capability_definition_version=definition,
-        role_contract_version="s1-v1",
+        role_contract_version="s4-v2",
     )
     model.verification_state = {"analysis": evidence}
     connection.encrypted_key, connection.nonce = encrypt_key(connection, KEY, 1)
@@ -87,36 +87,15 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
         )
     )
     await data.db.commit()
-    active = peak = 0
-    both = asyncio.Event()
+    messages = [
+        dict(id=m.id, role=m.role, content=m.content)
+        for m in await data.db.scalars(select(Message).order_by(Message.id))
+    ]
 
     async def answer(schema):
-        nonlocal active, peak
-        properties = schema["properties"]
-        if "results" in properties:
-            return {
-                "results": [
-                    {"index": 0, "is_greeting": False},
-                    {"index": 1, "is_greeting": False},
-                    {"index": 2, "is_greeting": False},
-                ]
-            }
-        if "label" in properties:
-            active += 1
-            peak = max(peak, active)
-            if active == 3:
-                both.set()
-            try:
-                await asyncio.wait_for(both.wait(), 3)
-            finally:
-                active -= 1
-            return dict(label="A", confidence=0.9, reasoning="Explore")
-        return dict(
-            brief_feedback=["Good question"],
-            strengths=[],
-            improvements=[],
-            dialogue_coaching=[],
-        )
+        assert "message_classifications" in schema["properties"]
+        assert "confidence" not in schema["properties"]
+        return analysis_reply(messages)
 
     if provider == "openai":
         from test_student_probe import response_body, sdk_transport
@@ -160,7 +139,7 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
         "B": 0,
         "C": 0,
     }
-    assert peak == 3 and len(calls) == 5
+    assert len(calls) == 1
     for call in calls:
         body = call if provider == "openai" else json.loads(call.content)
         if provider == "openai":
@@ -192,7 +171,7 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
     )
     async with data.factory() as db:
         attempts = (await db.scalars(select(ApiUsageLog))).all()
-        assert len(attempts) == 5 and all(
+        assert len(attempts) == 1 and all(
             a.provider == provider
             and a.model == model.model_id
             and a.status == "completed"

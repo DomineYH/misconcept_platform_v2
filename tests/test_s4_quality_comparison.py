@@ -11,6 +11,7 @@ from time import perf_counter
 import httpx2
 import pytest
 from analysis_fixtures import install_analysis_snapshot
+from s2_analysis_baseline import run_llm_pipeline as s2_pipeline
 from s4_quality_fixtures import load_corpus, mock_comparison_record
 from test_analysis_invocations import analysis_transport
 from test_analysis_invocations import api as analysis_api
@@ -24,6 +25,14 @@ from src.services.lesson_snapshots import canonical_hash
 api = analysis_api
 connection_api = provider_api
 pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
+
+
+@pytest.fixture(autouse=True)
+def isolated_s2_replay(monkeypatch):
+    from src.services import analysis_pipeline
+
+    # shortcut: candidate remains S2 replay, switch the SDK fixture and expectations with the S4 quality harness.
+    monkeypatch.setattr(analysis_pipeline, "run_llm_pipeline", s2_pipeline)
 
 
 @pytest.fixture

@@ -492,7 +492,10 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
 
     student.model.verification_state = {
         **student.model.verification_state,
-        "analysis": dict(student.model.verification_state["student"]),
+        "analysis": {
+            **student.model.verification_state["student"],
+            "role_contract_version": "s4-v2",
+        },
     }
     envelope = deepcopy(data.session.config_snapshot_json)
     envelope["config"]["analysis"].update(
@@ -512,9 +515,7 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
     analyzed = await client.post(f"{path}/analyze")
     assert analyzed.status_code == 200
     assert analyzed.json()["feedback_status"] == "failed"
-    assert (
-        len(inputs) >= 2
-    )  # Greeting/classification and synthesis see real inputs.
+    assert len(inputs) == 1  # One analysis reviews all durable inputs.
     encoded = json.dumps(inputs)
     assert "Preserved teacher question" in encoded
     assert "UNSAVED PARTIAL OUTPUT" not in encoded

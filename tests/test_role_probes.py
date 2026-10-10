@@ -30,32 +30,50 @@ MENTOR_NEGATIVE = {
     "reason_summary": "PRIVATE-REASON",
 }
 CLASSIFICATION = {
-    "label": "A",
-    "confidence": 0.9,
-    "reasoning": {"summary": "탐색 질문", "improved_sentence": None},
-}
-SYNTHESIS = {
+    "schema_version": 2,
+    "message_classifications": [
+        dict(
+            message_id=100,
+            disposition="classified",
+            rubric_id="A",
+            quote="Why?",
+            reason="탐색 질문",
+        )
+    ],
+    "misconception_findings": [
+        dict(
+            kind="maintained",
+            claim="학생의 설명에서 설정된 오개념을 관찰했습니다.",
+            evidence=[dict(message_id=101, quote="그냥 덧셈이니까요.")],
+        )
+    ],
     "brief_feedback": ["학생의 생각을 탐색했어요."],
     "strengths": [
-        {"message_id": 100, "quote": "Why?", "reason": "근거를 물었어요."}
+        dict(message_id=100, quote="Why?", reason="근거를 물었어요.")
     ],
     "improvements": [
-        {
-            "student_message_id": 101,
-            "student_quote": "그냥 덧셈이니까요.",
-            "missed_reason": "풀이 근거를 탐색해요.",
-            "alternative_question": "분모가 다르면 어떻게 될까?",
-            "alternative_reason": "분모의 의미를 생각해요.",
-        }
+        dict(
+            message_id=101,
+            quote="그냥 덧셈이니까요.",
+            missed_reason="풀이 근거를 탐색해요.",
+            alternative_question="분모가 다르면 어떻게 될까?",
+            alternative_reason="분모의 의미를 생각해요.",
+        )
     ],
     "dialogue_coaching": [
-        {
-            "message_id": 101,
-            "role": "student",
-            "marker": "key_clue",
-            "note": "오개념 근거예요.",
-        }
+        dict(
+            message_id=101,
+            role="student",
+            marker="key_clue",
+            quote="그냥 덧셈이니까요.",
+            note="오개념 근거예요.",
+        )
     ],
+}
+SYNTHESIS = {
+    key: value
+    for key, value in CLASSIFICATION.items()
+    if key != "message_classifications"
 }
 
 
@@ -148,7 +166,7 @@ async def test_capacity_definition_stales_all_roles_and_explicit_probe_refreshes
     assert current["verification_state"]["mentor"]["status"] == "stale"
     assert current["verification_state"]["analysis"]["status"] == "stale"
     assert ROLE_CONTRACT_VERSIONS == dict(
-        student="s1-v1", mentor="s3-v1", analysis="s1-v1"
+        student="s1-v1", mentor="s3-v1", analysis="s4-v2"
     )
     assert len(calls) == 2 and all(c.is_closed() for c in clients)
     assert (await write(api, "models/1/update", **update)).status_code == 200
@@ -238,9 +256,11 @@ async def test_analysis_probe_validates_existing_classification_and_synthesis(
         assert schema["type"] == "json_schema" and schema["strict"] is True
         assert schema["schema"]["additionalProperties"] is False
         if len(calls) == 2:
-            assert json.loads(payload["input"][0]["content"]) == [
-                {"id": 100, "role": "teacher", "content": "Why?"},
-                {"id": 101, "role": "student", "content": "그냥 덧셈이니까요."},
+            assert json.loads(payload["input"][0]["content"])[
+                "validated_evidence"
+            ] == [
+                dict(message_id=100, quote="Why?"),
+                dict(message_id=101, quote="그냥 덧셈이니까요."),
             ]
         return httpx2.Response(
             200,
@@ -272,8 +292,8 @@ async def test_analysis_probe_validates_existing_classification_and_synthesis(
             )
         ).all()
         assert rows == [
-            ("analysis", "classification", "completed", 1),
-            ("analysis", "synthesis", "completed", 1),
+            ("analysis", "unified", "completed", 1),
+            ("analysis", "merge", "completed", 1),
         ]
 
 
@@ -289,14 +309,14 @@ async def test_analysis_probe_validates_existing_classification_and_synthesis(
         ("mentor", 2, "empty", "empty_response"),
         ("analysis", 1, "label", "invalid_reference"),
         ("analysis", 1, "confidence", "invalid_output"),
-        ("analysis", 1, "low", "invalid_output"),
+        ("analysis", 1, "low", "invalid_reference"),
         ("analysis", 1, "summary_empty", "empty_response"),
         ("analysis", 2, "id", "invalid_reference"),
         ("analysis", 2, "quote", "invalid_reference"),
-        ("analysis", 2, "quote_empty", "invalid_reference"),
-        ("analysis", 2, "quote_whitespace", "invalid_reference"),
-        ("analysis", 2, "student_quote_empty", "invalid_reference"),
-        ("analysis", 2, "student_quote_whitespace", "invalid_reference"),
+        ("analysis", 2, "quote_empty", "invalid_output"),
+        ("analysis", 2, "quote_whitespace", "invalid_output"),
+        ("analysis", 2, "student_quote_empty", "invalid_output"),
+        ("analysis", 2, "student_quote_whitespace", "invalid_output"),
         ("analysis", 2, "role", "invalid_reference"),
         ("analysis", 2, "improvement_id", "invalid_reference"),
         ("analysis", 2, "coaching_role", "invalid_reference"),
@@ -341,13 +361,15 @@ async def test_role_failure_stops_bundle_and_records_safe_error(
         if mode == "reason_empty":
             value["reason_summary"] = " "
         if mode == "label":
-            value["label"] = "invented"
+            value["message_classifications"][0]["rubric_id"] = "invented"
         if mode == "confidence":
             value["confidence"] = 2.0
         if mode == "low":
-            value["label"] = "B"
+            value["message_classifications"][0][
+                "disposition"
+            ] = "non_analyzable"
         if mode == "summary_empty":
-            value["reasoning"]["summary"] = " "
+            value["brief_feedback"] = [" "]
         if mode == "id":
             value["strengths"][0]["message_id"] = 999
         if mode == "quote":
@@ -357,24 +379,23 @@ async def test_role_failure_stops_bundle_and_records_safe_error(
                 "" if mode == "quote_empty" else " "
             )
         if mode in {"student_quote_empty", "student_quote_whitespace"}:
-            value["improvements"][0]["student_quote"] = (
+            value["improvements"][0]["quote"] = (
                 "" if mode == "student_quote_empty" else " "
             )
         if mode == "role":
             value["strengths"][0]["message_id"] = 101
         if mode == "improvement_id":
-            value["improvements"][0]["student_message_id"] = 100
+            value["improvements"][0]["message_id"] = 999
         if mode == "coaching_role":
             value["dialogue_coaching"][0]["role"] = "teacher"
         if mode == "feedback_length":
-            value["brief_feedback"] = ["가" * 71]
+            value["brief_feedback"] = ["가" * 301]
         if mode == "question_length":
-            value["improvements"][0]["alternative_question"] = "가" * 61
+            value["improvements"][0]["alternative_question"] = "가" * 201
         if mode == "marker":
             value["dialogue_coaching"][0]["marker"] = "invented"
         if mode == "empty" and role == "analysis":
-            value["strengths"] = []
-            value["improvements"] = []
+            value["brief_feedback"] = []
         content = '{"PRIVATE-OUTPUT":' if mode == "json" else json.dumps(value)
         if mode == "empty" and role == "mentor":
             content = ""

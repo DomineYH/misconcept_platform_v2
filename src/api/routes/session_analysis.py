@@ -86,6 +86,8 @@ async def analyze_session_endpoint(
         existing_summary
         and analysis_status(existing_summary, existing_report) != "failed"
     ):
+        if existing_report is not None and existing_report.version == 2:
+            return await load_analysis_response(session_id, db)
         return summary_response(existing_summary, existing_report)
 
     snapshot = await load_analysis_lesson(db, session_id, user.id)
@@ -95,7 +97,11 @@ async def analyze_session_endpoint(
         else []
     )
     try:
-        return await analyze_session(session_id, session, db, actor_id=user.id)
+        saved = await analyze_session(session_id, session, db, actor_id=user.id)
+        _, report = await load_summary(session_id, db)
+        if report is not None and report.version == 2:
+            return await load_analysis_response(session_id, db)
+        return saved
     except IntegrityError as e:
         return await handle_duplicate_session_state(
             session_id, label_names, db, e
@@ -141,6 +147,11 @@ async def get_analysis_page(
             "request": request,
             "user": user,
             "session_id": session_id,
+            **(
+                {"analysis_result_url": f"/sessions/{session_id}/analysis"}
+                if "accepted_report" in analysis_data
+                else {}
+            ),
             **analysis_data,
         },
     )
@@ -164,6 +175,11 @@ async def get_analysis_modal(
             "request": request,
             "user": user,
             "session_id": session_id,
+            **(
+                {"analysis_result_url": f"/sessions/{session_id}/analysis"}
+                if "accepted_report" in analysis_data
+                else {}
+            ),
             **analysis_data,
         },
     )

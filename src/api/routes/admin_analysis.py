@@ -85,7 +85,7 @@ async def analysis_page(
                 "label": analysis_display(session)[1].get(
                     analysis.label, analysis.label
                 ),
-                "confidence": analysis.confidence or 0,
+                "confidence": analysis.confidence,
                 "reasoning": parse_reasoning(analysis.meta_json),
                 "session_id": session.id,
                 **session_display(session),
@@ -135,7 +135,7 @@ async def analysis_page(
 
     stats = {
         "total_analyses": total,
-        "avg_confidence": avg_conf_result or 0,
+        "avg_confidence": avg_conf_result,
         "most_common_label": most_common_label,
     }
 

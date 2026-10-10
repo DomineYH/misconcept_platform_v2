@@ -29,8 +29,16 @@ class AnalysisCaller:
         self.model = selection.model_id
         self.actor_id = actor_id or owner_id
 
-    async def structured(self, prompt, schema, operation, *, normalize=None):
-        # Each parallel call gets its own short-lived DB session.
+    async def structured(
+        self,
+        prompt,
+        schema,
+        operation,
+        *,
+        normalize=None,
+        validation_context=None,
+    ):
+        # No database transaction spans the provider call.
         async with self.factory() as db:
             connection, model, options = await resolve_frozen_model(
                 db, self.selection, "analysis"
@@ -38,7 +46,10 @@ class AnalysisCaller:
             from src.services.analysis_pipeline import load_analysis_lesson
 
             await load_analysis_lesson(db, self.session_id, self.actor_id)
-        validation = {"actor_id": self.actor_id}
+        validation = (
+            validation_context if validation_context is not None else {}
+        )
+        validation["actor_id"] = self.actor_id
         if normalize:
             validation["normalize"] = normalize
         request = StructuredRequest(
@@ -91,6 +102,14 @@ class AnalysisCaller:
                 if event.type == "interrupted":
                     raise asyncio.CancelledError
                 if event.type != "completed":
+                    # The ledger fails validation; only verified items remain usable.
+                    if validation.get(
+                        "analysis_errors"
+                    ) and event.error_code in {
+                        "invalid_output",
+                        "invalid_reference",
+                    }:
+                        return validation["validated_analysis"], legacy_usage
                     raise InvocationError(event.error_code)
                 return (
                     validation.get("normalized", event.structured),

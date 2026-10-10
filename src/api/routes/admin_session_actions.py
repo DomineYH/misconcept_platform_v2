@@ -17,18 +17,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
-from src.api.routes.session_analysis import AnalysisRequest
 from src.api.routes.session_helpers import (
     mark_session_ended,
     require_native_session,
 )
+from src.api.schemas import AnalysisRequest
 from src.config import config
 from src.models.session import Session
 from src.models.user import User
 from src.services.analysis_results import (
     load_analysis_response as _load_analysis_response,
 )
-from src.services.analysis_runs import request_analysis
+from src.services.analysis_runs import (
+    cancel_analysis,
+    get_run,
+    request_analysis,
+    run_response,
+)
 from src.services.session_history import session_display
 
 router = APIRouter()
@@ -277,8 +282,6 @@ async def get_admin_analysis_run(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    from src.services.analysis_runs import get_run, run_response
-
     run = await get_run(db, session_id, run_id)
     session = await db.get(Session, session_id)
     if session is None or session.deleted_at is not None:
@@ -296,8 +299,6 @@ async def cancel_admin_analysis_run(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    from src.services.analysis_runs import cancel_analysis, get_run
-
     await get_run(db, session_id, run_id)
     session = await db.get(Session, session_id)
     if session is None or session.deleted_at is not None:

@@ -22,9 +22,9 @@ from src.models.question_analysis import QuestionAnalysis
 from src.models.session import Session
 from src.models.session_summary import SessionSummary
 from src.models.user import User
+from src.services.analysis_projection import analysis_status
 from src.services.analysis_results import analysis_display
 from src.services.session_history import session_display
-from src.utils.session_feedback import FALLBACK_FEEDBACK
 
 ANALYSIS_COLUMNS = [
     "analysis_schema_version",
@@ -79,27 +79,14 @@ async def _analysis_exports(db, summaries):
     for sid, summary in summaries.items():
         report, run = reports.get(sid), runs.get(sid)
         payload = json.loads(report.payload_json) if report else {}
-        status = "unknown"
-        if report:
-            status = (
-                payload.get("metadata", {}).get("outcome", report.status)
-                if report.version == 2 or report.status == "failed"
-                else "legacy"
-            )
-        elif summary and summary.feedback != FALLBACK_FEEDBACK:
-            status = "legacy"
-        elif run:
-            status = run.status
-        elif summary:
-            status = "failed"
+        status = analysis_status(summary, report, run, legacy=True)
+        is_v2 = report is not None and report.version == 2
         common = dict(
             analysis_schema_version=report.version if report else "unknown",
             analysis_status=status,
         )
         coverage = (
-            payload.get("metadata", {}).get("coverage")
-            if report and report.version == 2
-            else None
+            payload.get("metadata", {}).get("coverage") if is_v2 else None
         )
         summary_columns = dict(
             analysis_coverage_json=(
@@ -112,7 +99,7 @@ async def _analysis_exports(db, summaries):
                     payload.get("misconception_findings", []),
                     ensure_ascii=False,
                 )
-                if report and report.version == 2
+                if is_v2
                 else ""
             ),
         )
@@ -121,7 +108,7 @@ async def _analysis_exports(db, summaries):
             if coverage
             else {}
         )
-        if report and report.version == 2:
+        if is_v2:
             dispositions.update(
                 {
                     item["message_id"]: item["disposition"]

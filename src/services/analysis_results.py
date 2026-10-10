@@ -18,7 +18,9 @@ from src.models import (
     User,
 )
 from src.models.provider_connection import now
-from src.services.analysis_projection import public_analysis
+from src.services.analysis_pipeline import load_analysis_lesson
+from src.services.analysis_plan import load_plan, public_plan
+from src.services.analysis_projection import analysis_status, public_analysis
 from src.services.lesson_snapshots import read_lesson_snapshot
 from src.services.session_history import session_display
 from src.utils.analysis_helpers import parse_reasoning
@@ -39,21 +41,6 @@ def analysis_display(session):
     return analysis.classification_enabled, {
         r.id: r.name for r in analysis.rubric
     }
-
-
-def analysis_status(summary, report):
-    if report is not None:
-        if (
-            report.version == 2
-            and json.loads(report.payload_json)
-            .get("metadata", {})
-            .get("outcome")
-            == "no_dialogue"
-        ):
-            return "no_dialogue"
-        return report.status
-    # Compatibility only: old fallback rows predate explicit report status.
-    return "failed" if summary.feedback == FALLBACK_FEEDBACK else "legacy"
 
 
 def summary_response(summary, report):
@@ -106,7 +93,7 @@ async def save_analysis(
         await db.execute(text("BEGIN IMMEDIATE"))
         run = await db.get(GenerationRun, run_id) if run_id else None
         if run_id:
-            from src.services.analysis_pipeline import load_analysis_lesson
+            # local import: cycle with analysis_runs, which persists results here.
             from src.services.analysis_runs import RUN_SECONDS
 
             payload.setdefault("metadata", {}).update(
@@ -153,9 +140,8 @@ async def save_analysis(
         summary, report = await load_summary(session_id, db)
         if summary:
             current = analysis_status(summary, report)
-            preserve = (
-                status == "failed"
-                or (status == "degraded" and current in {"ok", "legacy"})
+            preserve = status == "failed" or (
+                status == "degraded" and current in {"ok", "legacy"}
             )
             if preserve:
                 response = summary_response(summary, report)
@@ -404,8 +390,6 @@ async def load_analysis_response(
                 or admin
             )
         ):
-            from src.services.analysis_plan import load_plan, public_plan
-
             plan = public_plan(await load_plan(db, session, regenerate=admin))
         response.update(
             public_analysis(

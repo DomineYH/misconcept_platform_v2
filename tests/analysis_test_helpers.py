@@ -51,7 +51,7 @@ async def call_analysis_route(handler, request, session_id, user, db):
     """Keep preexisting service result assertions after async reservation."""
     import json
 
-    from src.api.routes.session_analysis import AnalysisRequest
+    from src.api.schemas import AnalysisRequest
     from src.services.analysis_results import load_analysis_response
     from src.services.analysis_runs import active_analyses
 

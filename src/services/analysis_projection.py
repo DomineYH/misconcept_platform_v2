@@ -5,6 +5,29 @@ import json
 from src.utils.session_feedback import FALLBACK_FEEDBACK
 
 
+def analysis_status(summary, report, run=None, *, legacy=False):
+    """Derive saved status; v1 display stays legacy while retry uses its status."""
+    if report is not None:
+        if (
+            report.version == 2
+            and json.loads(report.payload_json)
+            .get("metadata", {})
+            .get("outcome")
+            == "no_dialogue"
+        ):
+            return "no_dialogue"
+        return (
+            "legacy"
+            if legacy and report.version != 2 and report.status != "failed"
+            else report.status
+        )
+    if summary is not None and summary.feedback != FALLBACK_FEEDBACK:
+        return "legacy"
+    if run is not None:
+        return run.status
+    return "failed" if summary is not None else "unknown"
+
+
 def public_analysis(
     session,
     summary,
@@ -23,18 +46,7 @@ def public_analysis(
         if report
         else dict(brief_feedback=[summary.feedback] if summary else [])
     )
-    outcome = payload.get("metadata", {}).get(
-        "outcome",
-        (
-            report.status
-            if report
-            else (
-                "failed"
-                if summary and summary.feedback == FALLBACK_FEEDBACK
-                else "legacy"
-            )
-        ),
-    )
+    outcome = analysis_status(summary, report)
     accepted = None
     if (
         summary is not None
@@ -67,9 +79,7 @@ def public_analysis(
         accepted.update(
             schema_version=report.version if report else 1,
             run_id=payload.get("metadata", {}).get("run_id"),
-            status=(
-                report.status if report and report.version == 2 else "legacy"
-            ),
+            status=analysis_status(summary, report, legacy=True),
             created_at=(
                 report.created_at if report else summary.created_at
             ).isoformat(),
@@ -117,6 +127,7 @@ def public_analysis(
     elif latest is not None and latest.error_code:
         latest_run["error_code"] = latest.error_code
     if run is not None:
+        # local import: cycle with analysis_runs via analysis_results.
         from src.services.analysis_runs import run_state
 
         latest_run = run_state(run, report)

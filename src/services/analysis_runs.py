@@ -7,10 +7,15 @@ from datetime import timezone
 from uuid import uuid4
 
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.api.routes.session_helpers import (
+    require_native_session,
+    validate_scenario_access,
+)
 from src.models import GenerationRun, Message, Session, User
 from src.models.provider_connection import now
 from src.services import analysis_pipeline
@@ -18,8 +23,9 @@ from src.services.analysis_chunks import run_chunk_pipeline as chunk_executor
 from src.services.analysis_pipeline import (
     load_analysis_lesson,
 )
+from src.services.analysis_plan import load_plan, public_plan
+from src.services.analysis_projection import analysis_status
 from src.services.analysis_results import (
-    analysis_status,
     load_analysis_response,
     load_summary,
     save_analysis,
@@ -28,6 +34,7 @@ from src.services.call_admission import execution_lock
 from src.services.generation_runs import conflict, digest
 from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
+from src.services.lesson_snapshots import read_lesson_snapshot
 
 logger = logging.getLogger(__name__)
 RUN_SECONDS = 900
@@ -123,6 +130,14 @@ async def existing_reservation(
     return None
 
 
+async def plan_response(
+    db, session_id, plan, status_code, *, admin=False, **fields
+):
+    response = await load_analysis_response(session_id, db, admin=admin)
+    response.update(plan=public_plan(plan), _http_status=status_code, **fields)
+    return response, None
+
+
 async def reserve_analysis(
     factory,
     session_id,
@@ -143,15 +158,11 @@ async def reserve_analysis(
                 not user.is_admin and session.teacher_id != actor_id
             ):
                 raise HTTPException(403, detail="Forbidden")
-            from src.api.routes.session_helpers import require_native_session
-
             require_native_session(session)
             if not session.ended_at:
                 raise HTTPException(
                     400, detail="Session must be ended before analysis"
                 )
-            from src.services.lesson_snapshots import read_lesson_snapshot
-
             if regenerate and not user.is_admin:
                 raise HTTPException(403, detail="Forbidden")
             lesson = read_lesson_snapshot(session)
@@ -165,8 +176,6 @@ async def reserve_analysis(
                     .order_by(Message.created_at, Message.id)
                 )
             )
-            from src.services.analysis_plan import load_plan, public_plan
-
             plan = await load_plan(db, session, regenerate=regenerate)
             fingerprint = digest(
                 dict(
@@ -205,45 +214,38 @@ async def reserve_analysis(
                     None,
                 )
             if plan_hash is not None and plan_hash != plan["plan_hash"]:
-                from src.api.routes.session_helpers import (
-                    validate_scenario_access,
-                )
-
                 await validate_scenario_access(session.scenario_id, user, db)
-                response = await load_analysis_response(
-                    session_id, db, admin=user.is_admin
-                )
-                response.update(
-                    plan=public_plan(plan),
+                return await plan_response(
+                    db,
+                    session_id,
+                    plan,
+                    409,
+                    admin=user.is_admin,
                     detail=dict(code="plan_conflict"),
-                    _http_status=409,
                 )
-                return response, None
             lesson = await load_analysis_lesson(db, session_id, actor_id)
             connection, model, _ = await resolve_frozen_model(
                 db, lesson.config.analysis.resolved_model_config, "analysis"
             )
             if plan["mode"] == "blocked":
-                response = await load_analysis_response(
-                    session_id, db, admin=user.is_admin
-                )
-                response.update(
-                    plan=public_plan(plan),
+                return await plan_response(
+                    db,
+                    session_id,
+                    plan,
+                    422,
+                    admin=user.is_admin,
                     status="blocked",
                     code=plan["blocked_code"],
-                    _http_status=422,
                 )
-                return response, None
             if plan["mode"] == "chunked" and plan_hash is None:
-                response = await load_analysis_response(
-                    session_id, db, admin=user.is_admin
-                )
-                response.update(
-                    plan=public_plan(plan),
+                return await plan_response(
+                    db,
+                    session_id,
+                    plan,
+                    200,
+                    admin=user.is_admin,
                     status="plan_required",
-                    _http_status=200,
                 )
-                return response, None
             run_id = str(uuid4())
             run = GenerationRun(
                 id=run_id,
@@ -426,8 +428,6 @@ async def request_analysis(
     )
     if execution is not None:
         start_analysis(factory, execution)
-    from fastapi.responses import JSONResponse
-
     status_code = accepted.pop("_http_status", None)
     return JSONResponse(
         accepted,

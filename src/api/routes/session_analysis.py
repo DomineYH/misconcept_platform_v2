@@ -14,7 +14,7 @@ from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
 )
-from src.api.routes.student_generation import GenerationRequest
+from src.api.schemas import AnalysisRequest
 from src.config import config
 from src.models import (
     UiEvent,
@@ -23,12 +23,13 @@ from src.models import (
 from src.services.analysis_results import (
     load_analysis_response,
 )
+from src.services.analysis_runs import (
+    cancel_analysis,
+    get_run,
+    request_analysis,
+    run_response,
+)
 from src.services.export import CSVExporter
-
-
-class AnalysisRequest(GenerationRequest):
-    plan_hash: str | None = None
-
 
 router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
@@ -44,8 +45,6 @@ async def end_session(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Commit the end, then reserve analysis or return its confirmation plan."""
-    from src.services.analysis_runs import request_analysis
-
     session = await load_session(session_id, user, db)
     ended_at, _ = await mark_session_ended(session, db, force=True)
     request_id = (
@@ -77,8 +76,6 @@ async def analyze_session_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Reserve an analysis independently of the response connection."""
-    from src.services.analysis_runs import request_analysis
-
     await load_session(session_id, user, db)
     return await request_analysis(
         db, session_id, user.id, body.request_id, plan_hash=body.plan_hash
@@ -218,8 +215,6 @@ async def get_analysis_run(
     db: AsyncSession = Depends(get_db_session),
 ):
     await load_session(session_id, user, db)
-    from src.services.analysis_runs import get_run, run_response
-
     return await run_response(db, await get_run(db, session_id, run_id))
 
 
@@ -233,6 +228,4 @@ async def cancel_analysis_run(
     db: AsyncSession = Depends(get_db_session),
 ):
     await load_session(session_id, user, db)
-    from src.services.analysis_runs import cancel_analysis
-
     return await cancel_analysis(db, session_id, run_id, user.id)

@@ -68,7 +68,7 @@ for ordinary calls globally and per provider. Capacity refusals return 429 witho
 a queue. Each administrator can run one probe bundle. Disable/delete immediately
 block admission and request cancellation of every active credential revision.
 Limits and absolute deadlines are read for new calls; reducing limits preserves
-existing calls. Ordinary classification/synthesis and analysis_unified/analysis_merge calls may retry once;
+existing calls. Ordinary analysis_unified/analysis_chunk/analysis_merge calls may retry once;
 backoff returns capacity and reacquires it under the current limits. This service
 requires one asynchronous worker in one app instance. Student lesson calls now
 require an enabled, student-verified DB registration
@@ -298,3 +298,12 @@ the S2 baseline and S4 candidate executors with mocked SDK HTTP only.
 Actual educational approval remains separate work; release stays blocked
 until the education lead approves actual comparisons for every intended pilot
 model/config after separately authorized paid execution.
+
+S4-09 (#86) integration and cutover: [operations hand-off](docs/s4-cutover.md)
+records API/CSV changes, s4-v2 and shared capability v3 reverification,
+WAL-preserving migration 034/restore, rollback write boundaries and spec traceability.
+`tests/test_s4_integration.py` and `tests/test_s4_cutover.py` use temporary data
+and existing SDK mocks. S2 baseline execution is isolated under `tests/s2_*`;
+product runtime uses only v2 analysis. Technical completion remains
+`release_blocked` until separate paid comparison, education approval and
+production authorization have real records.

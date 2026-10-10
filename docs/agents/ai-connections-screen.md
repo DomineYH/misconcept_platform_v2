@@ -1,5 +1,11 @@
 # AI 연결·모델 화면 계약 (#41 → #42–#55)
 
+S4 현재 분석 계약과 전환은 [운영 인계](../s4-cutover.md)를 따른다.
+아래 S1/S2의 인사·개별 분류·종합 및 `Runtime*`,
+`QuestionClassification`/`SessionSynthesis` 설명은 과거 구현 기록이다.
+제품 실행은 v2 unified/chunk/merge와 `s4-v2` 역할 시험을 사용하며,
+구형 실행 코드는 격리된 `tests/s2_*` 비교 기준선에만 남는다.
+
 `GET /admin/ai`는 기존 관리자 인증으로 템플릿만 반환한다. 화면 진입,
 새로고침, 재접속은 제공자를 호출하거나 시험을 시작하지 않는다.
 `static/js/ai-connections.js`가 아래 API를 소비한다. A2는 연결 조회와 키 저장/교체/활성 변경/삭제를 실제 DB에 연결한다. A3는 OpenAI 비생성 목록·모델 등록/편집·singleton 설정을 연결한다. A5는 OpenAI 학생 역할 시험과 시도 원장을, A7은 멘토/분석 시험을 연결한다. 없는 API는 안전한 설정 불가 안내를 표시한다.

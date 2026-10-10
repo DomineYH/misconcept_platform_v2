@@ -10,7 +10,7 @@
 | 추가 열 | 의미 |
 | --- | --- |
 | `analysis_schema_version` | 저장된 구조화 보고서 버전. 보고서가 없으면 `unknown` |
-| `analysis_status` | 채택된 보고서의 `ok`/`degraded`/`failed`/`no_dialogue`; v1/요약만 있으면 `legacy`. 채택된 결과가 없으면 최신 실행 상태, 실행도 없으면 `unknown` |
+| `analysis_status` | 채택된 보고서의 `ok`/`degraded`/`failed`/`no_dialogue`; 실패 v1은 `failed`, 그 외 v1/과거 정상 요약은 `legacy`. 채택된 결과가 없으면 최신 실행 상태, 실행도 없지만 서버 fallback 요약이 있으면 `failed`, 결과·실행·요약이 모두 없으면 `unknown` |
 | `analysis_coverage_json` | v2 summary 행에만 실제 서버 범위 JSON. 과거 결과와 message 행은 빈 값 |
 | `misconception_findings_json` | v2 summary 행에만 저장된 관찰 배열 JSON. 검증된 관찰이 없는 v2는 `[]`, 과거 결과와 message 행은 빈 값 |
 | `message_analysis_disposition` | 해당 교사 message 행에만 `classified`/`non_analyzable`/`unclassified` 또는 서버가 기록한 `missing`. 알 수 없는 과거/미채택 분류는 `unknown`; 분류 off와 다른 역할/summary 행은 빈 값 |

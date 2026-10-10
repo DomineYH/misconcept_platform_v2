@@ -1,5 +1,16 @@
 import {readSSE} from './student-sse.js';
 
+function failureText(code) {
+  if (['timeout_connect', 'timeout_first_output', 'timeout_total'].includes(code)) {
+    return '멘토 응답 대기 시간이 초과되었습니다. 멘토를 다시 요청해주세요.';
+  }
+  return {
+    invalid_output:'멘토 응답 형식이 올바르지 않습니다. 멘토를 다시 요청하거나 관리자에게 설정 확인을 요청해주세요.',
+    refused:'멘토 응답이 거절되었습니다. 멘토를 다시 요청하거나 관리자에게 설정 확인을 요청해주세요.',
+    context_limit:'입력이 너무 큽니다. 질문을 줄이거나 관리자에게 수업 설정 확인을 요청해주세요.'
+  }[code] || '멘토 코칭 생성에 실패했습니다.';
+}
+
 export function mountMentorStream(ui) {
   const container = document.getElementById('messages-container');
   if (container.dataset.mentorStream) return;
@@ -92,7 +103,7 @@ export function mountMentorStream(ui) {
       }
     } else if (['failed', 'interrupted', 'cancelled'].includes(data.status)) {
       finish(turn, data.status, data.status === 'cancelled' ?
-        '대화가 종료되어 멘토를 다시 요청할 수 없습니다.' : '멘토 코칭 생성에 실패했습니다.', data.retryable);
+        '대화가 종료되어 멘토를 다시 요청할 수 없습니다.' : failureText(data.code || data.error_code), data.retryable);
       if (data.status === 'cancelled') ui.end();
     } else {
       turn.runId = data.run_id;
@@ -197,6 +208,8 @@ export function mountMentorStream(ui) {
           finish(turn, 'failed', '관리자에게 AI 연결과 멘토 모델 검증을 요청해주세요.', true);
         } else if (response.status === 429 && data.code === 'call_limit_reached') {
           finish(turn, 'failed', 'AI 호출이 많습니다. 잠시 후 멘토를 다시 요청해주세요.', true);
+        } else if (response.status === 422 && data.code === 'context_limit') {
+          finish(turn, 'failed', failureText(data.code));
         } else {
           finish(turn, 'failed', '멘토 요청을 처리하지 못했습니다.', ![400, 401, 403, 404, 422].includes(response.status));
         }

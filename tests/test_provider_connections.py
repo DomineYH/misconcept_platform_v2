@@ -29,6 +29,10 @@ async def api(data, monkeypatch):
     reauth_limiter.storage.reset()
     monkeypatch.setattr(migrate, "engine", data.engine)
     await migrate.run_all_migrations(through=30)
+    await migrate.run_migration(
+        migrate.DIRECTORY / "032_mentor_reason_summary.sql"
+    )
+    await migrate.run_migration(migrate.DIRECTORY / "033_context_budget.sql")
     from legacy_models import native_writer_defaults
 
     native_writer_defaults(data.engine.url.database)

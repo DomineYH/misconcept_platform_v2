@@ -170,6 +170,11 @@ async def test_wal_backup_upgrade_readers_and_restore(
             async with fresh_engine.connect() as conn:
                 assert await schema(conn) == upgraded_schema
 
+            # Current ORM readers require the nullable context evidence column.
+            monkeypatch.setattr(migrate, "engine", copy_engine)
+            await migrate.run_migration(
+                migrate.DIRECTORY / "033_context_budget.sql"
+            )
             data.factory = async_sessionmaker(
                 copy_engine, expire_on_commit=False, autoflush=False
             )

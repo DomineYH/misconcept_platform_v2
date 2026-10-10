@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from lesson_fixtures import configure_mentor
+from lesson_fixtures import configure_mentor, mentor_output
 from sqlalchemy import delete, select
 from test_mentor_generation import (
     client,
@@ -95,9 +95,7 @@ async def test_mentor_rechecks_live_access_after_acceptance(
     mentor.responses.create.assert_not_awaited()
 
 
-async def test_auto_subcalls_share_the_first_overall_deadline(
-    data, client, mentor
-):
+async def test_single_auto_call_respects_overall_deadline(data, client, mentor):
     await configure_mentor(data, mentor, "auto", start_turn=1)
     login(client, data.owner)
     turn = await complete_turn(client, data)
@@ -112,13 +110,9 @@ async def test_auto_subcalls_share_the_first_overall_deadline(
 
     async def slow(**body):
         calls.append(body)
-        await asyncio.sleep(0.65)
+        await asyncio.sleep(1.1)
         return SimpleNamespace(
-            output_text=(
-                '{"is_repetitive":true,"is_inappropriate":false,"reason":"Condition met"}'
-                if "text" in body
-                else "Too late coaching"
-            ),
+            output_text=(mentor_output("Too late coaching", "Condition met")),
             usage=None,
         )
 
@@ -130,7 +124,7 @@ async def test_auto_subcalls_share_the_first_overall_deadline(
     )
     assert frames(result)[-1][0] == "run.failed"
     assert frames(result)[-1][1]["code"] == "timeout_total"
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert "Too late coaching" not in result.text
     async with data.factory() as db:
         attempts = (
@@ -141,7 +135,6 @@ async def test_auto_subcalls_share_the_first_overall_deadline(
             )
         ).all()
         assert [(row.operation, row.status) for row in attempts] == [
-            ("mentor_judgment", "completed"),
             ("mentor", "timed_out"),
         ]
 
@@ -167,7 +160,7 @@ async def test_auto_failure_is_consumed_once_and_manual_retry_is_allowed(
     assert mentor.responses.create.await_count == 1
     mentor.responses.create.side_effect = None
     mentor.responses.create.return_value = SimpleNamespace(
-        output_text="Manual recovery", usage=None
+        output_text=mentor_output("Manual recovery"), usage=None
     )
     retry = await client.post(
         mentor_url(data, turn),
@@ -190,15 +183,16 @@ async def test_inflight_auto_check_reserves_rolling_capacity_until_negative_resu
     async def upstream(**body):
         if body.get("stream"):
             return mentor.stream
-        if "text" in body:
+        if "자동 검사" in body["instructions"]:
             entered.set()
             await gate.wait()
             return SimpleNamespace(
-                output_text='{"is_repetitive":false,"is_inappropriate":false,"reason":"Condition not met"}',
+                output_text=mentor_output(None, "Condition not met"),
                 usage=None,
             )
         return SimpleNamespace(
-            output_text="Released reservation coaching", usage=None
+            output_text=mentor_output("Released reservation coaching"),
+            usage=None,
         )
 
     mentor.responses.create.side_effect = upstream
@@ -272,7 +266,7 @@ async def test_admitted_auto_checks_consume_interval_without_consuming_intervent
         if outcome == "failure" and checks == 1:
             raise RuntimeError("PRIVATE failure")
         return SimpleNamespace(
-            output_text='{"is_repetitive":false,"is_inappropriate":false,"reason":"Condition not met"}',
+            output_text=mentor_output(None, "Condition not met"),
             usage=None,
         )
 

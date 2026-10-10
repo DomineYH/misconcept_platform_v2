@@ -22,6 +22,9 @@ pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 async def long_dialogue(data, monkeypatch):
     monkeypatch.setattr(migrate, "engine", data.engine)
     await migrate.run_all_migrations(through=30)
+    await migrate.run_migration(
+        migrate.DIRECTORY / "032_mentor_reason_summary.sql"
+    )
     # Timestamps tie and insertion order opposes turn order deliberately.
     for index in range(60, 0, -1):
         for role in ("student", "tutor", "teacher"):

@@ -8,7 +8,7 @@ from src.services.invocation_types import (
     TextRequest,
 )
 from src.services.role_output_contracts import (
-    InterventionJudgment,
+    MentorOutput,
     QuestionClassification,
     SessionSynthesis,
 )
@@ -96,19 +96,26 @@ def probe_steps(provider, model_id, role, options, request_id):
         ]
     return [
         (
-            "judgment",
+            "manual_positive",
             "structured",
             request(
-                "교사-학생 대화의 반복과 부적절함을 판단하세요. reason은 판단 근거입니다.",
+                "교사를 위한 수동 도움입니다. should_intervene=true와 공백이 아닌 feedback 코칭을 "
+                "반환하세요. reason_summary에는 짧은 판단 설명을 쓰고 원문 추론은 쓰지 마세요.",
                 DIALOGUE,
-                InterventionJudgment,
+                MentorOutput,
+                {"trigger": "manual", "expected_should_intervene": True},
             ),
         ),
         (
-            "coaching",
-            "text",
+            "auto_negative",
+            "structured",
             request(
-                "교사에게만 한국어 존댓말로 짧은 코칭을 제공하세요.", DIALOGUE
+                "자동 멘토 검사입니다. 개입 조건은 교사가 도움을 명시적으로 요청한 경우입니다. "
+                "이 합성 대화는 조건을 충족하지 않으므로 should_intervene=false, feedback은 정확히 "
+                "빈 문자열로 반환하세요. reason_summary에는 짧은 판단 설명을 쓰세요.",
+                "교사: 어떤 방법으로 풀었니?\n학생: 분모를 같게 만들었어요.",
+                MentorOutput,
+                {"trigger": "auto", "expected_should_intervene": False},
             ),
         ),
     ]

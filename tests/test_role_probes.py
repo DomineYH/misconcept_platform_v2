@@ -19,7 +19,16 @@ from src.services.model_verification import ROLE_CONTRACT_VERSIONS
 api = probe_api
 pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 
-JUDGMENT = {"is_repetitive": False, "is_inappropriate": True, "reason": "반복"}
+MENTOR_POSITIVE = {
+    "should_intervene": True,
+    "feedback": "학생의 생각을 묻는 질문을 해보세요.",
+    "reason_summary": "PRIVATE-REASON",
+}
+MENTOR_NEGATIVE = {
+    "should_intervene": False,
+    "feedback": "",
+    "reason_summary": "PRIVATE-REASON",
+}
 CLASSIFICATION = {
     "label": "A",
     "confidence": 0.9,
@@ -50,25 +59,145 @@ SYNTHESIS = {
 }
 
 
-async def test_mentor_probe_validates_judgment_then_coaching_and_only_mentor(
+async def test_capacity_definition_stales_all_roles_and_explicit_probe_refreshes_db(
+    data, api, monkeypatch
+):
+    from src.services.model_capabilities import capabilities
+
+    body = await prepare(api)
+    definition = capabilities("openai", "gpt-5-mini")
+    old_version = "openai-2026-10-09-v1"
+    old_definition = {**definition, "definition_version": old_version}
+    old_definition.pop("combined_context_tokens")
+    async with data.engine.begin() as db:
+        await db.execute(
+            text(
+                "UPDATE model_config SET enabled=1,capability_definition_version=:old,"
+                "capabilities_json=:definition,verification_state=:states WHERE id=1"
+            ),
+            dict(
+                old=old_version,
+                definition=json.dumps(old_definition),
+                states=json.dumps(
+                    {
+                        role: dict(
+                            status="succeeded",
+                            credential_revision=1,
+                            connection_version=2,
+                            capability_definition_version=old_version,
+                            role_contract_version=contract,
+                        )
+                        for role, contract in ROLE_CONTRACT_VERSIONS.items()
+                    }
+                ),
+            ),
+        )
+        before = (
+            await db.execute(
+                text(
+                    "SELECT model_id,default_options_json FROM model_config WHERE id=1"
+                )
+            )
+        ).one()
+
+    async def upstream(request, payload):
+        if not payload.get("stream"):
+            return httpx2.Response(200, json=response_body())
+        from test_student_probe import sse
+
+        return httpx2.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sse(
+                "response.output_text.delta",
+                delta="Synthetic student answer",
+                sequence_number=0,
+                item_id="m",
+                output_index=0,
+                content_index=0,
+            )
+            + sse(
+                "response.completed",
+                response=response_body(),
+                sequence_number=1,
+            ),
+        )
+
+    clients, calls = sdk_transport(monkeypatch, upstream)
+    model = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert {
+        role: evidence["status"]
+        for role, evidence in model["verification_state"].items()
+    } == {role: "stale" for role in ROLE_CONTRACT_VERSIONS}
+    assert model["capabilities"]["combined_context_tokens"] == 400000
+    assert not calls and not clients
+    update = dict(
+        expected_version=1,
+        display_name=model["display_name"],
+        enabled=True,
+        default_options={},
+    )
+    assert (await write(api, "models/1/update", **update)).json()["detail"][
+        "code"
+    ] == "role_verification_required"
+    assert not calls
+    assert (await write(api, "models/1/probes", **body)).status_code == 202
+    assert (await completed(api, body["request_id"]))["status"] == "succeeded"
+    current = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert current["verification_state"]["student"]["status"] == "succeeded"
+    assert current["verification_state"]["mentor"]["status"] == "stale"
+    assert current["verification_state"]["analysis"]["status"] == "stale"
+    assert ROLE_CONTRACT_VERSIONS == dict(
+        student="s1-v1", mentor="s3-v1", analysis="s1-v1"
+    )
+    assert len(calls) == 2 and all(c.is_closed() for c in clients)
+    assert (await write(api, "models/1/update", **update)).status_code == 200
+    assert len(calls) == 2
+    async with data.engine.connect() as db:
+        stored = (
+            await db.execute(
+                text(
+                    "SELECT capabilities_json,capability_definition_version FROM model_config WHERE id=1"
+                )
+            )
+        ).one()
+        assert json.loads(stored[0]) == definition
+        assert stored[1] == definition["definition_version"]
+        assert (
+            await db.execute(
+                text(
+                    "SELECT model_id,default_options_json FROM model_config WHERE id=1"
+                )
+            )
+        ).one() == before
+        assert (
+            await db.execute(
+                text("SELECT context_budget_json FROM api_usage_log")
+            )
+        ).all() == [(None,), (None,)]
+
+
+async def test_mentor_probe_validates_manual_positive_then_auto_negative_and_only_mentor(
     data, api, monkeypatch
 ):
     body = {**await prepare(api), "role": "mentor"}
 
     async def upstream(request, payload):
-        if len(calls) == 1:
-            assert payload["text"]["format"]["strict"] is True
-            schema = payload["text"]["format"]["schema"]
-            assert schema["additionalProperties"] is False
-            assert set(schema["required"]) == {
-                "is_repetitive",
-                "is_inappropriate",
-                "reason",
-            }
-            content = json.dumps(JUDGMENT)
-        else:
-            assert "text" not in payload and not payload.get("stream")
-            content = "학생의 생각을 묻는 질문을 해보세요."
+        assert payload["text"]["format"]["strict"] is True
+        schema = payload["text"]["format"]["schema"]
+        assert schema["additionalProperties"] is False
+        assert set(schema["required"]) == {
+            "should_intervene",
+            "feedback",
+            "reason_summary",
+        }
+        assert not payload.get("stream")
+        assert ("수동" if len(calls) == 1 else "자동") in payload[
+            "instructions"
+        ]
+        content = json.dumps(
+            MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE
+        )
         return httpx2.Response(200, json=response_body(content))
 
     clients, calls = sdk_transport(monkeypatch, upstream, budget=1500)
@@ -77,6 +206,10 @@ async def test_mentor_probe_validates_judgment_then_coaching_and_only_mentor(
     assert (await completed(api, body["request_id"]))["status"] == "succeeded"
     model = (await api.get("/admin/ai/state")).json()["models"][0]
     assert model["verification_state"]["mentor"]["status"] == "succeeded"
+    assert (
+        model["verification_state"]["mentor"]["role_contract_version"]
+        == "s3-v1"
+    )
     assert model["verification_state"]["mentor"]["verified_at"]
     assert model["verification_state"]["student"]["status"] == "unverified"
     assert model["verification_state"]["analysis"]["status"] == "unverified"
@@ -90,8 +223,8 @@ async def test_mentor_probe_validates_judgment_then_coaching_and_only_mentor(
             )
         ).all()
         assert rows == [
-            ("mentor", "judgment", "completed", 1),
-            ("mentor", "coaching", "completed", 1),
+            ("mentor", "manual_positive", "completed", 1),
+            ("mentor", "auto_negative", "completed", 1),
         ]
 
 
@@ -147,6 +280,8 @@ async def test_analysis_probe_validates_existing_classification_and_synthesis(
 @pytest.mark.parametrize(
     "role,step,mode,code",
     [
+        ("mentor", 1, "manual_false", "invalid_output"),
+        ("mentor", 2, "auto_positive", "invalid_output"),
         ("mentor", 1, "json", "invalid_json"),
         ("mentor", 1, "type", "invalid_output"),
         ("mentor", 1, "reason_empty", "empty_response"),
@@ -181,12 +316,16 @@ async def test_role_failure_stops_bundle_and_records_safe_error(
 
     async def upstream(request, payload):
         value = deepcopy(
-            JUDGMENT
+            (MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE)
             if role == "mentor"
             else (CLASSIFICATION if len(calls) == 1 else SYNTHESIS)
         )
         if len(calls) != step:
             return httpx2.Response(200, json=response_body(json.dumps(value)))
+        if mode == "manual_false":
+            value = dict(MENTOR_NEGATIVE)
+        if mode == "auto_positive":
+            value = dict(MENTOR_POSITIVE)
         if mode == "transient":
             return httpx2.Response(
                 503,
@@ -198,9 +337,9 @@ async def test_role_failure_stops_bundle_and_records_safe_error(
                 },
             )
         if mode == "type":
-            value["is_repetitive"] = "false"
+            value["should_intervene"] = "false"
         if mode == "reason_empty":
-            value["reason"] = " "
+            value["reason_summary"] = " "
         if mode == "label":
             value["label"] = "invented"
         if mode == "confidence":
@@ -305,10 +444,8 @@ async def test_only_successful_role_can_run_and_failed_retest_revokes_success(
                 200, json=response_body('{"PRIVATE-OUTPUT":')
             )
         if role == "mentor":
-            content = (
-                json.dumps(JUDGMENT)
-                if "text" in payload
-                else "질문을 해보세요."
+            content = json.dumps(
+                MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE
             )
         else:
             content = json.dumps(
@@ -350,6 +487,7 @@ async def test_only_successful_role_can_run_and_failed_retest_revokes_success(
     assert (await api.get("/admin/ai/state")).json()["models"][0][
         "verification_state"
     ][role]["status"] == "succeeded"
+    original_version = ROLE_CONTRACT_VERSIONS[role]
     monkeypatch.setitem(ROLE_CONTRACT_VERSIONS, role, "s1-test-next")
     assert (await api.get("/admin/ai/state")).json()["models"][0][
         "verification_state"
@@ -360,7 +498,7 @@ async def test_only_successful_role_can_run_and_failed_retest_revokes_success(
             role=role,
             **{**arguments, "expected_model_version": 3},
         )
-    monkeypatch.setitem(ROLE_CONTRACT_VERSIONS, role, "s1-v1")
+    monkeypatch.setitem(ROLE_CONTRACT_VERSIONS, role, original_version)
     failing = True
     retest = {**body, "expected_version": 3, "request_id": str(uuid4())}
     assert (await write(api, "models/1/probes", **retest)).status_code == 202

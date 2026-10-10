@@ -4,6 +4,7 @@ import asyncio
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
 from test_scenario_api import scenario_payload as scenario_fixture
@@ -36,7 +37,12 @@ async def test_end_cancels_running_student_before_upstream_finishes(
     )
     try:
         await asyncio.wait_for(entered.wait(), 3)
-        from src.models import GenerationRun
+        from src.models import ApiUsageLog, GenerationRun
+
+        async with data.factory() as db:
+            attempt = (await db.scalars(select(ApiUsageLog))).one()
+            budget = attempt.context_budget_json
+            assert budget and attempt.status == "running"
 
         running = (
             await client.get(
@@ -110,6 +116,15 @@ async def test_end_cancels_running_student_before_upstream_finishes(
             )
         ).status_code == 400
         assert student.responses.create.await_count == 1
+        async with data.factory() as db:
+            attempt = (await db.scalars(select(ApiUsageLog))).one()
+            assert attempt.context_budget_json == budget
+            assert attempt.finished_at is not None
+            assert (
+                attempt.input_tokens is None
+                and attempt.estimated_cost_usd is None
+            )
+        assert "context_budget" not in str(snapshot)
     finally:
         gate.set()
         await task

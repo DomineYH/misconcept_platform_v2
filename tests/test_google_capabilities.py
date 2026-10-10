@@ -11,11 +11,26 @@ from src.services.model_capabilities import (
 )
 
 
+@pytest.mark.parametrize(
+    "limit,conflict", [(None, False), (1048576, False), (1024, True)]
+)
+def test_catalog_input_capacity_conflict_blocks_google_definition(
+    limit, conflict
+):
+    connection = SimpleNamespace(
+        provider="google",
+        catalog_models_json=[
+            {"model_id": "gemini-2.5-flash", "input_token_limit": limit}
+        ],
+    )
+    assert metadata_conflict("gemini-2.5-flash", connection) is conflict
+
+
 def test_stable_google_definition_preserves_budget_zero_and_rejects_level():
     definition = capabilities("google", "gemini-2.5-flash")
     assert (
         definition
-        and definition["definition_version"] == "google-2026-10-09-v1"
+        and definition["definition_version"] == "google-2026-10-10-v2"
     )
     assert (
         definition["text"]

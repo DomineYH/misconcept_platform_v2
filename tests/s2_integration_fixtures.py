@@ -52,6 +52,8 @@ async def installation(request, data, source, tmp_path, monkeypatch):
     try:
         if request.param == "fresh":
             await seed.seed_database()
+        else:
+            await migrate.run_all_migrations()
         async with factory() as db:
             group = await db.scalar(select(UserGroup).order_by(UserGroup.id))
             for username in ("admin", "owner", "other"):
@@ -112,17 +114,23 @@ async def authenticate(api, username):
     await api.get("/scenarios")
 
 
-def workflow_transport(monkeypatch, provider):
+def workflow_transport(monkeypatch, provider, *, budget=1024):
     """Only the provider's HTTP boundary is replaced; SDK parsing stays real."""
     from test_student_probe import response_body, sdk_transport, sse
 
     payloads, schemas = [], []
-    state = SimpleNamespace(fail_analysis=False)
+    state = SimpleNamespace(
+        fail_analysis=False,
+        structured_results=[],
+        student_answer="Student answer",
+    )
 
     def answer(body, schema):
         payloads.append(body)
         properties = (schema or {}).get("properties", {})
         schemas.append(properties)
+        if properties and state.structured_results:
+            return json.dumps(state.structured_results.pop(0))
         if state.fail_analysis and "brief_feedback" in properties:
             return "invalid JSON"
         if "results" in properties:
@@ -140,15 +148,15 @@ def workflow_transport(monkeypatch, provider):
                     dialogue_coaching=[],
                 )
             )
-        if "is_repetitive" in properties:
+        if "should_intervene" in properties:
             return json.dumps(
                 dict(
-                    is_repetitive=True,
-                    is_inappropriate=False,
-                    reason="Authored condition",
+                    should_intervene=True,
+                    feedback="Mentor coaching",
+                    reason_summary="Authored condition",
                 )
             )
-        return "Student answer" if body.get("stream") else "Mentor coaching"
+        return state.student_answer if body.get("stream") else "Mentor coaching"
 
     if provider == "openai":
 
@@ -169,7 +177,7 @@ def workflow_transport(monkeypatch, provider):
             return httpx2.Response(200, json=response_body(text))
 
         clients, calls = sdk_transport(
-            monkeypatch, upstream, budget=1024, key=KEY
+            monkeypatch, upstream, budget=budget, key=KEY
         )
     elif provider == "anthropic":
         from test_anthropic_catalog import sdk_transport

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.call_admission import admit_call
 from src.services.call_execution import execute_call
+from src.services.context_budget import fit_context
 from src.services.invocation_types import InvocationError, TextRequest
 from src.services.lesson_connections import resolve_frozen_model
 from src.services.lesson_snapshots import load_active_lesson
@@ -42,6 +43,25 @@ def build_student_input(lesson, teacher, history):
     return messages
 
 
+def build_student_request(
+    lesson, teacher, history, connection, model, options, request_id
+):
+    messages = build_student_input(lesson, teacher, history)
+    return fit_context(
+        TextRequest(
+            connection.provider,
+            model.model_id,
+            "student",
+            messages[0]["content"],
+            messages[1:],
+            options,
+            request_id,
+        ),
+        prior_pair_count=len(history) // 2,
+        configured_prior_turn_limit=lesson.config.runtime.context_turn_limit,
+    )
+
+
 class StudentBot:
     """Chatbot simulating student with specific misconception."""
 
@@ -54,6 +74,11 @@ class StudentBot:
         self, teacher_message: str
     ) -> tuple[str, Optional[dict]]:
         """Execute the frozen student role with current access and no retry."""
+        permit, request = await self.prepare_response(teacher_message)
+        return await self.invoke_response(permit, request)
+
+    async def prepare_response(self, teacher_message):
+        """Check required input and approve before a caller persists a new question."""
         factory = async_sessionmaker(
             self.db_session.bind, expire_on_commit=False, autoflush=False
         )
@@ -72,16 +97,15 @@ class StudentBot:
                 self.session_id,
                 limit=lesson.config.runtime.context_turn_limit,
             )
-            messages = build_student_input(lesson, teacher_message, history)
-        request = TextRequest(
-            connection.provider,
-            model.model_id,
-            "student",
-            messages[0]["content"],
-            messages[1:],
-            options,
-            str(uuid4()),
-        )
+            request = build_student_request(
+                lesson,
+                teacher_message,
+                history,
+                connection,
+                model,
+                options,
+                str(uuid4()),
+            )
         permit = await admit_call(
             factory,
             connection_id=connection.id,
@@ -94,6 +118,9 @@ class StudentBot:
             expected_model_version=model.config_version,
             model_options=options,
         )
+        return permit, request
+
+    async def invoke_response(self, permit, request):
         async with aclosing(
             execute_call(
                 permit,

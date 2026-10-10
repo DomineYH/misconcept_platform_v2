@@ -217,6 +217,7 @@ export function mountStudentStream(ui) {
 
   async function send(isRetry = false) {
     if (ui.isLocked() || leftPage || forbidden) return;
+    const previous = pending;
     if (isRetry) {
       if (!pending?.retryable || !['failed', 'interrupted', 'unknown'].includes(pending.status)) return;
       const resend = pending.status === 'unknown';
@@ -254,6 +255,29 @@ export function mountStudentStream(ui) {
       }
       if (response.status === 403) {
         deny();
+        return;
+      }
+      if (response.status === 422 && (await response.clone().json()).detail?.code === 'context_limit') {
+        status.textContent = '입력이 너무 큽니다. 질문을 줄이거나 관리자에게 수업 설정 확인을 요청해주세요. 요청은 아직 수락되지 않았습니다.';
+        if (!input.value) input.value = pending.content;
+        if (body.turn_id) {
+          pending = previous;
+          status.textContent += ' 기존 응답 미완료·대화 기록에 미포함';
+          teacher.dataset.requestId = pending.request_id;
+          student.querySelector('.message-bubble').textContent = pending.partial_text || '';
+          actions.hidden = false;
+          retry.disabled = !pending.retryable;
+          persist();
+        } else {
+          teacher.remove();
+          container.append(status);
+          student.remove();
+          pending = null;
+          sessionStorage.removeItem(storageKey);
+          sessionStorage.setItem(draftKey, input.value);
+        }
+        sync();
+        if (!input.disabled) input.focus();
         return;
       }
       if (response.status === 400 && (await response.clone().json()).detail === 'Session already ended') {

@@ -64,7 +64,7 @@ async def test_register_known_unknown_models_and_safe_initial_settings(
         and known["capabilities"]["streaming"]
         and known["capabilities"]["structured"]
     )
-    assert known["capabilities"]["checked_at"] == "2026-10-09"
+    assert known["capabilities"]["checked_at"] == "2026-10-10"
     assert known["capabilities"]["sources"]
     assert unknown["capabilities"] is None and unknown["default_options"] == {}
     assert (

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from lesson_fixtures import mentor_output
 from sqlalchemy import select
 from test_mentor_generation import (
     client,
@@ -70,11 +71,7 @@ async def test_capacity_refusal_has_no_run_counter_or_attempt_and_can_be_retried
         entered.set()
         await gate.wait()
         return SimpleNamespace(
-            output_text=(
-                '{"is_repetitive":true,"is_inappropriate":false,"reason":"Condition met"}'
-                if "text" in body
-                else "Capacity coaching"
-            ),
+            output_text=(mentor_output("Capacity coaching", "Condition met")),
             usage=None,
         )
 
@@ -140,13 +137,13 @@ async def test_capacity_refusal_has_no_run_counter_or_attempt_and_can_be_retried
     assert not active_calls and not registered_calls
 
 
-@pytest.mark.parametrize("operation", ["mentor", "mentor_judgment"])
+@pytest.mark.parametrize("trigger", ["manual", "auto"])
 async def test_disabling_connection_cancels_mentor_and_finalizes_unknown_usage(
-    data, client, mentor, caplog, operation
+    data, client, mentor, caplog, trigger
 ):
     from lesson_fixtures import LESSON_KEY
 
-    if operation == "mentor":
+    if trigger == "manual":
         turn, entered, cancelled = await waiting_mentor(data, client, mentor)
     else:
         from lesson_fixtures import configure_mentor
@@ -179,7 +176,7 @@ async def test_disabling_connection_cancels_mentor_and_finalizes_unknown_usage(
     await data.db.commit()
     payload = {
         "request_id": str(uuid4()),
-        "trigger": "manual" if operation == "mentor" else "auto",
+        "trigger": trigger,
     }
     pending = asyncio.create_task(
         client.post(mentor_url(data, turn), json=payload)
@@ -210,7 +207,7 @@ async def test_disabling_connection_cancels_mentor_and_finalizes_unknown_usage(
                 )
             ).one()
             assert (
-                attempt.operation == operation and attempt.status == "cancelled"
+                attempt.operation == "mentor" and attempt.status == "cancelled"
             )
             assert (
                 attempt.error_code == "interrupted"

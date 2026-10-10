@@ -6,11 +6,17 @@ from uuid import uuid4
 import httpx
 import httpx2
 import pytest
-from lesson_fixtures import install_connection, install_snapshot
+from lesson_fixtures import (
+    STUDENT_INSTRUCTION,
+    install_connection,
+    install_snapshot,
+)
 from sqlalchemy import select
 from test_scenario_api import client, login
 
-from src.models import ApiUsageLog, GenerationRun
+from src.models import ApiUsageLog, GenerationRun, Message
+from src.services import context_budget
+from src.services.invocation_types import TextRequest
 from src.services.model_capabilities import capabilities
 from src.services.provider_secrets import encrypt_key
 from src.services.student_bot import StudentBot
@@ -20,8 +26,9 @@ __all__ = ["client"]
 
 @pytest.mark.parametrize("provider", ["openai", "anthropic", "google"])
 @pytest.mark.parametrize("stream", [True, False])
+@pytest.mark.parametrize("trim", [False, True])
 async def test_student_uses_frozen_provider_and_native_options(
-    data, client, monkeypatch, provider, stream
+    data, client, monkeypatch, provider, stream, trim
 ):
     from test_provider_connections import KEY
     from test_student_generation import frames
@@ -57,14 +64,95 @@ async def test_student_uses_frozen_provider_and_native_options(
             max_output_tokens=1024, thinking={"budget": 0}, temperature=0.4
         ),
     }[provider]
-    await install_snapshot(data, connection, model, options=options)
+    await install_snapshot(
+        data,
+        connection,
+        model,
+        options=options,
+        context_turn_limit=2 if trim else 10,
+    )
+    expected_messages = [{"role": "user", "content": "Why {x}?"}]
+    if trim:
+        for index in range(1, 4):
+            turn_id, run_id = str(uuid4()), str(uuid4())
+            data.db.add(
+                GenerationRun(
+                    id=run_id,
+                    owner_id=data.owner.id,
+                    session_id=data.session.id,
+                    turn_id=turn_id,
+                    operation="student",
+                    request_id=str(uuid4()),
+                    input_hash="old",
+                    config_hash=data.session.config_hash,
+                    provider=provider,
+                    model=model.model_id,
+                    status="completed",
+                    result_kind="message",
+                )
+            )
+            data.db.add_all(
+                [
+                    Message(
+                        session_id=data.session.id,
+                        role="teacher",
+                        turn_id=turn_id,
+                        turn_index=index,
+                        content=f"Teacher {index} 한🙂",
+                    ),
+                    Message(
+                        session_id=data.session.id,
+                        role="student",
+                        turn_id=turn_id,
+                        turn_index=index,
+                        content=f"Student {index}",
+                        generation_run_id=run_id,
+                    ),
+                ]
+            )
+        expected_messages = [
+            {"role": "user", "content": "Teacher 3 한🙂"},
+            {"role": "assistant", "content": "Student 3"},
+        ] + expected_messages
+        expected = TextRequest(
+            provider,
+            model.model_id,
+            "student",
+            STUDENT_INSTRUCTION,
+            expected_messages,
+            options,
+            "estimate-fixture",
+        )
+        definition = capabilities(provider, model.model_id)
+        if provider == "google":
+            definition["input_token_limit"] = context_budget.estimate_input(
+                expected
+            )
+        else:
+            definition["combined_context_tokens"] = (
+                context_budget.estimate_input(expected) + 1024
+            )
+        monkeypatch.setattr(
+            context_budget, "capabilities", lambda *_: definition
+        )
     model.default_options_json = {"unknown_current_option": True}
     model.config_version += 1
     await data.db.commit()
     request_id = str(uuid4())
+
+    async def assert_started():
+        async with data.factory() as db:
+            attempt = (await db.scalars(select(ApiUsageLog))).one()
+            assert attempt.status == "running"
+            assert attempt.context_budget_json["reserved_output_tokens"] == 1024
+            assert (
+                attempt.input_tokens is None and attempt.raw_usage_json is None
+            )
+
     if provider == "openai":
 
         async def upstream(request, body):
+            await assert_started()
             if stream:
                 payload = sse(
                     "response.output_text.delta",
@@ -95,6 +183,7 @@ async def test_student_uses_frozen_provider_and_native_options(
         from test_anthropic_probes import stream_body
 
         async def upstream(request):
+            await assert_started()
             if stream:
                 return httpx2.Response(
                     200,
@@ -112,6 +201,7 @@ async def test_student_uses_frozen_provider_and_native_options(
         from test_google_invocations import sse as google_sse
 
         async def upstream(request):
+            await assert_started()
             if stream:
                 return httpx.Response(
                     200,
@@ -130,7 +220,13 @@ async def test_student_uses_frozen_provider_and_native_options(
         assert frames(result)[-1][0] == "output.completed", result.text
         assert frames(result)[-1][1]["message"]["content"] == "Answer"
         async with data.factory() as db:
-            run = (await db.scalars(select(GenerationRun))).one()
+            run = (
+                await db.scalars(
+                    select(GenerationRun).where(
+                        GenerationRun.request_id == request_id
+                    )
+                )
+            ).one()
             assert (run.provider, run.model, run.config_hash) == (
                 provider,
                 model.model_id,
@@ -148,12 +244,14 @@ async def test_student_uses_frozen_provider_and_native_options(
         assert body["reasoning"] == {"effort": "low"}
         assert body["max_output_tokens"] == 1024
         instruction = body["instructions"]
+        actual_messages = body["input"]
     elif provider == "anthropic":
         assert body["model"] == "claude-sonnet-4-6"
         assert body["max_tokens"] == 1024
         assert body["thinking"] == {"type": "disabled"}
         assert body["temperature"] == 0.4
         instruction = body["system"]
+        actual_messages = body["messages"]
     else:
         assert calls[0].url.path.endswith(
             "gemini-2.5-flash:"
@@ -165,6 +263,15 @@ async def test_student_uses_frozen_provider_and_native_options(
         )
         assert body["generationConfig"]["temperature"] == 0.4
         instruction = body["systemInstruction"]["parts"][0]["text"]
+        actual_messages = [
+            {
+                "role": "assistant" if item["role"] == "model" else "user",
+                "content": item["parts"][0]["text"],
+            }
+            for item in body["contents"]
+        ]
+    assert actual_messages == expected_messages
+    assert instruction == STUDENT_INSTRUCTION
     assert "Explain your thinking" in instruction
     assert "PRIVATE ANALYSIS" not in instruction
     assert all(
@@ -180,3 +287,25 @@ async def test_student_uses_frozen_provider_and_native_options(
         )
         assert attempt.session_id == data.session.id
         assert (attempt.run_id is not None) == stream
+        evidence = attempt.context_budget_json
+        assert evidence is not None
+        assert evidence["estimator"] == "utf8-v1"
+        assert evidence["reserved_output_tokens"] == 1024
+        assert evidence["capability_definition_version"] == version
+        assert evidence["configured_prior_turn_limit"] == (2 if trim else 10)
+        assert evidence["selected_prior_pairs"] == (2 if trim else 0)
+        assert (
+            evidence["kept_prior_pairs"]
+            == evidence["dropped_prior_pairs"]
+            == (1 if trim else 0)
+        )
+        assert evidence["target_pair_included"] is False
+        assert (
+            evidence["estimated_input_tokens"]
+            <= evidence["input_budget_tokens"]
+        )
+        assert attempt.input_tokens != evidence["estimated_input_tokens"]
+        if not stream:
+            assert len((await db.scalars(select(GenerationRun))).all()) == (
+                3 if trim else 0
+            )

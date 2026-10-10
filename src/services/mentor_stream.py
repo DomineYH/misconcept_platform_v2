@@ -1,4 +1,4 @@
-"""Final-only mentor SSE using the existing non-streaming judgment policy."""
+"""Final-only mentor SSE after the structured result is committed."""
 
 import asyncio
 import json
@@ -94,14 +94,9 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
         if cancelled.is_set():
             raise StudentStreamError("session_ended")
         bot = TutorBot(
-            factory=factory,
-            lesson=execution["lesson"],
-            history=execution["history"],
-            trigger=execution["trigger"],
-            owner_id=execution["owner_id"],
+            request=execution["request"],
             session_id=accepted["session_id"],
             run_id=accepted["run_id"],
-            request_id=accepted["request_id"],
             permit=execution["permit"],
         )
         task = asyncio.create_task(bot.generate_feedback())
@@ -127,13 +122,14 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                 raise StudentStreamError("session_ended")
             if task not in done:
                 continue
-            content, _ = task.result()
+            content, reason = task.result()
             try:
                 result = await finish_mentor(
                     factory,
                     accepted["run_id"],
                     status="completed",
                     content=content,
+                    reason_summary=reason,
                 )
             except Exception:
                 logger.error("Mentor final commit failed")

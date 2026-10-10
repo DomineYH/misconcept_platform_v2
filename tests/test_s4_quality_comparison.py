@@ -29,10 +29,17 @@ pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 
 @pytest.fixture(autouse=True)
 def isolated_s2_replay(monkeypatch):
-    from src.services import analysis_pipeline
+    from src.services import analysis_pipeline, analysis_runs
 
     # shortcut: candidate remains S2 replay, switch the SDK fixture and expectations with the S4 quality harness.
     monkeypatch.setattr(analysis_pipeline, "run_llm_pipeline", s2_pipeline)
+
+    async def mock_chunk_replay(*args, plan, **kwargs):
+        assert plan["mode"] == "chunked" and len(plan["chunks"]) <= 8
+        # shortcut: confirmed chunks replay S2 only, replace with #83's execution harness.
+        return await s2_pipeline(*args, **kwargs)
+
+    monkeypatch.setattr(analysis_runs, "chunk_executor", mock_chunk_replay)
 
 
 @pytest.fixture
@@ -142,6 +149,20 @@ async def test_mock_comparison_records_same_frozen_inputs_without_approval(
         response = await api.post(
             path, headers={"x-csrf-token": api.cookies["csrftoken"]}
         )
+        if sample["length"] == "long":
+            assert response.status_code == 200, response.text
+            assert response.json()["status"] == "plan_required"
+            plan = response.json()["plan"]
+            assert (
+                len(plan["chunks"])
+                == sample["planner_fixture"]["expected_chunks"]
+            )
+            assert calls == []  # No execution before explicit confirmation.
+            response = await api.post(
+                path,
+                json={"plan_hash": plan["plan_hash"]},
+                headers={"x-csrf-token": api.cookies["csrftoken"]},
+            )
         assert response.status_code == 200, response.text
         elapsed = perf_counter() - started
         login(api, data.owner)

@@ -190,7 +190,10 @@ async def install_snapshot(
         context="PRIVATE ANALYSIS",
         expected_understanding="PRIVATE ANSWER",
         instruction="PRIVATE EVALUATION",
-        resolved_model_config=selection,
+        resolved_model_config={
+            **selection,
+            "options": {**selection["options"], "max_output_tokens": 8192},
+        },
     )
     values["runtime"]["context_turn_limit"] = context_turn_limit
     envelope = dict(

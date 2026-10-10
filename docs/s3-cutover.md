@@ -158,3 +158,20 @@ historical HTTP/CSV/ACL behavior. `tests/test_s3_integration.py` and
 `tests/test_s3_load.py` reuse existing SDK fixtures and S1 load prior art. Their
 injected delay/failure results establish regression behavior only, not real
 provider p95, billing accuracy, educational quality or production readiness.
+
+## S4 analysis capacity addendum (#82)
+
+S4 keeps the S3 student/mentor `utf8-v1` policy unchanged. Capacity definition
+v3 adds limit-specific official sources and a 2026-10-11 check date for the
+same exact models; it also rejects a smaller explicit catalog capacity.
+As with v2, changing the shared definition stales **all** roles for affected
+models, even though only analysis gains a planner. Administrators must refresh
+the definition through the existing registration flow and explicitly reverify
+each needed role. Historical reports remain readable; no background paid
+reverification or snapshot/model/option substitution is performed.
+
+Analysis now uses the `s4-v2` role contract and a separate
+`utf8-v1-s4-20pct` planner. A low frozen output cap can block analysis before any
+provider call. A chunked plan requires explicit confirmation; execution remains
+unavailable until #83 supplies the chunk executor. No additional migration is
+needed for #82: migration 034 already provides `generation_run.plan_json`.

@@ -30,7 +30,7 @@ def test_stable_google_definition_preserves_budget_zero_and_rejects_level():
     definition = capabilities("google", "gemini-2.5-flash")
     assert (
         definition
-        and definition["definition_version"] == "google-2026-10-10-v2"
+        and definition["definition_version"] == "google-2026-10-11-v3"
     )
     assert (
         definition["text"]

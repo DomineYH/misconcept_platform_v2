@@ -4,7 +4,7 @@
   const statuses = {
     ok: '정상 분석', degraded: '부분 분석', failed: '분석 실패', legacy: '과거 분석',
     running: '분석 진행 중', cancelled: '분석 취소됨', interrupted: '분석 중단됨',
-    no_dialogue: '대화 없음',
+    no_dialogue: '대화 없음', ready: '분석 실행 전', plan_required: '분할 계획 확인 대기',
   };
   function node(parent, tag, text, className) {
     const el = document.createElement(tag);
@@ -89,7 +89,7 @@
           headers: {...getAnalysisCsrfHeaders(), 'Content-Type': 'application/json'},
           body: JSON.stringify(body),
         });
-        if (!response.ok && response.status !== 409) throw new Error();
+        if (!response.ok && ![409, 422, 501].includes(response.status)) throw new Error();
         const conflict = response.status === 409 ? (await response.clone().json()).detail : null;
         if (conflict?.code === 'request_conflict') {
           busy = false;
@@ -115,6 +115,10 @@
           ? '진행 중인 분석 실행의 상태를 확인했습니다.'
           : response.status === 409
           ? '계획이 변경되었습니다. 새 범위를 확인하고 실행을 다시 확인하세요.'
+          : data.code === 'chunk_execution_unavailable'
+          ? '분할 실행 기능이 아직 준비되지 않았습니다. 분석을 실행하지 않았습니다.'
+          : response.status === 422
+          ? '분석 계획의 한도를 초과해 실행하지 않았습니다.'
           : '분석 요청 결과를 확인하세요.';
       } catch {
         busy = false;
@@ -173,15 +177,16 @@
           if (statusError) button(controls, '실행 상태 다시 확인', checkStatus);
         }
         const plan = data.plan;
-        if (plan && !planHidden) {
+        if (plan && plan.status !== 'single' && !planHidden) {
           const section = node(root, 'section', null, 'analysis-section');
           node(section, 'h2', plan.status === 'blocked' ? '분석 계획 불가' : '분할 실행 전 확인');
           node(section, 'p', `대상 범위: 메시지 ${plan.message_ids.join(', ')} · ${plan.message_ids.length}개`);
           node(section, 'p', `${plan.chunks.length}개 분할 + 종합 · 예상 생성 호출 ${plan.generation_calls}회`);
-          node(section, 'p', `추정 입력 ${plan.estimated_input_tokens} · 추정 출력 ${plan.estimated_output_tokens} 토큰`);
+          node(section, 'p', `추정 입력 ${plan.estimated_input_tokens ?? '알 수 없음'} · 추정 출력 ${plan.estimated_output_tokens ?? '알 수 없음'} 토큰`);
           node(section, 'p', '추정치이며 실제 사용량이나 비용을 보장하지 않습니다.');
           node(section, 'p', `일시 장애 재시도 상한: 호출당 ${plan.retry_limit}회 · 최대 ${plan.generation_calls * (plan.retry_limit + 1)}회 시도`);
           plan.chunks.forEach((chunk, index) => node(section, 'p', `분할 ${index + 1}: 메시지 ${chunk.message_ids.join(', ')}`));
+          if (plan.merge) node(section, 'p', `종합 입력 상한 추정 ${plan.merge.estimated_input_tokens} · 종합 출력 추정 ${plan.merge.estimated_output_tokens} 토큰`);
           node(section, 'p', '기존 정상 결과는 새 정상 결과가 검증될 때까지 보존합니다. 부분 분석이나 실패로 덮어쓰지 않습니다.');
           if (plan.status === 'blocked') {
             const reasons = {
@@ -189,7 +194,9 @@
               too_many_chunks: '대화가 최대 8개 분할을 초과합니다.',
               merge_too_large: '종합할 분석 결과가 한도를 초과합니다.',
               unknown_limits: '분석에 필요한 모델 한도를 확인할 수 없습니다.',
+              catalog_limit_conflict: '카탈로그의 모델 한도가 검증된 한도보다 작아 실행할 수 없습니다.',
               output_limit_missing: '저장된 출력 상한이 없어 분석 계획을 만들 수 없습니다.',
+              output_limit_exceeded: '저장된 출력 상한이 모델의 최대 출력 한도를 초과합니다.',
             };
             node(section, 'p', reasons[plan.blocked_code] || '분석 범위와 한도를 확인할 수 없어 실행하지 않습니다.');
           } else if (data.permissions.can_analyze || data.permissions.can_retry || data.permissions.can_regenerate) {
@@ -201,7 +208,7 @@
               announcement.focus();
             });
           }
-        } else if (plan && planHidden) {
+        } else if (plan && plan.status !== 'single' && planHidden) {
           button(controls, '분할 계획 다시 보기', () => { planHidden = false; render(); });
         } else if (data.permissions.can_retry) button(controls, '분석 재시도', () => analyze());
         else if (data.permissions.can_regenerate) button(controls, '분석 재생성', () => analyze());

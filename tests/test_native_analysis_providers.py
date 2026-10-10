@@ -56,14 +56,14 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
     model.verification_state = {"analysis": evidence}
     connection.encrypted_key, connection.nonce = encrypt_key(connection, KEY, 1)
     options = {
-        "openai": dict(max_output_tokens=1024, reasoning={"effort": "low"}),
+        "openai": dict(max_output_tokens=8192, reasoning={"effort": "low"}),
         "anthropic": dict(
-            max_output_tokens=1024,
+            max_output_tokens=8192,
             thinking={"type": "disabled"},
             temperature=0.4,
         ),
         "google": dict(
-            max_output_tokens=1024, thinking={"budget": 0}, temperature=0.4
+            max_output_tokens=8192, thinking={"budget": 0}, temperature=0.4
         ),
     }[provider]
     envelope = copy.deepcopy(data.session.config_snapshot_json)
@@ -105,7 +105,7 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
             return httpx2.Response(200, json=response_body(json.dumps(value)))
 
         clients, calls = sdk_transport(
-            monkeypatch, upstream, budget=1024, key=KEY
+            monkeypatch, upstream, budget=8192, key=KEY
         )
     elif provider == "anthropic":
         from test_anthropic_catalog import sdk_transport
@@ -145,20 +145,20 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
         if provider == "openai":
             assert (
                 body["model"] == model.model_id
-                and body["max_output_tokens"] == 1024
+                and body["max_output_tokens"] == 8192
                 and body["reasoning"] == {"effort": "low"}
             )
         elif provider == "anthropic":
             assert (
                 body["model"] == model.model_id
-                and body["max_tokens"] == 1024
+                and body["max_tokens"] == 8192
                 and body["thinking"] == {"type": "disabled"}
                 and body["temperature"] == 0.4
             )
         else:
             assert call.url.path.endswith("gemini-2.5-flash:generateContent")
             assert (
-                body["generationConfig"]["maxOutputTokens"] == 1024
+                body["generationConfig"]["maxOutputTokens"] == 8192
                 and body["generationConfig"]["thinkingConfig"][
                     "thinking_budget"
                 ]
@@ -175,6 +175,6 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
             a.provider == provider
             and a.model == model.model_id
             and a.status == "completed"
-            and a.context_budget_json is None
+            and a.context_budget_json["estimator"] == "utf8-v1-s4-20pct"
             for a in attempts
         )

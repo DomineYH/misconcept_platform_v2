@@ -241,7 +241,16 @@ async def load_analysis_response(
         .order_by(GenerationRun.started_at.desc(), GenerationRun.id.desc())
         .limit(1)
     )
-    if summary is None and latest_run is None:
+    session = await db.get(Session, session_id)
+    if (
+        summary is None
+        and latest_run is None
+        and (
+            session is None
+            or session.snapshot_origin != "native"
+            or not session.ended_at
+        )
+    ):
         return None
 
     report_result = await db.execute(
@@ -253,7 +262,7 @@ async def load_analysis_response(
     feedback_status = (
         analysis_status(summary, feedback_report)
         if summary
-        else latest_run.status
+        else latest_run.status if latest_run else "plan_required"
     )
     feedback_sections = await load_feedback_sections(session_id, db)
 
@@ -370,8 +379,10 @@ async def load_analysis_response(
             session.ended_at.isoformat() if session.ended_at else None
         ),
     }
-    if latest_run is not None or (
-        feedback_report is not None and feedback_report.version == 2
+    if (
+        (summary is None and session.snapshot_origin == "native")
+        or latest_run is not None
+        or (feedback_report is not None and feedback_report.version == 2)
     ):
         latest = await db.scalar(
             select(ApiUsageLog)
@@ -382,6 +393,20 @@ async def load_analysis_response(
             .order_by(ApiUsageLog.id.desc())
             .limit(1)
         )
+        plan = None
+        if (
+            session.snapshot_origin == "native"
+            and session.ended_at
+            and (latest_run is None or latest_run.status != "running")
+            and (
+                summary is None
+                or feedback_status in {"failed", "degraded"}
+                or admin
+            )
+        ):
+            from src.services.analysis_plan import load_plan, public_plan
+
+            plan = public_plan(await load_plan(db, session, regenerate=admin))
         response.update(
             public_analysis(
                 session,
@@ -393,6 +418,7 @@ async def load_analysis_response(
                 latest,
                 admin=admin,
                 run=latest_run,
+                plan=plan,
             )
         )
     if latest_run is not None and json.loads(latest_run.plan_json or "{}").get(

@@ -19,6 +19,7 @@ from src.api.routes.session_helpers import (
 )
 from src.models import (
     ApiUsageLog,
+    GenerationRun,
     Message,
     QuestionAnalysis,
     Session,
@@ -27,6 +28,7 @@ from src.models import (
 from src.models.provider_connection import now
 from src.services.analysis_invocations import AnalysisCaller
 from src.services.analysis_output_contract import UnifiedAnalysisOutput
+from src.services.analysis_plan import analysis_prompt, build_plan
 from src.services.analysis_results import save_analysis
 from src.services.analysis_statistics import analysis_statistics
 from src.services.invocation_types import InvocationError
@@ -140,14 +142,23 @@ async def run_llm_pipeline(
         labels={r.id: r.level for r in analysis.rubric},
         classification_enabled=analysis.classification_enabled,
     )
-    inputs = dict(
-        messages=messages,
-        scenario=snapshot.scenario_context.model_dump(),
-        problem=snapshot.config.problem.model_dump(),
-        student=snapshot.config.student.model_dump(
-            exclude={"resolved_model_config"}
+    if run_id:
+        async with factory() as db:
+            run = await db.get(GenerationRun, run_id)
+            plan = json.loads(run.plan_json)
+    else:
+        plan = build_plan(snapshot, messages)
+    budget_metadata = dict(
+        estimator=plan["estimator_version"],
+        formula=plan["formula"],
+        estimated_input_tokens=plan["estimated_input_tokens"],
+        estimated_output_tokens=plan["estimated_output_tokens"],
+        input_budget_tokens=plan["input_budget_tokens"],
+        reserved_output_tokens=plan.get("frozen_output_cap"),
+        reserved_thinking_tokens=plan["reserved_thinking_tokens"],
+        capability_definition_version=(
+            plan["limits"]["definition_version"] if plan["limits"] else None
         ),
-        analysis=analysis.model_dump(exclude={"resolved_model_config"}),
     )
     payload = dict(
         schema_version=2,
@@ -161,13 +172,14 @@ async def run_llm_pipeline(
     status, error_code = "ok", None
     if messages:
         try:
+            if plan["mode"] != "single":
+                raise InvocationError("context_limit")
             payload, _ = await caller.structured(
-                template
-                + "\n입력 JSON\n"
-                + json.dumps(inputs, ensure_ascii=False),
+                analysis_prompt(snapshot, messages),
                 UnifiedAnalysisOutput,
                 "analysis_unified",
                 validation_context=context,
+                context_budget=budget_metadata,
             )
         except InvocationError as error:
             error_code = error.code
@@ -184,7 +196,10 @@ async def run_llm_pipeline(
     payload["metadata"] = dict(
         coverage=coverage,
         mode="single",
-        estimator_version=None,
+        estimator_version=plan["estimator_version"],
+        formula=plan["formula"],
+        plan_hash=plan["plan_hash"],
+        estimates=budget_metadata,
         request_id=caller.request_id,
         run_id=run_id,
         config_hash=canonical_hash(snapshot.model_dump()),

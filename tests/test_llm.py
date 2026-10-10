@@ -243,7 +243,7 @@ async def test_classification_and_synthesis_parse_errors_do_not_retry(
         result["label"] == "A" and result["reasoning"]["summary"] == "because"
     )
     assert result["_api_usage"]["total_tokens"] == 15
-    assert calls[0]["max_output_tokens"] == 1500
+    assert calls[0]["max_output_tokens"] == 8192
     with pytest.raises(InvocationError, match="invalid_json"):
         await analyzer.classify_question("Why?", snapshot.config.analysis)
     assert len(calls) == 2
@@ -263,7 +263,7 @@ async def test_classification_and_synthesis_parse_errors_do_not_retry(
         )
     assert row.total_tokens == 15
     assert row.status == "failed" and row.error_code == "invalid_json"
-    assert len(calls) == 3 and calls[-1]["max_output_tokens"] == 1500
+    assert len(calls) == 3 and calls[-1]["max_output_tokens"] == 8192
     assert all(sdk.is_closed() for sdk in clients)
 
 

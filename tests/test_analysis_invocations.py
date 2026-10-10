@@ -109,7 +109,7 @@ async def test_analysis_uses_db_key_and_ledger_and_preserves_degraded(
     assert response.status_code == 200
     assert response.json()["feedback_status"] == "degraded"
     assert len(calls) == 1 and all(client.is_closed() for client in clients)
-    assert [c["max_output_tokens"] for c in calls] == [1500]
+    assert [c["max_output_tokens"] for c in calls] == [8192]
     async with data.factory() as db:
         rows = (
             await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))

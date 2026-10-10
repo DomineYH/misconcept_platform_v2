@@ -37,7 +37,7 @@ async def test_contracted_installation_authoring_to_csv(
     from analysis_test_helpers import AnalysisApi
 
     api = AnalysisApi(workflow_api)
-    transport = workflow_transport(monkeypatch, provider)
+    transport = workflow_transport(monkeypatch, provider, analysis_budget=8192)
     await authenticate(api, "admin")
     state = (await api.get("/admin/ai/state")).json()
     connection = next(
@@ -172,7 +172,10 @@ async def test_contracted_installation_authoring_to_csv(
                 level="high",
             )
         ],
-        resolved_model_config=selection,
+        resolved_model_config={
+            **selection,
+            "options": {**options, "max_output_tokens": 8192},
+        },
     )
     repaired = await post(api, "/admin/scenarios/1/update", body)
     assert repaired.status_code == 200, repaired.text
@@ -366,22 +369,23 @@ async def test_contracted_installation_authoring_to_csv(
         and "PRIVATE_MENTOR" not in student_payload
         and "PRIVATE_ANALYSIS" not in student_payload
     )
-    for payload in transport.payloads:
+    for payload, schema in zip(transport.payloads, transport.schemas):
         text = json.dumps(payload, ensure_ascii=False)
         assert "CHANGED " not in text and KEY not in text
+        output_cap = 8192 if "message_classifications" in schema else 1024
         if provider == "openai":
-            assert payload["max_output_tokens"] == 1024 and payload[
+            assert payload["max_output_tokens"] == output_cap and payload[
                 "reasoning"
             ] == {"effort": "low"}
         elif provider == "anthropic":
             assert (
-                payload["max_tokens"] == 1024
+                payload["max_tokens"] == output_cap
                 and payload["thinking"] == {"type": "disabled"}
                 and payload["temperature"] == 0.4
             )
         else:
             assert (
-                payload["generationConfig"]["maxOutputTokens"] == 1024
+                payload["generationConfig"]["maxOutputTokens"] == output_cap
                 and payload["generationConfig"]["temperature"] == 0.4
             )
     for payload, schema in zip(transport.payloads, transport.schemas):

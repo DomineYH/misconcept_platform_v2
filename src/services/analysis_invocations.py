@@ -42,6 +42,7 @@ class AnalysisCaller:
         *,
         normalize=None,
         validation_context=None,
+        context_budget=None,
     ):
         # No database transaction spans the provider call.
         async with self.factory() as db:
@@ -74,6 +75,7 @@ class AnalysisCaller:
             self.request_id,
             schema,
             validation,
+            context_budget_json=context_budget,
         )
         permit = await admit_call(
             self.factory,

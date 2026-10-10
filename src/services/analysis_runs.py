@@ -26,12 +26,11 @@ from src.services.call_admission import execution_lock
 from src.services.generation_runs import conflict, digest
 from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
-from src.services.model_verification import ROLE_CONTRACT_VERSIONS
-from src.services.session_synthesizer import prompt_hash
-from src.utils.cache import load_prompt_template
 
 logger = logging.getLogger(__name__)
 RUN_SECONDS = 900
+# shortcut: chunk execution is unavailable, supply the executor in #83.
+chunk_executor = None
 # shortcut: tasks require one worker, coordinate cancellation before adding workers.
 active_analyses: dict[str, asyncio.Task] = {}
 cleanup_tasks: set[asyncio.Task] = set()
@@ -137,17 +136,9 @@ async def reserve_analysis(
                     .order_by(Message.created_at, Message.id)
                 )
             )
-            plan = dict(
-                version=1,
-                regenerate=regenerate,
-                mode="single",
-                schema_version=2,
-                contract_version=ROLE_CONTRACT_VERSIONS["analysis"],
-                prompt_version=prompt_hash(
-                    load_prompt_template("analysis_v2.txt")
-                ),
-                message_ids=[m.id for m in messages],
-            )
+            from src.services.analysis_plan import load_plan, public_plan
+
+            plan = await load_plan(db, session, regenerate=regenerate)
             fingerprint = digest(
                 dict(
                     session_id=session_id,
@@ -178,8 +169,6 @@ async def reserve_analysis(
                     await run_response(db, existing, admin=user.is_admin),
                     None,
                 )
-            if plan_hash is not None and plan_hash != digest(plan):
-                conflict("plan_conflict")
             busy = await db.scalar(
                 select(GenerationRun).where(
                     GenerationRun.session_id == session_id,
@@ -202,10 +191,50 @@ async def reserve_analysis(
                     ),
                     None,
                 )
+            if plan_hash is not None and plan_hash != plan["plan_hash"]:
+                from src.api.routes.session_helpers import (
+                    validate_scenario_access,
+                )
+
+                await validate_scenario_access(session.scenario_id, user, db)
+                response = await load_analysis_response(
+                    session_id, db, admin=user.is_admin
+                )
+                response.update(
+                    plan=public_plan(plan),
+                    detail=dict(code="plan_conflict"),
+                    _http_status=409,
+                )
+                return response, None
             lesson = await load_analysis_lesson(db, session_id, actor_id)
             connection, model, _ = await resolve_frozen_model(
                 db, lesson.config.analysis.resolved_model_config, "analysis"
             )
+            if plan["mode"] == "blocked":
+                response = await load_analysis_response(
+                    session_id, db, admin=user.is_admin
+                )
+                response.update(
+                    plan=public_plan(plan),
+                    status="blocked",
+                    code=plan["blocked_code"],
+                    _http_status=422,
+                )
+                return response, None
+            if plan["mode"] == "chunked" and (
+                plan_hash is None or chunk_executor is None
+            ):
+                response = await load_analysis_response(
+                    session_id, db, admin=user.is_admin
+                )
+                response.update(
+                    plan=public_plan(plan),
+                    status="plan_required",
+                    _http_status=200 if plan_hash is None else 501,
+                )
+                if plan_hash is not None:
+                    response["code"] = "chunk_execution_unavailable"
+                return response, None
             run_id = str(uuid4())
             run = GenerationRun(
                 id=run_id,
@@ -219,7 +248,7 @@ async def reserve_analysis(
                 provider=connection.provider,
                 model=model.model_id,
                 status="running",
-                plan_json=json.dumps({**plan, "plan_hash": digest(plan)}),
+                plan_json=json.dumps(plan),
                 started_at=now(),
             )
             db.add(run)
@@ -237,6 +266,7 @@ async def reserve_analysis(
                 request_id=request_id,
                 regenerate=regenerate,
                 started_at=run.started_at,
+                plan=plan,
             )
 
 
@@ -260,7 +290,12 @@ async def execute_analysis(factory, execution):
             ).total_seconds()
         )
         async with asyncio.timeout(max(0, remaining)):
-            result = await analysis_pipeline.run_llm_pipeline(
+            pipeline = (
+                chunk_executor
+                if execution["plan"]["mode"] == "chunked"
+                else analysis_pipeline.run_llm_pipeline
+            )
+            result = await pipeline(
                 execution["session_id"],
                 execution["all_messages"],
                 execution["teacher_messages"],
@@ -270,6 +305,11 @@ async def execute_analysis(factory, execution):
                 execution["actor_id"],
                 request_id=execution["request_id"],
                 run_id=run_id,
+                **(
+                    {"plan": execution["plan"]}
+                    if execution["plan"]["mode"] == "chunked"
+                    else {}
+                ),
             )
             async with factory() as db:
                 await save_analysis(
@@ -351,9 +391,11 @@ async def request_analysis(
         start_analysis(factory, execution)
     from fastapi.responses import JSONResponse
 
+    status_code = accepted.pop("_http_status", None)
     return JSONResponse(
         accepted,
-        status_code=(
+        status_code=status_code
+        or (
             202
             if execution is not None
             or accepted.get("latest_run", {}).get("status") == "running"

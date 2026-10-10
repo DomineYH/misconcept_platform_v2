@@ -72,5 +72,16 @@ export default async function checkChunkConfirmation(page) {
   await result.getByRole('button', {name: '같은 요청 다시 전송', exact: true}).waitFor();
   assert(await result.getByRole('heading', {name: '채택된 보고서: 정상 분석'}).isVisible());
   assert(!(await result.innerText()).includes('PRIVATE_'), 'unexpected error envelopes never replace the report or expose raw errors');
+  let unsupported = 0;
+  await page.route('**/admin/sessions/1/analyze_regenerate', route => {
+    unsupported++;
+    return route.fulfill({status: 501, json: {...changedPlan, code: 'chunk_execution_unavailable'}});
+  });
+  await page.goto(`${origin}/fixtures/s4/analysis?state=plan&admin=1`);
+  await result.getByRole('button', {name: '확인하고 분할 실행', exact: true}).click();
+  await result.getByRole('status').filter({hasText: /분할 실행 기능이 아직 준비되지 않았습니다/}).waitFor();
+  assert.equal(unsupported, 1);
+  assert.equal(await result.getByRole('button', {name: '같은 요청 다시 전송', exact: true}).count(), 0);
+  assert(await result.getByRole('heading', {name: '채택된 보고서: 정상 분석'}).isVisible());
   return {checks: ['chunk scope/estimates, zero calls before confirmation, cancel/retry/preservation and CSRF'], pageErrors: []};
 }

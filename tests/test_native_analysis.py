@@ -47,6 +47,9 @@ async def native_analysis(data, monkeypatch, *, enabled=True):
             dict(id="C", name="Other", criteria="PRIVATE NEUTRAL", level=None),
         ],
     )
+    envelope["config"]["analysis"]["resolved_model_config"]["options"][
+        "max_output_tokens"
+    ] = 8192
     data.session.config_snapshot_json = envelope
     data.session.config_hash = canonical_hash(envelope)
     data.session.ended_at = datetime.now(timezone.utc)
@@ -103,7 +106,7 @@ async def test_analysis_uses_frozen_inputs_and_one_model_option_set(
     assert response.json()["distribution"] == {"A": 2, "B": 0, "C": 0}
     assert len(calls) == 1 and all(c.is_closed() for c in clients)
     assert all(
-        c["max_output_tokens"] == 1500
+        c["max_output_tokens"] == 8192
         and c["reasoning"] == {"effort": "medium"}
         for c in calls
     )

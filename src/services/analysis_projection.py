@@ -16,6 +16,7 @@ def public_analysis(
     *,
     admin=False,
     run=None,
+    plan=None,
 ):
     payload = (
         json.loads(report.payload_json)
@@ -75,7 +76,14 @@ def public_analysis(
                 else []
             ),
         )
-    latest_run = dict(status=outcome, preserved=False)
+    latest_run = dict(
+        status=(
+            ("plan_required" if plan and plan["mode"] == "chunked" else "ready")
+            if summary is None and run is None
+            else outcome
+        ),
+        preserved=False,
+    )
     if code := payload.get("metadata", {}).get("error_code"):
         latest_run["error_code"] = code
     if latest is not None and latest.request_id != payload.get(
@@ -101,11 +109,12 @@ def public_analysis(
         accepted_report=accepted,
         latest_run=latest_run,
         messages=messages,
-        plan=None,
+        plan=plan,
         permissions=dict(
             can_analyze=native
             and accepted is None
-            and latest_run["status"] in {"failed", "cancelled", "interrupted"},
+            and latest_run["status"]
+            in {"failed", "cancelled", "interrupted", "ready", "plan_required"},
             can_retry=native
             and not running
             and (accepted["status"] if accepted else latest_run["status"])

@@ -6,10 +6,8 @@ import json
 import pytest
 from s4_quality_fixtures import FIXTURES, load_corpus, mock_comparison_record
 
-from src.services.context_budget import estimate_input
-from src.services.invocation_types import StructuredRequest
-from src.services.lesson_snapshots import canonical_hash
-from src.services.role_output_contracts import RuntimeSynthesis
+from src.services.analysis_plan import build_plan
+from src.services.lesson_snapshots import LessonSnapshot, canonical_hash
 
 
 def test_fixed_corpus_covers_d10_and_has_no_human_approval():
@@ -106,34 +104,31 @@ def test_mock_comparison_rejects_model_or_option_substitution(field, value):
         mock_comparison_record(corpus, sample["id"], baseline, candidate)
 
 
-def test_long_corpus_exceeds_fixed_mock_input_budget_without_padding():
+def test_long_corpus_has_real_bounded_chunk_plans_without_padding():
     corpus = load_corpus()
     for sample in corpus["samples"]:
         if sample["length"] != "long":
             continue
-        selection = sample["snapshot"]["config"]["analysis"][
-            "resolved_model_config"
-        ]
-        request = StructuredRequest(
-            selection["provider"],
-            selection["model_id"],
-            "analysis",
-            "",
-            [
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        sample["transcript"], ensure_ascii=False
-                    ),
-                }
-            ],
-            selection["options"],
-            "mock-corpus-budget",
-            RuntimeSynthesis,
+        plan = build_plan(
+            LessonSnapshot.model_validate(sample["snapshot"]),
+            sample["transcript"],
         )
+        fixture = sample["planner_fixture"]
+        assert plan["mode"] == fixture["expected_mode"] == "chunked"
+        assert plan["input_budget_tokens"] == fixture["input_budget_tokens"]
+        assert len(plan["chunks"]) == fixture["expected_chunks"] <= 8
+        assert plan["generation_calls"] == len(plan["chunks"]) + 1
         assert (
-            estimate_input(request)
-            > sample["planner_fixture"]["input_budget_tokens"]
+            plan["merge"]["estimated_input_tokens"]
+            <= plan["input_budget_tokens"]
+        )
+        assert [
+            mid for chunk in plan["chunks"] for mid in chunk["message_ids"]
+        ] == [m["id"] for m in sample["transcript"]]
+        assert all(
+            c["estimated_input_tokens"] <= plan["input_budget_tokens"]
+            and c["estimated_output_tokens"] <= plan["frozen_output_cap"]
+            for c in plan["chunks"]
         )
     boundaries = {b["id"]: b for b in corpus["boundary_fixtures"]}
     assert boundaries["input-exact"]["expected"] == "single"

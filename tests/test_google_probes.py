@@ -35,7 +35,7 @@ async def prepare(api, role):
     assert saved.status_code == 200
     model = (await api.get("/admin/ai/state")).json()["models"][0]
     assert model["model_id"] == "gemini-2.5-flash"
-    assert model["capabilities"]["definition_version"] == "google-2026-10-10-v2"
+    assert model["capabilities"]["definition_version"] == "google-2026-10-11-v3"
     return dict(expected_version=1, role=role, request_id=str(uuid4()))
 
 
@@ -135,7 +135,7 @@ async def test_google_role_probe_is_versioned_idempotent_and_has_two_attempts(
     )
     assert evidence[
         "capability_definition_version"
-    ] == "google-2026-10-10-v2" and evidence["role_contract_version"] == (
+    ] == "google-2026-10-11-v3" and evidence["role_contract_version"] == (
         {"student": "s1-v1", "mentor": "s3-v1", "analysis": "s4-v2"}[role]
     )
     assert all(

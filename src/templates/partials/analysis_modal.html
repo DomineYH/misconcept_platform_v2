@@ -8,6 +8,9 @@
 <!-- Modal Body -->
 <div class="modal-body">
     {% include "partials/snapshot_provenance.html" %}
+    {% if analysis_result_url is defined %}
+    {% include "partials/analysis_result.html" %}
+    {% else %}
     {% set feedback_status = feedback_status | default('legacy') %}
 
     {# ── Wedge: feedback hero + stat grid + toggle ── #}
@@ -85,6 +88,7 @@
     {# ── Detail panel (3 tabs): shared partial ── #}
     {% if feedback_status != 'failed' %}
     {% include "partials/analysis_detail_tabs.html" %}
+    {% endif %}
     {% endif %}
 </div>
 

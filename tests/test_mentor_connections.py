@@ -50,8 +50,10 @@ async def test_coaching_uses_db_key_exact_options_and_one_linked_attempt(
             'Coach {literal} {{braces}} {"json":true}' in body["instructions"]
         )
         assert body["input"] == [
-            {"role": "user", "content": "teacher: Why?"},
-            {"role": "user", "content": "student: Student answer"},
+            {
+                "role": "user",
+                "content": "teacher: Why?\nstudent: Student answer",
+            },
         ]
         return SimpleNamespace(
             output_text=mentor_output("DB mentor coaching"), usage=None

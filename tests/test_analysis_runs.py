@@ -267,11 +267,16 @@ async def test_run_deadline_bounds_provider_wait_and_does_not_restart(
     assert len(calls) == 1 and all(client.is_closed() for client in clients)
 
 
-async def test_admin_end_commits_then_reserves_and_replays_same_run(
-    data, api, monkeypatch
+@pytest.mark.parametrize(
+    "actor,with_body", [("teacher", True), ("teacher", False), ("admin", True)]
+)
+async def test_end_commits_then_reserves_and_replays_same_run(
+    data, api, monkeypatch, actor, with_body
 ):
+    import httpx
     from test_scenario_api import login
 
+    from src.main import app
     from src.models import Session
 
     await prepare_analysis(data, monkeypatch)
@@ -289,22 +294,34 @@ async def test_admin_end_commits_then_reserves_and_replays_same_run(
         )
 
     _, calls = analysis_transport(monkeypatch, upstream)
-    login(api, data.admin)
+    login(api, data.admin if actor == "admin" else data.owner)
     await api.get("/health")
+    prefix = "/admin" if actor == "admin" else ""
+    analyze = "analyze_regenerate" if actor == "admin" else "analyze"
     headers = {"x-csrf-token": api.cookies["csrftoken"]}
     body = {"request_id": str(uuid4())}
     try:
-        accepted = await api.post(
-            f"/admin/sessions/{data.session.id}/end", json=body, headers=headers
-        )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            cookies=api.cookies,
+        ) as browser:
+            accepted = await browser.post(
+                f"{prefix}/sessions/{data.session.id}/end",
+                headers=headers,
+                **({"json": body} if with_body else {}),
+            )
+        # Closing the end-request client cannot cancel the reserved run.
         assert accepted.status_code == 202
         await asyncio.wait_for(entered.wait(), 5)
         replay = await api.post(
-            f"/admin/sessions/{data.session.id}/end", json=body, headers=headers
+            f"{prefix}/sessions/{data.session.id}/end",
+            headers=headers,
+            **({"json": body} if with_body else {}),
         )
         assert replay.json()["run_id"] == accepted.json()["run_id"]
         competing = await api.post(
-            f"/admin/sessions/{data.session.id}/analyze_regenerate",
+            f"{prefix}/sessions/{data.session.id}/{analyze}",
             json={"request_id": str(uuid4())},
             headers=headers,
         )
@@ -460,3 +477,110 @@ async def test_admin_end_html_exposes_running_analysis_before_report_exists(
     finally:
         release.set()
         await asyncio.gather(*list(active_analyses.values()))
+
+
+async def test_unexpected_execution_failure_is_not_a_storage_failure(
+    data, api, monkeypatch
+):
+    from unittest.mock import AsyncMock
+
+    from src.services import analysis_pipeline
+
+    await prepare_analysis(data, monkeypatch)
+    monkeypatch.setattr(
+        analysis_pipeline,
+        "run_llm_pipeline",
+        AsyncMock(
+            side_effect=RuntimeError("PRIVATE unexpected execution failure")
+        ),
+    )
+    body = {"request_id": str(uuid4())}
+    headers = {"x-csrf-token": api.cookies["csrftoken"]}
+    accepted = await api.post(
+        f"/sessions/{data.session.id}/analyze", json=body, headers=headers
+    )
+    assert accepted.status_code == 202
+    result = await terminal(api, accepted.json()["actions"]["status"])
+    assert result["latest_run"]["status"] == "failed"
+    assert result["latest_run"]["error_code"] == "analysis_failed"
+    assert result["accepted_report"] is None
+    assert "PRIVATE" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("collision", ["request", "running"])
+async def test_unique_reservation_collision_recovers_replay_or_busy(
+    data, api, monkeypatch, collision
+):
+    from sqlalchemy import event
+
+    await prepare_analysis(data, monkeypatch)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def upstream(request, body):
+        entered.set()
+        await release.wait()
+        return httpx2.Response(
+            200, json=response_body(json.dumps(result_for(body)), USAGE)
+        )
+
+    _, calls = analysis_transport(monkeypatch, upstream)
+    url = f"/sessions/{data.session.id}/analyze"
+    headers = {"x-csrf-token": api.cookies["csrftoken"]}
+    body = {"request_id": str(uuid4())}
+    accepted = await api.post(url, json=body, headers=headers)
+    assert accepted.status_code == 202
+    await asyncio.wait_for(entered.wait(), 5)
+    if collision == "request":
+        await api.post(accepted.json()["actions"]["cancel"], headers=headers)
+        await terminal(api, accepted.json()["actions"]["status"])
+    hidden, inserts = set(), []
+
+    def stale_read(conn, cursor, statement, parameters, context, executemany):
+        # Simulate a stale pre-insert read; the real SQLite indexes reject insertion.
+        if statement.startswith("INSERT INTO generation_run"):
+            inserts.append(statement)
+        for column in ("request_id", "status"):
+            if (
+                f"generation_run.{column} = ?" in statement
+                and column not in hidden
+                and (column == "status" or collision == "request")
+            ):
+                hidden.add(column)
+                statement = statement.replace(
+                    f"generation_run.{column} = ?",
+                    f"generation_run.{column} = ? AND 0",
+                )
+                break
+        return statement, parameters
+
+    event.listen(
+        data.engine.sync_engine,
+        "before_cursor_execute",
+        stale_read,
+        retval=True,
+    )
+    try:
+        competing = await api.post(
+            url,
+            json=(
+                body if collision == "request" else {"request_id": str(uuid4())}
+            ),
+            headers=headers,
+        )
+        if collision == "request":
+            assert competing.status_code == 200
+            assert competing.json()["run_id"] == accepted.json()["run_id"]
+        else:
+            assert competing.status_code == 409
+            assert competing.json()["detail"] == {
+                "code": "analysis_busy",
+                "run_id": accepted.json()["run_id"],
+            }
+        assert len(inserts) == 1
+        assert len(calls) == 1
+    finally:
+        event.remove(
+            data.engine.sync_engine, "before_cursor_execute", stale_read
+        )
+        release.set()
+        await terminal(api, accepted.json()["actions"]["status"])

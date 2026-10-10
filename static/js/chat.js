@@ -507,52 +507,13 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       }
     }
 
-    // Phase 1: End session (skip if already ended)
-    if (!skipEnd) {
-      setAnalysisState('ending');
-      lockChatUI('세션 종료 중...');
-
-      try {
-        const endResponse = await fetchWithAuthGuard(`/sessions/${window.currentSessionId}/end`, {
-          method: 'POST',
-          headers: getCsrfHeaders()
-        });
-
-        if (!endResponse.ok) {
-          const error = await safeReadJson(endResponse);
-          alert(`세션 종료 실패: ${error.detail || error.feedback || '알 수 없는 오류'}`);
-          setAnalysisState('active');
-          window.location.reload();
-          return;
-        }
-
-        clearDraftMessage();
-        const bannerText = document.getElementById('session-status-text');
-        if (bannerText) {
-          bannerText.textContent = '이 대화는 종료되었습니다.';
-        }
-
-        const returnBtn = document.getElementById('return-to-scenarios-btn');
-        if (returnBtn) returnBtn.disabled = true;
-
-      } catch (error) {
-        if (error && error.code === 'AUTH_EXPIRED') {
-          return;
-        }
-        console.error('Failed to end session:', error);
-        alert('세션 종료에 실패했습니다');
-        setAnalysisState('active');
-        window.location.reload();
-        return;
-      }
-    }
-
-    // Phase 2: Analyze
-    setAnalysisState('analyzing');
     btn.dataset.analysisRequestId ||= crypto.randomUUID();
+    btn.dataset.analysisRequestUrl ||= `/sessions/${window.currentSessionId}/${skipEnd ? 'analyze' : 'end'}`;
+    setAnalysisState(skipEnd ? 'analyzing' : 'ending');
+    lockChatUI('분석 준비 중...');
 
     try {
-      const analyzeResponse = await fetchWithAuthGuard(`/sessions/${window.currentSessionId}/analyze`, {
+      const analyzeResponse = await fetchWithAuthGuard(btn.dataset.analysisRequestUrl, {
         method: 'POST',
         headers: {...getCsrfHeaders(), 'Content-Type': 'application/json'},
         body: JSON.stringify({request_id: btn.dataset.analysisRequestId})
@@ -561,9 +522,13 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       const analysisResult = await safeReadJson(analyzeResponse);
       if (analyzeResponse.ok || analysisResult.detail?.code === 'request_conflict') {
         delete btn.dataset.analysisRequestId;
+        delete btn.dataset.analysisRequestUrl;
       }
       const activeRun = analyzeResponse.status === 409 && analysisResult.detail?.code === 'analysis_busy';
       if ((analyzeResponse.ok && (analyzeResponse.status === 202 || !analysisResult.retryable)) || (analyzeResponse.status === 422 && analysisResult.plan) || activeRun) {
+        clearDraftMessage();
+        const bannerText = document.getElementById('session-status-text');
+        if (bannerText) bannerText.textContent = '이 대화는 종료되었습니다.';
         const overlay = document.getElementById('analysis-modal-overlay');
         htmx.ajax('GET', `/sessions/${window.currentSessionId}/analysis_modal`,
           { target: '#analysis-modal-container', swap: 'innerHTML' })

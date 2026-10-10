@@ -260,12 +260,6 @@ async def test_ending_session_waits_for_chunk_confirmation(
         headers=headers,
     )
     assert ended.status_code == 200
-    if path == "teacher":
-        ended = await api.post(
-            f"/sessions/{data.session.id}/analyze",
-            json=dict(request_id=str(uuid4())),
-            headers=headers,
-        )
     assert ended.json()["status"] == "plan_required"
     async with data.factory() as db:
         from src.models import Session
@@ -275,9 +269,10 @@ async def test_ending_session_waits_for_chunk_confirmation(
         assert list(await db.scalars(select(GenerationRun))) == []
 
 
+@pytest.mark.parametrize("start", ["analyze", "end"])
 @pytest.mark.parametrize("boundary", ["unit", "chunks", "merge"])
 async def test_unexecutable_plans_reject_with_zero_provider_calls(
-    data, api, monkeypatch, boundary
+    data, api, monkeypatch, boundary, start
 ):
     from src.models import ModelConfig
 
@@ -306,8 +301,11 @@ async def test_unexecutable_plans_reject_with_zero_provider_calls(
             )
         )
     await data.db.commit()
+    if start == "end":
+        data.session.ended_at = None
+        await data.db.commit()
     result = await api.post(
-        f"/sessions/{data.session.id}/analyze",
+        f"/sessions/{data.session.id}/{start}",
         json=dict(request_id=str(uuid4())),
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )

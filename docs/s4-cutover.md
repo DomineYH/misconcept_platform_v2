@@ -62,9 +62,11 @@ filesystem or its final stopped-writer copy; repeat against the authorized copy.
 | `GET /sessions/{id}/analysis/runs/{run_id}` | 200 status and adoption/outcome; owner ACL; administrator equivalent under `/admin` |
 | `POST /sessions/{id}/analysis/runs/{run_id}/cancel` | 202 explicit cancellation, CSRF; administrator equivalent under `/admin`; incurred provider cost is not refunded |
 | `GET /sessions/{id}/analysis` | Accepted report and latest execution are separate; administrator equivalent under `/admin` |
-| Teacher `POST /sessions/{id}/end` | Commits the end only; existing UI then requests `/analyze` through the same planner |
+| Teacher `POST /sessions/{id}/end` | Commits end, then reserves single or returns chunked/blocked plan; optional JSON analysis body. UI consumes this response and retransmits the same request ID after a lost response |
 | Administrator `POST /admin/sessions/{id}/end` | Commits end, then reserves single or returns plan; optional JSON analysis body, existing HTML action still supported |
 
+Teacher end requests without a JSON body derive a stable request ID from the
+actor, session and committed end timestamp; repeated end requests replay it.
 Leaving the page keeps a reserved task alive. Poll only active analysis runs and
 stop after a terminal result/cancel. Restart changes unfinished runs to
 `interrupted`, without rerunning. Teachers explicitly retry failed/degraded
@@ -213,8 +215,8 @@ execution totals belong to the final #86 report. Every row remains subject to
 
 | Spec criterion | Evidence / human gate |
 | --- | --- |
-| D1.1 native/frozen/current authority, historical reading separate | `test_analysis_checks_current_authority_and_native_provenance`; `test_s4_concurrent_regeneration_interruption_preserves_report` |
-| D1.2 full ordered teacher/student input, no mentor/reasoning/window truncation | `test_analysis_uses_frozen_inputs_and_one_model_option_set` |
+| D1.1 native/frozen/current authority, historical reading separate | `test_analysis_checks_current_authority_and_native_provenance`; `test_unadoptable_run_keeps_no_report_and_never_reexecutes[revoke]`; `test_s4_concurrent_regeneration_interruption_preserves_report` |
+| D1.2 full ordered teacher/student input, no mentor/reasoning/window truncation | `test_analysis_uses_frozen_inputs_and_one_model_option_set`; `test_analysis_ignores_recent_turn_window_and_excludes_reasoning_and_partial_generation` |
 | D1.3 unanswered/unlinked ownership and response_missing | `test_unmatched_messages_attach_without_inventing_turn_links`; `test_single_analysis_saves_v2_evidence_and_server_statistics` |
 | D1.4 no_dialogue/teacher-only/greeting-only | `test_dialogue_boundaries_have_honest_coverage_and_call_count` |
 | D1.5 classification off retains feedback/findings | `test_classification_off_keeps_feedback_and_explicit_display`; `test_eight_confirmed_chunks_make_nine_calls_with_classification_on_or_off` |
@@ -236,7 +238,7 @@ execution totals belong to the final #86 report. Every row remains subject to
 | D4.4 teacher retry/admin regenerate/auth/CSRF | `test_teacher_retries_partial_as_new_request_and_preserves_it_on_failure`; `test_s4_start_to_reader_csv_and_replay`; `test_run_lookup_and_cancellation_keep_owner_and_admin_boundaries` |
 | D4.5 reserve then recheck/adopt/preserve, no fake success | `test_s4_concurrent_regeneration_interruption_preserves_report`; `test_chunk_adoption_and_interruptions_preserve_accepted_report`; `test_storage_failure_never_adopts_or_reports_completion` |
 | D4.6 detached 202/cancel/deadline/restart/no resume | `test_unadoptable_run_keeps_no_report_and_never_reexecutes`; `test_run_deadline_bounds_provider_wait_and_does_not_restart`; `browser_s4_lifecycle.mjs` |
-| D4.7 analyze/plan/status/cancel/end response contracts | `test_s4_start_to_reader_csv_and_replay`; `test_confirmation_rechecks_current_plan_and_permission_with_zero_calls`; `test_run_lookup_and_cancellation_keep_owner_and_admin_boundaries` |
+| D4.7 analyze/plan/status/cancel/end response contracts | `test_end_commits_then_reserves_and_replays_same_run`; `test_s4_start_to_reader_csv_and_replay`; `test_confirmation_rechecks_current_plan_and_permission_with_zero_calls`; `test_run_lookup_and_cancellation_keep_owner_and_admin_boundaries` |
 | D4.8 run-linked attempts and three-operation retry allowlist | `test_confirmed_chunks_merge_once_with_unique_ordered_classifications_and_ledger`; `test_transient_retry_is_a_separate_attempt_within_one_chunk_or_merge`; `test_removed_s2_operations_are_not_runtime_retry_paths`; `test_s4_retry_allowlist_is_limited_to_runtime_analysis` |
 | D4.9 migration numbering/old data/no backfill | `test_s4_wal_copy_migration_restore_preserves_hashes_readers_and_acl`; `test_034_preserves_033_records_and_matches_fresh` |
 | D5.1 official limits/catalog conflict/unknown | `test_shared_limits_record_official_source_and_check_date`; `test_smaller_openai_catalog_capacity_blocks_but_unknown_stays_unknown`; provider capability fixtures |
@@ -244,7 +246,7 @@ execution totals belong to the final #86 report. Every row remains subject to
 | D5.3 output/thinking formula/version | `test_single_plan_records_frozen_cap_formula_and_version`; `test_native_thinking_reservation_and_frozen_options`; HG3 |
 | D5.4 all input/context/output caps, no substitution | `test_unknown_and_oversized_units_are_blocked_with_zero_calls`; `test_analysis_uses_frozen_inputs_and_one_model_option_set` |
 | D5.5 plan scope/estimate/chunks/calls/retry/hash/unknown price | `test_plan_is_readable_without_reserving_or_calling_before_confirmation`; `browser_s4_plan.mjs` |
-| D5.6 both end flows/confirm/recheck/ended retained | `test_s4_start_to_reader_csv_and_replay`; `test_ending_session_waits_for_chunk_confirmation`; `test_confirmation_rechecks_current_plan_and_permission_with_zero_calls` |
+| D5.6 both end flows/confirm/recheck/ended retained | `test_end_commits_then_reserves_and_replays_same_run`; `test_s4_start_to_reader_csv_and_replay`; `test_ending_session_waits_for_chunk_confirmation`; `test_confirmation_rechecks_current_plan_and_permission_with_zero_calls` |
 | D6.1 greedy whole turns/unique ownership/one overlap | `test_chunked_plan_keeps_whole_turns_unique_ownership_and_one_turn_overlap`; `test_unmatched_messages_attach_without_inventing_turn_links` |
 | D6.2 8+1 sequential / 900s including retry/current timeout | `test_eight_confirmed_chunks_make_nine_calls_with_classification_on_or_off`; `test_remaining_run_deadline_caps_each_call_and_prevents_adoption`; `test_analysis_does_not_retry_when_backoff_exceeds_remaining_deadline` |
 | D6.3 oversized unit/8+ blocked/evidence-only merge | `test_unexecutable_plans_reject_with_zero_provider_calls`; `test_confirmed_chunks_merge_once_with_unique_ordered_classifications_and_ledger` |

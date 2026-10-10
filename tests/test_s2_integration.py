@@ -275,9 +275,13 @@ async def test_contracted_installation_authoring_to_csv(
     assert replay.json()["run_id"] == frames(coached)[-1][1]["run_id"]
     assert replay.json()["message"]["content"] == "Mentor coaching"
     assert len(transport.calls) == before
-    assert (
-        await post(api, f"/sessions/{session_id}/end", {})
-    ).status_code == 200
+    ended = await post(
+        api, f"/sessions/{session_id}/end", {"request_id": str(uuid4())}
+    )
+    assert ended.status_code == 202
+    from test_analysis_runs import terminal
+
+    await terminal(api, ended.json()["actions"]["status"])
     analyzed = await post(api, f"/sessions/{session_id}/analyze", {})
     assert analyzed.status_code == 200, analyzed.text
     assert analyzed.json()["distribution"] == (

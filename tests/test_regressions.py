@@ -123,7 +123,18 @@ async def test_http_permissions_retry_and_ended_message_guard(
     await install_analysis_snapshot(data, monkeypatch)
 
     sid = data.session.id
-    await analysis_pipeline.create_fallback_summary(sid, ["A", "B"], data.db)
+    from src.api.routes import session_analysis as routes
+
+    monkeypatch.setattr(
+        analysis_pipeline,
+        "run_llm_pipeline",
+        AsyncMock(side_effect=RuntimeError("offline")),
+    )
+    failed = await call_analysis_route(
+        routes.analyze_session_endpoint, request(), sid, data.owner, data.db
+    )
+    assert failed["latest_run"]["status"] == "failed"
+    assert failed["accepted_report"] is None
     fake = AsyncMock(
         return_value=(
             {"A": 1},

@@ -8,11 +8,8 @@ Failed attempts preserve an existing accepted report.
 
 import hashlib
 import json
-from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.api.routes.session_helpers import (
     require_native_session,
@@ -30,7 +27,6 @@ from src.models.provider_connection import now
 from src.services.analysis_invocations import AnalysisCaller
 from src.services.analysis_output_contract import UnifiedAnalysisOutput
 from src.services.analysis_plan import analysis_prompt, build_plan
-from src.services.analysis_results import save_analysis
 from src.services.analysis_statistics import analysis_statistics
 from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
@@ -67,37 +63,6 @@ async def load_analysis_lesson(db, session_id, actor_id):
     except InvocationError:
         raise configuration_error() from None
     return snapshot
-
-
-async def analyze_session(
-    session_id, session, db, *, actor_id=None, regenerate=False
-):
-    snapshot = await load_analysis_lesson(
-        db, session_id, actor_id or session.teacher_id
-    )
-    all_messages_result = await db.execute(
-        select(Message)
-        .where(
-            Message.session_id == session_id,
-            Message.role.in_(["teacher", "student"]),
-        )
-        .order_by(Message.created_at, Message.id)
-    )
-    all_messages = all_messages_result.scalars().all()
-    teacher_messages = [m for m in all_messages if m.role == "teacher"]
-
-    await db.commit()  # Inputs stay loaded (expire_on_commit=False); no lock across LLM.
-
-    result = await run_llm_pipeline(
-        session_id,
-        all_messages,
-        teacher_messages,
-        snapshot,
-        async_sessionmaker(db.bind, expire_on_commit=False, autoflush=False),
-        session.teacher_id,
-        actor_id or session.teacher_id,
-    )
-    return await save_analysis(session_id, result, db, regenerate=regenerate)
 
 
 async def run_llm_pipeline(
@@ -217,31 +182,4 @@ async def run_llm_pipeline(
         selection.model_id,
         source_hash,
         [],
-    )
-
-
-async def create_fallback_summary(
-    session_id: int,
-    label_names: list[str],
-    db: AsyncSession,
-) -> dict[str, Any]:
-    """Create fallback summary when analysis fails."""
-    return await save_analysis(
-        session_id,
-        (
-            {label: 0 for label in label_names},
-            [],
-            dict(
-                version=1,
-                brief_feedback=[FALLBACK_FEEDBACK],
-                strengths=[],
-                improvements=[],
-                dialogue_coaching=[],
-            ),
-            "failed",
-            "unknown",
-            "unknown",
-            [],
-        ),
-        db,
     )

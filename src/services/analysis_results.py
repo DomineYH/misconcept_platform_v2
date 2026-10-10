@@ -154,8 +154,7 @@ async def save_analysis(
         if summary:
             current = analysis_status(summary, report)
             preserve = (
-                (not regenerate and current not in {"failed", "degraded"})
-                or status == "failed"
+                status == "failed"
                 or (status == "degraded" and current in {"ok", "legacy"})
             )
             if preserve:

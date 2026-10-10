@@ -37,6 +37,10 @@ def test_s4_runtime_excludes_s2_execution_and_normalization(data):
             if isinstance(node, ast.ClassDef):
                 assert node.name not in forbidden, path
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                assert node.name not in {
+                    "analyze_session",
+                    "create_fallback_summary",
+                }, path
                 if node.name == "structured":
                     assert "normalize" not in {
                         arg.arg for arg in node.args.kwonlyargs
@@ -84,15 +88,9 @@ async def test_s4_start_to_reader_csv_and_replay(
         ended = await api.post(
             f"{prefix}/sessions/{sid}/end", json=body, headers=headers
         )
-        assert ended.status_code == (
-            202 if admin and mode != "chunked" else 200
-        )
-        if admin:
-            started = ended
-            url = f"{prefix}/sessions/{sid}/end"
-        else:
-            assert ended.json()["ended"] and calls == []
-            started = await api.post(url, json=body, headers=headers)
+        assert ended.status_code == (202 if mode != "chunked" else 200)
+        started = ended
+        url = f"{prefix}/sessions/{sid}/end"
     else:
         started = await api.post(url, json=body, headers=headers)
     if mode == "chunked":

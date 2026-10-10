@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.models import GenerationRun, Message, Session, User
@@ -93,6 +94,35 @@ async def run_response(db, run, *, admin=False):
     return response
 
 
+async def existing_reservation(
+    db, session_id, actor_id, request_id, fingerprint, *, admin
+):
+    existing = await db.scalar(
+        select(GenerationRun).where(
+            GenerationRun.session_id == session_id,
+            GenerationRun.owner_id == actor_id,
+            GenerationRun.request_id == request_id,
+        )
+    )
+    if existing:
+        if (
+            existing.operation != "analysis"
+            or existing.input_hash != fingerprint
+        ):
+            conflict("request_conflict")
+        return await run_response(db, existing, admin=admin)
+    busy = await db.scalar(
+        select(GenerationRun).where(
+            GenerationRun.session_id == session_id,
+            GenerationRun.operation == "analysis",
+            GenerationRun.status == "running",
+        )
+    )
+    if busy:
+        conflict("analysis_busy", run_id=busy.id)
+    return None
+
+
 async def reserve_analysis(
     factory,
     session_id,
@@ -151,32 +181,16 @@ async def reserve_analysis(
                     regenerate=regenerate,
                 )
             )
-            existing = await db.scalar(
-                select(GenerationRun).where(
-                    GenerationRun.session_id == session_id,
-                    GenerationRun.owner_id == actor_id,
-                    GenerationRun.request_id == request_id,
-                )
+            response = await existing_reservation(
+                db,
+                session_id,
+                actor_id,
+                request_id,
+                fingerprint,
+                admin=user.is_admin,
             )
-            if existing:
-                if (
-                    existing.operation != "analysis"
-                    or existing.input_hash != fingerprint
-                ):
-                    conflict("request_conflict")
-                return (
-                    await run_response(db, existing, admin=user.is_admin),
-                    None,
-                )
-            busy = await db.scalar(
-                select(GenerationRun).where(
-                    GenerationRun.session_id == session_id,
-                    GenerationRun.operation == "analysis",
-                    GenerationRun.status == "running",
-                )
-            )
-            if busy:
-                conflict("analysis_busy", run_id=busy.id)
+            if response is not None:
+                return response, None
             summary, report = await load_summary(session_id, db)
             if (
                 not regenerate
@@ -246,8 +260,33 @@ async def reserve_analysis(
                 plan_json=json.dumps(plan),
                 started_at=now(),
             )
+            admin = user.is_admin
             db.add(run)
-            await db.flush()
+            try:
+                await db.flush()
+            except IntegrityError as error:
+                await db.rollback()
+                if not any(
+                    marker in str(error.orig)
+                    for marker in (
+                        "uq_run_request",
+                        "uq_run_running_analysis",
+                        "UNIQUE constraint failed: generation_run.owner_id, generation_run.session_id, generation_run.request_id",
+                        "UNIQUE constraint failed: generation_run.session_id",
+                    )
+                ):
+                    raise
+                response = await existing_reservation(
+                    db,
+                    session_id,
+                    actor_id,
+                    request_id,
+                    fingerprint,
+                    admin=admin,
+                )
+                if response is None:
+                    raise
+                return response, None
             response = await run_response(db, run, admin=user.is_admin)
             await db.commit()
             return response, dict(
@@ -329,9 +368,12 @@ async def execute_analysis(factory, execution):
                 else "configuration_unavailable"
             ),
         )
+    except DBAPIError:
+        logger.exception("Analysis storage failed")
+        await finish_failure(factory, run_id, "failed", "storage_failed")
     except Exception:
         logger.exception("Analysis execution failed")
-        await finish_failure(factory, run_id, "failed", "storage_failed")
+        await finish_failure(factory, run_id, "failed", "analysis_failed")
 
 
 def start_analysis(factory, execution):

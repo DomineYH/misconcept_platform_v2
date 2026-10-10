@@ -48,7 +48,7 @@
         data = result;
         if (changed) {
           render();
-          announcement.textContent = `최신 실행: ${statuses[data.latest_run.status] || '상태 확인 불가'}`;
+          announcement.textContent = `최신 실행: ${statuses[data.latest_run?.status] || '상태 확인 불가'}`;
         }
         schedulePolling();
       } catch {
@@ -144,7 +144,9 @@
       link.addEventListener('click', event => {
         event.preventDefault();
         const target = document.getElementById(`${prefix}-message-${messageId}`);
-        target.closest('details').open = true;
+        if (!target) return;
+        const transcript = target.closest('details');
+        if (transcript) transcript.open = true;
         target.focus();
         target.scrollIntoView({block: 'center'});
         announcement.textContent = `메시지 ${messageId} 원문으로 이동했습니다.`;
@@ -163,7 +165,7 @@
       if (run) {
         node(root, 'h2', `최신 실행: ${statuses[run.status] || '상태 확인 불가'}`);
         if (run.superseded) node(root, 'p', '이 요청의 보고서는 이후 분석으로 대체되었습니다. 최신 결과는 세션 분석 화면에서 확인하세요.');
-        if (run.preserved && report) node(root, 'p', `이전 ${report.status === 'degraded' ? '부분 분석을' : '정상 결과를'} 보존했습니다. 최신 실행의 결과와 구별해 확인하세요.`);
+        if (run.preserved && report) node(root, 'p', `${report.status === 'legacy' ? '과거 분석을' : report.status === 'degraded' ? '이전 부분 분석을' : '이전 정상 결과를'} 보존했습니다. 최신 실행의 결과와 구별해 확인하세요.`);
         if (run.status === 'failed') node(root, 'p', '분석을 완료하지 못했습니다. 다시 시도할 수 있습니다.');
         if (run.status === 'no_dialogue' || run.outcome?.outcome === 'no_dialogue') node(root, 'p', '분석 가능 범위: 0개 메시지 · 호출 없이 안내합니다.');
       }

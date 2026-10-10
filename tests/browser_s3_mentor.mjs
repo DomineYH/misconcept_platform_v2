@@ -4,7 +4,7 @@ export default async function checkMentorOutcomes(page) {
   page.setDefaultTimeout(5000);
   const base = new URL(page.url()).origin;
   page.on('dialog', dialog => dialog.accept());
-  await page.route('**/sessions/*/end', route => route.fulfill({json:{ended:true}}));
+  await page.route('**/sessions/*/end', route => route.fulfill({json:{feedback_status:'failed', retryable:true, error:'analysis_failed'}}));
   await page.route('**/sessions/*/analyze', route => route.fulfill({json:{feedback_status:'failed', retryable:true, error:'analysis_failed'}}));
   await page.addInitScript(() => {
     const original = window.fetch;

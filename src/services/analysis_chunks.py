@@ -43,6 +43,7 @@ async def run_chunk_pipeline(
     run_id=None,
     plan,
 ):
+    assert len(plan["chunks"]) <= 8, "Analysis plans support at most 8 chunks"
     analysis = snapshot.config.analysis
     selection = analysis.resolved_model_config
     caller = AnalysisCaller(

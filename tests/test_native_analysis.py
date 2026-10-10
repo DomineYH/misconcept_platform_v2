@@ -485,3 +485,79 @@ async def test_admin_analysis_and_csv_map_frozen_names(data, api, monkeypatch):
         and "Explore" in export.text
         and "enabled" in export.text
     )
+
+
+async def test_analysis_ignores_recent_turn_window_and_excludes_reasoning_and_partial_generation(
+    data, api, monkeypatch
+):
+    from uuid import uuid4
+
+    from s4_analysis_fixtures import prompt_inputs
+    from sqlalchemy import select
+
+    from src.models import GenerationRun
+    from src.services.lesson_snapshots import read_lesson_snapshot
+
+    await native_analysis(data, monkeypatch)
+    assert (
+        read_lesson_snapshot(data.session).config.runtime.context_turn_limit
+        == 1
+    )
+    stored = list(await data.db.scalars(select(Message).order_by(Message.id)))
+    stored[1].analysis_metadata = json.dumps(
+        {"reasoning": "PRIVATE RAW REASONING"}
+    )
+    data.db.add_all(
+        [
+            Message(
+                session_id=data.session.id,
+                role="student",
+                content="Completed second answer",
+            ),
+            Message(
+                session_id=data.session.id,
+                role="teacher",
+                content="Final unanswered question",
+            ),
+            GenerationRun(
+                id=str(uuid4()),
+                owner_id=data.owner.id,
+                session_id=data.session.id,
+                turn_id=str(uuid4()),
+                operation="student",
+                request_id=str(uuid4()),
+                input_hash="a" * 64,
+                config_hash=data.session.config_hash,
+                provider="openai",
+                model="gpt-5-mini",
+                status="failed",
+                partial_text="PRIVATE PARTIAL GENERATION",
+            ),
+        ]
+    )
+    await data.db.commit()
+
+    async def upstream(request, body):
+        inputs = prompt_inputs(body)["messages"]
+        assert [m["content"] for m in inputs] == [
+            "Early question {x}",
+            "Early answer",
+            "Why?",
+            "Completed second answer",
+            "Final unanswered question",
+        ]
+        assert all(set(m) == {"id", "role", "content"} for m in inputs)
+        assert "PRIVATE RAW REASONING" not in json.dumps(body)
+        assert "PRIVATE PARTIAL GENERATION" not in json.dumps(body)
+        return httpx2.Response(
+            200, json=response_body(json.dumps(result_for(body)), USAGE)
+        )
+
+    _, calls = analysis_transport(monkeypatch, upstream)
+    response = await api.post(
+        f"/sessions/{data.session.id}/analyze",
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
+    )
+    assert response.status_code == 200
+    assert response.json()["feedback_status"] == "ok"
+    assert len(calls) == 1

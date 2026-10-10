@@ -301,3 +301,37 @@ async def test_eight_confirmed_chunks_make_nine_calls_with_classification_on_or_
         and c["reasoning"] == {"effort": "medium"}
         for c in calls
     )
+
+
+async def test_executor_rejects_more_than_eight_chunks_before_any_call(
+    data, api, monkeypatch
+):
+    from src.models import Message
+    from src.services.analysis_chunks import run_chunk_pipeline
+    from src.services.analysis_plan import load_plan
+    from src.services.lesson_snapshots import read_lesson_snapshot
+
+    await long_session(data, monkeypatch)
+    plan = await load_plan(data.db, data.session)
+    plan["chunks"] = (plan["chunks"] * 5)[:9]
+    messages = list(await data.db.scalars(select(Message).order_by(Message.id)))
+    snapshot = read_lesson_snapshot(data.session)
+    await data.db.commit()
+
+    async def upstream(request, body):
+        return httpx2.Response(
+            200, json=response_body(json.dumps(chunk_reply(body)), USAGE)
+        )
+
+    _, calls = analysis_transport(monkeypatch, upstream)
+    with pytest.raises(AssertionError, match="at most 8 chunks"):
+        await run_chunk_pipeline(
+            data.session.id,
+            messages,
+            [m for m in messages if m.role == "teacher"],
+            snapshot,
+            data.factory,
+            data.owner.id,
+            plan=plan,
+        )
+    assert calls == []

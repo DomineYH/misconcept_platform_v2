@@ -7,6 +7,7 @@ from sqlalchemy import select, text
 from test_regressions import request
 
 from src.api.routes import admin_session_actions as actions
+from src.api.routes import session_analysis as routes
 from src.models import Session, SessionFeedbackReport, SessionSummary
 from src.services import analysis_pipeline as pipeline
 
@@ -55,12 +56,15 @@ async def test_analysis_save_failure_is_atomic(data, monkeypatch):
         return_value=({"A": 1}, [], {}, "invalid-status", "test", "hash", [])
     )
     monkeypatch.setattr(pipeline, "run_llm_pipeline", fake)
-    with pytest.raises(Exception):
-        await pipeline.analyze_session(
-            data.session.id,
-            data.session,
-            data.db,
-        )
+    result = await call_analysis_route(
+        routes.analyze_session_endpoint,
+        request(),
+        data.session.id,
+        data.owner,
+        data.db,
+    )
+    assert result["latest_run"]["status"] == "failed"
+    assert result["latest_run"]["adopted"] is False
     await data.db.rollback()
     async with data.factory() as reader:
         assert (await reader.scalars(select(SessionSummary))).all() == []

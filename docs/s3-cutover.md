@@ -172,6 +172,6 @@ reverification or snapshot/model/option substitution is performed.
 
 Analysis now uses the `s4-v2` role contract and a separate
 `utf8-v1-s4-20pct` planner. A low frozen output cap can block analysis before any
-provider call. A chunked plan requires explicit confirmation; execution remains
-unavailable until #83 supplies the chunk executor. No additional migration is
-needed for #82: migration 034 already provides `generation_run.plan_json`.
+provider call. A chunked plan requires explicit confirmation and uses the #83
+chunk executor. No additional migration is needed for #82: migration 034 already
+provides `generation_run.plan_json`.

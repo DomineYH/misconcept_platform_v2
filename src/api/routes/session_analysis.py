@@ -1,5 +1,8 @@
 """Session analysis routes."""
 
+from datetime import timezone
+from uuid import NAMESPACE_URL, uuid5
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
@@ -36,21 +39,32 @@ limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 async def end_session(
     request: Request,
     session_id: int,
+    body: AnalysisRequest | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
-    """End session without running analysis.
+):
+    """Commit the end, then reserve analysis or return its confirmation plan."""
+    from src.services.analysis_runs import request_analysis
 
-    This endpoint only marks the session as ended. Use the /analyze
-    endpoint to run the analysis separately.
-    """
     session = await load_session(session_id, user, db)
-    await mark_session_ended(session, db, force=True)
-
-    return {
-        "ended": True,
-        "ended_at": session.ended_at.isoformat() if session.ended_at else None,
-    }
+    ended_at, _ = await mark_session_ended(session, db, force=True)
+    request_id = (
+        body.request_id
+        if body
+        else str(
+            uuid5(
+                NAMESPACE_URL,
+                f"teacher-end:{session_id}:{user.id}:{ended_at.replace(tzinfo=timezone.utc).isoformat()}",
+            )
+        )
+    )
+    return await request_analysis(
+        db,
+        session_id,
+        user.id,
+        request_id,
+        plan_hash=body.plan_hash if body else None,
+    )
 
 
 @router.post("/sessions/{session_id}/analyze")

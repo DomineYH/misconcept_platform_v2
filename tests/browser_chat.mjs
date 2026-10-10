@@ -36,7 +36,7 @@ export default async function checkChat(page) {
       }
     } else if (path.endsWith('/runs')) {
       await route.fulfill({status:401, contentType:'application/json', body:'{"code":"AUTH_EXPIRED"}'});
-    } else if (path.endsWith('/analyze')) {
+    } else if (path.endsWith('/analyze') || path.endsWith('/end')) {
       analysisCount++;
       analysisRequests.push(request.postDataJSON());
       await route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(
@@ -94,6 +94,7 @@ export default async function checkChat(page) {
 
   await page.locator('#end-session-btn').click();
   await page.waitForFunction(() => document.querySelector('#end-session-btn').dataset.state === 'ready-to-analyze');
+  assert(analysisCount === 1 && analysisRequests[0].request_id, 'end response drives analysis without a second request');
   assert(await input.isDisabled(), 'ended session locks messages');
   assert(!(await page.locator('#end-session-btn').isDisabled()), 'failed analysis allows retry');
   assert(await page.locator('#polling-enabled').inputValue() === 'false', 'ended polling stopped');
@@ -109,6 +110,19 @@ export default async function checkChat(page) {
   await page.goto(`${base}/chat?ended=1`);
   assert(await input.isDisabled(), 'ended reload remains locked');
   assert(await page.locator('#end-session-btn').getAttribute('data-state') === 'ready-to-analyze', 'ended reload can analyze');
+  await page.goto(`${base}/chat`);
+  const lostEndRequests = [];
+  await page.route('**/sessions/1/end', async route => {
+    lostEndRequests.push(route.request().postDataJSON());
+    if (lostEndRequests.length === 1) await route.abort('failed');
+    else await route.fulfill({status:202, json:{latest_run:{status:'running'}}});
+  });
+  await page.locator('#end-session-btn').click();
+  await page.waitForFunction(() => document.querySelector('#end-session-btn').dataset.state === 'ready-to-analyze');
+  await page.locator('#end-session-btn').click();
+  await page.waitForFunction(() => document.querySelector('#end-session-btn').dataset.state === 'done');
+  assert(lostEndRequests.length === 2 && lostEndRequests[0].request_id === lostEndRequests[1].request_id, 'lost end response retries end with the same request');
+  await page.goto(`${base}/chat?ended=1`);
   const lostRequests = [];
   await page.route('**/sessions/1/analyze', async route => {
     lostRequests.push(route.request().postDataJSON());

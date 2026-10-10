@@ -80,5 +80,12 @@ export default async function checkExplicitAnalysisLifecycle(page) {
   await page.waitForTimeout(1300);
   assert.equal(polls, removed, 'removing the modal stops polling');
   assert.equal(cancellations, 1, 'removing the modal keeps the reserved run');
+  const legacy = await fixture('legacy');
+  await page.route('**/sessions/1/analysis/runs/run-1', route => route.fulfill({json: {
+    ...legacy, latest_run: null,
+  }}));
+  await page.goto(`${origin}/fixtures/s4/analysis?state=running`);
+  await result.getByRole('heading', {name: '채택된 보고서: 과거 분석'}).waitFor();
+  assert.equal(await result.getByRole('status').innerText(), '최신 실행: 상태 확인 불가');
   return {checks: ['same request replay, active status polling, explicit cancellation, preservation and stopped polling'], pageErrors: []};
 }

@@ -215,7 +215,7 @@ execution totals belong to the final #86 report. Every row remains subject to
 
 | Spec criterion | Evidence / human gate |
 | --- | --- |
-| D1.1 native/frozen/current authority, historical reading separate | `test_analysis_checks_current_authority_and_native_provenance`; `test_unadoptable_run_keeps_no_report_and_never_reexecutes[revoke]`; `test_s4_concurrent_regeneration_interruption_preserves_report` |
+| D1.1 native/frozen/current authority, historical reading separate | `test_analysis_checks_current_authority_and_native_provenance`; `test_unadoptable_run_keeps_no_report_and_never_reexecutes[revoke-baseline]`; `test_s4_concurrent_regeneration_interruption_preserves_report` |
 | D1.2 full ordered teacher/student input, no mentor/reasoning/window truncation | `test_analysis_uses_frozen_inputs_and_one_model_option_set`; `test_analysis_ignores_recent_turn_window_and_excludes_reasoning_and_partial_generation` |
 | D1.3 unanswered/unlinked ownership and response_missing | `test_unmatched_messages_attach_without_inventing_turn_links`; `test_single_analysis_saves_v2_evidence_and_server_statistics` |
 | D1.4 no_dialogue/teacher-only/greeting-only | `test_dialogue_boundaries_have_honest_coverage_and_call_count` |

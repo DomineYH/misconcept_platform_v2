@@ -563,7 +563,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         delete btn.dataset.analysisRequestId;
       }
       const activeRun = analyzeResponse.status === 409 && analysisResult.detail?.code === 'analysis_busy';
-      if ((analyzeResponse.ok && !analysisResult.retryable) || activeRun) {
+      if ((analyzeResponse.ok && (analyzeResponse.status === 202 || !analysisResult.retryable)) || activeRun) {
         const overlay = document.getElementById('analysis-modal-overlay');
         htmx.ajax('GET', `/sessions/${window.currentSessionId}/analysis_modal`,
           { target: '#analysis-modal-container', swap: 'innerHTML' })

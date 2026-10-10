@@ -113,7 +113,7 @@ export default async function checkChat(page) {
   await page.route('**/sessions/1/analyze', async route => {
     lostRequests.push(route.request().postDataJSON());
     if (lostRequests.length === 1) await route.abort('failed');
-    else await route.fulfill({status:202, json:{retryable:false, latest_run:{status:'running'}}});
+    else await route.fulfill({status:202, json:{retryable:true, latest_run:{status:'running'}}});
   });
   await page.locator('#end-session-btn').click();
   await page.waitForFunction(() => document.querySelector('#end-session-btn').dataset.state === 'ready-to-analyze');

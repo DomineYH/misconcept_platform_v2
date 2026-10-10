@@ -45,6 +45,27 @@ export default async function checkExplicitAnalysisLifecycle(page) {
   assert(await result.getByRole('heading', {name: '채택된 보고서: 정상 분석'}).isVisible());
   assert.equal(submitted.length, 2, 'cancel does not restart analysis');
 
+  await page.route('**/sessions/1/analyze', route => route.fulfill({status: 409,
+    json: {detail: {code: 'analysis_busy', run_id: 'run-1'}}}));
+  await page.goto(`${origin}/fixtures/s4/analysis?state=failed`);
+  await result.getByRole('button', {name: '분석 재시도', exact: true}).click();
+  await result.getByRole('heading', {name: '최신 실행: 분석 진행 중'}).waitFor();
+  assert.match(await result.getByRole('status').innerText(), /진행 중인 분석 실행/);
+
+  await page.route('**/sessions/1/analyze', route => route.fulfill({status: 409,
+    json: {detail: {code: 'request_conflict'}}}));
+  await page.goto(`${origin}/fixtures/s4/analysis?state=failed`);
+  await result.getByRole('button', {name: '분석 재시도', exact: true}).click();
+  await result.getByRole('status').filter({hasText: '요청 입력이 변경되어'}).waitFor();
+  assert.equal(await result.getByRole('button', {name: '같은 요청 다시 전송', exact: true}).count(), 0);
+
+  await page.route('**/fixtures/s4/result?state=failed', route => route.fulfill({json: {
+    ...running, accepted_report: null, latest_run: {status: 'ok', superseded: true},
+  }}));
+  await page.goto(`${origin}/fixtures/s4/analysis?state=failed`);
+  await result.getByText('이 요청의 보고서는 이후 분석으로 대체되었습니다. 최신 결과는 세션 분석 화면에서 확인하세요.', {exact: true}).waitFor();
+  assert.equal(await result.getByRole('heading', {name: /채택된 보고서/}).count(), 0);
+
   await page.goto(`${origin}/fixtures/s4/analysis?state=running`);
   await result.getByRole('heading', {name: '최신 실행: 분석 진행 중'}).waitFor();
   await page.goto(`${origin}/chat`);
@@ -52,5 +73,12 @@ export default async function checkExplicitAnalysisLifecycle(page) {
   await page.waitForTimeout(1300);
   assert.equal(polls, departed, 'leaving the screen stops status polling');
   assert.equal(cancellations, 1, 'leaving is not an explicit cancellation');
+  await page.goto(`${origin}/fixtures/s4/analysis?state=running`);
+  await result.getByRole('heading', {name: '최신 실행: 분석 진행 중'}).waitFor();
+  await result.evaluate(el => el.remove());
+  const removed = polls;
+  await page.waitForTimeout(1300);
+  assert.equal(polls, removed, 'removing the modal stops polling');
+  assert.equal(cancellations, 1, 'removing the modal keeps the reserved run');
   return {checks: ['same request replay, active status polling, explicit cancellation, preservation and stopped polling'], pageErrors: []};
 }

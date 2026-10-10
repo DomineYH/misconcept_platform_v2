@@ -1,6 +1,6 @@
 """Admin session action routes."""
 
-import logging
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
+from src.api.routes.session_analysis import AnalysisRequest
 from src.api.routes.session_helpers import (
     mark_session_ended,
     require_native_session,
@@ -24,13 +25,12 @@ from src.api.routes.session_helpers import (
 from src.config import config
 from src.models.session import Session
 from src.models.user import User
-from src.services.analysis_pipeline import analyze_session, load_analysis_lesson
 from src.services.analysis_results import (
     load_analysis_response as _load_analysis_response,
 )
+from src.services.analysis_runs import request_analysis
 from src.services.session_history import session_display
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
@@ -42,6 +42,7 @@ limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 async def end_session(
     request: Request,
     session_id: int,
+    body: AnalysisRequest | None = None,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -64,22 +65,18 @@ async def end_session(
         )
 
     require_native_session(session)
-    if session.ended_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session already ended",
-        )
+    await mark_session_ended(session, db, force=True)
+    accepted = await request_analysis(
+        db,
+        session_id,
+        user.id,
+        body.request_id if body else str(uuid4()),
+        plan_hash=body.plan_hash if body else None,
+    )
+    if body is not None:
+        return accepted
 
-    await mark_session_ended(session, db)
-
-    # Trigger analysis
-    try:
-        await analyze_session(session_id, session, db, actor_id=user.id)
-    except Exception as e:
-        await db.rollback()
-        logger.warning(f"Analysis failed for session {session_id}: {e}")
-
-    # Rollback expires scalar and relationship attributes; reload all render inputs.
+    # Reload render inputs after committing the end and analysis reservation.
     session = (
         await db.execute(
             query.options(joinedload(Session.summary)).execution_options(
@@ -94,7 +91,9 @@ async def end_session(
             "request": request,
             "session": session,
             "session_display": session_display,
+            "analysis_session_ids": {session_id},
         },
+        status_code=accepted.status_code,
     )
 
 
@@ -242,54 +241,52 @@ async def get_admin_analysis(
 @limiter.limit("2/minute")
 async def regenerate_analysis(
     request: Request,
+    body: AnalysisRequest,
     session_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
-    """Regenerate session analysis (admin-only).
-
-    Runs full synthesis pipeline. On LLM failure, old data is preserved.
-    On success, replaces old report and summary atomically.
-    """
-    query = (
-        select(Session)
-        .options(joinedload(Session.scenario))
-        .where(Session.id == session_id)
+):
+    """Reserve a new analysis while preserving the accepted report."""
+    return await request_analysis(
+        db,
+        session_id,
+        user.id,
+        body.request_id,
+        regenerate=True,
+        plan_hash=body.plan_hash,
     )
-    result = await db.execute(query)
-    session = result.unique().scalar_one_or_none()
 
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
 
-    require_native_session(session)
-    if not session.ended_at:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session must be ended before analysis",
-        )
+@router.get("/admin/sessions/{session_id}/analysis/runs/{run_id}")
+async def get_admin_analysis_run(
+    session_id: int,
+    run_id: str,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    from src.services.analysis_runs import get_run, run_response
 
-    await load_analysis_lesson(db, session_id, user.id)
-    try:
-        saved = await analyze_session(
-            session_id, session, db, actor_id=user.id, regenerate=True
-        )
-    except Exception:
-        await db.rollback()
-        logger.exception(
-            "Analysis regeneration failed for session %d", session_id
-        )
-        raise HTTPException(
-            500, detail="Analysis regeneration failed"
-        ) from None
-    analysis_data = await _load_analysis_response(session_id, db, admin=True)
-    if analysis_data is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Analysis regeneration failed",
-        )
-    analysis_data["regeneration_status"] = saved["regeneration_status"]
-    return analysis_data
+    run = await get_run(db, session_id, run_id)
+    session = await db.get(Session, session_id)
+    if session is None or session.deleted_at is not None:
+        raise HTTPException(404, detail="Session not found")
+    return await run_response(db, run, admin=True)
+
+
+@router.post(
+    "/admin/sessions/{session_id}/analysis/runs/{run_id}/cancel",
+    status_code=202,
+)
+async def cancel_admin_analysis_run(
+    session_id: int,
+    run_id: str,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    from src.services.analysis_runs import cancel_analysis, get_run
+
+    await get_run(db, session_id, run_id)
+    session = await db.get(Session, session_id)
+    if session is None or session.deleted_at is not None:
+        raise HTTPException(404, detail="Session not found")
+    return await cancel_analysis(db, session_id, run_id, user.id, admin=True)

@@ -2,17 +2,48 @@
 
 import json
 
+from src.utils.session_feedback import FALLBACK_FEEDBACK
+
 
 def public_analysis(
-    session, summary, report, messages, labels, enabled, latest, *, admin=False
+    session,
+    summary,
+    report,
+    messages,
+    labels,
+    enabled,
+    latest,
+    *,
+    admin=False,
+    run=None,
 ):
-    payload = json.loads(report.payload_json)
-    outcome = payload.get("metadata", {}).get("outcome", report.status)
+    payload = (
+        json.loads(report.payload_json)
+        if report
+        else dict(brief_feedback=[summary.feedback] if summary else [])
+    )
+    outcome = payload.get("metadata", {}).get(
+        "outcome", report.status if report else "running"
+    )
     accepted = None
-    if report.status != "failed" and outcome != "no_dialogue":
+    if (
+        summary is not None
+        and outcome != "no_dialogue"
+        and (
+            (report is not None and report.status != "failed")
+            or (report is None and summary.feedback != FALLBACK_FEEDBACK)
+        )
+    ):
         total = sum(summary.distribution.values())
         accepted = {
-            key: payload[key]
+            key: payload.get(
+                key,
+                (
+                    []
+                    if key != "schema_version"
+                    else (report.version if report else 1)
+                ),
+            )
             for key in (
                 "schema_version",
                 "message_classifications",
@@ -24,8 +55,11 @@ def public_analysis(
             )
         }
         accepted.update(
-            status=report.status,
-            created_at=report.created_at.isoformat(),
+            run_id=payload.get("metadata", {}).get("run_id"),
+            status=report.status if report else "legacy",
+            created_at=(
+                report.created_at if report else summary.created_at
+            ).isoformat(),
             classification_enabled=enabled,
             coverage=payload.get("metadata", {}).get("coverage"),
             distribution=(
@@ -54,6 +88,14 @@ def public_analysis(
         )
     elif latest is not None and latest.error_code:
         latest_run["error_code"] = latest.error_code
+    if run is not None:
+        from src.services.analysis_runs import run_state
+
+        latest_run = run_state(run, report)
+        latest_run["preserved"] = (
+            accepted is not None and accepted.get("run_id") != run.id
+        )
+    running = latest_run["status"] == "running"
     native = session.snapshot_origin == "native"
     return dict(
         accepted_report=accepted,
@@ -61,16 +103,31 @@ def public_analysis(
         messages=messages,
         plan=None,
         permissions=dict(
-            can_analyze=native and report.status == "failed",
-            can_retry=native and report.status == "failed",
-            can_regenerate=native and admin,
+            can_analyze=native
+            and accepted is None
+            and latest_run["status"] in {"failed", "cancelled", "interrupted"},
+            can_retry=native
+            and not running
+            and latest_run["status"] == "failed"
+            and accepted is None,
+            can_regenerate=native and admin and not running,
             read_only=not native,
         ),
         actions=dict(
+            status=(
+                f"/admin/sessions/{session.id}/analysis"
+                if admin
+                else f"/sessions/{session.id}/analysis"
+            ),
+            cancel=(
+                f"{'/admin' if admin else ''}/sessions/{session.id}/analysis/runs/{run.id}/cancel"
+                if run and running
+                else None
+            ),
             analyze=(
                 f"/admin/sessions/{session.id}/analyze_regenerate"
                 if admin
                 else f"/sessions/{session.id}/analyze"
-            )
+            ),
         ),
     )

@@ -33,6 +33,7 @@ async def api(data, monkeypatch):
         migrate.DIRECTORY / "032_mentor_reason_summary.sql"
     )
     await migrate.run_migration(migrate.DIRECTORY / "033_context_budget.sql")
+    await migrate.run_migration(migrate.DIRECTORY / "034_analysis_run.sql")
     from legacy_models import native_writer_defaults
 
     native_writer_defaults(data.engine.url.database)

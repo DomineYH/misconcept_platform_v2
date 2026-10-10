@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from analysis_fixtures import install_analysis_snapshot
+from analysis_test_helpers import call_analysis_route
 from sqlalchemy import select
 from test_regressions import request
 
@@ -30,16 +31,16 @@ async def test_failed_analysis_retries_then_reuses_success(data, monkeypatch):
         )
     )
     monkeypatch.setattr(pipeline, "run_llm_pipeline", fake)
-    result = await routes.analyze_session_endpoint(
-        request(), sid, data.owner, data.db
+    result = await call_analysis_route(
+        routes.analyze_session_endpoint, request(), sid, data.owner, data.db
     )
     assert fake.await_count == 1
     assert result["feedback"] == "success"
     assert result["feedback_status"] == "ok"
     assert result["retryable"] is False
     assert (
-        await routes.analyze_session_endpoint(
-            request(), sid, data.owner, data.db
+        await call_analysis_route(
+            routes.analyze_session_endpoint, request(), sid, data.owner, data.db
         )
         == result
     )
@@ -71,23 +72,23 @@ async def test_legacy_and_degraded_policy(data, monkeypatch):
     )
     data.db.add(summary)
     await data.db.commit()
-    response = await routes.analyze_session_endpoint(
-        request(), sid, data.owner, data.db
+    response = await call_analysis_route(
+        routes.analyze_session_endpoint, request(), sid, data.owner, data.db
     )
     assert response["feedback_status"] == "legacy"
     assert fake.await_count == 0
     summary.feedback = pipeline.FALLBACK_FEEDBACK
     await data.db.commit()
-    response = await routes.analyze_session_endpoint(
-        request(), sid, data.owner, data.db
+    response = await call_analysis_route(
+        routes.analyze_session_endpoint, request(), sid, data.owner, data.db
     )
     assert response["feedback"] == "recovered"
     assert fake.await_count == 1
     _, report = await load_summary(sid, data.db)
     report.status = "degraded"
     await data.db.commit()
-    response = await routes.analyze_session_endpoint(
-        request(), sid, data.owner, data.db
+    response = await call_analysis_route(
+        routes.analyze_session_endpoint, request(), sid, data.owner, data.db
     )
     assert response["feedback_status"] == "degraded"
     assert fake.await_count == 1
@@ -172,8 +173,8 @@ async def test_admin_cannot_replace_good_result_with_failed_or_degraded(
             "run_llm_pipeline",
             AsyncMock(return_value=({}, [], {}, status, "test", "hash", [])),
         )
-        result = await actions.regenerate_analysis(
-            request(), sid, data.admin, data.db
+        result = await call_analysis_route(
+            actions.regenerate_analysis, request(), sid, data.admin, data.db
         )
         assert result["feedback"] == "original"
         assert result["feedback_status"] == "ok"

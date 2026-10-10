@@ -24,7 +24,9 @@ USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
 async def api(connection_api, data):
     login(connection_api, data.owner)
     await connection_api.get("/health")
-    yield connection_api
+    from analysis_test_helpers import AnalysisApi
+
+    yield AnalysisApi(connection_api)
 
 
 def analysis_transport(monkeypatch, handler):
@@ -118,7 +120,11 @@ async def test_analysis_uses_db_key_and_ledger_and_preserves_degraded(
     assert all(
         r.total_tokens == 15 and r.session_id == data.session.id for r in rows
     )
-    assert all(r.owner_id == data.owner.id and r.run_id is None for r in rows)
+    assert all(
+        r.owner_id == data.owner.id
+        and r.run_id == response.json()["latest_run"]["run_id"]
+        for r in rows
+    )
 
 
 @pytest.mark.parametrize(

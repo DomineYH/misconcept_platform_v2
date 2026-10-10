@@ -32,7 +32,9 @@ async def client(data):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            yield client
+            from analysis_test_helpers import AnalysisApi
+
+            yield AnalysisApi(client)
     finally:
         app.dependency_overrides.clear()
 

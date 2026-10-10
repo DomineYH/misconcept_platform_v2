@@ -72,6 +72,9 @@ async def install_connection(data, monkeypatch):
         await migrate.run_migration(
             migrate.DIRECTORY / "033_context_budget.sql", db_engine=data.engine
         )
+    await migrate.run_migration(
+        migrate.DIRECTORY / "034_analysis_run.sql", db_engine=data.engine
+    )
     connection = await data.db.scalar(
         select(ProviderConnection).where(
             ProviderConnection.provider == "openai"

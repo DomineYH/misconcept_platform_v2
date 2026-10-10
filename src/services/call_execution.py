@@ -186,6 +186,12 @@ async def execute_call(
 
                 async with permit.factory() as db:
                     try:
+                        if run_id is not None:
+                            from src.models import GenerationRun
+
+                            run = await db.get(GenerationRun, run_id)
+                            if run is None or run.status != "running":
+                                raise InvocationError("interrupted")
                         await load_analysis_lesson(
                             db,
                             session_id,

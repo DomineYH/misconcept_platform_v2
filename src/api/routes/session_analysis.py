@@ -1,40 +1,31 @@
 """Session analysis routes."""
 
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
-    require_native_session,
 )
+from src.api.routes.student_generation import GenerationRequest
 from src.config import config
 from src.models import (
     UiEvent,
     User,
 )
-from src.services.analysis_pipeline import (
-    analyze_session,
-    handle_analysis_failure,
-    handle_duplicate_session_state,
-    load_analysis_lesson,
-)
 from src.services.analysis_results import (
-    analysis_status,
     load_analysis_response,
-    load_summary,
-    summary_response,
 )
 from src.services.export import CSVExporter
 
-logger = logging.getLogger(__name__)
+
+class AnalysisRequest(GenerationRequest):
+    plan_hash: str | None = None
+
 
 router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
@@ -66,48 +57,18 @@ async def end_session(
 @limiter.limit("5/minute")
 async def analyze_session_endpoint(
     request: Request,
+    body: AnalysisRequest,
     session_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
-    """Analyze questions and generate summary for an ended session."""
-    session = await load_session(session_id, user, db)
-    require_native_session(session)
+):
+    """Reserve an analysis independently of the response connection."""
+    from src.services.analysis_runs import request_analysis
 
-    # Session must be ended before analysis
-    if not session.ended_at:
-        raise HTTPException(
-            status_code=400,
-            detail="Session must be ended before analysis",
-        )
-
-    existing_summary, existing_report = await load_summary(session_id, db)
-    if (
-        existing_summary
-        and analysis_status(existing_summary, existing_report) != "failed"
-    ):
-        if existing_report is not None and existing_report.version == 2:
-            return await load_analysis_response(session_id, db)
-        return summary_response(existing_summary, existing_report)
-
-    snapshot = await load_analysis_lesson(db, session_id, user.id)
-    label_names = (
-        [r.id for r in snapshot.config.analysis.rubric]
-        if snapshot.config.analysis.classification_enabled
-        else []
+    await load_session(session_id, user, db)
+    return await request_analysis(
+        db, session_id, user.id, body.request_id, plan_hash=body.plan_hash
     )
-    try:
-        saved = await analyze_session(session_id, session, db, actor_id=user.id)
-        _, report = await load_summary(session_id, db)
-        if report is not None and report.version == 2:
-            return await load_analysis_response(session_id, db)
-        return saved
-    except IntegrityError as e:
-        return await handle_duplicate_session_state(
-            session_id, label_names, db, e
-        )
-    except Exception as e:
-        return await handle_analysis_failure(session_id, label_names, db, e)
 
 
 @router.get("/sessions/{session_id}/analysis")
@@ -233,3 +194,31 @@ async def export_session(
             )
         },
     )
+
+
+@router.get("/sessions/{session_id}/analysis/runs/{run_id}")
+async def get_analysis_run(
+    session_id: int,
+    run_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await load_session(session_id, user, db)
+    from src.services.analysis_runs import get_run, run_response
+
+    return await run_response(db, await get_run(db, session_id, run_id))
+
+
+@router.post(
+    "/sessions/{session_id}/analysis/runs/{run_id}/cancel", status_code=202
+)
+async def cancel_analysis_run(
+    session_id: int,
+    run_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await load_session(session_id, user, db)
+    from src.services.analysis_runs import cancel_analysis
+
+    return await cancel_analysis(db, session_id, run_id, user.id)

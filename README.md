@@ -89,6 +89,14 @@ v2 call uses the frozen lesson and completed teacher/student dialogue; the serve
 validates exact evidence and computes statistics and rubric grades. No dialogue
 makes no provider call. Existing v1 reports remain readable; analysis models need
 explicit s4-v2 role revalidation, while student and mentor evidence stays current.
+Analysis requests send a UUID `request_id` and receive 202 with a durable run ID
+and status/cancel paths. Replaying that request makes no new call; changed inputs
+or another active request return 409. Accepted reports and the latest execution
+status are separate. Leaving the page keeps the execution; explicit cancellation,
+the 900-second run cap, permission revocation or failed storage prevent adoption.
+Startup marks unfinished runs interrupted without rerunning them. Migration 034
+preserves existing records and adds analysis execution constraints; the supported
+single worker owns the page-independent tasks.
 Do not treat this stage as the final production cutover.
 
 Encryption uses the exactly pinned [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/)

@@ -83,8 +83,8 @@ async def test_033_preserves_032_history_and_matches_fresh(tmp_path):
                 )
             ).scalar() == 1
             upgraded_schema = await schema(db)
-        await migrate.run_all_migrations(db_engine=fresh)
-        await migrate.run_all_migrations(db_engine=fresh)
+        await migrate.run_all_migrations(through=33, db_engine=fresh)
+        await migrate.run_all_migrations(through=33, db_engine=fresh)
         async with fresh.connect() as db:
             assert await schema(db) == upgraded_schema
     finally:

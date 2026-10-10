@@ -549,15 +549,21 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
     // Phase 2: Analyze
     setAnalysisState('analyzing');
+    btn.dataset.analysisRequestId ||= crypto.randomUUID();
 
     try {
       const analyzeResponse = await fetchWithAuthGuard(`/sessions/${window.currentSessionId}/analyze`, {
         method: 'POST',
-        headers: getCsrfHeaders()
+        headers: {...getCsrfHeaders(), 'Content-Type': 'application/json'},
+        body: JSON.stringify({request_id: btn.dataset.analysisRequestId})
       });
 
       const analysisResult = await safeReadJson(analyzeResponse);
-      if (analyzeResponse.ok && !analysisResult.retryable) {
+      if (analyzeResponse.ok || analysisResult.detail?.code === 'request_conflict') {
+        delete btn.dataset.analysisRequestId;
+      }
+      const activeRun = analyzeResponse.status === 409 && analysisResult.detail?.code === 'analysis_busy';
+      if ((analyzeResponse.ok && !analysisResult.retryable) || activeRun) {
         const overlay = document.getElementById('analysis-modal-overlay');
         htmx.ajax('GET', `/sessions/${window.currentSessionId}/analysis_modal`,
           { target: '#analysis-modal-container', swap: 'innerHTML' })

@@ -131,7 +131,8 @@ async def test_dialogue_boundaries_have_honest_coverage_and_call_count(
     )
     assert len(calls) == (0 if boundary == "no_dialogue" else 1)
     if boundary == "no_dialogue":
-        assert result["latest_run"]["status"] == "no_dialogue"
+        assert result["latest_run"]["status"] == "ok"
+        assert result["latest_run"]["outcome"]["outcome"] == "no_dialogue"
         assert result["accepted_report"] is None and result["messages"] == []
         async with data.factory() as db:
             report = await db.scalar(select(SessionFeedbackReport))

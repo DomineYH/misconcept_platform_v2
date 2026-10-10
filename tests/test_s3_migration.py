@@ -136,7 +136,7 @@ async def test_s2_final_wal_restore_s3_upgrade_preserves_history_and_access(
             ]
             upgraded_schema = await schema(db)
         for _ in range(2):
-            await migrate.run_all_migrations(db_engine=fresh)
+            await migrate.run_all_migrations(through=33, db_engine=fresh)
         async with fresh.connect() as db:
             assert await schema(db) == upgraded_schema
 

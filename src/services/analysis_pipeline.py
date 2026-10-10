@@ -7,12 +7,10 @@ Failed attempts preserve an existing accepted report.
 """
 
 import json
-import logging
 from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.api.routes.session_helpers import (
@@ -29,11 +27,7 @@ from src.models import (
 from src.models.provider_connection import now
 from src.services.analysis_invocations import AnalysisCaller
 from src.services.analysis_output_contract import UnifiedAnalysisOutput
-from src.services.analysis_results import (
-    load_summary,
-    save_analysis,
-    summary_response,
-)
+from src.services.analysis_results import save_analysis
 from src.services.analysis_statistics import analysis_statistics
 from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
@@ -44,8 +38,6 @@ from src.services.lesson_snapshots import (
 )
 from src.services.session_synthesizer import FAILED_PAYLOAD, prompt_hash
 from src.utils.cache import load_prompt_template
-
-logger = logging.getLogger(__name__)
 
 FALLBACK_FEEDBACK = (
     "분석에 실패했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요."
@@ -114,6 +106,9 @@ async def run_llm_pipeline(
     factory,
     owner_id=None,
     actor_id=None,
+    *,
+    request_id=None,
+    run_id=None,
 ) -> tuple[
     dict,
     list[QuestionAnalysis],
@@ -132,6 +127,8 @@ async def run_llm_pipeline(
         session_id=session_id,
         owner_id=owner_id,
         actor_id=actor_id,
+        request_id=request_id,
+        run_id=run_id,
     )
     messages = [
         dict(id=m.id, role=m.role, content=m.content) for m in all_messages
@@ -189,7 +186,7 @@ async def run_llm_pipeline(
         mode="single",
         estimator_version=None,
         request_id=caller.request_id,
-        run_id=None,
+        run_id=run_id,
         config_hash=canonical_hash(snapshot.model_dump()),
         prompt_version=source_hash,
         schema_version=2,
@@ -206,47 +203,6 @@ async def run_llm_pipeline(
         source_hash,
         [],
     )
-
-
-async def handle_duplicate_session_state(
-    session_id: int,
-    label_names: list[str],
-    db: AsyncSession,
-    error: IntegrityError,
-) -> dict[str, Any]:
-    """Handle duplicate insert from concurrent requests.
-
-    Re-queries BOTH SessionSummary AND SessionFeedbackReport
-    on IntegrityError. Returns unified response shape.
-    """
-    await db.rollback()
-    logger.warning(
-        f"Session {session_id}: duplicate session state detected: {error}"
-    )
-    summary, report = await load_summary(session_id, db)
-    if summary:
-        return summary_response(summary, report)
-    return await create_fallback_summary(session_id, label_names, db)
-
-
-# Backward-compatible alias for existing imports
-handle_duplicate_summary = handle_duplicate_session_state
-
-
-async def handle_analysis_failure(
-    session_id: int,
-    label_names: list[str],
-    db: AsyncSession,
-    error: Exception,
-) -> dict[str, Any]:
-    """Handle analysis pipeline failure with fallback."""
-    await db.rollback()
-    logger.error(
-        f"Session {session_id}: analysis pipeline failed: {error}",
-        exc_info=True,
-    )
-
-    return await create_fallback_summary(session_id, label_names, db)
 
 
 async def create_fallback_summary(

@@ -1,7 +1,7 @@
 // Shared chat controls with the product fetch transport and isolated responses.
 export default async function checkChat(page) {
   const base = page.url().split('/').slice(0, 3).join('/');
-  const errors = [], checks = [], csrf = [];
+  const errors = [], checks = [], csrf = [], analysisRequests = [];
   const assert = (value, message) => { if (!value) throw new Error(message); };
   let sendCount = 0, analysisCount = 0, polls = 0, mode = 'ok', releaseSend;
   page.on('pageerror', error => errors.push(error.message));
@@ -38,6 +38,7 @@ export default async function checkChat(page) {
       await route.fulfill({status:401, contentType:'application/json', body:'{"code":"AUTH_EXPIRED"}'});
     } else if (path.endsWith('/analyze')) {
       analysisCount++;
+      analysisRequests.push(request.postDataJSON());
       await route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(
         analysisCount === 1 ? {retryable:true, feedback_status:'failed', feedback:'Retry'} : {retryable:false, feedback_status:'ok'}
       )});
@@ -99,6 +100,7 @@ export default async function checkChat(page) {
   await page.locator('#end-session-btn').click();
   await page.waitForFunction(() => document.querySelector('#end-session-btn').dataset.state === 'done');
   assert(analysisCount === 2, 'analysis retries exactly once');
+  assert(analysisRequests[0].request_id !== analysisRequests[1].request_id, 'known failed run uses a new request for explicit retry');
   await page.keyboard.press('Escape');
   assert(await page.locator('#analysis-modal-overlay').isHidden(), 'Escape closes modal');
   await page.locator('#end-session-btn').click();
@@ -107,6 +109,22 @@ export default async function checkChat(page) {
   await page.goto(`${base}/chat?ended=1`);
   assert(await input.isDisabled(), 'ended reload remains locked');
   assert(await page.locator('#end-session-btn').getAttribute('data-state') === 'ready-to-analyze', 'ended reload can analyze');
+  const lostRequests = [];
+  await page.route('**/sessions/1/analyze', async route => {
+    lostRequests.push(route.request().postDataJSON());
+    if (lostRequests.length === 1) await route.abort('failed');
+    else await route.fulfill({status:202, json:{retryable:false, latest_run:{status:'running'}}});
+  });
+  await page.locator('#end-session-btn').click();
+  await page.waitForFunction(() => document.querySelector('#end-session-btn').dataset.state === 'ready-to-analyze');
+  await page.locator('#end-session-btn').click();
+  await page.waitForFunction(() => document.querySelector('#end-session-btn').dataset.state === 'done');
+  assert(lostRequests.length === 2 && lostRequests[0].request_id === lostRequests[1].request_id, 'lost initial analysis response replays the same request');
+  await page.goto(`${base}/chat?ended=1`);
+  await page.route('**/sessions/1/analyze', route => route.fulfill({status:409, json:{detail:{code:'analysis_busy', run_id:'run-active'}}}));
+  await page.locator('#end-session-btn').click();
+  await page.waitForFunction(() => document.querySelector('#end-session-btn').dataset.state === 'done');
+  assert(await page.locator('#analysis-modal-overlay').isVisible(), 'competing analysis opens the existing run instead of reporting completion');
   checks.push('end, failed analysis retry, modal closing and ended reload');
 
   await page.evaluate(() => sessionStorage.clear());

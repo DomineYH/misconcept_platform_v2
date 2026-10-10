@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
+from src.models.generation_run import GenerationRun
 from src.models.session import Session
 from src.models.user import User
 from src.services.session_history import session_display
@@ -116,6 +117,15 @@ async def sessions_page(
     result = await db.execute(query)
     sessions = result.scalars().all()
 
+    analysis_session_ids = set(
+        await db.scalars(
+            select(GenerationRun.session_id).where(
+                GenerationRun.session_id.in_([s.id for s in sessions]),
+                GenerationRun.operation == "analysis",
+            )
+        )
+    )
+
     teachers_result = await db.execute(
         select(User)
         .where(User.id.in_(select(Session.teacher_id).distinct()))
@@ -130,6 +140,7 @@ async def sessions_page(
             "user": user,
             "sessions": sessions,
             "session_display": session_display,
+            "analysis_session_ids": analysis_session_ids,
             "teachers": teachers,
             "current_teacher_id": teacher_id_val,
             "current_date_from": date_from or "",

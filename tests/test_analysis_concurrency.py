@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from uuid import uuid4
 
 import httpx2
 import pytest
@@ -279,16 +280,22 @@ async def test_cancelled_analysis_finalizes_attempt_without_synthesis_or_retry(
         )
 
     clients, calls = analysis_transport(monkeypatch, upstream)
-    task = asyncio.create_task(
-        api.post(
-            f"/sessions/{data.session.id}/analyze",
-            headers={"x-csrf-token": api.cookies["csrftoken"]},
-        )
+    accepted = await api.post(
+        f"/sessions/{data.session.id}/analyze",
+        json={"request_id": str(uuid4())},
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
+    assert accepted.status_code == 202
     await asyncio.wait_for(entered.wait(), 5)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(task, 5)
+    from src.services.analysis_runs import active_analyses
+
+    task = active_analyses[accepted.json()["run_id"]]
+    cancelled = await api.post(
+        accepted.json()["actions"]["cancel"],
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
+    )
+    assert cancelled.status_code == 202
+    await asyncio.wait_for(task, 5)
     assert len(calls) == 1 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (
@@ -356,12 +363,15 @@ async def test_cancel_during_analysis_backoff_does_not_create_another_attempt(
         )
 
     clients, calls = analysis_transport(monkeypatch, upstream)
-    task = asyncio.create_task(
-        api.post(
-            f"/sessions/{data.session.id}/analyze",
-            headers={"x-csrf-token": api.cookies["csrftoken"]},
-        )
+    accepted = await api.post(
+        f"/sessions/{data.session.id}/analyze",
+        json={"request_id": str(uuid4())},
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
+    assert accepted.status_code == 202
+    from src.services.analysis_runs import active_analyses
+
+    task = active_analyses[accepted.json()["run_id"]]
     try:
         async with asyncio.timeout(5):
             while True:
@@ -375,9 +385,12 @@ async def test_cancel_during_analysis_backoff_does_not_create_another_attempt(
                     break
                 await asyncio.sleep(0.01)
     finally:
-        task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(task, 5)
+        cancelled = await api.post(
+            accepted.json()["actions"]["cancel"],
+            headers={"x-csrf-token": api.cookies["csrftoken"]},
+        )
+        assert cancelled.status_code == 202
+    await asyncio.wait_for(task, 5)
     assert len(calls) == 1 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (await db.scalars(select(ApiUsageLog))).all()

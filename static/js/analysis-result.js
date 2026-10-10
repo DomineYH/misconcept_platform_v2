@@ -58,7 +58,17 @@
         announcement.textContent = '실행 상태를 확인할 수 없습니다. 분석을 새로 실행하지 않고 상태를 다시 확인하세요.';
       }
     }
-    window.addEventListener('pagehide', stopPolling, {once: true});
+    const observer = new MutationObserver(() => {
+      if (!root.isConnected) {
+        stopPolling();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+    window.addEventListener('pagehide', () => {
+      stopPolling();
+      observer.disconnect();
+    }, {once: true});
 
     function button(parent, label, action) {
       const el = node(parent, 'button', label, 'btn btn-secondary');
@@ -80,13 +90,30 @@
           body: JSON.stringify(body),
         });
         if (!response.ok && response.status !== 409) throw new Error();
-        data = await projection(response);
+        const conflict = response.status === 409 ? (await response.clone().json()).detail : null;
+        if (conflict?.code === 'request_conflict') {
+          busy = false;
+          pending = null;
+          render();
+          schedulePolling();
+          announcement.textContent = '요청 입력이 변경되어 재전송할 수 없습니다. 결과를 새로고침하여 확인하세요.';
+          announcement.focus();
+          return;
+        }
+        if (conflict?.code === 'analysis_busy') {
+          const statusUrl = url.replace(/\/analyze(?:_regenerate)?$/, `/analysis/runs/${encodeURIComponent(conflict.run_id)}`);
+          const active = await fetch(statusUrl, {credentials: 'same-origin'});
+          if (!active.ok) throw new Error();
+          data = await projection(active);
+        } else data = await projection(response);
         busy = false;
         pending = null;
         planHidden = false;
         render();
         schedulePolling();
-        announcement.textContent = response.status === 409
+        announcement.textContent = conflict?.code === 'analysis_busy'
+          ? '진행 중인 분석 실행의 상태를 확인했습니다.'
+          : response.status === 409
           ? '계획이 변경되었습니다. 새 범위를 확인하고 실행을 다시 확인하세요.'
           : '분석 요청 결과를 확인하세요.';
       } catch {
@@ -131,9 +158,10 @@
       const run = data.latest_run;
       if (run) {
         node(root, 'h2', `최신 실행: ${statuses[run.status] || '상태 확인 불가'}`);
+        if (run.superseded) node(root, 'p', '이 요청의 보고서는 이후 분석으로 대체되었습니다. 최신 결과는 세션 분석 화면에서 확인하세요.');
         if (run.preserved && report) node(root, 'p', '이전 정상 결과를 보존했습니다. 최신 실행의 결과와 구별해 확인하세요.');
         if (run.status === 'failed') node(root, 'p', '분석을 완료하지 못했습니다. 다시 시도할 수 있습니다.');
-        if (run.status === 'no_dialogue') node(root, 'p', '분석 가능 범위: 0개 메시지 · 호출 없이 안내합니다.');
+        if (run.status === 'no_dialogue' || run.outcome?.outcome === 'no_dialogue') node(root, 'p', '분석 가능 범위: 0개 메시지 · 호출 없이 안내합니다.');
       }
       if (data.permissions.read_only) node(root, 'p', '과거 자료 · 읽기 전용 · 재분석할 수 없습니다.');
       if (!data.permissions.read_only) {

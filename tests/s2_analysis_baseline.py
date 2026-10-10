@@ -20,6 +20,9 @@ async def run_llm_pipeline(
     factory,
     owner_id=None,
     actor_id=None,
+    *,
+    request_id=None,
+    run_id=None,
 ) -> tuple[
     dict,
     list[QuestionAnalysis],
@@ -47,6 +50,8 @@ async def run_llm_pipeline(
         session_id=session_id,
         owner_id=owner_id,
         actor_id=actor_id,
+        request_id=request_id,
+        run_id=run_id,
     )
 
     # Step 1: Filter greeting messages
@@ -137,6 +142,7 @@ async def run_llm_pipeline(
             factory,
             selection=selection,
             actor_id=actor_id,
+            run_id=run_id,
             session_id=session_id,
             owner_id=owner_id,
             request_id=analyzer.request_id,

@@ -2,8 +2,11 @@
 
 import asyncio
 from contextlib import aclosing
+from datetime import timezone
 from uuid import uuid4
 
+from src.models import GenerationRun
+from src.models.provider_connection import now
 from src.services.call_admission import admit_call
 from src.services.call_execution import execute_call
 from src.services.invocation_types import InvocationError, StructuredRequest
@@ -20,11 +23,13 @@ class AnalysisCaller:
         owner_id,
         actor_id=None,
         request_id=None,
+        run_id=None,
     ):
         self.factory = factory
         self.session_id = session_id
         self.owner_id = owner_id
         self.request_id = request_id or str(uuid4())
+        self.run_id = run_id
         self.selection = selection
         self.model = selection.model_id
         self.actor_id = actor_id or owner_id
@@ -46,6 +51,13 @@ class AnalysisCaller:
             from src.services.analysis_pipeline import load_analysis_lesson
 
             await load_analysis_lesson(db, self.session_id, self.actor_id)
+            run = (
+                await db.get(GenerationRun, self.run_id)
+                if self.run_id
+                else None
+            )
+            if self.run_id and (run is None or run.status != "running"):
+                raise asyncio.CancelledError
         validation = (
             validation_context if validation_context is not None else {}
         )
@@ -75,9 +87,28 @@ class AnalysisCaller:
             expected_model_version=model.config_version,
             model_options=options,
         )
+        if run is not None:
+            from src.services.analysis_runs import RUN_SECONDS
+
+            remaining = (
+                RUN_SECONDS
+                - (
+                    now() - run.started_at.replace(tzinfo=timezone.utc)
+                ).total_seconds()
+            )
+            permit.timeouts = {
+                **permit.timeouts,
+                "analysis_total": min(
+                    permit.timeouts["analysis_total"], max(0, remaining)
+                ),
+            }
         async with aclosing(
             execute_call(
-                permit, request, kind="structured", session_id=self.session_id
+                permit,
+                request,
+                kind="structured",
+                session_id=self.session_id,
+                run_id=self.run_id,
             )
         ) as events:
             async for event in events:

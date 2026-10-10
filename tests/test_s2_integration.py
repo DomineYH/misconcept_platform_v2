@@ -34,7 +34,9 @@ pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 async def test_contracted_installation_authoring_to_csv(
     installation, workflow_api, monkeypatch, provider, entry
 ):
-    api = workflow_api
+    from analysis_test_helpers import AnalysisApi
+
+    api = AnalysisApi(workflow_api)
     transport = workflow_transport(monkeypatch, provider)
     await authenticate(api, "admin")
     state = (await api.get("/admin/ai/state")).json()
@@ -309,11 +311,22 @@ async def test_contracted_installation_authoring_to_csv(
     await authenticate(api, "owner")
     preserved = (await api.get(f"/sessions/{session_id}/analysis")).json()
     assert preserved["accepted_report"] == public.json()["accepted_report"]
-    assert preserved["latest_run"] == dict(
-        status="failed", preserved=True, error_code="invalid_json"
+    latest = preserved["latest_run"]
+    assert (latest["status"], latest["preserved"], latest["error_code"]) == (
+        "failed",
+        True,
+        "invalid_json",
     )
-    assert {k: v for k, v in preserved.items() if k != "latest_run"} == {
-        k: v for k, v in public.json().items() if k != "latest_run"
+    assert latest["run_id"] != public.json()["latest_run"]["run_id"]
+    assert latest["adopted"] is False
+    assert {
+        k: v
+        for k, v in preserved.items()
+        if k not in {"latest_run", "regeneration_status"}
+    } == {
+        k: v
+        for k, v in public.json().items()
+        if k not in {"latest_run", "regeneration_status"}
     }
     if installation.converted:
         historical = await api.get("/sessions/1/export.csv")

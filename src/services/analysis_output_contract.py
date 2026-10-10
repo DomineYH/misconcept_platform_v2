@@ -144,9 +144,13 @@ class MergeAnalysisOutput(RoleOutput):
                         raw, dict
                     ):
                         mid = raw.get("message_id")
-                        if type(mid) is int and any(
-                            m["id"] == mid and m["role"] == "teacher"
-                            for m in context.get("messages", [])
+                        if (
+                            type(mid) is int
+                            and mid in context.get("owned_message_ids", [mid])
+                            and any(
+                                m["id"] == mid and m["role"] == "teacher"
+                                for m in context.get("messages", [])
+                            )
                         ):
                             context.setdefault(
                                 "invalid_message_ids", []
@@ -158,7 +162,9 @@ class MergeAnalysisOutput(RoleOutput):
                 item["message_id"] for item in clean["message_classifications"]
             }
             if any(
-                m["role"] == "teacher" and m["id"] not in supplied
+                m["role"] == "teacher"
+                and m["id"] not in supplied
+                and m["id"] in context.get("owned_message_ids", [m["id"]])
                 for m in context.get("messages", [])
             ):
                 errors.append(
@@ -212,6 +218,13 @@ def validate_item(section, item, context, duplicates):
     if section == "misconception_findings":
         for evidence in item.evidence:
             reference(evidence, "student")
+        if "owned_message_ids" in context:
+            owned = context["owned_message_ids"]
+            if not any(e.message_id in owned for e in item.evidence) or (
+                item.kind != "changed"
+                and any(e.message_id not in owned for e in item.evidence)
+            ):
+                raise InvocationError("invalid_reference")
         if item.kind == "changed":
             ids = [e.message_id for e in item.evidence]
             if (
@@ -221,6 +234,11 @@ def validate_item(section, item, context, duplicates):
             ):
                 raise InvocationError("invalid_reference")
     else:
+        if (
+            "owned_message_ids" in context
+            and item.message_id not in context["owned_message_ids"]
+        ):
+            raise InvocationError("invalid_reference")
         role = (
             "teacher"
             if section in {"strengths", "message_classifications"}

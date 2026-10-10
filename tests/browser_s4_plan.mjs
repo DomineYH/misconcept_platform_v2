@@ -72,16 +72,39 @@ export default async function checkChunkConfirmation(page) {
   await result.getByRole('button', {name: '같은 요청 다시 전송', exact: true}).waitFor();
   assert(await result.getByRole('heading', {name: '채택된 보고서: 정상 분석'}).isVisible());
   assert(!(await result.innerText()).includes('PRIVATE_'), 'unexpected error envelopes never replace the report or expose raw errors');
-  let unsupported = 0;
-  await page.route('**/admin/sessions/1/analyze_regenerate', route => {
-    unsupported++;
-    return route.fulfill({status: 501, json: {...changedPlan, code: 'chunk_execution_unavailable'}});
-  });
-  await page.goto(`${origin}/fixtures/s4/analysis?state=plan&admin=1`);
-  await result.getByRole('button', {name: '확인하고 분할 실행', exact: true}).click();
-  await result.getByRole('status').filter({hasText: /분할 실행 기능이 아직 준비되지 않았습니다/}).waitFor();
-  assert.equal(unsupported, 1);
-  assert.equal(await result.getByRole('button', {name: '같은 요청 다시 전송', exact: true}).count(), 0);
-  assert(await result.getByRole('heading', {name: '채택된 보고서: 정상 분석'}).isVisible());
+  for (const state of ['chunked', 'partial']) {
+    const running = await (await page.request.get(`${origin}/fixtures/s4/result?state=running`)).json();
+    const terminal = await (await page.request.get(`${origin}/fixtures/s4/result?state=${state}`)).json();
+    if (state === 'partial') {
+      terminal.plan = changedPlan.plan;
+      terminal.accepted_report.brief_feedback = ['부분 분석: 검증된 6 / 7개 메시지의 결과입니다.'];
+    }
+    let confirms = 0, polls = 0;
+    await page.route('**/admin/sessions/1/analyze_regenerate', route => {
+      confirms++;
+      assert.equal(route.request().postDataJSON().plan_hash, 'plan-v1');
+      return route.fulfill({status: 202, json: running});
+    });
+    await page.route('**/sessions/1/analysis/runs/run-1', route => {
+      polls++;
+      return route.fulfill({json: terminal});
+    });
+    await page.goto(`${origin}/fixtures/s4/analysis?state=plan&admin=1`);
+    await result.getByRole('button', {name: '확인하고 분할 실행', exact: true}).click();
+    await result.getByRole('heading', {name: '최신 실행: 분석 진행 중'}).waitFor();
+    assert.equal(await result.getByRole('button', {name: '확인하고 분할 실행', exact: true}).count(), 0);
+    await result.getByRole('heading', {name: `최신 실행: ${state === 'partial' ? '부분 분석' : '정상 분석'}`}).waitFor();
+    assert.equal(confirms, 1);
+    assert.equal(polls, 1);
+    assert(await result.getByText(/분할 정상 분석 · 메시지/).first().isVisible());
+    if (state === 'partial') {
+      assert(await result.getByText('부분 분석: 검증된 6 / 7개 메시지의 결과입니다.', {exact: true}).isVisible());
+      assert(await result.getByText('분할 분석 실패 · 메시지 107', {exact: true}).isVisible());
+      assert(await result.getByRole('button', {name: '확인하고 분할 실행', exact: true}).isVisible());
+    }
+    await page.waitForTimeout(1300);
+    assert.equal(polls, 1, 'finished chunk execution stops polling');
+    assert.equal(confirms, 1, 'a partial result never starts another execution automatically');
+  }
   return {checks: ['chunk scope/estimates, zero calls before confirmation, cancel/retry/preservation and CSRF'], pageErrors: []};
 }

@@ -89,7 +89,7 @@
           headers: {...getAnalysisCsrfHeaders(), 'Content-Type': 'application/json'},
           body: JSON.stringify(body),
         });
-        if (!response.ok && ![409, 422, 501].includes(response.status)) throw new Error();
+        if (!response.ok && ![409, 422].includes(response.status)) throw new Error();
         const conflict = response.status === 409 ? (await response.clone().json()).detail : null;
         if (conflict?.code === 'request_conflict') {
           busy = false;
@@ -115,8 +115,6 @@
           ? '진행 중인 분석 실행의 상태를 확인했습니다.'
           : response.status === 409
           ? '계획이 변경되었습니다. 새 범위를 확인하고 실행을 다시 확인하세요.'
-          : data.code === 'chunk_execution_unavailable'
-          ? '분할 실행 기능이 아직 준비되지 않았습니다. 분석을 실행하지 않았습니다.'
           : response.status === 422
           ? '분석 계획의 한도를 초과해 실행하지 않았습니다.'
           : '분석 요청 결과를 확인하세요.';

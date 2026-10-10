@@ -40,7 +40,7 @@ async def long_session(data, monkeypatch):
     await data.db.commit()
 
 
-async def test_plan_is_readable_without_run_and_confirmation_does_not_fake_execution(
+async def test_plan_is_readable_without_reserving_or_calling_before_confirmation(
     data, api, monkeypatch
 ):
     await long_session(data, monkeypatch)
@@ -58,13 +58,6 @@ async def test_plan_is_readable_without_run_and_confirmation_does_not_fake_execu
     read = await api.get(f"/sessions/{data.session.id}/analysis")
     assert read.status_code == 200
     assert read.json()["plan"]["plan_hash"] == plan["plan_hash"]
-    confirmed = await api.post(
-        url,
-        json=dict(request_id=str(uuid4()), plan_hash=plan["plan_hash"]),
-        headers=headers,
-    )
-    assert confirmed.status_code == 501
-    assert confirmed.json()["code"] == "chunk_execution_unavailable"
     async with data.factory() as db:
         assert list(await db.scalars(select(ApiUsageLog))) == []
         assert list(await db.scalars(select(GenerationRun))) == []

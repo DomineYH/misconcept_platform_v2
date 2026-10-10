@@ -84,9 +84,10 @@ shared admission with zero retries. Their existing sensitivity, counters and loc
 fallback remain unchanged; local no-intervention decisions make no provider call.
 Judgment attempts are recorded separately as `mentor_judgment`, including failures
 without usage. Post-session analysis also uses DB registrations and common
-invocations while preserving configured model IDs and options. One structured
-v2 call uses the frozen lesson and completed teacher/student dialogue; the server
-validates exact evidence and computes statistics and rubric grades. No dialogue
+invocations while preserving configured model IDs and options. Dialogue within
+budget uses one structured v2 call with the frozen lesson and completed
+teacher/student dialogue; the server validates exact evidence and computes
+statistics and rubric grades. No dialogue
 makes no provider call. Existing v1 reports remain readable; analysis models need
 explicit s4-v2 role revalidation, while student and mentor evidence stays current.
 Analysis requests send a UUID `request_id` and receive 202 with a durable run ID
@@ -95,6 +96,10 @@ or another active request return 409. Accepted reports and the latest execution
 status are separate. Teachers explicitly retry failed or partial analyses with a
 new request; administrators can regenerate native results. Partial results show
 coverage and valid-only classification counts, and never replace ok/legacy results.
+Long dialogue requires explicit confirmation of its frozen plan, then executes
+up to eight sequential chunks and one evidence-only merge. The first non-ok chunk
+stops execution; a failed merge retains only validated chunk results as partial
+analysis.
 Leaving the page keeps the execution; explicit cancellation,
 the 900-second run cap, permission revocation or failed storage prevent adoption.
 Startup marks unfinished runs interrupted without rerunning them. Migration 034
@@ -289,7 +294,7 @@ S4-08 (#85) quality preparation: [the fixed corpus and release gate](docs/s4-qua
 provides 12 synthetic Korean dialogues, agent-draft expected evidence and a
 comparison record template. `uv run --frozen python -m pytest -q
 tests/test_s4_quality_corpus.py tests/test_s4_quality_comparison.py` rehearses
-the existing analysis execution with mocked SDK HTTP only. S4 candidate analysis
-and actual educational approval remain separate work; release stays blocked
+the S2 baseline and S4 candidate executors with mocked SDK HTTP only.
+Actual educational approval remains separate work; release stays blocked
 until the education lead approves actual comparisons for every intended pilot
 model/config after separately authorized paid execution.

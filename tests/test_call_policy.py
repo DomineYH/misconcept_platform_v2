@@ -7,7 +7,9 @@ import pytest
 from src.services.call_policy import retry_after, retry_limit
 
 
-@pytest.mark.parametrize("operation", ["analysis_unified", "analysis_merge"])
+@pytest.mark.parametrize(
+    "operation", ["analysis_unified", "analysis_chunk", "analysis_merge"]
+)
 @pytest.mark.parametrize(
     "role,admin,expected",
     [

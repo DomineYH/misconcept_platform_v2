@@ -51,7 +51,13 @@ def retry_after(value, *, now=None):
 def retry_limit(operation, role, admin):
     return int(
         operation
-        in ("classification", "synthesis", "analysis_unified", "analysis_merge")
+        in (
+            "classification",
+            "synthesis",
+            "analysis_unified",
+            "analysis_chunk",
+            "analysis_merge",
+        )
         and role == "analysis"
         and not admin
     )

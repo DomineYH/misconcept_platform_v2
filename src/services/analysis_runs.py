@@ -1,4 +1,4 @@
-"""Durable single-call analysis reservations; the database owns execution rights."""
+"""Durable analysis reservations; the database owns execution rights."""
 
 import asyncio
 import json
@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from src.models import GenerationRun, Message, Session, User
 from src.models.provider_connection import now
 from src.services import analysis_pipeline
+from src.services.analysis_chunks import run_chunk_pipeline as chunk_executor
 from src.services.analysis_pipeline import (
     load_analysis_lesson,
 )
@@ -29,8 +30,6 @@ from src.services.lesson_connections import resolve_frozen_model
 
 logger = logging.getLogger(__name__)
 RUN_SECONDS = 900
-# shortcut: chunk execution is unavailable, supply the executor in #83.
-chunk_executor = None
 # shortcut: tasks require one worker, coordinate cancellation before adding workers.
 active_analyses: dict[str, asyncio.Task] = {}
 cleanup_tasks: set[asyncio.Task] = set()
@@ -221,19 +220,15 @@ async def reserve_analysis(
                     _http_status=422,
                 )
                 return response, None
-            if plan["mode"] == "chunked" and (
-                plan_hash is None or chunk_executor is None
-            ):
+            if plan["mode"] == "chunked" and plan_hash is None:
                 response = await load_analysis_response(
                     session_id, db, admin=user.is_admin
                 )
                 response.update(
                     plan=public_plan(plan),
                     status="plan_required",
-                    _http_status=200 if plan_hash is None else 501,
+                    _http_status=200,
                 )
-                if plan_hash is not None:
-                    response["code"] = "chunk_execution_unavailable"
                 return response, None
             run_id = str(uuid4())
             run = GenerationRun(

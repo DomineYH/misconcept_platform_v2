@@ -1,6 +1,7 @@
 """One attempt/deadline/retry/cleanup boundary for catalog and generation."""
 
 import asyncio
+import json
 from contextlib import aclosing
 from uuid import uuid4
 
@@ -187,11 +188,19 @@ async def execute_call(
                 async with permit.factory() as db:
                     try:
                         if run_id is not None:
-                            from src.models import GenerationRun
+                            from src.models import GenerationRun, User
 
                             run = await db.get(GenerationRun, run_id)
                             if run is None or run.status != "running":
                                 raise InvocationError("interrupted")
+                            if json.loads(run.plan_json).get("regenerate"):
+                                actor = await db.get(
+                                    User, request.validation_context["actor_id"]
+                                )
+                                if actor is None or not actor.is_admin:
+                                    raise InvocationError(
+                                        "configuration_unavailable"
+                                    )
                         await load_analysis_lesson(
                             db,
                             session_id,

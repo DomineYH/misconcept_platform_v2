@@ -1,4 +1,4 @@
-"""Same frozen dialogue through real S2 execution and mock candidate replay."""
+"""Same frozen dialogue through real S2/S4 execution and mocked SDK calls."""
 
 import copy
 import hashlib
@@ -19,7 +19,7 @@ from test_provider_connections import api as provider_api
 from test_scenario_api import login
 from test_student_probe import response_body
 
-from src.models import Message
+from src.models import GenerationRun, Message
 from src.services.lesson_snapshots import canonical_hash
 
 api = analysis_api
@@ -27,29 +27,43 @@ connection_api = provider_api
 pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 
 
-@pytest.fixture(autouse=True)
-def isolated_s2_replay(monkeypatch):
-    from src.services import analysis_pipeline, analysis_runs
-
-    # shortcut: candidate remains S2 replay, switch the SDK fixture and expectations with the S4 quality harness.
-    monkeypatch.setattr(analysis_pipeline, "run_llm_pipeline", s2_pipeline)
-
-    async def mock_chunk_replay(*args, plan, **kwargs):
-        assert plan["mode"] == "chunked" and len(plan["chunks"]) <= 8
-        # shortcut: confirmed chunks replay S2 only, replace with #83's execution harness.
-        return await s2_pipeline(*args, **kwargs)
-
-    monkeypatch.setattr(analysis_runs, "chunk_executor", mock_chunk_replay)
-
-
 @pytest.fixture
 def quality_reply():
-    """Replace responses at the existing SDK boundary when S4 is implemented."""
-
-    # shortcut: candidate replays S2 with mock output; replace at #79's SDK boundary.
+    """Both executors use the same SDK transport boundary."""
 
     def reply(sample, body, side):
         name = body["text"]["format"]["name"]
+        if name in {"UnifiedAnalysisOutput", "MergeAnalysisOutput"}:
+            from s4_analysis_fixtures import analysis_reply, prompt_inputs
+
+            inputs = prompt_inputs(body)
+            if name == "MergeAnalysisOutput":
+                return inputs["chunk_feedback"][0]
+            owned = inputs.get(
+                "owned_message_ids", [m["id"] for m in inputs["messages"]]
+            )
+            messages = [m for m in inputs["messages"] if m["id"] in owned]
+            value = analysis_reply(
+                messages,
+                enabled=inputs["analysis"]["classification_enabled"],
+                label="open",
+            )
+            value["brief_feedback"] = [
+                f"{side}: 실행 경계 리허설이며 교육 품질 판단이 아닙니다."
+            ]
+            if sample["boundary"] == "greeting_only":
+                for item in value["message_classifications"]:
+                    item.update(disposition="non_analyzable", rubric_id=None)
+            else:
+                teacher = next(m for m in messages if m["role"] == "teacher")
+                value["strengths"] = [
+                    dict(
+                        message_id=teacher["id"],
+                        quote=teacher["content"][:200],
+                        reason="원문 참조 검사용 mock",
+                    )
+                ]
+            return value
         if name == "RuntimeGreetings":
             return {
                 "results": [
@@ -100,6 +114,15 @@ def quality_reply():
 async def test_mock_comparison_records_same_frozen_inputs_without_approval(
     data, api, monkeypatch, tmp_path, sample_id, quality_reply
 ):
+    from src.services import analysis_pipeline, analysis_runs
+    from src.services.analysis_chunks import run_chunk_pipeline
+
+    s4_pipeline = analysis_pipeline.run_llm_pipeline
+
+    async def baseline_chunks(*args, plan, **kwargs):
+        # S2 has no chunk executor; replay its full dialogue after plan confirmation.
+        return await s2_pipeline(*args, **kwargs)
+
     corpus = load_corpus()
     sample = next(s for s in corpus["samples"] if s["id"] == sample_id)
     await install_analysis_snapshot(data, monkeypatch)
@@ -126,10 +149,23 @@ async def test_mock_comparison_records_same_frozen_inputs_without_approval(
             "analysis_prompt.txt",
             "greeting_detection.txt",
             "session_synthesis_prompt.txt",
+            "analysis_v2.txt",
+            "analysis_merge_v2.txt",
         )
     }
     for side in ("baseline", "candidate"):
+        monkeypatch.setattr(
+            analysis_pipeline,
+            "run_llm_pipeline",
+            s2_pipeline if side == "baseline" else s4_pipeline,
+        )
+        monkeypatch.setattr(
+            analysis_runs,
+            "chunk_executor",
+            baseline_chunks if side == "baseline" else run_chunk_pipeline,
+        )
         raw = []
+        plan = None
 
         async def upstream(request, body):
             value = quality_reply(sample, body, side)
@@ -170,7 +206,9 @@ async def test_mock_comparison_records_same_frozen_inputs_without_approval(
         assert reader.status_code == 200, reader.text
         output = reader.json()
         assert output["feedback_status"] == (
-            "degraded" if sample["boundary"] == "greeting_only" else "ok"
+            "degraded"
+            if side == "baseline" and sample["boundary"] == "greeting_only"
+            else "ok"
         )
         assert side in output["feedback"]
         assert [(m["role"], m["content"]) for m in output["messages"]] == [
@@ -190,6 +228,8 @@ async def test_mock_comparison_records_same_frozen_inputs_without_approval(
                 + sum(m["role"] == "teacher" for m in sample["transcript"])
             )
         )
+        if side == "candidate":
+            expected_calls = plan["generation_calls"] if plan else 1
         assert len(calls) == expected_calls
         assert all(c.is_closed() for c in clients)
         selection = sample["snapshot"]["config"]["analysis"][
@@ -203,26 +243,50 @@ async def test_mock_comparison_records_same_frozen_inputs_without_approval(
             )
             assert call["reasoning"] == selection["options"]["reasoning"]
         synthesis = calls[-1]["input"][0]["content"]
-        assert all(m["content"] in synthesis for m in sample["transcript"])
+        if side == "candidate" and plan:
+            from s4_analysis_fixtures import prompt_inputs
+
+            assert "messages" not in prompt_inputs(calls[-1])
+            assert [
+                mid
+                for call in calls[:-1]
+                for mid in prompt_inputs(call)["owned_message_ids"]
+            ] == [m["id"] for m in sample["transcript"]]
+        else:
+            assert all(m["content"] in synthesis for m in sample["transcript"])
+        if side == "candidate":
+            async with data.factory() as db:
+                run = await db.get(
+                    GenerationRun, output["latest_run"]["run_id"]
+                )
+                plan = json.loads(run.plan_json)
         results[side] = dict(
             code_revision=code_revision,
-            execution_contract=(
-                "s2-v1"
-                if side == "baseline"
-                else "s2-v1-mock-placeholder-s4-not-implemented"
-            ),
+            execution_contract=("s2-v1" if side == "baseline" else "s4-v2"),
             provider=selection["provider"],
             exact_model_id=selection["model_id"],
             options=selection["options"],
             prompt_versions=prompt_versions,
             rendered_prompt_hashes=[canonical_hash(c["input"]) for c in calls],
-            schema_version="RuntimeSynthesis-v1",
+            schema_version="RuntimeSynthesis-v1" if side == "baseline" else 2,
             schema_hashes=[
                 canonical_hash(c["text"]["format"]["schema"]) for c in calls
             ],
-            estimator_version="not_used_by_s2_analysis",
-            chunk_policy_version="not_used_by_s2_analysis",
-            plan_hash="not_used_by_s2_analysis",
+            estimator_version=(
+                "not_used_by_s2_analysis"
+                if side == "baseline"
+                else plan["estimator_version"]
+            ),
+            chunk_policy_version=(
+                "not_used_by_s2_analysis"
+                if side == "baseline"
+                else plan["chunk_policy_version"]
+            ),
+            plan_hash=(
+                "not_used_by_s2_analysis"
+                if side == "baseline"
+                else plan["plan_hash"]
+            ),
             output=output,
             raw_provider_outputs=raw,
             validation_status=response.json()["feedback_status"],

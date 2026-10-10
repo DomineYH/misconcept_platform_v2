@@ -108,8 +108,8 @@ def public_analysis(
             and latest_run["status"] in {"failed", "cancelled", "interrupted"},
             can_retry=native
             and not running
-            and latest_run["status"] == "failed"
-            and accepted is None,
+            and (accepted["status"] if accepted else latest_run["status"])
+            in {"failed", "degraded"},
             can_regenerate=native and admin and not running,
             read_only=not native,
         ),

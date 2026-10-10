@@ -62,7 +62,7 @@ def summary_response(summary, report):
         "distribution": summary.distribution,
         "feedback": summary.feedback,
         "feedback_status": status,
-        "retryable": status == "failed",
+        "retryable": status in {"failed", "degraded"},
     }
     if status == "failed":
         result["error"] = "analysis_failed"
@@ -154,13 +154,9 @@ async def save_analysis(
         if summary:
             current = analysis_status(summary, report)
             preserve = (
-                (not regenerate and current != "failed")
-                or (regenerate and status == "failed")
-                or (
-                    regenerate
-                    and status == "degraded"
-                    and current in {"ok", "legacy"}
-                )
+                (not regenerate and current not in {"failed", "degraded"})
+                or status == "failed"
+                or (status == "degraded" and current in {"ok", "legacy"})
             )
             if preserve:
                 response = summary_response(summary, report)
@@ -356,7 +352,7 @@ async def load_analysis_response(
         "classification_enabled": classification_enabled,
         "feedback": summary.feedback if summary else None,
         "feedback_status": feedback_status,
-        "retryable": feedback_status == "failed"
+        "retryable": feedback_status in {"failed", "degraded"}
         and session.snapshot_origin == "native",
         **session_display(session),
         "feedback_sections": feedback_sections,

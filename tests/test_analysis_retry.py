@@ -90,8 +90,9 @@ async def test_legacy_and_degraded_policy(data, monkeypatch):
     response = await call_analysis_route(
         routes.analyze_session_endpoint, request(), sid, data.owner, data.db
     )
-    assert response["feedback_status"] == "degraded"
-    assert fake.await_count == 1
+    assert response["feedback_status"] == "ok"
+    assert response["latest_run"]["adopted"] is True
+    assert fake.await_count == 2
 
 
 async def test_concurrent_retries_and_late_fallback_keep_success(

@@ -193,7 +193,8 @@ async def reserve_analysis(
             if (
                 not regenerate
                 and summary
-                and analysis_status(summary, report) != "failed"
+                and analysis_status(summary, report)
+                not in {"failed", "degraded"}
             ):
                 return (
                     await load_analysis_response(

@@ -159,7 +159,7 @@
       if (run) {
         node(root, 'h2', `최신 실행: ${statuses[run.status] || '상태 확인 불가'}`);
         if (run.superseded) node(root, 'p', '이 요청의 보고서는 이후 분석으로 대체되었습니다. 최신 결과는 세션 분석 화면에서 확인하세요.');
-        if (run.preserved && report) node(root, 'p', '이전 정상 결과를 보존했습니다. 최신 실행의 결과와 구별해 확인하세요.');
+        if (run.preserved && report) node(root, 'p', `이전 ${report.status === 'degraded' ? '부분 분석을' : '정상 결과를'} 보존했습니다. 최신 실행의 결과와 구별해 확인하세요.`);
         if (run.status === 'failed') node(root, 'p', '분석을 완료하지 못했습니다. 다시 시도할 수 있습니다.');
         if (run.status === 'no_dialogue' || run.outcome?.outcome === 'no_dialogue') node(root, 'p', '분석 가능 범위: 0개 메시지 · 호출 없이 안내합니다.');
       }

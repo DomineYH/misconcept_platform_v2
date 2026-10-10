@@ -92,7 +92,10 @@ explicit s4-v2 role revalidation, while student and mentor evidence stays curren
 Analysis requests send a UUID `request_id` and receive 202 with a durable run ID
 and status/cancel paths. Replaying that request makes no new call; changed inputs
 or another active request return 409. Accepted reports and the latest execution
-status are separate. Leaving the page keeps the execution; explicit cancellation,
+status are separate. Teachers explicitly retry failed or partial analyses with a
+new request; administrators can regenerate native results. Partial results show
+coverage and valid-only classification counts, and never replace ok/legacy results.
+Leaving the page keeps the execution; explicit cancellation,
 the 900-second run cap, permission revocation or failed storage prevent adoption.
 Startup marks unfinished runs interrupted without rerunning them. Migration 034
 preserves existing records and adds analysis execution constraints; the supported

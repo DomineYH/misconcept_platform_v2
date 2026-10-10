@@ -140,11 +140,21 @@ async def test_s2_final_wal_restore_s3_upgrade_preserves_history_and_access(
         async with fresh.connect() as db:
             assert await schema(db) == upgraded_schema
 
+        # Current result readers require the later additive analysis migration.
+        await migrate.run_migration(
+            migrate.DIRECTORY / "034_analysis_run.sql", db_engine=upgraded
+        )
         login(client, data.owner)
         history = await client.get("/sessions/1")
         exported = await client.get("/sessions/1/export.csv")
         assert history.status_code == exported.status_code == 200
-        assert "읽기 전용" in history.text and "Original {text}" in history.text
+        assert "읽기 전용" in history.text
+        assert 'data-result-url="/sessions/1/analysis"' in history.text
+        result = await client.get("/sessions/1/analysis")
+        assert result.status_code == 200
+        assert [m["content"] for m in result.json()["messages"]] == [
+            "Original {text}"
+        ]
         assert (
             "Original feedback" in exported.text
             and "Original label" in exported.text

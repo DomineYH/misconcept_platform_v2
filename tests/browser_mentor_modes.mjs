@@ -49,6 +49,7 @@ export default async function checkMentorModes(page) {
   await page.waitForFunction(() => document.querySelector('#teacher-form').dataset.studentStream);
   await send();
   await page.locator('.mentor-slot').getByText('멘토 미개입', {exact:true}).waitFor();
+  assert(await page.locator('.mentor-slot .message-bubble').isHidden(), 'no-intervention does not create a coaching message');
   assert(await page.evaluate(() => modePosts.length === 1 && modePosts[0].trigger === 'auto'), 'auto mode sends auto trigger');
   await page.evaluate(() => {
     const partial = document.createElement('div');
@@ -77,6 +78,19 @@ export default async function checkMentorModes(page) {
   await page.locator('#mentor-help-status').getByText('최근 완료 턴의 개입 상한에 도달했습니다.', {exact:true}).waitFor();
   assert(await page.locator('#request-mentor').isDisabled(), 'rolling cap disables help with safe reason');
   assert(await page.locator('#teacher-input').isEnabled(), 'rolling cap leaves next student input enabled');
+  for (const code of ['mentor_start_turn', 'mentor_interval']) {
+    await page.evaluate(() => sessionStorage.clear());
+    await page.goto(`${base}/chat?stream&mentor=1`);
+    await page.waitForFunction(() => document.querySelector('#teacher-form').dataset.studentStream);
+    await page.evaluate(code => { window.modeReply = {status:409, code}; }, code);
+    await send();
+    await page.locator('#mentor-help-status').getByText('자동 검사 간격 대기 중 — 도움 버튼으로 요청할 수 있습니다.', {exact:true}).waitFor();
+    assert(await page.locator('#request-mentor').isEnabled(), `${code}: manual help does not wait for auto policy`);
+    assert(await page.evaluate(() => modePosts.length === 1), `${code}: no queued automatic retry`);
+    await page.locator('#request-mentor').click();
+    await page.getByText('Manual help', {exact:true}).waitFor();
+    assert(await page.evaluate(() => modePosts.length === 2 && modePosts[1].trigger === 'manual'), `${code}: manual help is explicit`);
+  }
   await page.evaluate(() => sessionStorage.clear());
   await page.goto(`${base}/chat?mentor_manual=1&mentor_history=1&mentor_coached=1`);
   await page.waitForFunction(() => document.querySelector('#teacher-form').dataset.studentStream);

@@ -5,7 +5,8 @@ export default async function checkAIProbes(page) {
   page.setDefaultTimeout(8000);
   const base = new URL(page.url()).origin;
   const data = state(), starts = [], cancels = [];
-  let polls = 0;
+  let polls = 0, mentorFails = false;
+  data.models[0].verification_state.mentor = {status:'stale', verified_at:'2026-10-08', role_contract_version:'s1-v1'};
   await page.route('**/admin/ai/state', route => route.fulfill({json:data}));
   await page.route('**/admin/ai/models/1/probes', async route => {
     const body = route.request().postDataJSON();
@@ -17,6 +18,11 @@ export default async function checkAIProbes(page) {
     polls++;
     const request_id = new URL(route.request().url()).pathname.split('/').at(-1);
     const start = starts.find(start => start.request_id === request_id);
+    if (start.role === 'mentor' && mentorFails) {
+      data.models[0].verification_state.mentor = {status:'failed', error_code:'invalid_output'};
+      await route.fulfill({json:{request_id, status:'failed'}});
+      return;
+    }
     data.models[0].verification_state[start.role] = {status:'succeeded', verified_at:'2026-10-08'};
     await route.fulfill({json:{request_id, status:'succeeded'}});
   });
@@ -27,6 +33,8 @@ export default async function checkAIProbes(page) {
   });
   await page.goto(`${base}/admin/ai`);
   const model = page.locator('[data-model="1"]');
+  await model.getByText('멘토: 재검증 필요 · 2026-10-08', {exact:true}).waitFor();
+  assert.equal(starts.length, 0, 'old mentor evidence does not trigger a paid revalidation');
   await model.getByRole('button', {name:'학생봇 시험', exact:true}).focus();
   await page.keyboard.press('Enter');
   const disclosure = await page.locator('#ai-editor').innerText();
@@ -45,7 +53,8 @@ export default async function checkAIProbes(page) {
   assert.equal(polls, 1);
   await model.getByRole('button', {name:'멘토 시험', exact:true}).click();
   const mentor = await page.locator('#ai-editor').innerText();
-  for (const text of ['개입 판단 JSON과 코칭 텍스트', '1500', '최대 2회', '자동 재시도 0회', '교육적 품질 보증이 아닙니다', '첫 단계 실패']) assert(mentor.includes(text), `mentor disclosure: ${text}`);
+  for (const text of ['수동 코칭', '자동 미개입', '각각 단일 구조화 응답', '1500', '최대 2회', '비용', '고정 합성 입력', '자동 재시도 0회', '교육적 품질 보증이 아닙니다', '첫 단계 실패']) assert(mentor.includes(text), `mentor disclosure: ${text}`);
+  assert.equal(starts.length, 1, 'opening mentor revalidation requires an explicit start');
   await page.getByRole('button', {name:'시험 시작', exact:true}).click();
   await model.getByRole('button', {name:'멘토 시험 취소', exact:true}).click();
   await page.getByRole('status').filter({hasText:'중단을 요청했습니다'}).waitFor();
@@ -75,5 +84,14 @@ export default async function checkAIProbes(page) {
     await row.getByText(guidance, {exact:true}).waitFor();
     assert(!(await row.innerText()).includes('응답 형식'), `${code} is not a format failure`);
   }
+  mentorFails = true;
+  await model.getByRole('button', {name:'멘토 시험', exact:true}).click();
+  await page.getByRole('button', {name:'시험 시작', exact:true}).click();
+  await model.getByRole('button', {name:'멘토 진행 조회', exact:true}).click();
+  await page.getByRole('status').filter({hasText:'시험 상태: 실패'}).waitFor();
+  await model.getByText('응답 형식이 역할 계약과 일치하지 않습니다.', {exact:false}).waitFor();
+  await page.clock.install();
+  await page.clock.runFor(60000);
+  assert.equal(starts.length, 4, 'failed synthetic trial does not restart automatically');
   return {pageErrors:[]};
 }

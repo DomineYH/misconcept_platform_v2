@@ -46,6 +46,7 @@ export default async function checkContextLimit(page) {
   await page.goto(`${base}/chat?stream`);
   await page.waitForFunction(() => document.querySelector('#teacher-form').dataset.studentStream);
   const input = page.locator('#teacher-input');
+  const studentRows = await page.locator('.message-student').count();
   await input.fill('너무 긴 새 질문🙂');
   await input.press('Enter');
   const notice = page.locator('.student-run-status');
@@ -54,6 +55,7 @@ export default async function checkContextLimit(page) {
   assert(await input.isEnabled(), 'preflight rejection allows editing');
   assert(await input.evaluate(el => el === document.activeElement), 'draft keeps keyboard focus');
   assert.equal(await page.locator('.message-teacher').count(), 0, 'unaccepted question is not a conversation turn');
+  assert.equal(await page.locator('.message-student').count(), studentRows, 'preflight rejection leaves no empty student row');
   assert.equal(await page.locator('[data-message-id]').count(), 0);
   assert.equal(await notice.getAttribute('role'), 'status');
   assert(!(await notice.innerText()).includes('PRIVATE'));

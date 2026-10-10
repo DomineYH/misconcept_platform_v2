@@ -270,6 +270,8 @@ export function mountStudentStream(ui) {
           persist();
         } else {
           teacher.remove();
+          container.append(status);
+          student.remove();
           pending = null;
           sessionStorage.removeItem(storageKey);
           sessionStorage.setItem(draftKey, input.value);

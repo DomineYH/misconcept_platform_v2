@@ -70,21 +70,17 @@ async def test_auto_structured_errors_fail_without_heuristic_coaching(
 
     async def create(**kwargs):
         calls.append(kwargs)
-        if len(calls) == 1:
-            if semantic == "fallback":
-                raise APIError(
-                    "SECRET semantic error",
-                    request=httpx.Request("POST", "https://example.test"),
-                    body=None,
-                )
-            if semantic == "invalid_json":
-                return SimpleNamespace(output_text="not JSON", usage=None)
-            return SimpleNamespace(
-                output_text=mentor_output("Semantic coaching", "Semantic loop"),
-                usage=None,
+        if semantic == "fallback":
+            raise APIError(
+                "SECRET semantic error",
+                request=httpx.Request("POST", "https://example.test"),
+                body=None,
             )
+        if semantic == "invalid_json":
+            return SimpleNamespace(output_text="not JSON", usage=None)
         return SimpleNamespace(
-            output_text=mentor_output("Semantic coaching"), usage=None
+            output_text=mentor_output("Semantic coaching", "Semantic loop"),
+            usage=None,
         )
 
     mentor.responses.create.side_effect = create

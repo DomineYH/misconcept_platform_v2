@@ -15,7 +15,6 @@ export default async function checkAnalysis(page) {
     await page.getByRole('tab', {name: '개선할 점'}).click();
     assert(await page.getByText('Narrative improvement', {exact: true}).isVisible());
     assert(await page.getByText('What about halves?', {exact: false}).isVisible());
-    if (width === 390) await page.screenshot({path: '/mnt/d/dev/misconcept_platform_v2-wt/reports-s2-impl/s2-08-classification-off-mobile.png', fullPage: true});
     await page.goto(`${origin}/fixtures/s2/analysis`);
     await page.getByRole('button', {name: /상세 분석/}).click();
     assert(await page.getByText('Frozen display name', {exact: true}).isVisible());
@@ -23,6 +22,5 @@ export default async function checkAnalysis(page) {
     assert(await page.getByText('잘 한 대화', {exact: true}).isVisible());
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   }
-  await page.screenshot({path: '/mnt/d/dev/misconcept_platform_v2-wt/reports-s2-impl/s2-08-analysis-mobile.png', fullPage: true});
   return {pageErrors: []};
 }

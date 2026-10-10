@@ -40,7 +40,6 @@ export default async function checkHistory(page, base) {
     assert((await page.content()).includes('Original history evidence'));
     assert(!(await page.content()).includes('PRIVATE RUBRIC'));
     await page.evaluate(() => scrollTo(0, 0));
-    await page.screenshot({path: `/mnt/d/dev/misconcept_platform_v2-wt/reports-s2-impl/s2-09-history-${width}.png`, fullPage: true});
   }
   const csv = await page.request.get(`${base}/sessions/${legacy.id}/export.csv`);
   assert.equal(csv.status(), 200);

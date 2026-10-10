@@ -85,11 +85,12 @@ fallback remain unchanged; local no-intervention decisions make no provider call
 Judgment attempts are recorded separately as `mentor_judgment`, including failures
 without usage. Post-session analysis also uses DB registrations and common
 invocations while preserving configured model IDs and options. Dialogue within
-budget uses one structured v2 call with the frozen lesson and completed
+budget uses one structured v2 call with the frozen lesson and stored
 teacher/student dialogue; the server validates exact evidence and computes
 statistics and rubric grades. No dialogue
 makes no provider call. Existing v1 reports remain readable; analysis models need
-explicit s4-v2 role revalidation, while student and mentor evidence stays current.
+explicit s4-v2 role revalidation. Student and mentor role contracts keep their
+existing versions; shared capability v3 separately makes all roles' old evidence stale.
 Analysis requests send a UUID `request_id` and receive 202 with a durable run ID
 and status/cancel paths. Replaying that request makes no new call; changed inputs
 or another active request return 409. Accepted reports and the latest execution

@@ -1,0 +1,3169 @@
+{
+  "version": "s4-quality-corpus-v1-agent-draft",
+  "synthetic": true,
+  "review": {
+    "status": "agent_draft_requires_education_lead_review",
+    "education_lead": "initial product owner; explicit designation required for a successor",
+    "reviewer": null,
+    "reviewed_at": null
+  },
+  "samples": [
+    {
+      "id": "math-short-01",
+      "subject": "수학",
+      "length": "short",
+      "boundary": "greeting_only",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "분수 비교 인사",
+          "subject": "수학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "1/3과 1/4의 크기를 비교한다.",
+            "learning_objective": "1/3과 1/4의 크기를 비교한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "분모가 크면 분수도 크다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "1/3과 1/4의 크기를 비교한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 1001,
+          "role": "teacher",
+          "content": "안녕하세요. 오늘 만나서 반가워요."
+        },
+        {
+          "id": 1002,
+          "role": "student",
+          "content": "안녕하세요. 잘 부탁드려요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "insufficient",
+        "evidence": [],
+        "allowed_interpretations": [
+          "교과 내용 발화가 없어 오개념 상태를 판단할 수 없다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다.",
+          "인사 또는 미응답 질문만으로 학생봇 이해 변화가 확인되었다고 말한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "transcript_hash": "d9b454a97b0f2fd19d62ac5f91d8b837c88321f4a87c2e739f13eb00ff0bf848",
+      "config_hash": "213bc20f662f1e795ef1d257e5380fed32af3c9c1d10887aed038e17a5373c2a",
+      "sample_hash": "76b1ca8a095063c522be3d6a0c9abbfb6f665ab0b1dc27e4f6b1ca5de163bf0b"
+    },
+    {
+      "id": "math-short-02",
+      "subject": "수학",
+      "length": "short",
+      "boundary": "unanswered_tail",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "분수 비교 근거 부족과 미응답",
+          "subject": "수학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "1/3과 1/4의 크기를 비교한다.",
+            "learning_objective": "1/3과 1/4의 크기를 비교한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "분모가 크면 분수도 크다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "1/3과 1/4의 크기를 비교한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": false,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 2001,
+          "role": "teacher",
+          "content": "같은 크기의 피자를 3조각과 4조각으로 나누면 한 조각은 어떻게 달라질까요?"
+        },
+        {
+          "id": 2002,
+          "role": "student",
+          "content": "아직 생각하지 못했어요. 잘 모르겠어요."
+        },
+        {
+          "id": 2003,
+          "role": "teacher",
+          "content": "한 조각의 크기를 그림으로 비교해 볼까요?"
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "insufficient",
+        "evidence": [
+          {
+            "message_id": 2001,
+            "role": "teacher",
+            "quote": "같은 크기의 피자를 3조각과 4조각으로 나누면 한 조각은 어떻게 달라질까요?",
+            "allowed_rubric_ids": []
+          },
+          {
+            "message_id": 2002,
+            "role": "student",
+            "quote": "아직 생각하지 못했어요. 잘 모르겠어요."
+          },
+          {
+            "message_id": 2003,
+            "role": "teacher",
+            "quote": "한 조각의 크기를 그림으로 비교해 볼까요?",
+            "allowed_rubric_ids": []
+          }
+        ],
+        "allowed_interpretations": [
+          "학생봇이 크기 비교 이유를 말하지 않아 상태 판단은 근거 부족이다. 마지막 질문은 미응답이며 추가 변화 근거가 아니다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다.",
+          "인사 또는 미응답 질문만으로 학생봇 이해 변화가 확인되었다고 말한다.",
+          "분류 off인데 분류 분포 또는 발문 등급을 만들어 낸다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "transcript_hash": "f4811a631acf89445d0ff59242f11e35fb9d954fca929261c5f5b523eab0135a",
+      "config_hash": "8df78029ae2e8f45f6979c3732b1eb87822c1d40aa64ddb71d2164568b1ed92a",
+      "sample_hash": "322f1a406854a67be42ee0b516fd445c3242818f5a15af415c923de043a0bda8"
+    },
+    {
+      "id": "math-ordinary-01",
+      "subject": "수학",
+      "length": "ordinary",
+      "boundary": "none",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "분수 덧셈 유지",
+          "subject": "수학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "1/2+1/3을 그림과 식으로 설명한다.",
+            "learning_objective": "1/2+1/3을 그림과 식으로 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "분자와 분모를 각각 더한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "1/2+1/3을 그림과 식으로 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 3001,
+          "role": "teacher",
+          "content": "1/2 더하기 1/3을 어떻게 구했나요?"
+        },
+        {
+          "id": 3002,
+          "role": "student",
+          "content": "분자는 1 더하기 1, 분모는 2 더하기 3이라서 2/5예요."
+        },
+        {
+          "id": 3003,
+          "role": "teacher",
+          "content": "분모의 2와 3은 각각 무엇을 나타내나요?"
+        },
+        {
+          "id": 3004,
+          "role": "student",
+          "content": "각 피자를 나눈 조각 수예요."
+        },
+        {
+          "id": 3005,
+          "role": "teacher",
+          "content": "두 조각의 크기는 같은가요?"
+        },
+        {
+          "id": 3006,
+          "role": "student",
+          "content": "절반 조각과 삼분의 일 조각은 달라요."
+        },
+        {
+          "id": 3007,
+          "role": "teacher",
+          "content": "크기가 다른 조각을 어떻게 같은 단위로 나타낼 수 있을까요?"
+        },
+        {
+          "id": 3008,
+          "role": "student",
+          "content": "잘 모르겠어요. 숫자를 더하면 되지 않을까요?"
+        },
+        {
+          "id": 3009,
+          "role": "teacher",
+          "content": "두 피자를 각각 6조각으로 나누면 원래 조각은 몇 조각일까요?"
+        },
+        {
+          "id": 3010,
+          "role": "student",
+          "content": "절반은 3개이고 삼분의 일은 2개예요."
+        },
+        {
+          "id": 3011,
+          "role": "teacher",
+          "content": "그럼 합은 5/6이라고 써야 하지 않을까요?"
+        },
+        {
+          "id": 3012,
+          "role": "student",
+          "content": "그림에서는 그렇지만 식은 2/5라고 생각해요."
+        },
+        {
+          "id": 3013,
+          "role": "teacher",
+          "content": "그림과 식의 답이 다른 이유를 설명해 볼래요?"
+        },
+        {
+          "id": 3014,
+          "role": "student",
+          "content": "그림은 조각을 더 쪼갠 거고 식은 원래 숫자를 더한 거예요."
+        },
+        {
+          "id": 3015,
+          "role": "teacher",
+          "content": "새 문제 1/3+1/4도 같은 방법으로 풀어 볼래요?"
+        },
+        {
+          "id": 3016,
+          "role": "student",
+          "content": "2/7이에요. 분모도 더해야 해요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "maintained",
+        "evidence": [
+          {
+            "message_id": 3001,
+            "role": "teacher",
+            "quote": "1/2 더하기 1/3을 어떻게 구했나요?",
+            "allowed_rubric_ids": [
+              "open"
+            ]
+          },
+          {
+            "message_id": 3003,
+            "role": "teacher",
+            "quote": "분모의 2와 3은 각각 무엇을 나타내나요?",
+            "allowed_rubric_ids": [
+              "probe"
+            ]
+          },
+          {
+            "message_id": 3011,
+            "role": "teacher",
+            "quote": "그럼 합은 5/6이라고 써야 하지 않을까요?",
+            "allowed_rubric_ids": [
+              "leading"
+            ]
+          },
+          {
+            "message_id": 3002,
+            "role": "student",
+            "quote": "분자는 1 더하기 1, 분모는 2 더하기 3이라서 2/5예요."
+          },
+          {
+            "message_id": 3012,
+            "role": "student",
+            "quote": "그림에서는 그렇지만 식은 2/5라고 생각해요."
+          },
+          {
+            "message_id": 3016,
+            "role": "student",
+            "quote": "2/7이에요. 분모도 더해야 해요."
+          }
+        ],
+        "allowed_interpretations": [
+          "그림에서 5/6을 따라가도 새 문제에서 분모 덧셈을 유지한다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "transcript_hash": "a555e160c7d5edf46dd1f89de003e586d0bd0bfa403a07b36c3c2f9f4c541b1c",
+      "config_hash": "d9a5e10da4e93abe27b9d395842fc488a20d064f58b16ada59c5fe222f0e5f70",
+      "sample_hash": "19a3c958954149ee938b3aea35bc957df15be5b589233bb8ddb8cce0203ca753"
+    },
+    {
+      "id": "math-ordinary-02",
+      "subject": "수학",
+      "length": "ordinary",
+      "boundary": "none",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "음수 곱셈 변화",
+          "subject": "수학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "음수끼리 곱하면 양수가 되는 이유를 규칙으로 설명한다.",
+            "learning_objective": "음수끼리 곱하면 양수가 되는 이유를 규칙으로 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "음수가 포함된 곱은 모두 음수라고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "음수끼리 곱하면 양수가 되는 이유를 규칙으로 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 4001,
+          "role": "teacher",
+          "content": "음수 두 개를 곱하면 어떤 수가 될까요?"
+        },
+        {
+          "id": 4002,
+          "role": "student",
+          "content": "마이너스가 있으니 항상 음수예요."
+        },
+        {
+          "id": 4003,
+          "role": "teacher",
+          "content": "3 곱하기 -2와 2 곱하기 -2를 비교해 볼까요?"
+        },
+        {
+          "id": 4004,
+          "role": "student",
+          "content": "-6과 -4예요."
+        },
+        {
+          "id": 4005,
+          "role": "teacher",
+          "content": "첫 수가 하나씩 줄 때 답은 어떻게 달라지나요?"
+        },
+        {
+          "id": 4006,
+          "role": "student",
+          "content": "2씩 커져요."
+        },
+        {
+          "id": 4007,
+          "role": "teacher",
+          "content": "1 곱하기 -2와 0 곱하기 -2는요?"
+        },
+        {
+          "id": 4008,
+          "role": "student",
+          "content": "-2와 0이에요."
+        },
+        {
+          "id": 4009,
+          "role": "teacher",
+          "content": "이 규칙을 -1 곱하기 -2까지 이어 볼래요?"
+        },
+        {
+          "id": 4010,
+          "role": "student",
+          "content": "0보다 2 큰 2가 되네요."
+        },
+        {
+          "id": 4011,
+          "role": "teacher",
+          "content": "그러면 처음 생각과 무엇이 달라졌나요?"
+        },
+        {
+          "id": 4012,
+          "role": "student",
+          "content": "음수가 둘이면 답이 양수일 수도 있겠네요."
+        },
+        {
+          "id": 4013,
+          "role": "teacher",
+          "content": "왜 양수라고 생각하는지 네 말로 설명해 볼래요?"
+        },
+        {
+          "id": 4014,
+          "role": "student",
+          "content": "첫 수를 하나씩 줄이면 답이 2씩 늘어나니까요."
+        },
+        {
+          "id": 4015,
+          "role": "teacher",
+          "content": "그럼 -2 곱하기 -2는 4가 맞죠?"
+        },
+        {
+          "id": 4016,
+          "role": "student",
+          "content": "네, 4예요."
+        },
+        {
+          "id": 4017,
+          "role": "teacher",
+          "content": "-3 곱하기 -4도 스스로 설명해 볼래요?"
+        },
+        {
+          "id": 4018,
+          "role": "student",
+          "content": "-2 곱하기 -4가 8이고 4가 더 늘어서 12예요."
+        },
+        {
+          "id": 4019,
+          "role": "teacher",
+          "content": "지금 알게 된 규칙을 정리해 볼까요?"
+        },
+        {
+          "id": 4020,
+          "role": "student",
+          "content": "음수끼리 곱하면 양수예요. 규칙을 이어서 확인했어요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "changed",
+        "evidence": [
+          {
+            "message_id": 4001,
+            "role": "teacher",
+            "quote": "음수 두 개를 곱하면 어떤 수가 될까요?",
+            "allowed_rubric_ids": [
+              "open"
+            ]
+          },
+          {
+            "message_id": 4013,
+            "role": "teacher",
+            "quote": "왜 양수라고 생각하는지 네 말로 설명해 볼래요?",
+            "allowed_rubric_ids": [
+              "probe"
+            ]
+          },
+          {
+            "message_id": 4015,
+            "role": "teacher",
+            "quote": "그럼 -2 곱하기 -2는 4가 맞죠?",
+            "allowed_rubric_ids": [
+              "leading"
+            ]
+          },
+          {
+            "message_id": 4002,
+            "role": "student",
+            "quote": "마이너스가 있으니 항상 음수예요."
+          },
+          {
+            "message_id": 4010,
+            "role": "student",
+            "quote": "0보다 2 큰 2가 되네요."
+          },
+          {
+            "message_id": 4018,
+            "role": "student",
+            "quote": "-2 곱하기 -4가 8이고 4가 더 늘어서 12예요."
+          },
+          {
+            "message_id": 4020,
+            "role": "student",
+            "quote": "음수끼리 곱하면 양수예요. 규칙을 이어서 확인했어요."
+          }
+        ],
+        "allowed_interpretations": [
+          "초기 주장과 달리 규칙 설명과 새 예시에서 양수 결과를 제시한다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "transcript_hash": "415793d092edfe7bc92484a784e63bfa452664926b7ecaba8a1b8437b7601e25",
+      "config_hash": "220beebc8ee526bc4410fc1c00b4b54d3ea26613fc8c0fa560e6c75aab4c9780",
+      "sample_hash": "4fcd60f645bb4c674391fcba878c7ee1f439b0d25fa563f2655fb5b5cfb954bc"
+    },
+    {
+      "id": "math-long-01",
+      "subject": "수학",
+      "length": "long",
+      "boundary": "unanswered_tail",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "비례 관계 장문",
+          "subject": "수학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "일정한 단가의 개수와 가격 관계를 표와 말로 설명한다.",
+            "learning_objective": "일정한 단가의 개수와 가격 관계를 표와 말로 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "비례 관계에서도 두 양의 차이가 일정하다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "일정한 단가의 개수와 가격 관계를 표와 말로 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 5001,
+          "role": "teacher",
+          "content": "공책 2권이 6천 원이면 4권은 얼마일까요?"
+        },
+        {
+          "id": 5002,
+          "role": "student",
+          "content": "권수가 2 늘었으니 가격도 2 늘어서 8천 원이에요."
+        },
+        {
+          "id": 5003,
+          "role": "teacher",
+          "content": "권수와 가격에서 각각 무엇이 늘었나요?"
+        },
+        {
+          "id": 5004,
+          "role": "student",
+          "content": "권수는 권 단위고 가격은 천 원 단위인데 둘 다 2를 더했어요."
+        },
+        {
+          "id": 5005,
+          "role": "teacher",
+          "content": "공책 한 권의 가격은 어떻게 알아볼까요?"
+        },
+        {
+          "id": 5006,
+          "role": "student",
+          "content": "6을 2로 나누면 3천 원이에요."
+        },
+        {
+          "id": 5007,
+          "role": "teacher",
+          "content": "그 단가로 4권을 계산해 볼래요?"
+        },
+        {
+          "id": 5008,
+          "role": "student",
+          "content": "3 곱하기 4는 12천 원인데 처음 답과 달라요."
+        },
+        {
+          "id": 5009,
+          "role": "teacher",
+          "content": "두 방법이 다른 이유는 무엇일까요?"
+        },
+        {
+          "id": 5010,
+          "role": "student",
+          "content": "더한 2를 가격에도 그대로 쓴 게 이상할 수 있어요."
+        },
+        {
+          "id": 5011,
+          "role": "teacher",
+          "content": "1권, 2권, 3권의 가격을 표로 써 볼까요?"
+        },
+        {
+          "id": 5012,
+          "role": "student",
+          "content": "3천 원, 6천 원, 9천 원이에요."
+        },
+        {
+          "id": 5013,
+          "role": "teacher",
+          "content": "가격의 차이는 얼마씩인가요?"
+        },
+        {
+          "id": 5014,
+          "role": "student",
+          "content": "한 권 늘 때마다 3천 원씩 늘어요."
+        },
+        {
+          "id": 5015,
+          "role": "teacher",
+          "content": "권수의 차이와 가격의 차이가 같은가요?"
+        },
+        {
+          "id": 5016,
+          "role": "student",
+          "content": "아니요. 권수는 1이고 가격은 3천 원이에요."
+        },
+        {
+          "id": 5017,
+          "role": "teacher",
+          "content": "가격을 권수로 나눈 값은 어떤가요?"
+        },
+        {
+          "id": 5018,
+          "role": "student",
+          "content": "모두 3천 원이에요."
+        },
+        {
+          "id": 5019,
+          "role": "teacher",
+          "content": "그럼 5권의 가격은 15천 원이겠죠?"
+        },
+        {
+          "id": 5020,
+          "role": "student",
+          "content": "네, 한 권이 3천 원이니까요."
+        },
+        {
+          "id": 5021,
+          "role": "teacher",
+          "content": "7권일 때도 같은 생각을 쓸 수 있나요?"
+        },
+        {
+          "id": 5022,
+          "role": "student",
+          "content": "3 곱하기 7로 21천 원이에요."
+        },
+        {
+          "id": 5023,
+          "role": "teacher",
+          "content": "2권에서 7권으로 바뀔 때 가격은 얼마나 늘었나요?"
+        },
+        {
+          "id": 5024,
+          "role": "student",
+          "content": "5권이 늘어서 15천 원 늘었어요."
+        },
+        {
+          "id": 5025,
+          "role": "teacher",
+          "content": "비례 관계를 네 말로 설명해 볼까요?"
+        },
+        {
+          "id": 5026,
+          "role": "student",
+          "content": "권수에 같은 단가를 곱해서 가격을 구해요."
+        },
+        {
+          "id": 5027,
+          "role": "teacher",
+          "content": "단가가 4천 원인 다른 공책 2권은 얼마일까요?"
+        },
+        {
+          "id": 5028,
+          "role": "student",
+          "content": "8천 원이에요."
+        },
+        {
+          "id": 5029,
+          "role": "teacher",
+          "content": "그 공책 4권은 어떻게 구하나요?"
+        },
+        {
+          "id": 5030,
+          "role": "student",
+          "content": "16천 원이고 권수가 두 배면 가격도 두 배예요."
+        },
+        {
+          "id": 5031,
+          "role": "teacher",
+          "content": "모든 물건에서 이 관계가 항상 성립할까요?"
+        },
+        {
+          "id": 5032,
+          "role": "student",
+          "content": "할인이 있으면 단가가 달라져서 아닐 수도 있어요."
+        },
+        {
+          "id": 5033,
+          "role": "teacher",
+          "content": "지금 표에서는 할인 정보가 있나요?"
+        },
+        {
+          "id": 5034,
+          "role": "student",
+          "content": "없으니 같은 단가라고 보고 계산했어요."
+        },
+        {
+          "id": 5035,
+          "role": "teacher",
+          "content": "처음 8천 원이라고 답한 방법을 다시 살펴볼래요?"
+        },
+        {
+          "id": 5036,
+          "role": "student",
+          "content": "서로 다른 단위에 같은 수를 더해서 틀렸어요."
+        },
+        {
+          "id": 5037,
+          "role": "teacher",
+          "content": "새 문제에서 단가가 5천 원이면 6권은요?"
+        },
+        {
+          "id": 5038,
+          "role": "student",
+          "content": "30천 원이에요. 단가와 권수를 곱했어요."
+        },
+        {
+          "id": 5039,
+          "role": "teacher",
+          "content": "오늘 확인한 관계를 한 문장으로 정리해 볼래요?"
+        },
+        {
+          "id": 5040,
+          "role": "student",
+          "content": "단가가 일정할 때 가격은 권수에 비례해요."
+        },
+        {
+          "id": 5041,
+          "role": "teacher",
+          "content": "할인이 적용되면 어떤 정보가 더 필요할까요?"
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "changed",
+        "evidence": [
+          {
+            "message_id": 5001,
+            "role": "teacher",
+            "quote": "공책 2권이 6천 원이면 4권은 얼마일까요?",
+            "allowed_rubric_ids": [
+              "open"
+            ]
+          },
+          {
+            "message_id": 5005,
+            "role": "teacher",
+            "quote": "공책 한 권의 가격은 어떻게 알아볼까요?",
+            "allowed_rubric_ids": [
+              "probe"
+            ]
+          },
+          {
+            "message_id": 5019,
+            "role": "teacher",
+            "quote": "그럼 5권의 가격은 15천 원이겠죠?",
+            "allowed_rubric_ids": [
+              "leading"
+            ]
+          },
+          {
+            "message_id": 5002,
+            "role": "student",
+            "quote": "권수가 2 늘었으니 가격도 2 늘어서 8천 원이에요."
+          },
+          {
+            "message_id": 5026,
+            "role": "student",
+            "quote": "권수에 같은 단가를 곱해서 가격을 구해요."
+          },
+          {
+            "message_id": 5038,
+            "role": "student",
+            "quote": "30천 원이에요. 단가와 권수를 곱했어요."
+          },
+          {
+            "message_id": 5040,
+            "role": "student",
+            "quote": "단가가 일정할 때 가격은 권수에 비례해요."
+          }
+        ],
+        "allowed_interpretations": [
+          "초기 차이 고정 설명에서 단가와 배수 설명으로 변화하나 미응답 끝 발화는 추가 변화 근거가 아니다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다.",
+          "인사 또는 미응답 질문만으로 학생봇 이해 변화가 확인되었다고 말한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "planner_fixture": {
+        "kind": "synthetic_capacity_not_provider_limit",
+        "input_budget_tokens": 5000,
+        "expected_mode": "chunked",
+        "max_chunks": 8,
+        "verification": "pending_s4_planner_82_83"
+      },
+      "transcript_hash": "34f80e7a69f6a042f3857a29f1617919cc9c4a8107f31b7b19cf00451c00cd04",
+      "config_hash": "fb7de351f10e2b4ff329ec611c169eff6abc328aefce46c667f02e8320c7efde",
+      "sample_hash": "2bc4c62c35f326cc5a878df6891ab6b3ca37846957aa7ab08f3c674a0a310d20"
+    },
+    {
+      "id": "math-long-02",
+      "subject": "수학",
+      "length": "long",
+      "boundary": "none",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "넓이와 둘레 장문",
+          "subject": "수학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "같은 둘레인 직사각형들의 넓이를 비교한다.",
+            "learning_objective": "같은 둘레인 직사각형들의 넓이를 비교한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "둘레가 같으면 넓이도 같다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "같은 둘레인 직사각형들의 넓이를 비교한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": false,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 6001,
+          "role": "teacher",
+          "content": "둘레가 같은 직사각형은 넓이도 같을까요?"
+        },
+        {
+          "id": 6002,
+          "role": "student",
+          "content": "저는 항상 넓이를 가로 곱하기 세로로 따로 구했어요. 둘레만으로는 몰라요."
+        },
+        {
+          "id": 6003,
+          "role": "teacher",
+          "content": "가로 1, 세로 5인 도형의 둘레와 넓이는요?"
+        },
+        {
+          "id": 6004,
+          "role": "student",
+          "content": "둘레는 12이고 넓이는 5예요."
+        },
+        {
+          "id": 6005,
+          "role": "teacher",
+          "content": "가로 2, 세로 4인 도형은요?"
+        },
+        {
+          "id": 6006,
+          "role": "student",
+          "content": "둘레는 12이고 넓이는 8이에요."
+        },
+        {
+          "id": 6007,
+          "role": "teacher",
+          "content": "두 도형에서 같고 다른 것을 말해 볼래요?"
+        },
+        {
+          "id": 6008,
+          "role": "student",
+          "content": "둘레는 같고 넓이는 달라요."
+        },
+        {
+          "id": 6009,
+          "role": "teacher",
+          "content": "넓이가 다른 까닭을 칸으로 설명해 볼까요?"
+        },
+        {
+          "id": 6010,
+          "role": "student",
+          "content": "첫 도형은 다섯 칸이고 두 번째는 여덟 칸이에요."
+        },
+        {
+          "id": 6011,
+          "role": "teacher",
+          "content": "한 변을 늘리면 다른 변은 어떻게 해야 둘레가 유지되나요?"
+        },
+        {
+          "id": 6012,
+          "role": "student",
+          "content": "늘린 만큼 다른 변을 줄여요."
+        },
+        {
+          "id": 6013,
+          "role": "teacher",
+          "content": "가로 3, 세로 3인 경우를 더 넣어 볼까요?"
+        },
+        {
+          "id": 6014,
+          "role": "student",
+          "content": "둘레 12이고 넓이는 9예요."
+        },
+        {
+          "id": 6015,
+          "role": "teacher",
+          "content": "세 경우를 표로 정리해 볼래요?"
+        },
+        {
+          "id": 6016,
+          "role": "student",
+          "content": "1과 5는 5, 2와 4는 8, 3과 3은 9예요."
+        },
+        {
+          "id": 6017,
+          "role": "teacher",
+          "content": "넓이가 가장 큰 경우는 어느 것인가요?"
+        },
+        {
+          "id": 6018,
+          "role": "student",
+          "content": "이 표에서는 정사각형이에요."
+        },
+        {
+          "id": 6019,
+          "role": "teacher",
+          "content": "표에 없는 경우까지 확인했다고 말할 수 있나요?"
+        },
+        {
+          "id": 6020,
+          "role": "student",
+          "content": "아니요. 아직 세 경우만 계산했어요."
+        },
+        {
+          "id": 6021,
+          "role": "teacher",
+          "content": "가로 1.5, 세로 4.5는 어떨까요?"
+        },
+        {
+          "id": 6022,
+          "role": "student",
+          "content": "둘레 12이고 넓이는 6.75예요."
+        },
+        {
+          "id": 6023,
+          "role": "teacher",
+          "content": "1과 5의 경우보다 넓이가 큰가요?"
+        },
+        {
+          "id": 6024,
+          "role": "student",
+          "content": "네, 6.75가 5보다 커요."
+        },
+        {
+          "id": 6025,
+          "role": "teacher",
+          "content": "소수 길이도 같은 넓이 식을 쓸 수 있나요?"
+        },
+        {
+          "id": 6026,
+          "role": "student",
+          "content": "네, 가로와 세로를 곱해요."
+        },
+        {
+          "id": 6027,
+          "role": "teacher",
+          "content": "둘레를 재는 단위와 넓이 단위를 구별해 볼까요?"
+        },
+        {
+          "id": 6028,
+          "role": "student",
+          "content": "길이는 센티미터, 넓이는 제곱센티미터예요."
+        },
+        {
+          "id": 6029,
+          "role": "teacher",
+          "content": "둘레만 보고 넓이를 정할 수 없겠죠?"
+        },
+        {
+          "id": 6030,
+          "role": "student",
+          "content": "맞아요. 두 변의 길이를 알아야 해요."
+        },
+        {
+          "id": 6031,
+          "role": "teacher",
+          "content": "같은 넓이이면 둘레도 같을까요?"
+        },
+        {
+          "id": 6032,
+          "role": "student",
+          "content": "그것도 꼭 같지는 않을 것 같아요."
+        },
+        {
+          "id": 6033,
+          "role": "teacher",
+          "content": "넓이 12인 2와 6, 3과 4를 비교해 볼까요?"
+        },
+        {
+          "id": 6034,
+          "role": "student",
+          "content": "둘레는 각각 16과 14예요."
+        },
+        {
+          "id": 6035,
+          "role": "teacher",
+          "content": "이 예시는 어떤 주장을 뒷받침하나요?"
+        },
+        {
+          "id": 6036,
+          "role": "student",
+          "content": "넓이가 같아도 둘레는 다를 수 있어요."
+        },
+        {
+          "id": 6037,
+          "role": "teacher",
+          "content": "처음부터 갖고 있던 생각을 다시 말해 볼래요?"
+        },
+        {
+          "id": 6038,
+          "role": "student",
+          "content": "처음부터 둘레와 넓이는 별개라고 생각했어요."
+        },
+        {
+          "id": 6039,
+          "role": "teacher",
+          "content": "오늘 대화가 네 생각을 바꿨다고 말해도 될까요?"
+        },
+        {
+          "id": 6040,
+          "role": "student",
+          "content": "이미 알고 있던 걸 여러 예로 확인한 거예요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "deviation",
+        "evidence": [
+          {
+            "message_id": 6001,
+            "role": "teacher",
+            "quote": "둘레가 같은 직사각형은 넓이도 같을까요?",
+            "allowed_rubric_ids": []
+          },
+          {
+            "message_id": 6009,
+            "role": "teacher",
+            "quote": "넓이가 다른 까닭을 칸으로 설명해 볼까요?",
+            "allowed_rubric_ids": []
+          },
+          {
+            "message_id": 6029,
+            "role": "teacher",
+            "quote": "둘레만 보고 넓이를 정할 수 없겠죠?",
+            "allowed_rubric_ids": []
+          },
+          {
+            "message_id": 6002,
+            "role": "student",
+            "quote": "저는 항상 넓이를 가로 곱하기 세로로 따로 구했어요. 둘레만으로는 몰라요."
+          },
+          {
+            "message_id": 6008,
+            "role": "student",
+            "quote": "둘레는 같고 넓이는 달라요."
+          },
+          {
+            "message_id": 6038,
+            "role": "student",
+            "quote": "처음부터 둘레와 넓이는 별개라고 생각했어요."
+          },
+          {
+            "message_id": 6040,
+            "role": "student",
+            "quote": "이미 알고 있던 걸 여러 예로 확인한 거예요."
+          }
+        ],
+        "allowed_interpretations": [
+          "첫 학생봇 발화부터 설정된 오개념을 부정한다. 설정 이탈 가능성을 기록하고 교사의 교정 효과로 해석하지 않는다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다.",
+          "분류 off인데 분류 분포 또는 발문 등급을 만들어 낸다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "planner_fixture": {
+        "kind": "synthetic_capacity_not_provider_limit",
+        "input_budget_tokens": 5000,
+        "expected_mode": "chunked",
+        "max_chunks": 8,
+        "verification": "pending_s4_planner_82_83"
+      },
+      "transcript_hash": "ce2f234991f354722a0404575fc96e70d3c1c7e1e38dd08d58102fc099f10dbc",
+      "config_hash": "86420546d42326ed37390c6f59cf685e3d574186d733a92e7b4b956e0a849158",
+      "sample_hash": "809cbdd50dc89a3027aef974cdc72978c75456ed8a4fe014b0b8b9ccb65b7d4e"
+    },
+    {
+      "id": "science-short-01",
+      "subject": "과학",
+      "length": "short",
+      "boundary": "none",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "뜨고 가라앉기",
+          "subject": "과학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "부피와 질량을 함께 고려해 물체의 뜨고 가라앉음을 설명한다.",
+            "learning_objective": "부피와 질량을 함께 고려해 물체의 뜨고 가라앉음을 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "무거운 물체는 모두 가라앉는다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "부피와 질량을 함께 고려해 물체의 뜨고 가라앉음을 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 7001,
+          "role": "teacher",
+          "content": "큰 배는 무거운데 왜 물에 뜰까요?"
+        },
+        {
+          "id": 7002,
+          "role": "student",
+          "content": "배는 특별하지만 다른 무거운 물체는 다 가라앉아요."
+        },
+        {
+          "id": 7003,
+          "role": "teacher",
+          "content": "같은 무게의 쇠구슬과 속이 빈 통은 어떨까요?"
+        },
+        {
+          "id": 7004,
+          "role": "student",
+          "content": "둘 다 무거우면 가라앉을 거예요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "maintained",
+        "evidence": [
+          {
+            "message_id": 7001,
+            "role": "teacher",
+            "quote": "큰 배는 무거운데 왜 물에 뜰까요?",
+            "allowed_rubric_ids": [
+              "open"
+            ]
+          },
+          {
+            "message_id": 7003,
+            "role": "teacher",
+            "quote": "같은 무게의 쇠구슬과 속이 빈 통은 어떨까요?",
+            "allowed_rubric_ids": [
+              "probe"
+            ]
+          },
+          {
+            "message_id": 7002,
+            "role": "student",
+            "quote": "배는 특별하지만 다른 무거운 물체는 다 가라앉아요."
+          },
+          {
+            "message_id": 7004,
+            "role": "student",
+            "quote": "둘 다 무거우면 가라앉을 거예요."
+          }
+        ],
+        "allowed_interpretations": [
+          "배를 예외로 취급하며 무게만으로 판단하는 설명을 유지한다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "transcript_hash": "8de29945b8a5b422cad500ebfffd16e472d8938a5acedac43d9f72ac087db92b",
+      "config_hash": "8143b8993f06f14dcc2bbff9a7c61a9c150f6d7ac919af0499f51d107e48acf6",
+      "sample_hash": "ba7f6e54aa9498c1baf1d33dbcea2bbbc5d94094407961779fc7b0fa00bc6460"
+    },
+    {
+      "id": "science-short-02",
+      "subject": "과학",
+      "length": "short",
+      "boundary": "unanswered_tail",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "계절 설명 미완결",
+          "subject": "과학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "자전축 기울기와 태양 고도, 낮 길이를 연결해 계절을 설명한다.",
+            "learning_objective": "자전축 기울기와 태양 고도, 낮 길이를 연결해 계절을 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "여름은 지구가 태양에 더 가까워져서 생긴다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "자전축 기울기와 태양 고도, 낮 길이를 연결해 계절을 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 8001,
+          "role": "teacher",
+          "content": "여름이 더운 이유를 어떻게 생각하나요?"
+        },
+        {
+          "id": 8002,
+          "role": "student",
+          "content": "가까워서 그런지 기울기 때문인지 잘 모르겠어요."
+        },
+        {
+          "id": 8003,
+          "role": "teacher",
+          "content": "같은 날 남반구가 겨울이라는 사실은 어떻게 설명할까요?"
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "insufficient",
+        "evidence": [
+          {
+            "message_id": 8001,
+            "role": "teacher",
+            "quote": "여름이 더운 이유를 어떻게 생각하나요?",
+            "allowed_rubric_ids": [
+              "open"
+            ]
+          },
+          {
+            "message_id": 8003,
+            "role": "teacher",
+            "quote": "같은 날 남반구가 겨울이라는 사실은 어떻게 설명할까요?",
+            "allowed_rubric_ids": [
+              "probe"
+            ]
+          },
+          {
+            "message_id": 8002,
+            "role": "student",
+            "quote": "가까워서 그런지 기울기 때문인지 잘 모르겠어요."
+          }
+        ],
+        "allowed_interpretations": [
+          "명시적 거리 설명도 자전축 설명도 없어 상태 판단은 근거 부족이다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다.",
+          "인사 또는 미응답 질문만으로 학생봇 이해 변화가 확인되었다고 말한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "transcript_hash": "5f409004dd021db54bfbe50bedeeb1f211d07efc3b011d7bad8de9eedac807b6",
+      "config_hash": "0fe218c1c109a1bc066776990aa1566e4b78eb5eac0be933c5fd64ccf5b5f343",
+      "sample_hash": "e83381cb3a813bfff81bd76bcf559550083047c725ff3d46d5c1df86eef56592"
+    },
+    {
+      "id": "science-ordinary-01",
+      "subject": "과학",
+      "length": "ordinary",
+      "boundary": "none",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "녹은 설탕과 질량",
+          "subject": "과학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "닫힌 용기에서 용해 전후 전체 질량이 보존됨을 설명한다.",
+            "learning_objective": "닫힌 용기에서 용해 전후 전체 질량이 보존됨을 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "설탕이 물에 녹으면 사라져 전체 질량이 줄어든다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "닫힌 용기에서 용해 전후 전체 질량이 보존됨을 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 9001,
+          "role": "teacher",
+          "content": "설탕을 물에 녹이면 전체 질량은 어떻게 될까요?"
+        },
+        {
+          "id": 9002,
+          "role": "student",
+          "content": "설탕이 안 보이니까 질량이 줄어요."
+        },
+        {
+          "id": 9003,
+          "role": "teacher",
+          "content": "뚜껑을 닫은 용기를 저울에 올려 비교하면 어떨까요?"
+        },
+        {
+          "id": 9004,
+          "role": "student",
+          "content": "녹인 뒤 더 가벼울 것 같아요."
+        },
+        {
+          "id": 9005,
+          "role": "teacher",
+          "content": "전후 저울 값이 모두 120그램이면 무엇을 알 수 있나요?"
+        },
+        {
+          "id": 9006,
+          "role": "student",
+          "content": "안 보이는데도 무게는 같네요."
+        },
+        {
+          "id": 9007,
+          "role": "teacher",
+          "content": "설탕이 사라진 것과 보이지 않는 것은 같을까요?"
+        },
+        {
+          "id": 9008,
+          "role": "student",
+          "content": "다를 수 있겠어요. 물에 퍼져서 안 보이나 봐요."
+        },
+        {
+          "id": 9009,
+          "role": "teacher",
+          "content": "물을 증발시키면 무엇이 남을지 예상해 볼래요?"
+        },
+        {
+          "id": 9010,
+          "role": "student",
+          "content": "설탕이 남을 것 같아요."
+        },
+        {
+          "id": 9011,
+          "role": "teacher",
+          "content": "그럼 녹은 설탕도 용기 안에 있다고 볼 수 있겠죠?"
+        },
+        {
+          "id": 9012,
+          "role": "student",
+          "content": "네, 그래서 전체 질량이 같은 거예요."
+        },
+        {
+          "id": 9013,
+          "role": "teacher",
+          "content": "소금을 닫힌 물병에 녹이면 전체 질량은요?"
+        },
+        {
+          "id": 9014,
+          "role": "student",
+          "content": "빠져나가지 않으니 녹이기 전과 같아요."
+        },
+        {
+          "id": 9015,
+          "role": "teacher",
+          "content": "처음 생각과 지금 생각을 비교해 볼래요?"
+        },
+        {
+          "id": 9016,
+          "role": "student",
+          "content": "안 보인다고 없어진 건 아니고 닫힌 용기의 전체 질량은 같아요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "changed",
+        "evidence": [
+          {
+            "message_id": 9001,
+            "role": "teacher",
+            "quote": "설탕을 물에 녹이면 전체 질량은 어떻게 될까요?",
+            "allowed_rubric_ids": [
+              "open"
+            ]
+          },
+          {
+            "message_id": 9007,
+            "role": "teacher",
+            "quote": "설탕이 사라진 것과 보이지 않는 것은 같을까요?",
+            "allowed_rubric_ids": [
+              "probe"
+            ]
+          },
+          {
+            "message_id": 9011,
+            "role": "teacher",
+            "quote": "그럼 녹은 설탕도 용기 안에 있다고 볼 수 있겠죠?",
+            "allowed_rubric_ids": [
+              "leading"
+            ]
+          },
+          {
+            "message_id": 9002,
+            "role": "student",
+            "quote": "설탕이 안 보이니까 질량이 줄어요."
+          },
+          {
+            "message_id": 9008,
+            "role": "student",
+            "quote": "다를 수 있겠어요. 물에 퍼져서 안 보이나 봐요."
+          },
+          {
+            "message_id": 9014,
+            "role": "student",
+            "quote": "빠져나가지 않으니 녹이기 전과 같아요."
+          },
+          {
+            "message_id": 9016,
+            "role": "student",
+            "quote": "안 보인다고 없어진 건 아니고 닫힌 용기의 전체 질량은 같아요."
+          }
+        ],
+        "allowed_interpretations": [
+          "저울 조건을 설명하고 소금 예시에서도 보존을 예측하여 발화상의 변화를 관찰한다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "transcript_hash": "e153bb9043f31406d948af56e4bbf78ca5f24b0d5a74f9f7c65dafbf2362ee19",
+      "config_hash": "afe08070f22bd424b3906be22d2a7b49eaeb81d4c96a117f18d4287eb98665a3",
+      "sample_hash": "051b676ad32e6979ca56e19fdf8bcc7d02825d0ff93332ffdd92ca91b35c2ccb"
+    },
+    {
+      "id": "science-ordinary-02",
+      "subject": "과학",
+      "length": "ordinary",
+      "boundary": "none",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "전류 설정 이탈",
+          "subject": "과학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "직렬 회로의 전류가 각 지점에서 같음을 설명한다.",
+            "learning_objective": "직렬 회로의 전류가 각 지점에서 같음을 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "전구를 지나면 전류가 소비되어 줄어든다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "직렬 회로의 전류가 각 지점에서 같음을 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 10001,
+          "role": "teacher",
+          "content": "전구 앞뒤의 전류는 어떻게 될까요?"
+        },
+        {
+          "id": 10002,
+          "role": "student",
+          "content": "전류는 직렬 회로에서 같아요. 전구가 전류를 없애는 건 아니에요."
+        },
+        {
+          "id": 10003,
+          "role": "teacher",
+          "content": "그렇게 생각한 까닭은 무엇인가요?"
+        },
+        {
+          "id": 10004,
+          "role": "student",
+          "content": "전하가 계속 회로를 돌아야 해서요."
+        },
+        {
+          "id": 10005,
+          "role": "teacher",
+          "content": "전류계를 앞뒤에 넣으면 어떤 값을 예상하나요?"
+        },
+        {
+          "id": 10006,
+          "role": "student",
+          "content": "둘 다 0.2암페어로 같을 것 같아요."
+        },
+        {
+          "id": 10007,
+          "role": "teacher",
+          "content": "전구가 밝게 빛나는데 무엇이 바뀌나요?"
+        },
+        {
+          "id": 10008,
+          "role": "student",
+          "content": "전기 에너지가 빛과 열로 바뀌어요."
+        },
+        {
+          "id": 10009,
+          "role": "teacher",
+          "content": "전류와 에너지를 구분해서 말해 볼래요?"
+        },
+        {
+          "id": 10010,
+          "role": "student",
+          "content": "전류는 전하의 흐름이고 에너지는 전구에서 전달돼요."
+        },
+        {
+          "id": 10011,
+          "role": "teacher",
+          "content": "전구 두 개를 직렬로 넣어도 위치별 전류는요?"
+        },
+        {
+          "id": 10012,
+          "role": "student",
+          "content": "같은 회로의 각 위치에서는 같아요."
+        },
+        {
+          "id": 10013,
+          "role": "teacher",
+          "content": "한 개일 때와 두 개일 때의 값도 반드시 같을까요?"
+        },
+        {
+          "id": 10014,
+          "role": "student",
+          "content": "그건 저항이 달라져서 같다고 할 수 없어요."
+        },
+        {
+          "id": 10015,
+          "role": "teacher",
+          "content": "측정 없이 정확한 값까지 알 수 있나요?"
+        },
+        {
+          "id": 10016,
+          "role": "student",
+          "content": "주어진 저항이 없으면 숫자는 몰라요."
+        },
+        {
+          "id": 10017,
+          "role": "teacher",
+          "content": "전구 뒤에서 전류가 줄지는 않겠죠?"
+        },
+        {
+          "id": 10018,
+          "role": "student",
+          "content": "네, 직렬 회로라면 그렇지 않아요."
+        },
+        {
+          "id": 10019,
+          "role": "teacher",
+          "content": "오늘 처음 알게 된 것인가요?"
+        },
+        {
+          "id": 10020,
+          "role": "student",
+          "content": "아니요. 처음부터 그렇게 알고 있었어요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "deviation",
+        "evidence": [
+          {
+            "message_id": 10001,
+            "role": "teacher",
+            "quote": "전구 앞뒤의 전류는 어떻게 될까요?",
+            "allowed_rubric_ids": [
+              "open"
+            ]
+          },
+          {
+            "message_id": 10009,
+            "role": "teacher",
+            "quote": "전류와 에너지를 구분해서 말해 볼래요?",
+            "allowed_rubric_ids": [
+              "probe"
+            ]
+          },
+          {
+            "message_id": 10017,
+            "role": "teacher",
+            "quote": "전구 뒤에서 전류가 줄지는 않겠죠?",
+            "allowed_rubric_ids": [
+              "leading"
+            ]
+          },
+          {
+            "message_id": 10002,
+            "role": "student",
+            "quote": "전류는 직렬 회로에서 같아요. 전구가 전류를 없애는 건 아니에요."
+          },
+          {
+            "message_id": 10010,
+            "role": "student",
+            "quote": "전류는 전하의 흐름이고 에너지는 전구에서 전달돼요."
+          },
+          {
+            "message_id": 10020,
+            "role": "student",
+            "quote": "아니요. 처음부터 그렇게 알고 있었어요."
+          }
+        ],
+        "allowed_interpretations": [
+          "대화 시작부터 올바른 전류 설명을 하므로 설정 이탈이며 교사의 오개념 교정으로 세지 않는다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "transcript_hash": "a85d743962f29bbcab84944fca3e705363e0d70aafcd077f05fe574963fbec65",
+      "config_hash": "1d35535bdc57279290ea8d2e43d0050cd8b8b073438e90fddcdb51259f3a153d",
+      "sample_hash": "ddc10262397b3a9c917833d85610898af929c96be8b7c268b3221d92b2e6c74c"
+    },
+    {
+      "id": "science-long-01",
+      "subject": "과학",
+      "length": "long",
+      "boundary": "none",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "운동과 힘 장문",
+          "subject": "과학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "마찰이 거의 없으면 등속 운동에 계속 미는 힘이 필요하지 않음을 설명한다.",
+            "learning_objective": "마찰이 거의 없으면 등속 운동에 계속 미는 힘이 필요하지 않음을 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "움직이는 물체에는 운동 방향의 힘이 계속 작용한다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "마찰이 거의 없으면 등속 운동에 계속 미는 힘이 필요하지 않음을 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": true,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 11001,
+          "role": "teacher",
+          "content": "얼음 위에서 미끄러지는 퍽에는 어떤 힘이 필요할까요?"
+        },
+        {
+          "id": 11002,
+          "role": "student",
+          "content": "계속 앞으로 가려면 앞으로 미는 힘이 계속 있어야 해요."
+        },
+        {
+          "id": 11003,
+          "role": "teacher",
+          "content": "손이 떨어진 뒤에도 손이 힘을 주나요?"
+        },
+        {
+          "id": 11004,
+          "role": "student",
+          "content": "손의 힘이 퍽 안에 남아 있는 것 같아요."
+        },
+        {
+          "id": 11005,
+          "role": "teacher",
+          "content": "속력이 일정할 때와 커질 때를 구별해 볼까요?"
+        },
+        {
+          "id": 11006,
+          "role": "student",
+          "content": "둘 다 움직이니까 앞으로 힘이 있어요."
+        },
+        {
+          "id": 11007,
+          "role": "teacher",
+          "content": "마찰이 거의 없다면 속력은 어떻게 될까요?"
+        },
+        {
+          "id": 11008,
+          "role": "student",
+          "content": "남은 힘이 없어질 때까지 움직여요."
+        },
+        {
+          "id": 11009,
+          "role": "teacher",
+          "content": "물체 안에 힘이 저장된다는 것을 측정할 수 있을까요?"
+        },
+        {
+          "id": 11010,
+          "role": "student",
+          "content": "속력을 보면 얼마나 남았는지 알 수 있을 것 같아요."
+        },
+        {
+          "id": 11011,
+          "role": "teacher",
+          "content": "힘의 단위와 속력의 단위는 같은가요?"
+        },
+        {
+          "id": 11012,
+          "role": "student",
+          "content": "뉴턴과 미터 매 초라서 달라요."
+        },
+        {
+          "id": 11013,
+          "role": "teacher",
+          "content": "단위가 다른데 속력만으로 힘을 알 수 있나요?"
+        },
+        {
+          "id": 11014,
+          "role": "student",
+          "content": "직접 같지는 않아도 빨리 가면 힘이 큰 것 같아요."
+        },
+        {
+          "id": 11015,
+          "role": "teacher",
+          "content": "마찰 없는 수레가 일정한 속력으로 가는 자료를 보세요. 힘은요?"
+        },
+        {
+          "id": 11016,
+          "role": "student",
+          "content": "움직이니까 작지만 힘이 있어요."
+        },
+        {
+          "id": 11017,
+          "role": "teacher",
+          "content": "자료에서 알짜힘이 0이라고 하면 어떻게 설명할까요?"
+        },
+        {
+          "id": 11018,
+          "role": "student",
+          "content": "센서가 안에 남은 힘을 못 재는 것 같아요."
+        },
+        {
+          "id": 11019,
+          "role": "teacher",
+          "content": "알짜힘 0에서도 움직일 수 있지 않을까요?"
+        },
+        {
+          "id": 11020,
+          "role": "student",
+          "content": "저는 힘이 없으면 멈춘다고 생각해요."
+        },
+        {
+          "id": 11021,
+          "role": "teacher",
+          "content": "마찰이 있을 때 수레가 느려지는 까닭은요?"
+        },
+        {
+          "id": 11022,
+          "role": "student",
+          "content": "마찰이 안에 남은 힘을 없애요."
+        },
+        {
+          "id": 11023,
+          "role": "teacher",
+          "content": "마찰이 없을 때에는 그 설명이 어떻게 달라지나요?"
+        },
+        {
+          "id": 11024,
+          "role": "student",
+          "content": "남은 힘이 오래 가서 더 멀리 움직여요."
+        },
+        {
+          "id": 11025,
+          "role": "teacher",
+          "content": "정지한 물체와 등속 운동을 비교해 볼래요?"
+        },
+        {
+          "id": 11026,
+          "role": "student",
+          "content": "정지는 힘이 없고 운동은 힘이 있어요."
+        },
+        {
+          "id": 11027,
+          "role": "teacher",
+          "content": "움직이는 방향 반대로 힘을 주면 어떤가요?"
+        },
+        {
+          "id": 11028,
+          "role": "student",
+          "content": "앞으로 남은 힘이 줄어들어서 느려져요."
+        },
+        {
+          "id": 11029,
+          "role": "teacher",
+          "content": "힘이 운동 상태를 바꾼다는 설명은 어떨까요?"
+        },
+        {
+          "id": 11030,
+          "role": "student",
+          "content": "속력을 바꾸기도 하지만 운동을 유지하려고도 필요해요."
+        },
+        {
+          "id": 11031,
+          "role": "teacher",
+          "content": "등속 운동에서 속력이 변하지 않는다는 점을 다시 볼까요?"
+        },
+        {
+          "id": 11032,
+          "role": "student",
+          "content": "네, 그래도 앞으로 가니까 힘이 필요해요."
+        },
+        {
+          "id": 11033,
+          "role": "teacher",
+          "content": "새 예로 우주에서 추진을 멈춘 탐사선은요?"
+        },
+        {
+          "id": 11034,
+          "role": "student",
+          "content": "저장된 힘이 없어지면 멈출 거예요."
+        },
+        {
+          "id": 11035,
+          "role": "teacher",
+          "content": "공기 저항도 거의 없다는 조건이라면요?"
+        },
+        {
+          "id": 11036,
+          "role": "student",
+          "content": "저항이 없어도 힘이 다 쓰이면 멈춰요."
+        },
+        {
+          "id": 11037,
+          "role": "teacher",
+          "content": "자료와 네 설명 중 확인이 필요한 부분은 어디인가요?"
+        },
+        {
+          "id": 11038,
+          "role": "student",
+          "content": "힘이 안에 남는다는 생각을 더 확인하고 싶어요."
+        },
+        {
+          "id": 11039,
+          "role": "teacher",
+          "content": "지금 생각을 정리해 볼래요?"
+        },
+        {
+          "id": 11040,
+          "role": "student",
+          "content": "움직임이 계속되려면 운동 방향의 힘이 계속 필요해요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "maintained",
+        "evidence": [
+          {
+            "message_id": 11001,
+            "role": "teacher",
+            "quote": "얼음 위에서 미끄러지는 퍽에는 어떤 힘이 필요할까요?",
+            "allowed_rubric_ids": [
+              "open"
+            ]
+          },
+          {
+            "message_id": 11005,
+            "role": "teacher",
+            "quote": "속력이 일정할 때와 커질 때를 구별해 볼까요?",
+            "allowed_rubric_ids": [
+              "probe"
+            ]
+          },
+          {
+            "message_id": 11019,
+            "role": "teacher",
+            "quote": "알짜힘 0에서도 움직일 수 있지 않을까요?",
+            "allowed_rubric_ids": [
+              "leading"
+            ]
+          },
+          {
+            "message_id": 11002,
+            "role": "student",
+            "quote": "계속 앞으로 가려면 앞으로 미는 힘이 계속 있어야 해요."
+          },
+          {
+            "message_id": 11018,
+            "role": "student",
+            "quote": "센서가 안에 남은 힘을 못 재는 것 같아요."
+          },
+          {
+            "message_id": 11034,
+            "role": "student",
+            "quote": "저장된 힘이 없어지면 멈출 거예요."
+          },
+          {
+            "message_id": 11040,
+            "role": "student",
+            "quote": "움직임이 계속되려면 운동 방향의 힘이 계속 필요해요."
+          }
+        ],
+        "allowed_interpretations": [
+          "반대 자료를 센서 문제로 설명하고 새 상황에서도 지속력 오개념을 유지한다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "planner_fixture": {
+        "kind": "synthetic_capacity_not_provider_limit",
+        "input_budget_tokens": 5000,
+        "expected_mode": "chunked",
+        "max_chunks": 8,
+        "verification": "pending_s4_planner_82_83"
+      },
+      "transcript_hash": "c9b5f1bf7ec9f317f189a1216405ff5cd186ae749ed580377a72fba2751a4d07",
+      "config_hash": "f975308cd55b3ded82055977dae95dc601ab55c823a9529d960c938ce277df02",
+      "sample_hash": "289c642fb4a36f2eb3c6bec48808d73c0727d58f113a014ea903a35de4170c7c"
+    },
+    {
+      "id": "science-long-02",
+      "subject": "과학",
+      "length": "long",
+      "boundary": "none",
+      "snapshot": {
+        "schema_version": 1,
+        "scenario_context": {
+          "title": "증발과 끓음 장문",
+          "subject": "과학",
+          "target_grade": "교사교육 합성 표본"
+        },
+        "config": {
+          "problem": {
+            "public_text": "끓지 않는 물도 표면에서 증발할 수 있음을 설명한다.",
+            "learning_objective": "끓지 않는 물도 표면에서 증발할 수 있음을 설명한다."
+          },
+          "student": {
+            "name": "합성 학생봇",
+            "public_profile": "교육 검토용 가상 학생. 실제 개인정보 없음.",
+            "internal_profile": "자신의 이유를 말하고 확신이 없으면 모른다고 답하는 가상 학생.",
+            "misconception": "물은 100도에서 끓어야만 수증기로 바뀐다고 생각한다.",
+            "behavior_instruction": "설정된 오개념과 성향을 연기한다.",
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "mentor": {
+            "mode": "off",
+            "name": "멘토",
+            "welcome_message": "",
+            "behavior_instruction": "",
+            "intervention_policy": {
+              "condition": "",
+              "start_turn": 3,
+              "min_interval_turns": 2,
+              "window_turns": 10,
+              "max_interventions": 3
+            },
+            "resolved_model_config": null
+          },
+          "analysis": {
+            "context": "원문에서 확인되는 설명만 관찰하고 교사 개입의 인과적 효과는 확정하지 않는다.",
+            "expected_understanding": "끓지 않는 물도 표면에서 증발할 수 있음을 설명한다.",
+            "instruction": "교사 발문의 근거와 학생봇 설명을 구별하고 실행 가능한 대안 질문을 제안한다.",
+            "rubric_name": "합성 발문 기준",
+            "rubric_description": "형식보다 발화의 기능과 문맥을 기준으로 판단한다.",
+            "category_name": "발문 기능",
+            "classification_enabled": false,
+            "rubric": [
+              {
+                "id": "open",
+                "name": "열린 질문",
+                "criteria": "답을 정하지 않고 생각이나 설명을 요청한다.",
+                "level": "high"
+              },
+              {
+                "id": "probe",
+                "name": "탐색 질문",
+                "criteria": "이유, 근거, 비교 또는 적용을 추가로 확인한다.",
+                "level": "high"
+              },
+              {
+                "id": "leading",
+                "name": "유도 질문",
+                "criteria": "정답을 제시하거나 특정 답을 확인하도록 이끈다.",
+                "level": "low"
+              }
+            ],
+            "resolved_model_config": {
+              "model_config_id": 1,
+              "provider_connection_id": 1,
+              "provider": "openai",
+              "model_id": "gpt-5-mini",
+              "options": {
+                "max_output_tokens": 1500,
+                "reasoning": {
+                  "effort": "medium"
+                }
+              }
+            }
+          },
+          "runtime": {
+            "context_turn_limit": 10
+          }
+        }
+      },
+      "transcript": [
+        {
+          "id": 12001,
+          "role": "teacher",
+          "content": "젖은 빨래가 실온에서 마르는 까닭은 무엇일까요?"
+        },
+        {
+          "id": 12002,
+          "role": "student",
+          "content": "물이 없어지긴 하지만 수증기는 100도에서만 생겨요."
+        },
+        {
+          "id": 12003,
+          "role": "teacher",
+          "content": "빨래의 물은 어디로 갔을까요?"
+        },
+        {
+          "id": 12004,
+          "role": "student",
+          "content": "천 속으로 들어갔거나 아래로 떨어진 것 같아요."
+        },
+        {
+          "id": 12005,
+          "role": "teacher",
+          "content": "아래에 물이 없고 천도 가벼워졌다면요?"
+        },
+        {
+          "id": 12006,
+          "role": "student",
+          "content": "어디로 갔는지는 잘 모르겠어요."
+        },
+        {
+          "id": 12007,
+          "role": "teacher",
+          "content": "닫힌 통 안에 젖은 천을 두면 어떤 변화가 있나요?"
+        },
+        {
+          "id": 12008,
+          "role": "student",
+          "content": "통 안쪽에 물방울이 맺힐 수 있어요."
+        },
+        {
+          "id": 12009,
+          "role": "teacher",
+          "content": "그 물방울의 물은 어디에서 왔을까요?"
+        },
+        {
+          "id": 12010,
+          "role": "student",
+          "content": "젖은 천에서 나온 것 같아요."
+        },
+        {
+          "id": 12011,
+          "role": "teacher",
+          "content": "통을 100도로 가열한 적이 있나요?"
+        },
+        {
+          "id": 12012,
+          "role": "student",
+          "content": "없어요. 그냥 방에 두었어요."
+        },
+        {
+          "id": 12013,
+          "role": "teacher",
+          "content": "가열하지 않았는데 물이 이동했다면 처음 생각을 어떻게 볼까요?"
+        },
+        {
+          "id": 12014,
+          "role": "student",
+          "content": "100도가 아니어도 공기로 나갈 수 있겠네요."
+        },
+        {
+          "id": 12015,
+          "role": "teacher",
+          "content": "그 과정을 증발이라고 부르면 끓음과 어떤 차이가 있나요?"
+        },
+        {
+          "id": 12016,
+          "role": "student",
+          "content": "끓음처럼 전체에서 기포가 생기지는 않아요."
+        },
+        {
+          "id": 12017,
+          "role": "teacher",
+          "content": "물이 든 접시를 두면 높이가 줄까요?"
+        },
+        {
+          "id": 12018,
+          "role": "student",
+          "content": "네, 실온에서도 표면에서 증발할 것 같아요."
+        },
+        {
+          "id": 12019,
+          "role": "teacher",
+          "content": "온도가 높으면 어떤 점이 달라질까요?"
+        },
+        {
+          "id": 12020,
+          "role": "student",
+          "content": "더 빨리 증발할 것 같지만 100도일 필요는 없어요."
+        },
+        {
+          "id": 12021,
+          "role": "teacher",
+          "content": "바람이 불면 빨래가 빨리 마르는 이유는요?"
+        },
+        {
+          "id": 12022,
+          "role": "student",
+          "content": "주변의 수증기를 옮겨서 더 증발하게 해요."
+        },
+        {
+          "id": 12023,
+          "role": "teacher",
+          "content": "물을 끓일 때 보이는 기포는 어디에 생기나요?"
+        },
+        {
+          "id": 12024,
+          "role": "student",
+          "content": "물 속에서도 생겨요."
+        },
+        {
+          "id": 12025,
+          "role": "teacher",
+          "content": "증발에서는 어느 부분을 주로 살펴보나요?"
+        },
+        {
+          "id": 12026,
+          "role": "student",
+          "content": "물 표면에서 공기로 나가는 걸 봐요."
+        },
+        {
+          "id": 12027,
+          "role": "teacher",
+          "content": "수증기는 눈으로 보이는 하얀 김과 같은가요?"
+        },
+        {
+          "id": 12028,
+          "role": "student",
+          "content": "수증기는 안 보이고 김은 작은 물방울이라고 들었어요."
+        },
+        {
+          "id": 12029,
+          "role": "teacher",
+          "content": "그 구분을 관찰만으로 완전히 확인했나요?"
+        },
+        {
+          "id": 12030,
+          "role": "student",
+          "content": "아니요. 그 부분은 자료를 더 봐야 해요."
+        },
+        {
+          "id": 12031,
+          "role": "teacher",
+          "content": "오늘 자료로 확인한 핵심은 무엇인가요?"
+        },
+        {
+          "id": 12032,
+          "role": "student",
+          "content": "끓지 않아도 물이 공기로 이동한다는 거예요."
+        },
+        {
+          "id": 12033,
+          "role": "teacher",
+          "content": "실온의 웅덩이가 작아지는 것도 설명해 볼까요?"
+        },
+        {
+          "id": 12034,
+          "role": "student",
+          "content": "증발해서 줄 수 있어요. 땅에 스며드는 것도 따로 봐야 해요."
+        },
+        {
+          "id": 12035,
+          "role": "teacher",
+          "content": "모든 감소를 증발이라고 단정할 수 있나요?"
+        },
+        {
+          "id": 12036,
+          "role": "student",
+          "content": "아니요. 물이 새거나 스며드는지도 확인해야 해요."
+        },
+        {
+          "id": 12037,
+          "role": "teacher",
+          "content": "물이 얼어 있다면 같은 증발 설명을 그대로 쓸 수 있나요?"
+        },
+        {
+          "id": 12038,
+          "role": "student",
+          "content": "고체라서 다른 과정인지 더 알아봐야 해요."
+        },
+        {
+          "id": 12039,
+          "role": "teacher",
+          "content": "새 예로 컵에 남긴 물이 끓지 않고 줄어들면요?"
+        },
+        {
+          "id": 12040,
+          "role": "student",
+          "content": "새지 않았다면 표면에서 증발했다고 설명할 수 있어요."
+        },
+        {
+          "id": 12041,
+          "role": "teacher",
+          "content": "처음 생각에서 무엇을 고쳤나요?"
+        },
+        {
+          "id": 12042,
+          "role": "student",
+          "content": "100도에서만 기체가 된다는 생각을 고쳤어요."
+        },
+        {
+          "id": 12043,
+          "role": "teacher",
+          "content": "지금 설명을 한 문장으로 말해 볼래요?"
+        },
+        {
+          "id": 12044,
+          "role": "student",
+          "content": "액체 물은 끓지 않아도 표면에서 증발할 수 있어요."
+        }
+      ],
+      "expected_evidence_draft": {
+        "status": "agent_draft_requires_education_lead_review",
+        "finding": "changed",
+        "evidence": [
+          {
+            "message_id": 12001,
+            "role": "teacher",
+            "quote": "젖은 빨래가 실온에서 마르는 까닭은 무엇일까요?",
+            "allowed_rubric_ids": []
+          },
+          {
+            "message_id": 12015,
+            "role": "teacher",
+            "quote": "그 과정을 증발이라고 부르면 끓음과 어떤 차이가 있나요?",
+            "allowed_rubric_ids": []
+          },
+          {
+            "message_id": 12019,
+            "role": "teacher",
+            "quote": "온도가 높으면 어떤 점이 달라질까요?",
+            "allowed_rubric_ids": []
+          },
+          {
+            "message_id": 12002,
+            "role": "student",
+            "quote": "물이 없어지긴 하지만 수증기는 100도에서만 생겨요."
+          },
+          {
+            "message_id": 12014,
+            "role": "student",
+            "quote": "100도가 아니어도 공기로 나갈 수 있겠네요."
+          },
+          {
+            "message_id": 12034,
+            "role": "student",
+            "quote": "증발해서 줄 수 있어요. 땅에 스며드는 것도 따로 봐야 해요."
+          },
+          {
+            "message_id": 12042,
+            "role": "student",
+            "quote": "100도에서만 기체가 된다는 생각을 고쳤어요."
+          },
+          {
+            "message_id": 12044,
+            "role": "student",
+            "quote": "액체 물은 끓지 않아도 표면에서 증발할 수 있어요."
+          }
+        ],
+        "allowed_interpretations": [
+          "실온 증발을 새 예시에 적용하되 웅덩이 감소의 다른 원인과 미확인 내용을 구분한다.",
+          "발문 분류는 교육 담당자가 문맥에 따라 사전 고정한다. 복수 해석은 검토 기록에 남긴다."
+        ],
+        "forbidden_interpretations": [
+          "학생봇의 실제 능력이나 교사 개입의 인과적 효과를 확정한다.",
+          "설정의 오개념을 학생봇이 실제 말했다고 간주한다.",
+          "존재하지 않는 ID 또는 원문에 없는 인용을 정상 근거로 채택한다.",
+          "분류 off인데 분류 분포 또는 발문 등급을 만들어 낸다."
+        ],
+        "reviewer": null,
+        "reviewed_at": null,
+        "classification_note": "분류 off는 N/A. on의 지정 근거별 허용 ID도 교육 담당자 사전 검토가 필요한 초안이다."
+      },
+      "planner_fixture": {
+        "kind": "synthetic_capacity_not_provider_limit",
+        "input_budget_tokens": 5000,
+        "expected_mode": "chunked",
+        "max_chunks": 8,
+        "verification": "pending_s4_planner_82_83"
+      },
+      "transcript_hash": "d1b793d7874fd92e65ef5b3a16025c71262b3c8ed6c7b20e197a5118d20ebbc6",
+      "config_hash": "28d63de585b6d2a4891df152ec0f08b87e525f23dbc0b6fba2d65448f4d8120e",
+      "sample_hash": "ebefaf73210bd7943b562ad8e40583c3e6cd6e24979a4140714cfea706b29702"
+    }
+  ],
+  "boundary_fixtures": [
+    {
+      "id": "input-exact",
+      "input_budget_tokens": 5000,
+      "estimated_input_tokens": 5000,
+      "expected": "single"
+    },
+    {
+      "id": "input-over",
+      "input_budget_tokens": 5000,
+      "estimated_input_tokens": 5001,
+      "expected": "chunked"
+    },
+    {
+      "id": "eight-chunks",
+      "required_chunks": 8,
+      "max_chunks": 8,
+      "expected": "chunked"
+    },
+    {
+      "id": "nine-chunks",
+      "required_chunks": 9,
+      "max_chunks": 8,
+      "expected": "blocked_zero_calls"
+    },
+    {
+      "id": "unit-too-large",
+      "unit_estimated_tokens": 5001,
+      "input_budget_tokens": 5000,
+      "expected": "blocked_zero_calls"
+    },
+    {
+      "id": "merge-too-large",
+      "merge_estimated_tokens": 5001,
+      "input_budget_tokens": 5000,
+      "expected": "blocked_zero_calls"
+    }
+  ],
+  "corpus_hash": "5e7db32d01f99fa857ca1f2d5ceeef988fad9b3395508c1fdfb2aaf98a8fa3b9"
+}

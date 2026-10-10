@@ -270,3 +270,12 @@ delay/failure verifies student independence and slot cleanup, without claiming
 real p95 or educational quality. [S3 cutover and handoff](docs/s3-cutover.md)
 documents drain, backup/restore, stale roles, explicit reverification and the
 rollback boundary after new writes. Actual comparison panels remain S5 work.
+
+S4-08 (#85) quality preparation: [the fixed corpus and release gate](docs/s4-quality-gate.md)
+provides 12 synthetic Korean dialogues, agent-draft expected evidence and a
+comparison record template. `uv run --frozen python -m pytest -q
+tests/test_s4_quality_corpus.py tests/test_s4_quality_comparison.py` rehearses
+the existing analysis execution with mocked SDK HTTP only. S4 candidate analysis
+and actual educational approval remain separate work; release stays blocked
+until the education lead approves actual comparisons for every intended pilot
+model/config after separately authorized paid execution.

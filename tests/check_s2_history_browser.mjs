@@ -35,8 +35,11 @@ export default async function checkHistory(page, base) {
     await page.locator('#snapshot-provenance').waitFor();
     assert(await page.locator('#snapshot-provenance').isVisible());
     assert(await page.getByText('Original history feedback', {exact: true}).isVisible());
-    await page.getByRole('button', {name: /상세 분석/}).click();
-    assert(await page.getByText('Original label', {exact: true}).first().isVisible());
+    const result = page.locator('[data-analysis-result]');
+    await result.locator('details > summary').click();
+    assert(await result.getByText('분류: Original label · 평가: 우수', {exact: true}).isVisible());
+    assert(await result.getByText('판정 이유: Original history evidence', {exact: true}).isVisible());
+    assert(await result.getByText(/원문 근거·분석 범위: 알 수 없음/).isVisible());
     assert((await page.content()).includes('Original history evidence'));
     assert(!(await page.content()).includes('PRIVATE RUBRIC'));
     await page.evaluate(() => scrollTo(0, 0));

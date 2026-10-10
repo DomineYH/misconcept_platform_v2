@@ -36,7 +36,12 @@
       </dd>
     </dl>
   </div>
+  {% if analysis_result_url is defined %}
+  {% set analysis_transcript_open = true %}
+  {% include "partials/analysis_result.html" %}
+  {% else %}
   <section aria-label="원래 대화">
     {% for message in session.messages %}{% include "partials/message.html" %}{% endfor %}
   </section>
+  {% endif %}
 </div>

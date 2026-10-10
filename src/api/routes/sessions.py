@@ -25,6 +25,7 @@ from src.api.routes.session_messages import router as messages_router
 from src.api.routes.student_generation import router as student_router
 from src.config import config
 from src.models import Message, User
+from src.services.analysis_results import load_analysis_response
 from src.services.lesson_snapshots import start_lesson
 from src.services.session_history import session_display
 
@@ -75,6 +76,11 @@ async def session_history(
             .order_by(Message.created_at, Message.id)
         )
     ).all()
+    analysis = (
+        await load_analysis_response(session_id, db)
+        if session.ended_at
+        else None
+    )
     return templates.TemplateResponse(
         "session_history.html",
         dict(
@@ -82,6 +88,11 @@ async def session_history(
             user=user,
             session=session,
             messages=messages,
+            **(
+                {"analysis_result_url": f"/sessions/{session_id}/analysis"}
+                if analysis is not None
+                else {}
+            ),
             **session_display(session),
         ),
     )

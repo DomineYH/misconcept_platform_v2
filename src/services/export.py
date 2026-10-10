@@ -8,6 +8,7 @@ and session summary rows.
 import csv
 import hashlib
 import io
+import json
 import logging
 from typing import List
 
@@ -15,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from src.models import GenerationRun, SessionFeedbackReport
 from src.models.message import Message
 from src.models.question_analysis import QuestionAnalysis
 from src.models.session import Session
@@ -22,6 +24,15 @@ from src.models.session_summary import SessionSummary
 from src.models.user import User
 from src.services.analysis_results import analysis_display
 from src.services.session_history import session_display
+from src.utils.session_feedback import FALLBACK_FEEDBACK
+
+ANALYSIS_COLUMNS = [
+    "analysis_schema_version",
+    "analysis_status",
+    "analysis_coverage_json",
+    "misconception_findings_json",
+    "message_analysis_disposition",
+]
 
 HISTORY_COLUMNS = [
     "student_name",
@@ -42,6 +53,83 @@ def _history_columns(display):
             for key in HISTORY_COLUMNS[1:]
         },
     }
+
+
+async def _analysis_exports(db, summaries):
+    """Load accepted analysis metadata once per export, including bulk exports."""
+    reports = {
+        report.session_id: report
+        for report in await db.scalars(
+            select(SessionFeedbackReport).where(
+                SessionFeedbackReport.session_id.in_(summaries)
+            )
+        )
+    }
+    runs = {}
+    for run in await db.scalars(
+        select(GenerationRun)
+        .where(
+            GenerationRun.session_id.in_(summaries),
+            GenerationRun.operation == "analysis",
+        )
+        .order_by(GenerationRun.started_at.desc(), GenerationRun.id.desc())
+    ):
+        runs.setdefault(run.session_id, run)
+    result = {}
+    for sid, summary in summaries.items():
+        report, run = reports.get(sid), runs.get(sid)
+        payload = json.loads(report.payload_json) if report else {}
+        status = "unknown"
+        if report:
+            status = (
+                payload.get("metadata", {}).get("outcome", report.status)
+                if report.version == 2 or report.status == "failed"
+                else "legacy"
+            )
+        elif summary and summary.feedback != FALLBACK_FEEDBACK:
+            status = "legacy"
+        elif run:
+            status = run.status
+        elif summary:
+            status = "failed"
+        common = dict(
+            analysis_schema_version=report.version if report else "unknown",
+            analysis_status=status,
+        )
+        coverage = (
+            payload.get("metadata", {}).get("coverage")
+            if report and report.version == 2
+            else None
+        )
+        summary_columns = dict(
+            analysis_coverage_json=(
+                json.dumps(coverage, ensure_ascii=False)
+                if coverage is not None
+                else ""
+            ),
+            misconception_findings_json=(
+                json.dumps(
+                    payload.get("misconception_findings", []),
+                    ensure_ascii=False,
+                )
+                if report and report.version == 2
+                else ""
+            ),
+        )
+        dispositions = (
+            {mid: "missing" for mid in coverage.get("missing_message_ids", [])}
+            if coverage
+            else {}
+        )
+        if report and report.version == 2:
+            dispositions.update(
+                {
+                    item["message_id"]: item["disposition"]
+                    for item in payload.get("message_classifications", [])
+                }
+            )
+        result[sid] = common, summary_columns, dispositions
+    return result
 
 
 logger = logging.getLogger(__name__)
@@ -148,6 +236,9 @@ class CSVExporter:
             )
         )
         summary = summary_result.scalar_one_or_none()
+        analysis_columns, analysis_summary_columns, dispositions = (
+            await _analysis_exports(db, {session_id: summary})
+        )[session_id]
 
         # Generate CSV
         output = io.StringIO()
@@ -165,6 +256,7 @@ class CSVExporter:
                 "feedback",
                 "classification_status",
                 *HISTORY_COLUMNS,
+                *ANALYSIS_COLUMNS,
             ],
         )
         writer.writeheader()
@@ -193,12 +285,19 @@ class CSVExporter:
                     ),
                     "classification_status": classification_status,
                     **history_columns,
+                    **analysis_columns,
                     "confidence": (
                         f"{analysis.confidence:.2f}"
                         if analysis and analysis.confidence
                         else ""
                     ),
                     "feedback": "",
+                    "message_analysis_disposition": (
+                        dispositions.get(msg.id, "unknown")
+                        if msg.role == "teacher"
+                        and classification_enabled is not False
+                        else ""
+                    ),
                 }
             )
 
@@ -215,7 +314,9 @@ class CSVExporter:
                     "label": "",
                     "classification_status": classification_status,
                     **history_columns,
+                    **analysis_columns,
                     "confidence": "",
+                    **analysis_summary_columns,
                     "feedback": self._sanitize_csv_value(
                         summary.feedback or ""
                     ),
@@ -300,6 +401,9 @@ class CSVExporter:
             )
         )
         summary = summary_result.scalar_one_or_none()
+        analysis_columns, analysis_summary_columns, dispositions = (
+            await _analysis_exports(db, {session_id: summary})
+        )[session_id]
 
         output = io.StringIO()
         fieldnames = [
@@ -321,6 +425,7 @@ class CSVExporter:
             "feedback",
             "classification_status",
             *HISTORY_COLUMNS,
+            *ANALYSIS_COLUMNS,
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -356,6 +461,7 @@ class CSVExporter:
                     ),
                     "classification_status": classification_status,
                     **history_columns,
+                    **analysis_columns,
                     "confidence": (
                         f"{analysis.confidence:.2f}"
                         if analysis and analysis.confidence
@@ -363,6 +469,12 @@ class CSVExporter:
                     ),
                     "meta_json": analysis.meta_json if analysis else "",
                     "feedback": "",
+                    "message_analysis_disposition": (
+                        dispositions.get(msg.id, "unknown")
+                        if msg.role == "teacher"
+                        and classification_enabled is not False
+                        else ""
+                    ),
                 }
             )
 
@@ -390,8 +502,10 @@ class CSVExporter:
                     "label": "",
                     "classification_status": classification_status,
                     **history_columns,
+                    **analysis_columns,
                     "confidence": "",
                     "meta_json": "",
+                    **analysis_summary_columns,
                     "feedback": self._sanitize_csv_value(
                         summary.feedback or ""
                     ),
@@ -457,6 +571,9 @@ class CSVExporter:
             )
         )
         summaries = {s.session_id: s for s in summaries_result.scalars().all()}
+        analysis_exports = await _analysis_exports(
+            db, {sid: summaries.get(sid) for sid in sessions}
+        )
 
         # Generate CSV with all pre-loaded data
         output = io.StringIO()
@@ -479,6 +596,7 @@ class CSVExporter:
             "feedback",
             "classification_status",
             *HISTORY_COLUMNS,
+            *ANALYSIS_COLUMNS,
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -501,6 +619,9 @@ class CSVExporter:
                 None: "legacy",
             }[classification_enabled]
             session_messages = messages_by_session.get(session_id, [])
+            analysis_columns, analysis_summary_columns, dispositions = (
+                analysis_exports[session_id]
+            )
 
             for msg in session_messages:
                 analysis = analyses.get(msg.id)
@@ -535,6 +656,7 @@ class CSVExporter:
                         ),
                         "classification_status": classification_status,
                         **history_columns,
+                        **analysis_columns,
                         "confidence": (
                             f"{analysis.confidence:.2f}"
                             if analysis and analysis.confidence
@@ -542,6 +664,12 @@ class CSVExporter:
                         ),
                         "meta_json": (analysis.meta_json if analysis else ""),
                         "feedback": "",
+                        "message_analysis_disposition": (
+                            dispositions.get(msg.id, "unknown")
+                            if msg.role == "teacher"
+                            and classification_enabled is not False
+                            else ""
+                        ),
                     }
                 )
 
@@ -573,8 +701,10 @@ class CSVExporter:
                         "label": "",
                         "classification_status": classification_status,
                         **history_columns,
+                        **analysis_columns,
                         "confidence": "",
                         "meta_json": "",
+                        **analysis_summary_columns,
                         "feedback": self._sanitize_csv_value(
                             summary.feedback or ""
                         ),

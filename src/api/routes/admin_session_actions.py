@@ -157,7 +157,20 @@ async def session_detail(
 
     return templates.TemplateResponse(
         "partials/session_detail.html",
-        {"request": request, "session": session, **session_display(session)},
+        {
+            "request": request,
+            "session": session,
+            **session_display(session),
+            **(
+                {
+                    "analysis_result_url": f"/admin/sessions/{session_id}/analysis"
+                }
+                if session.ended_at
+                and await _load_analysis_response(session_id, db, admin=True)
+                is not None
+                else {}
+            ),
+        },
     )
 
 

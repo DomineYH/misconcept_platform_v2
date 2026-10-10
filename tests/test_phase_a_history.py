@@ -1,6 +1,5 @@
 """Phase A preserves historical readers and identifies late mentor targets."""
 
-import re
 from datetime import datetime, timedelta
 
 from test_scenario_api import client as client_fixture
@@ -47,11 +46,14 @@ async def test_admin_history_identifies_late_mentor_without_guessing_legacy(
         f"/admin/sessions/{data.session.id}/analysis_modal"
     )
     assert modal.status_code == 200
-    messages = re.findall(r'<li class="coach-msg[\s\S]*?</li>', modal.text)
-    assert [
-        re.search(r'<p class="coach-msg__content">(.*?)</p>', m)[1]
-        for m in messages
-    ] == [row[1] for row in rows]
-    assert "coach-msg__turn" not in messages[0]
-    assert '<span class="coach-msg__turn">1번째 턴</span>' in messages[-1]
-    assert '<span class="coach-msg__turn">2번째 턴</span>' in messages[-2]
+    assert (
+        f'data-result-url="/admin/sessions/{data.session.id}/analysis"'
+        in modal.text
+    )
+    result = await client.get(f"/admin/sessions/{data.session.id}/analysis")
+    assert result.status_code == 200
+    messages = result.json()["messages"]
+    assert [m["content"] for m in messages] == [row[1] for row in rows]
+    assert messages[0]["turn_index"] is None
+    assert messages[-1]["turn_index"] == 1
+    assert messages[-2]["turn_index"] == 2

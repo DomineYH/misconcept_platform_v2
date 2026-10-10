@@ -1,4 +1,4 @@
-"""Public v2 report fields for the shared S4 result renderer."""
+"""Public saved report fields for the shared S4 result renderer."""
 
 import json
 
@@ -23,7 +23,16 @@ def public_analysis(
         else dict(brief_feedback=[summary.feedback] if summary else [])
     )
     outcome = payload.get("metadata", {}).get(
-        "outcome", report.status if report else "running"
+        "outcome",
+        (
+            report.status
+            if report
+            else (
+                "failed"
+                if summary and summary.feedback == FALLBACK_FEEDBACK
+                else "legacy"
+            )
+        ),
     )
     accepted = None
     if (
@@ -55,8 +64,11 @@ def public_analysis(
             )
         }
         accepted.update(
+            schema_version=report.version if report else 1,
             run_id=payload.get("metadata", {}).get("run_id"),
-            status=report.status if report else "legacy",
+            status=(
+                report.status if report and report.version == 2 else "legacy"
+            ),
             created_at=(
                 report.created_at if report else summary.created_at
             ).isoformat(),
@@ -71,10 +83,18 @@ def public_analysis(
                     )
                     for label, count in summary.distribution.items()
                 ]
-                if enabled
+                if enabled is not False
                 else []
             ),
         )
+        if accepted["schema_version"] == 1:
+            accepted.update(
+                coverage=None,
+                message_classifications=[],
+                misconception_findings=[],
+            )
+        if isinstance(accepted["brief_feedback"], str):
+            accepted["brief_feedback"] = [accepted["brief_feedback"]]
     latest_run = dict(status=outcome, preserved=False)
     if code := payload.get("metadata", {}).get("error_code"):
         latest_run["error_code"] = code
@@ -95,7 +115,14 @@ def public_analysis(
         latest_run["preserved"] = (
             accepted is not None and accepted.get("run_id") != run.id
         )
-    running = latest_run["status"] == "running"
+    elif (
+        latest is None
+        and (report is None or report.version == 1)
+        and accepted is not None
+    ):
+        latest_run = None
+    running = latest_run is not None and latest_run["status"] == "running"
+    status = latest_run["status"] if latest_run else "legacy"
     native = session.snapshot_origin == "native"
     return dict(
         accepted_report=accepted,
@@ -105,10 +132,14 @@ def public_analysis(
         permissions=dict(
             can_analyze=native
             and accepted is None
-            and latest_run["status"] in {"failed", "cancelled", "interrupted"},
+            and status in {"failed", "cancelled", "interrupted"},
             can_retry=native
             and not running
-            and (accepted["status"] if accepted else latest_run["status"])
+            and (
+                report.status
+                if report
+                else (accepted["status"] if accepted else status)
+            )
             in {"failed", "degraded"},
             can_regenerate=native and admin and not running,
             read_only=not native,

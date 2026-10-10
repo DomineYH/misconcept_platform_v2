@@ -309,6 +309,7 @@ async def load_analysis_response(
         teacher_label_by_msg_id[msg.id] = (label, grade)
         questions.append(
             {
+                "message_id": msg.id,
                 "content": msg.content,
                 "label": label or "Unclassified",
                 "label_name": label_names.get(label, label) or "Unclassified",
@@ -380,9 +381,9 @@ async def load_analysis_response(
         ),
     }
     if (
-        (summary is None and session.snapshot_origin == "native")
+        summary is not None
         or latest_run is not None
-        or (feedback_report is not None and feedback_report.version == 2)
+        or session.snapshot_origin == "native"
     ):
         latest = await db.scalar(
             select(ApiUsageLog)

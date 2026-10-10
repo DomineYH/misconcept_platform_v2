@@ -1,3 +1,6 @@
 {# The URL serves the public projection; providers and planning stay server-side. #}
 <section data-analysis-result data-result-url="{{ analysis_result_url }}"
-         aria-label="사후 분석 결과"></section>
+         data-transcript-open="{{ analysis_transcript_open | default(false) | lower }}"
+         aria-label="사후 분석 결과">
+  {% if feedback is defined and feedback %}<p>{{ feedback }}</p>{% endif %}
+</section>

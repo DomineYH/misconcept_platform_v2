@@ -134,20 +134,22 @@
     }
 
     function evidence(parent, item) {
-      const message = data.messages.find(m => m.id === item.message_id);
+      const messageId = item.message_id ?? item.student_message_id;
+      const quote = item.quote ?? item.student_quote ?? '';
+      const message = data.messages.find(m => m.id === messageId);
       if (!message) {
-        node(parent, 'p', `원문 위치 알 수 없음: ${item.quote}`);
+        node(parent, 'p', `원문 위치 알 수 없음: ${quote}`);
         return;
       }
-      const link = node(parent, 'a', `원문 ${item.message_id}: ${item.quote}`);
-      link.href = `#${prefix}-message-${item.message_id}`;
+      const link = node(parent, 'a', `원문 ${messageId}: ${quote}`);
+      link.href = `#${prefix}-message-${messageId}`;
       link.addEventListener('click', event => {
         event.preventDefault();
-        const target = document.getElementById(`${prefix}-message-${item.message_id}`);
+        const target = document.getElementById(`${prefix}-message-${messageId}`);
         target.closest('details').open = true;
         target.focus();
         target.scrollIntoView({block: 'center'});
-        announcement.textContent = `메시지 ${item.message_id} 원문으로 이동했습니다.`;
+        announcement.textContent = `메시지 ${messageId} 원문으로 이동했습니다.`;
       });
     }
     function render() {
@@ -245,8 +247,9 @@
           node(section, 'p', '원문 근거·분석 범위: 알 수 없음 · 과거 결과를 그대로 표시합니다.');
         }
         node(section, 'h3', '질문 유형 분포');
-        if (!report.classification_enabled) node(section, 'p', '분류 미사용');
-        else if (coverage && !coverage.classified_message_ids.length) node(section, 'p', '비율 산정 불가 · 분류 분모 0개');
+        if (report.classification_enabled === false) node(section, 'p', '분류 미사용');
+        else if (report.classification_enabled == null) node(section, 'p', '과거 분류 사용 여부: 알 수 없음');
+        if (report.classification_enabled !== false && coverage && !coverage.classified_message_ids.length) node(section, 'p', '비율 산정 불가 · 분류 분모 0개');
         else for (const item of report.distribution) {
           node(section, 'p', `${item.name}: ${item.count}개 · ${item.percentage == null ? '비율 산정 불가' : item.percentage + '%'}`);
         }
@@ -259,7 +262,7 @@
           node(card, 'p', finding.claim);
           for (const item of finding.evidence) evidence(card, item);
         }
-        if (!report.misconception_findings.length) node(section, 'p', '검증된 오개념 관찰 근거가 없습니다.');
+        if (!report.misconception_findings.length) node(section, 'p', report.schema_version === 1 ? '과거 오개념 관찰: 알 수 없음' : '검증된 오개념 관찰 근거가 없습니다.');
         for (const [field, label, fields] of [
           ['strengths', '우수한 점', ['reason']],
           ['improvements', '개선할 점', ['missed_reason', 'alternative_question', 'alternative_reason']],
@@ -275,7 +278,7 @@
         }
       }
       const transcript = node(root, 'details');
-      transcript.open = !!transcriptOpen;
+      transcript.open = transcriptOpen ?? root.dataset.transcriptOpen === 'true';
       node(transcript, 'summary', '원래 대화');
       const list = node(transcript, 'ol', null, 'coach-msg-list');
       for (const message of data.messages) {
@@ -283,8 +286,17 @@
         row.id = `${prefix}-message-${message.id}`;
         row.dataset.messageId = message.id;
         row.tabIndex = -1;
-        node(row, 'p', `메시지 ${message.id} · ${message.role === 'teacher' ? '교사' : '학생'}`);
+        node(row, 'p', `메시지 ${message.id} · ${{teacher: '교사', student: '학생', tutor: '멘토'}[message.role] || message.role}`);
+        if (message.turn_index != null) node(row, 'span', `${message.turn_index}번째 턴`, 'coach-msg__turn');
         node(row, 'p', message.content, 'coach-msg__content');
+        if (message.created_at) node(row, 'p', `시각: ${message.created_at}`);
+        if (report?.schema_version === 1 && message.role === 'teacher') {
+          const question = data.questions?.find(q => q.message_id === message.id);
+          const label = message.label == null ? null : (question?.label_name ?? message.label);
+          node(row, 'p', `분류: ${label ?? '알 수 없음'} · 평가: ${question?.grade ?? '알 수 없음'}`);
+          node(row, 'p', `판정 이유: ${question?.reasoning?.summary || '알 수 없음'}`);
+          if (question?.reasoning?.improved_sentence) node(row, 'p', `개선한 문장: ${question.reasoning.improved_sentence}`);
+        }
       }
       if (focusedMessage) document.getElementById(`${prefix}-message-${focusedMessage}`)?.focus({preventScroll: true});
     }

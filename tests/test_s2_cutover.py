@@ -154,12 +154,27 @@ async def test_final_runtime_reads_history_and_refuses_legacy_writes(
     )
     data.factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
+        # Current result readers require the later additive execution migrations.
+        for filename in (
+            "032_mentor_reason_summary.sql",
+            "033_context_budget.sql",
+            "034_analysis_run.sql",
+        ):
+            await migrate.run_migration(
+                migrate.DIRECTORY / filename, db_engine=engine
+            )
         login(client, data.owner)
         history = await client.get("/sessions/1")
         assert history.status_code == 200, history.text
         assert "읽기 전용" in history.text
-        assert "Original {text}" in history.text
+        assert 'data-result-url="/sessions/1/analysis"' in history.text
         assert "private original" not in history.text
+        result = await client.get("/sessions/1/analysis")
+        assert result.status_code == 200
+        assert [m["content"] for m in result.json()["messages"]] == [
+            "Original {text}"
+        ]
+        assert "private original" not in result.text
         exported = await client.get("/sessions/1/export.csv")
         assert exported.status_code == 200
         assert "Original feedback" in exported.text

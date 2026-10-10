@@ -141,6 +141,11 @@ def analysis_fixture(state="ok", admin=False):
         ]
         data["latest_run"]["status"] = "degraded"
         data["permissions"]["can_retry"] = True
+    if state == "chunked":
+        report["coverage"]["chunks"] = [
+            dict(status="ok", message_ids=[101, 102, 103]),
+            dict(status="ok", message_ids=[104, 105, 106, 107]),
+        ]
     if state in {
         "failed",
         "preserved",
@@ -173,6 +178,7 @@ def analysis_fixture(state="ok", admin=False):
         report.update(
             schema_version=1,
             status="legacy",
+            classification_enabled=None,
             coverage=None,
             misconception_findings=[],
             message_classifications=[],
@@ -195,8 +201,35 @@ def analysis_fixture(state="ok", admin=False):
             if state == "legacy"
             else []
         )
-        report["improvements"] = []
+        report["improvements"] = (
+            [
+                dict(
+                    student_message_id=None,
+                    student_quote="과거 학생 인용",
+                    missed_reason="과거 개선 이유",
+                    alternative_question="과거 대안 질문",
+                    alternative_reason="과거 대안 이유",
+                )
+            ]
+            if state == "legacy"
+            else []
+        )
         report["dialogue_coaching"] = []
+        report["distribution"] = [
+            dict(name="Original label", count=1, percentage=100)
+        ]
+        data["questions"] = [
+            dict(
+                message_id=102,
+                label="Original label",
+                label_name="Original label",
+                grade="우수",
+                reasoning=dict(summary="Original reasoning"),
+                created_at="2026-10-01T10:00:00",
+            )
+        ]
+        messages[1]["created_at"] = "2026-10-01T10:00:00"
+        messages[1]["label"] = "Original label"
         data["permissions"].update(read_only=True, can_regenerate=False)
     if state == "no_dialogue":
         data.update(

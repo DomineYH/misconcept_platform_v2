@@ -134,6 +134,20 @@ async def test_dialogue_boundaries_have_honest_coverage_and_call_count(
         assert result["latest_run"]["status"] == "ok"
         assert result["latest_run"]["outcome"]["outcome"] == "no_dialogue"
         assert result["accepted_report"] is None and result["messages"] == []
+        import csv
+        import io
+
+        exported = await api.get(f"/sessions/{data.session.id}/export.csv")
+        rows = list(csv.DictReader(io.StringIO(exported.text.lstrip("\ufeff"))))
+        assert len(rows) == 1 and rows[0]["role"] == "summary"
+        assert rows[0]["analysis_schema_version"] == "2"
+        assert rows[0]["analysis_status"] == "no_dialogue"
+        assert (
+            json.loads(rows[0]["analysis_coverage_json"])["input_message_ids"]
+            == []
+        )
+        assert json.loads(rows[0]["misconception_findings_json"]) == []
+        assert rows[0]["message_analysis_disposition"] == ""
         async with data.factory() as db:
             report = await db.scalar(select(SessionFeedbackReport))
             assert (
@@ -243,9 +257,15 @@ async def test_existing_v1_report_is_readable_when_old_analysis_verification_is_
 
     _, calls = analysis_transport(monkeypatch, upstream)
     old = (await api.get(f"/sessions/{data.session.id}/analysis")).json()
-    assert old["feedback"] == "기존 정상 총평" and "accepted_report" not in old
+    assert old["feedback"] == "기존 정상 총평"
+    assert old["accepted_report"]["status"] == "legacy"
+    assert old["accepted_report"]["coverage"] is None
+    assert old["accepted_report"]["brief_feedback"] == ["기존 정상 총평"]
     page = await api.get(f"/sessions/{data.session.id}/analysis_page")
-    assert "기존 정상 총평" in page.text and "data-result-url" not in page.text
+    assert "기존 정상 총평" in page.text
+    assert (
+        f'data-result-url="/sessions/{data.session.id}/analysis"' in page.text
+    )
     login(api, data.admin)
     await api.get("/health")
     failed = await api.post(

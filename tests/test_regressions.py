@@ -49,7 +49,8 @@ async def test_ownership_and_group_access(data):
 async def test_teacher_message_survives_bot_failure(data):
     manager = SessionManager(data.db, data.session.id)
     manager.student_bot = AsyncMock()
-    manager.student_bot.generate_response.side_effect = RuntimeError("offline")
+    manager.student_bot.prepare_response.return_value = (AsyncMock(), None)
+    manager.student_bot.invoke_response.side_effect = RuntimeError("offline")
     with pytest.raises(RuntimeError, match="offline"):
         await manager.process_teacher_message("Why?")
     await data.db.rollback()

@@ -156,6 +156,9 @@ async def execute_call(
                     retry_wait_ms=wait_ms,
                     run_id=run_id,
                     session_id=session_id,
+                    context_budget_json=(
+                        request.context_budget_json if request else None
+                    ),
                 )
             )
             try:

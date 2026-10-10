@@ -203,6 +203,7 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
             await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))
         ).all()
         assert [row.operation for row in attempts] == ["mentor"]
+        assert all(row.context_budget_json is None for row in attempts)
         assert all(
             row.status == "completed"
             and row.run_id == run.id

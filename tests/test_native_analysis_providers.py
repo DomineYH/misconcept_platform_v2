@@ -196,5 +196,6 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
             a.provider == provider
             and a.model == model.model_id
             and a.status == "completed"
+            and a.context_budget_json is None
             for a in attempts
         )

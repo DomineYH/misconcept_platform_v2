@@ -59,6 +59,124 @@ SYNTHESIS = {
 }
 
 
+async def test_capacity_definition_stales_all_roles_and_explicit_probe_refreshes_db(
+    data, api, monkeypatch
+):
+    from src.services.model_capabilities import capabilities
+
+    body = await prepare(api)
+    definition = capabilities("openai", "gpt-5-mini")
+    old_version = "openai-2026-10-09-v1"
+    old_definition = {**definition, "definition_version": old_version}
+    old_definition.pop("combined_context_tokens")
+    async with data.engine.begin() as db:
+        await db.execute(
+            text(
+                "UPDATE model_config SET enabled=1,capability_definition_version=:old,"
+                "capabilities_json=:definition,verification_state=:states WHERE id=1"
+            ),
+            dict(
+                old=old_version,
+                definition=json.dumps(old_definition),
+                states=json.dumps(
+                    {
+                        role: dict(
+                            status="succeeded",
+                            credential_revision=1,
+                            connection_version=2,
+                            capability_definition_version=old_version,
+                            role_contract_version=contract,
+                        )
+                        for role, contract in ROLE_CONTRACT_VERSIONS.items()
+                    }
+                ),
+            ),
+        )
+        before = (
+            await db.execute(
+                text(
+                    "SELECT model_id,default_options_json FROM model_config WHERE id=1"
+                )
+            )
+        ).one()
+
+    async def upstream(request, payload):
+        if not payload.get("stream"):
+            return httpx2.Response(200, json=response_body())
+        from test_student_probe import sse
+
+        return httpx2.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sse(
+                "response.output_text.delta",
+                delta="Synthetic student answer",
+                sequence_number=0,
+                item_id="m",
+                output_index=0,
+                content_index=0,
+            )
+            + sse(
+                "response.completed",
+                response=response_body(),
+                sequence_number=1,
+            ),
+        )
+
+    clients, calls = sdk_transport(monkeypatch, upstream)
+    model = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert {
+        role: evidence["status"]
+        for role, evidence in model["verification_state"].items()
+    } == {role: "stale" for role in ROLE_CONTRACT_VERSIONS}
+    assert model["capabilities"]["combined_context_tokens"] == 400000
+    assert not calls and not clients
+    update = dict(
+        expected_version=1,
+        display_name=model["display_name"],
+        enabled=True,
+        default_options={},
+    )
+    assert (await write(api, "models/1/update", **update)).json()["detail"][
+        "code"
+    ] == "role_verification_required"
+    assert not calls
+    assert (await write(api, "models/1/probes", **body)).status_code == 202
+    assert (await completed(api, body["request_id"]))["status"] == "succeeded"
+    current = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert current["verification_state"]["student"]["status"] == "succeeded"
+    assert current["verification_state"]["mentor"]["status"] == "stale"
+    assert current["verification_state"]["analysis"]["status"] == "stale"
+    assert ROLE_CONTRACT_VERSIONS == dict(
+        student="s1-v1", mentor="s3-v1", analysis="s1-v1"
+    )
+    assert len(calls) == 2 and all(c.is_closed() for c in clients)
+    assert (await write(api, "models/1/update", **update)).status_code == 200
+    assert len(calls) == 2
+    async with data.engine.connect() as db:
+        stored = (
+            await db.execute(
+                text(
+                    "SELECT capabilities_json,capability_definition_version FROM model_config WHERE id=1"
+                )
+            )
+        ).one()
+        assert json.loads(stored[0]) == definition
+        assert stored[1] == definition["definition_version"]
+        assert (
+            await db.execute(
+                text(
+                    "SELECT model_id,default_options_json FROM model_config WHERE id=1"
+                )
+            )
+        ).one() == before
+        assert (
+            await db.execute(
+                text("SELECT context_budget_json FROM api_usage_log")
+            )
+        ).all() == [(None,), (None,)]
+
+
 async def test_mentor_probe_validates_manual_positive_then_auto_negative_and_only_mentor(
     data, api, monkeypatch
 ):

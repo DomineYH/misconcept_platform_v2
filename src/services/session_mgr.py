@@ -60,6 +60,9 @@ class SessionManager:
             await self.initialize()
 
         new_messages = []
+        permit, request = await self.student_bot.prepare_response(
+            teacher_content
+        )
 
         # Save teacher message
         teacher_msg = Message(
@@ -68,15 +71,19 @@ class SessionManager:
             content=teacher_content,
         )
         self.db.add(teacher_msg)
-        await self.db.flush()  # Get ID without commit
-        await self.db.commit()  # Teacher 메시지 즉시 가시화
+        try:
+            await self.db.flush()  # Get ID without commit
+            await self.db.commit()  # Teacher 메시지 즉시 가시화
+        except BaseException:
+            permit.release()
+            raise
         new_messages.append(teacher_msg)
 
         # Generate the student response before saving its completed text.
         (
             student_content,
             _student_usage,
-        ) = await self.student_bot.generate_response(teacher_content)
+        ) = await self.student_bot.invoke_response(permit, request)
 
         # Turn-level misconception calls are retired (ADR-0003).
         student_msg = Message(

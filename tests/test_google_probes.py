@@ -35,8 +35,37 @@ async def prepare(api, role):
     assert saved.status_code == 200
     model = (await api.get("/admin/ai/state")).json()["models"][0]
     assert model["model_id"] == "gemini-2.5-flash"
-    assert model["capabilities"]["definition_version"] == "google-2026-10-09-v1"
+    assert model["capabilities"]["definition_version"] == "google-2026-10-10-v2"
     return dict(expected_version=1, role=role, request_id=str(uuid4()))
+
+
+async def test_google_input_capacity_conflict_rejects_explicit_probe_without_attempt(
+    data, api
+):
+    body = await prepare(api, "student")
+    async with data.engine.begin() as db:
+        await db.execute(
+            text(
+                "UPDATE provider_connection SET catalog_models_json=:models WHERE provider='google'"
+            ),
+            {
+                "models": json.dumps(
+                    [dict(model_id="gemini-2.5-flash", input_token_limit=1024)]
+                )
+            },
+        )
+    result = await write(api, "models/1/probes", **body)
+    assert result.status_code == 422
+    assert result.json()["detail"]["code"] == "capability_definition_required"
+    state = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert state["capabilities"]["metadata_conflict"] is True
+    async with data.engine.connect() as db:
+        assert (
+            await db.execute(text("SELECT count(*) FROM model_probe"))
+        ).scalar() == 0
+        assert (
+            await db.execute(text("SELECT count(*) FROM api_usage_log"))
+        ).scalar() == 0
 
 
 @pytest.mark.parametrize("role", ["student", "mentor", "analysis"])
@@ -106,7 +135,7 @@ async def test_google_role_probe_is_versioned_idempotent_and_has_two_attempts(
     )
     assert evidence[
         "capability_definition_version"
-    ] == "google-2026-10-09-v1" and evidence["role_contract_version"] == (
+    ] == "google-2026-10-10-v2" and evidence["role_contract_version"] == (
         "s3-v1" if role == "mentor" else "s1-v1"
     )
     assert all(

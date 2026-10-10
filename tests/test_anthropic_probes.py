@@ -39,7 +39,7 @@ async def test_claude_options_keep_native_thinking_and_effort(data, api):
     await prepare(api)
     model = (await api.get("/admin/ai/state")).json()["models"][0]
     assert model["capabilities"] is not None
-    assert model["capabilities"]["checked_at"] == "2026-10-09"
+    assert model["capabilities"]["checked_at"] == "2026-10-10"
     assert model["capabilities"]["structured"] is True
     options = {
         "max_output_tokens": 4096,

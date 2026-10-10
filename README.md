@@ -100,6 +100,19 @@ counted individual messages (including mentor rows), and now counts complete
 pairs. Existing values are preserved, so administrators should adjust them
 before starting new sessions. Failed attempts and greetings consume no slots.
 
+Student stream and nonstream calls fit the frozen prior-turn limit into a local
+input budget by dropping the oldest complete pairs. The role instruction,
+problem, current question and frozen output options are preserved. Required
+input that still exceeds the budget returns HTTP 422 `context_limit` before a
+new turn or provider attempt is stored; shorten the question or ask an
+administrator to review the configuration. Provider context failures are recorded
+as failed attempts and are never automatically retried.
+
+Migration 033 adds nullable `api_usage_log.context_budget_json`, separate from
+actual tokens and costs. Capacity definition v2 makes old student, mentor and
+analysis evidence stale; administrators must explicitly reverify each required
+role. Saved lesson selections and snapshot hashes are preserved.
+
 Tests need no API credentials or network. They override configuration before
 imports, reject outbound sockets, and create databases only under pytest's
 temporary directory. The repository's dialogue_sim.db and .env are never used:

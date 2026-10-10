@@ -15,6 +15,7 @@ class TextRequest:
     messages: list[dict]
     validated_options: dict
     request_id: str
+    context_budget_json: dict | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)

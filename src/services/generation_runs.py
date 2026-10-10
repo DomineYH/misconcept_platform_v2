@@ -22,11 +22,11 @@ from src.models import (
 )
 from src.models.scenario_group import ScenarioGroup
 from src.services.call_admission import approve_call, execution_lock
-from src.services.invocation_types import InvocationError, TextRequest
+from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
 from src.services.lesson_snapshots import read_lesson_snapshot
 from src.services.model_verification import ROLE_CONTRACT_VERSIONS
-from src.services.student_bot import build_student_input
+from src.services.student_bot import build_student_request
 from src.services.turn_context import load_completed_turns
 
 
@@ -210,7 +210,24 @@ async def _reserve_student(factory, session_id, user, request):
             before_turn_index=teacher.turn_index,
             limit=lesson.config.runtime.context_turn_limit,
         )
-        messages = build_student_input(lesson, request.content, history)
+        try:
+            call = build_student_request(
+                lesson,
+                request.content,
+                history,
+                connection,
+                model,
+                options,
+                request.request_id,
+            )
+        except InvocationError as error:
+            raise HTTPException(
+                422 if error.code == "context_limit" else 503,
+                detail={
+                    "code": error.code,
+                    "message": "질문을 짧게 수정하거나 관리자에게 AI 설정을 확인해주세요.",
+                },
+            ) from None
         run = GenerationRun(
             id=str(uuid4()),
             owner_id=user.id,
@@ -256,15 +273,6 @@ async def _reserve_student(factory, session_id, user, request):
         permit.model_id = model.model_id
         permit.capability_version = model.capability_definition_version
         permit.contract_version = ROLE_CONTRACT_VERSIONS["student"]
-        call = TextRequest(
-            connection.provider,
-            model.model_id,
-            "student",
-            messages[0]["content"],
-            messages[1:],
-            options,
-            request.request_id,
-        )
         try:
             await db.commit()
         except BaseException:

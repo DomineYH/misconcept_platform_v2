@@ -211,7 +211,7 @@ singleton 설정은 settings_version CAS, 엄격한 정수/필드, 관리자 예
 
 ### OpenAI 기능 표
 
-확인일 **2026-10-09**, 정의 버전 **openai-2026-10-09-v1**.
+확인일 **2026-10-10**, 정의 버전 **openai-2026-10-10-v2**.
 서버 코드 `src/services/model_capabilities.py`가 원본이며 등록/편집 시 DB
 capabilities_json에 스냅샷을 저장한다. 읽기는 현재 정의를 반환하고 이전 정의
 버전으로 얻은 역할 성공은 stale로 처리한다. 클라이언트가 표를 제출할 수 없다.
@@ -460,8 +460,8 @@ adaptive/disabled/enabled.supported, effort.supported/low/medium/high/max.suppor
 늦은 이전 키 결과는 현재 캐시를 덮어쓰지 않는다.
 [Models API 근거](https://platform.claude.com/docs/en/api/models/list).
 
-기능 정의 `anthropic-2026-10-09-v1`은 정확 ID `claude-sonnet-4-6` 하나에만
-적용한다. text/stream/structured, 입력 1,000,000·출력 128,000 토큰이다.
+기능 정의 `anthropic-2026-10-10-v2`은 정확 ID `claude-sonnet-4-6` 하나에만
+적용한다. text/stream/structured, 결합 문맥 1,000,000·출력 128,000 토큰이다.
 목록의 명시적 미지원·더 작은 한도·retired가 정의와 충돌하면 시험과 새 사용을
 차단한다. 누락 메타데이터는 정의를 부정하지 않는다. 다른 ID·접두어·추측한
 스냅샷은 기능 정의 필요 상태다.
@@ -579,13 +579,13 @@ max_temperature만 저장한다. `models/` 접두사만 제거하며 직접 등�
 같은 정규화를 적용한다. 전체 성공 뒤 기존 revision 조건부 캐시 갱신을
 사용하므로 중간 실패·이전 키 결과는 최신 캐시를 덮어쓰지 못한다.
 
-최초 기능 표는 정확한 안정 ID `gemini-2.5-flash`, 정의
-`google-2026-10-09-v1`, 확인일 2026-10-09이다. 텍스트·스트리밍·구조화
+현재 기능 표는 정확한 안정 ID `gemini-2.5-flash`, 정의
+`google-2026-10-10-v2`, 확인일 2026-10-10이다. 텍스트·스트리밍·구조화
 출력과 thinking budget을 지원하고 출력 상한은 65536, temperature는 0–2,
 thinking.budget은 -1(자동) 또는 0–24576(0은 끄기)이다. 이 모델의 허용
 thinking level은 없으며 level/budget 동시 지정과 다른 미지원 옵션은 422다.
 다른 모델·변형의 기능을 접두사로 추측하지 않는다. 명시적인 목록 메타데이터가
-thinking, generateContent, 출력 상한, 최대 temperature와 충돌하면 시험·실행을
+thinking, generateContent, 입력/출력 상한, 최대 temperature와 충돌하면 시험·실행을
 차단한다. 목록 부재만으로 충돌을 만들지 않는다.
 
 근거는 [모델과 안정 ID](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash),
@@ -622,3 +622,56 @@ $0.30/백만 토큰, 캐시 입력 $0.03/백만 토큰, 출력(사고 포함) $2
 (2026-10-09 확인)을 따른다. HTTP 400의 google.rpc.ErrorInfo.reason이
 API_KEY_INVALID이면 authentication으로 분류하며 메시지 문자열을 해석하거나
 저장하지 않는다. 미지/잘못된 details는 invalid_output으로 실패한다.
+
+### S3 student local context budget (#74)
+
+Capacity definitions checked on **2026-10-10** use provider-specific v2 versions.
+Exact GPT-5-mini/GPT-5.2 and their existing fixed snapshot aliases have combined
+context 400,000 tokens ([mini](https://developers.openai.com/api/docs/models/gpt-5-mini),
+[5.2](https://developers.openai.com/api/docs/models/gpt-5.2));
+[Claude Sonnet 4.6](https://platform.claude.com/docs/en/models/sonnet-4-6/overview)
+has combined context 1,000,000;
+[Gemini 2.5 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash)
+has a separate input limit of 1,048,576, not a combined limit. Unknown model IDs
+remain unsupported and conflicting catalog limits block use and role probes.
+The previous Claude max_input_tokens definition is replaced by the combined
+capacity meaning; catalog metadata retains its provider field name.
+
+R reserves the validated frozen max_output_tokens, or the adapter's explicit
+request default (Claude 1,024), otherwise the documented maximum (OpenAI 128,000;
+Gemini 65,536). Thinking/reasoning already included in output is not added again.
+B is min(known input limit, known combined limit minus R), excluding unknown
+terms. Missing capacity or B<=0 uses configuration_unavailable.
+
+utf8-v1 serializes an envelope without API credentials: system_instruction, role-tagged
+messages, and output_schema for structured requests with ensure_ascii=false,
+sorted keys and compact separators. Its UTF-8 byte length plus 32 per message
+and 1,024 is the estimated input. output_schema uses the existing adapter's
+provider-facing conversion. This is a conservative app estimate, not an exact
+tokenizer count or a guarantee that the provider accepts the request.
+
+Only student callers apply this policy in #74. They select at most frozen N
+prior complete pairs using bounded SQL, retain chronological order and the
+current question once, then drop whole oldest prior pairs until estimate<=B.
+No global adapter truncation, summaries, remote token counting or output-option
+changes occur. `input_budget(request)` returns B, R and the definition version
+for any role; `estimate_input(request)` supports the existing mentor's packed
+dialogue format and native schema. `fit_context` trims only a paired-message
+prefix and preserves its required suffix, including a target pair. #75 owns
+mentor history trimming and metadata; mentor budgeting is not enabled here.
+
+New input rejected at preflight creates no teacher/run/attempt. Retry rejection
+preserves the previous failed turn. HTTP422 detail exposes only context_limit
+and fixed safe guidance. Existing teacher UI retains editable input. Migration
+033 adds nullable context_budget_json before real calls; its estimator/version,
+input estimate/budget, output reserve, configured/selected/kept/dropped prior
+pair counts, target inclusion and capability version contain no text or secrets.
+Old and non-target attempts remain NULL. Raw usage and pricing are unchanged;
+initial ledger failure blocks the provider and failure/cancellation retain
+already-written budget evidence. Evidence is not added to teacher surfaces.
+
+Definition changes stale all roles through existing effective role checks.
+Registration, explicit model edits and explicit role probes refresh the DB
+capability copy; each required role needs a new successful explicit probe.
+Student/analysis output contracts stay s1-v1 and mentor stays s3-v1. There is no
+automatic paid probe or model/options/snapshot replacement.

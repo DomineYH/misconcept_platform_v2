@@ -1,9 +1,9 @@
-"""Exact Claude definition and native option rules, checked 2026-10-09."""
+"""Exact Claude definition and native option rules, checked 2026-10-10."""
 
 from copy import deepcopy
 
 MODEL = "claude-sonnet-4-6"
-VERSION = "anthropic-2026-10-09-v1"
+VERSION = "anthropic-2026-10-10-v2"
 SOURCES = [
     "https://platform.claude.com/docs/en/models/sonnet-4-6/overview",
     "https://platform.claude.com/docs/en/api/messages/create",
@@ -19,13 +19,13 @@ def capabilities(model_id):
         return None
     return dict(
         definition_version=VERSION,
-        checked_at="2026-10-09",
+        checked_at="2026-10-10",
         sources=list(SOURCES),
         text=True,
         streaming=True,
         structured=True,
         max_output_tokens=128000,
-        max_input_tokens=1000000,
+        combined_context_tokens=1000000,
         temperature=True,
         thinking_types=["disabled", "adaptive", "enabled"],
         efforts=["low", "medium", "high", "max"],
@@ -123,7 +123,7 @@ def metadata_conflict(model_id, items):
             return True
         for field, limit in (
             ("max_tokens", "max_output_tokens"),
-            ("max_input_tokens", "max_input_tokens"),
+            ("max_input_tokens", "combined_context_tokens"),
         ):
             value = item.get(field)
             if value is not None and value < definition[limit]:

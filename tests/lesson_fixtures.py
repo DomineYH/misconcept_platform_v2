@@ -51,16 +51,26 @@ async def install_connection(data, monkeypatch):
         monkeypatch.setattr(migrate, "engine", data.engine)
         await migrate.run_all_migrations(through=30)
     async with data.engine.connect() as conn:
-        has_reason = await conn.run_sync(
-            lambda sync: any(
-                column["name"] == "mentor_reason_summary"
-                for column in inspect(sync).get_columns("generation_run")
+        has_reason, has_budget = await conn.run_sync(
+            lambda sync: (
+                any(
+                    column["name"] == "mentor_reason_summary"
+                    for column in inspect(sync).get_columns("generation_run")
+                ),
+                any(
+                    column["name"] == "context_budget_json"
+                    for column in inspect(sync).get_columns("api_usage_log")
+                ),
             )
         )
     if not has_reason:
         await migrate.run_migration(
             migrate.DIRECTORY / "032_mentor_reason_summary.sql",
             db_engine=data.engine,
+        )
+    if not has_budget:
+        await migrate.run_migration(
+            migrate.DIRECTORY / "033_context_budget.sql", db_engine=data.engine
         )
     connection = await data.db.scalar(
         select(ProviderConnection).where(

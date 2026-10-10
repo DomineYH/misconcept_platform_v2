@@ -95,6 +95,9 @@ class ApiUsageLog(Base):
     cache_write_tokens: Mapped[int | None] = mapped_column(Integer)
     reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
     raw_usage_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
+    context_budget_json: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True)
+    )
     pricing_as_of: Mapped[str | None] = mapped_column(Text)
     pricing_source: Mapped[str | None] = mapped_column(Text)
     usage_complete: Mapped[bool | None] = mapped_column()

@@ -4,6 +4,8 @@ import asyncio
 from contextlib import aclosing
 from uuid import uuid4
 
+from fastapi import HTTPException
+
 from src.models.provider_connection import now
 from src.services import (
     anthropic_catalog,
@@ -21,6 +23,7 @@ from src.services.call_admission import (
 from src.services.call_policy import CallDeadline, retry_limit
 from src.services.invocation_ledger import finish_attempt, start_attempt
 from src.services.invocation_types import CallEvent, InvocationError
+from src.services.lesson_snapshots import load_active_lesson
 
 PROVIDER_ADAPTERS = {
     "openai": (openai_catalog, openai_generation),
@@ -161,6 +164,37 @@ async def execute_call(
                 entry_id = await starting
                 raise
             await recheck_call(permit)
+            if (
+                permit.operation in ("student", "mentor", "mentor_judgment")
+                and not permit.admin
+            ):
+                async with permit.factory() as db:
+                    try:
+                        await load_active_lesson(
+                            db, session_id, permit.owner_id
+                        )
+                    except HTTPException:
+                        raise InvocationError(
+                            "configuration_unavailable"
+                        ) from None
+            if (
+                permit.role == "analysis"
+                and not permit.admin
+                and session_id is not None
+            ):
+                from src.services.analysis_pipeline import load_analysis_lesson
+
+                async with permit.factory() as db:
+                    try:
+                        await load_analysis_lesson(
+                            db,
+                            session_id,
+                            request.validation_context["actor_id"],
+                        )
+                    except HTTPException:
+                        raise InvocationError(
+                            "configuration_unavailable"
+                        ) from None
             if deadline.remaining() <= 0:
                 raise InvocationError("timeout_total")
             async with deadline.total():

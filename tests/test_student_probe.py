@@ -503,7 +503,21 @@ async def test_restart_interrupts_orphan_probe_and_attempt_without_regeneration(
     data, api, monkeypatch
 ):
     from src.db import connection
+
+    # Restart recovery runs on the final installed schema, after the cutover boundary.
+    from src.db.migrations import migrate
     from src.main import app, lifespan
+
+    async with data.engine.begin() as db:
+        for table in (
+            "session",
+            "scenario_group",
+            "scenario",
+            "prompt_template",
+            "analysis_framework",
+        ):
+            await db.execute(text(f"DELETE FROM {table}"))
+    await migrate.run_all_migrations(db_engine=data.engine)
 
     body = await prepare(api)
     opened = asyncio.Event()

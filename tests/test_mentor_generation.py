@@ -4,14 +4,12 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from legacy_models import PromptTemplate
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
 from test_scenario_api import scenario_payload as scenario_fixture
 from test_student_generation import frames
 from test_student_generation import student as student_fixture
-
-from src.config import config
-from src.models.prompt_template import PromptTemplate
 
 client = client_fixture
 scenario_payload = scenario_fixture
@@ -20,7 +18,7 @@ student = student_fixture
 
 @pytest.fixture
 async def mentor(data, student):
-    from lesson_fixtures import install_mentor_model
+    from lesson_fixtures import configure_mentor, install_mentor_model
 
     student.mentor_model = await install_mentor_model(data, student.connection)
     template = PromptTemplate(
@@ -33,6 +31,7 @@ async def mentor(data, student):
     data.scenario.tutor_template_id = template.id
     data.scenario.tutor_sensitivity = "low"
     await data.db.commit()
+    await configure_mentor(data, student)
 
     async def create(**kwargs):
         if kwargs.get("stream"):
@@ -57,9 +56,17 @@ def mentor_url(data, turn):
 
 
 async def test_no_intervention_is_durable_and_replayed(data, client, mentor):
+    from lesson_fixtures import configure_mentor
+
+    await configure_mentor(data, mentor, "auto", start_turn=1)
     login(client, data.owner)
     turn = await complete_turn(client, data)
-    payload = {"request_id": str(uuid4())}
+    mentor.responses.create.side_effect = None
+    mentor.responses.create.return_value = SimpleNamespace(
+        output_text='{"is_repetitive":false,"is_inappropriate":false,"reason":"No help needed"}',
+        usage=None,
+    )
+    payload = {"request_id": str(uuid4()), "trigger": "auto"}
     response = await client.post(mentor_url(data, turn), json=payload)
     assert response.status_code == 200, response.text
     events = frames(response)
@@ -67,24 +74,25 @@ async def test_no_intervention_is_durable_and_replayed(data, client, mentor):
     assert events[0][1]["operation"] == "mentor"
     assert events[-1][1]["result_kind"] == "no_intervention"
     assert events[-1][1]["message"] is None
-    for request in (payload, {"request_id": str(uuid4())}):
+    for request in (payload, {"request_id": str(uuid4()), "trigger": "auto"}):
         replay = await client.post(mentor_url(data, turn), json=request)
         assert replay.json()["run_id"] == events[0][1]["run_id"]
         assert replay.json()["result_kind"] == "no_intervention"
         assert replay.json()["status"] == "completed"
     state = await client.get(f"/runs/{events[0][1]['run_id']}")
     assert state.json()["result_kind"] == "no_intervention"
-    assert mentor.responses.create.await_count == 1  # Student only.
+    assert mentor.responses.create.await_count == 2  # Student and judgment.
     from sqlalchemy import select
 
     from src.models import ApiUsageLog
 
     async with data.factory() as db:
-        assert (
+        attempts = (
             await db.scalars(
                 select(ApiUsageLog).where(ApiUsageLog.role == "mentor")
             )
-        ).all() == []
+        ).all()
+        assert len(attempts) == 1 and attempts[0].operation == "mentor_judgment"
     await data.db.refresh(data.session)
     assert data.session.tutor_question_count == 1
     assert data.session.tutor_intervention_count == 0
@@ -120,7 +128,7 @@ async def test_slow_mentor_does_not_block_student_and_busy_creates_nothing(
         )
 
     mentor.responses.create.side_effect = create
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "manual"}
     pending = asyncio.create_task(
         client.post(mentor_url(data, first_turn), json=payload)
     )
@@ -132,7 +140,7 @@ async def test_slow_mentor_does_not_block_student_and_busy_creates_nothing(
         )
         replay = await client.post(mentor_url(data, first_turn), json=payload)
         assert replay.json()["status"] == "running"
-        busy_payload = {"request_id": str(uuid4())}
+        busy_payload = {"request_id": str(uuid4()), "trigger": "manual"}
         busy = await client.post(
             mentor_url(data, second_turn), json=busy_payload
         )
@@ -158,7 +166,7 @@ async def test_slow_mentor_does_not_block_student_and_busy_creates_nothing(
             )
         assert len(feedback_inputs) == 1
         assert "Later question" not in str(feedback_inputs)
-        assert feedback_inputs[0]["model"] == config.ANALYSIS_MODEL
+        assert feedback_inputs[0]["model"] == "gpt-5.2"
         assert "stream" not in feedback_inputs[0]
     finally:
         gate.set()
@@ -210,7 +218,8 @@ async def test_failed_feedback_retry_counts_question_once(data, client, mentor):
 
     mentor.responses.create.side_effect = create
     first = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
     assert frames(first)[-1][0] == "run.failed"
     assert "SECRET" not in first.text
@@ -218,7 +227,8 @@ async def test_failed_feedback_retry_counts_question_once(data, client, mentor):
     assert data.session.tutor_question_count == 1
     assert data.session.tutor_intervention_count == 0
     retry = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
     assert frames(retry)[-1][1]["message"]["content"] == "Recovered coach"
     assert frames(retry)[0][1]["run_id"] != frames(first)[0][1]["run_id"]
@@ -227,7 +237,8 @@ async def test_failed_feedback_retry_counts_question_once(data, client, mentor):
     assert data.session.tutor_intervention_count == 1
     for _ in range(2):
         duplicate = await client.post(
-            mentor_url(data, turn), json={"request_id": str(uuid4())}
+            mentor_url(data, turn),
+            json={"request_id": str(uuid4()), "trigger": "manual"},
         )
         assert duplicate.json()["message"]["content"] == "Recovered coach"
     assert calls == 2
@@ -253,21 +264,36 @@ async def test_failed_feedback_retry_counts_question_once(data, client, mentor):
         )
 
 
-async def test_chat_mounts_mentor_only_when_scenario_enables_it(
+async def test_unconverted_chat_has_no_native_snapshot_and_is_blocked(
     data, client, mentor
 ):
+    data.scenario.config_json = None
+    data.session.config_snapshot_json = None
+    await data.db.commit()
     login(client, data.owner)
     html = await client.get(f"/scenarios/{data.scenario.id}")
-    assert '"mentorEnabled": true' in html.text
-    assert "mountMentorStream" in html.text
-    turn = await complete_turn(client, data)
+    assert html.status_code == 400
+    assert html.json()["detail"] == {"code": "configuration_unavailable"}
     data.scenario.tutor_template_id = None
     await data.db.commit()
     html = await client.get(f"/scenarios/{data.scenario.id}")
-    assert '"mentorEnabled": false' in html.text
+    assert html.status_code == 400
+    assert html.json()["detail"] == {"code": "configuration_unavailable"}
+    mentor.responses.create.assert_not_awaited()
+
+
+async def test_snapshot_mentor_off_blocks_direct_call(data, client, mentor):
+    from lesson_fixtures import configure_mentor
+
+    await configure_mentor(data, mentor, "off")
+    login(client, data.owner)
+    turn = await complete_turn(client, data)
+    data.scenario.tutor_template_id = None
+    await data.db.commit()
     mentor.responses.create.reset_mock()
     disabled = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
     assert disabled.status_code == 400
     assert disabled.json()["detail"]["code"] == "mentor_disabled"

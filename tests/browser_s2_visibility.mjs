@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+
+export default async function checkHiddenScenarioValues(page) {
+  const base = new URL(page.url()).origin;
+  await page.goto(`${base}/fixtures/s2/editor`);
+  await page.getByRole('button', {name:'4. 멘토', exact:true}).click();
+  const mode = page.getByLabel('멘토 사용 모드');
+  await mode.waitFor({timeout:3000});
+  await mode.selectOption('auto');
+  await page.getByLabel('자동 개입 조건', {exact:true}).fill('조건 {literal}');
+  await page.getByLabel('최근 완료 턴 내 최대 개입 수').fill('4');
+  await mode.selectOption('manual');
+  assert(await page.getByLabel('최근 완료 턴 내 최대 개입 수').isHidden(), 'manual has no count cap');
+  await page.getByLabel('멘토 행동 지시').fill('보존할 코칭 지시');
+  await mode.selectOption('off');
+  assert(await page.getByLabel('멘토 행동 지시').isHidden());
+  assert(await page.locator('[data-preview="mentor_name"]').isHidden());
+  await mode.selectOption('auto');
+  assert.equal(await page.getByLabel('멘토 행동 지시').inputValue(), '보존할 코칭 지시');
+  assert.equal(await page.getByLabel('자동 개입 조건', {exact:true}).inputValue(), '조건 {literal}');
+  assert.equal(await page.getByLabel('최근 완료 턴 내 최대 개입 수').inputValue(), '4');
+  await page.getByRole('button', {name:'5. 사후 분석', exact:true}).click();
+  await page.getByRole('button', {name:'분류 기준 추가', exact:true}).click();
+  await page.getByLabel('분류 2 이름', {exact:true}).fill('보존할 기준');
+  await page.getByLabel('발화 분류 사용').uncheck();
+  assert(await page.getByLabel('분류 2 이름', {exact:true}).isHidden());
+  await page.getByLabel('발화 분류 사용').check();
+  assert.equal(await page.getByLabel('분류 2 이름', {exact:true}).inputValue(), '보존할 기준');
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', {name:'분류 1 삭제', exact:true}).click();
+  assert.equal(await page.getByLabel('분류 1 이름', {exact:true}).inputValue(), '보존할 기준');
+  assert.equal(await page.getByLabel('분류 1 수준', {exact:true}).locator('option').allTextContents().then(a => a.join(',')), '지정하지 않음,high,low');
+  await page.getByLabel('발화 분류 사용').uncheck();
+  await page.getByRole('button', {name:'4. 멘토', exact:true}).click();
+  await mode.selectOption('off');
+  let submitted;
+  await page.route('**/admin/scenarios/1/update', route => {
+    submitted = route.request().postDataJSON();
+    return route.fulfill({status:200, json:{version:2, status:'draft'}});
+  });
+  await page.getByRole('button', {name:'초안으로 저장', exact:true}).click();
+  await page.getByText('초안을 저장했습니다.', {exact:true}).waitFor();
+  assert.equal(submitted.config.mentor.mode, 'off');
+  assert.equal(submitted.config.mentor.behavior_instruction, '보존할 코칭 지시');
+  assert.equal(submitted.config.mentor.intervention_policy.condition, '조건 {literal}');
+  assert.equal(submitted.config.mentor.intervention_policy.max_interventions, 4);
+  assert.equal(submitted.config.analysis.classification_enabled, false);
+  assert.equal(submitted.config.analysis.rubric[0].name, '보존할 기준');
+  assert(!('manual_limit' in submitted.config.mentor));
+  return {pageErrors:[]};
+}

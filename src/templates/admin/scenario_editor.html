@@ -1,0 +1,144 @@
+{% extends "layout.html" %}
+{% block title %}시나리오 작성 - 관리자{% endblock %}
+{% macro text_field(path, label, kind='text', limit=50000, hint='') %}
+<div class="form-group">
+  <label for="{{ path }}">{{ label }}</label>
+  {% if kind == 'textarea' %}
+  <textarea id="{{ path }}" data-field="{{ path }}" rows="3" maxlength="{{ limit }}" aria-describedby="{{ path }}-hint {{ path }}-error"></textarea>
+  {% else %}
+  <input id="{{ path }}" data-field="{{ path }}" type="{{ kind }}" {% if kind == 'number' %}min="1" max="1000" step="1"{% else %}maxlength="{{ limit }}"{% endif %} aria-describedby="{{ path }}-hint {{ path }}-error">
+  {% endif %}
+  <small id="{{ path }}-hint">{{ hint }}</small>
+  <p id="{{ path }}-error" class="scenario-error" hidden></p>
+</div>
+{% endmacro %}
+{% macro model_field(role, label) %}
+<fieldset data-model-role="{{ role }}">
+  <legend>{{ label }} 모델 설정 · 내부 실행용</legend>
+  <label for="{{ role }}.resolved_model_config">{{ label }} 제공자 / 모델</label>
+  <select id="{{ role }}.resolved_model_config" aria-describedby="{{ role }}-model-status {{ role }}.resolved_model_config-error"></select>
+  <p id="{{ role }}-model-status" role="status"></p>
+  <p id="{{ role }}.resolved_model_config-error" class="scenario-error" hidden></p>
+  <div id="{{ role }}-model-options"></div>
+  <p>저장된 옵션은 현재 기본값과 합치지 않습니다. 모델을 변경하면 새 기본 옵션을 표시합니다.</p>
+</fieldset>
+{% endmacro %}
+{% block content %}
+<link rel="stylesheet" href="/static/css/scenario-editor.css">
+<div class="container scenario-editor">
+  <h1>시나리오 작성</h1>
+  <p>공개 내용과 내부 지시를 나누어 작성하세요. 실제 학생의 식별 정보 대신 가명·교육 페르소나를 사용하세요.</p>
+  <p id="editor-status" role="status" aria-live="polite"></p>
+  <div id="editor-errors" class="scenario-error-summary" role="alert" tabindex="-1" hidden><h2>게시 전 보완 항목</h2><ul id="editor-error-links"></ul></div>
+  <div id="editor-conflict" role="alert" tabindex="-1" hidden><p id="editor-conflict-message"></p><button type="button" id="editor-reload" class="btn btn-secondary">최신 내용 다시 불러오기</button></div>
+  {% if editor.review_required %}
+  <section id="conversion-review" class="scenario-review" aria-label="변환 검토">
+    <h2>기존 시나리오 변환 검토</h2>
+    <p>관리자 전용 이전 근거입니다. 모든 기존 시나리오는 검토가 필요한 초안입니다. 원문을 공개 소개로 자동 사용하지 않습니다.</p>
+    {% for entry in editor.conversion_provenance %}
+    <h3>{{ entry.field }}</h3><dl><dt>원문</dt><dd><pre>{{ entry.source }}</pre></dd><dt>변환값</dt><dd><pre>{{ entry.target }}</pre></dd></dl>
+    {% if entry.archive_ref is defined %}
+    <dl><dt>관리자 전용 원문 archive 참조</dt><dd><code>{{ entry.archive_ref }}</code></dd>
+      <dt>archive SHA-256</dt><dd><code>{{ entry.archive_hash }}</code></dd>
+      <dt>원문 SHA-256</dt><dd><code>{{ entry.source_hash }}</code></dd>
+      <dt>변환값 SHA-256</dt><dd><code>{{ entry.target_hash }}</code></dd>
+      <dt>배포 설정 출처 / 수집 시각</dt><dd>{{ entry.settings_source }} / {{ entry.captured_at }}</dd></dl>
+    {% endif %}
+    {% if entry.subcall_settings is defined %}<p>이전 하위 호출 설정</p><pre>{{ entry.subcall_settings }}</pre>{% endif %}
+    {% endfor %}
+    <p>검토 사유는 보완 안내에서 확인하세요. 누락된 필수 내용은 확인만으로 해소할 수 없습니다.</p>
+    <label><input type="checkbox" id="acknowledge-review"> 이 버전의 변환 경고를 검토했습니다.</label>
+    <p id="review-publication-status" role="status"></p>
+  </section>
+  {% endif %}
+  <div class="scenario-layout">
+    <nav class="scenario-steps" aria-label="작성 단계">
+      {% for label in ['기본 정보', '문제 상황', '학생봇', '멘토', '사후 분석'] %}
+      <button type="button" data-step="{{ loop.index0 }}" aria-controls="step-{{ loop.index0 }}">{{ loop.index }}. {{ label }} <span data-errors="{{ loop.index0 }}" hidden></span></button>
+      {% endfor %}
+    </nav>
+    <form id="scenario-form" novalidate>
+      <section id="step-0" data-panel="0"><h2 tabindex="-1">1. 기본 정보</h2>
+        {{ text_field('title', '제목', limit=200) }}
+        {{ text_field('subject', '교과', limit=100) }}
+        {{ text_field('target_grade', '대상 학년', limit=100) }}
+        {% if editor.is_active is defined %}<label><input id="is_active" data-field="is_active" type="checkbox"> 활성</label>{% endif %}
+        {{ text_field('runtime.context_turn_limit', '최근 완료 턴 문맥 상한', 'number', hint='학생봇·멘토의 문맥 1–100턴. 분석에는 전체 대화를 사용합니다.') }}
+        <fieldset id="scenario-groups"><legend>배정 그룹</legend>{% for group in editor.available_groups|default([]) %}<label><input type="checkbox" name="groups" value="{{ group.id }}"> {{ group.name }}</label>{% endfor %}</fieldset>
+      </section>
+      <section id="step-1" data-panel="1" hidden><h2 tabindex="-1">2. 문제 상황</h2>
+        <p class="visibility-badge">교사에게 공개</p>
+        {{ text_field('problem.public_text', '공개 문제 상황', 'textarea') }}
+        {{ text_field('problem.learning_objective', '학습목표', 'textarea') }}
+      </section>
+      <section id="step-2" data-panel="2" hidden><h2 tabindex="-1">3. 학생봇</h2>
+        <p class="visibility-badge">교사에게 공개</p>
+        {{ text_field('student.name', '학생봇 이름', limit=50) }}
+        {{ text_field('student.public_profile', '공개 학생 소개 (선택)', 'textarea') }}
+        <p class="visibility-badge">내부 실행용 · 교사에게 비공개</p>
+        {{ text_field('student.internal_profile', '내부 학생 프로필 (선택)', 'textarea') }}
+        {{ text_field('student.misconception', '목표 오개념', 'textarea') }}
+        {{ text_field('student.behavior_instruction', '학생봇 행동 지시', 'textarea', hint='말투 · 참여도 · 반응 길이 · 되묻기 여부 · 오개념 변화 조건') }}
+        {{ model_field('student', '학생봇') }}
+      </section>
+      <section id="step-3" data-panel="3" hidden><h2 tabindex="-1">4. 멘토</h2>
+        <label for="mentor.mode">멘토 사용 모드</label>
+        <select id="mentor.mode" data-field="mentor.mode"><option value="off">off · 사용 안 함</option><option value="manual">manual · 도움 버튼</option><option value="auto">auto · 완료 턴 뒤 자동 검사</option></select>
+        <p id="mentor-mode-note"></p>
+        <div id="mentor-settings">
+          <p class="visibility-badge">교사에게 공개</p>
+          {{ text_field('mentor.name', '멘토 이름', limit=50) }}
+          {{ text_field('mentor.welcome_message', '멘토 환영문 (선택)', 'textarea', hint='정적 안내입니다. AI 호출이나 대화 턴이 아닙니다.') }}
+          <p class="visibility-badge">내부 실행용 · 교사에게 비공개</p>
+          {{ text_field('mentor.behavior_instruction', '멘토 행동 지시', 'textarea', hint='코칭 방식 · 말투 · 피드백 길이') }}
+          <div id="mentor-auto-settings">
+            {{ text_field('mentor.intervention_policy.condition', '자동 개입 조건', 'textarea') }}
+            {{ text_field('mentor.intervention_policy.start_turn', '검사 시작 완료 턴', 'number') }}
+            {{ text_field('mentor.intervention_policy.min_interval_turns', '검사 사이 최소 완료 턴', 'number') }}
+            {{ text_field('mentor.intervention_policy.window_turns', '집계할 최근 완료 턴', 'number') }}
+            {{ text_field('mentor.intervention_policy.max_interventions', '최근 완료 턴 내 최대 개입 수', 'number') }}
+            <p>미개입·승인된 실패 검사도 간격을 소비합니다. 자동 검사 후 코칭까지 최대 두 호출입니다. 자동 모드의 수동 도움도 최근 턴 상한을 공유합니다.</p>
+          </div>
+          {{ model_field('mentor', '멘토') }}
+        </div>
+      </section>
+      <section id="step-4" data-panel="4" hidden><h2 tabindex="-1">5. 사후 분석</h2>
+        <p class="visibility-badge">내부 평가용 · 교사에게 비공개</p>
+        {{ text_field('analysis.context', '분석 맥락', 'textarea') }}
+        {{ text_field('analysis.expected_understanding', '정답·기대 이해', 'textarea') }}
+        {{ text_field('analysis.instruction', '분석 지시·강조점', 'textarea') }}
+        <label><input id="analysis.classification_enabled" data-field="analysis.classification_enabled" type="checkbox"> 발화 분류 사용</label>
+        <div id="rubric-settings">
+          {{ text_field('analysis.rubric_name', '분류 기준 이름', limit=50000) }}
+          {{ text_field('analysis.rubric_description', '분류 기준 설명', 'textarea') }}
+          {{ text_field('analysis.category_name', '분류 표시명') }}
+          <p>게시할 때 1–20개 완성 행이 필요합니다. ID는 영문·숫자·밑줄·하이픈으로 구성하고 ID와 이름은 중복 없이 작성하세요.</p>
+          <div id="rubric-rows"></div>
+          <button type="button" id="add-rubric" class="btn btn-secondary">분류 기준 추가</button>
+          <p id="analysis.rubric-error" class="scenario-error" hidden></p>
+        </div>
+        <p>분류를 끄더라도 총평·강점·개선점·대안 질문은 유지합니다.</p>
+        {{ model_field('analysis', '사후 분석') }}
+      </section>
+      <div class="scenario-actions">
+        <button type="button" id="previous-step" class="btn btn-secondary">이전 단계</button>
+        <span id="step-position"></span>
+        <button type="button" id="next-step" class="btn btn-secondary">다음 단계</button>
+        <button type="button" id="save-draft" class="btn btn-secondary">초안으로 저장</button>
+        <button type="submit" id="publish-scenario" class="btn btn-primary" {% if editor.publication_available is sameas false %}disabled title="게시 기능 준비 중"{% endif %}>게시</button>
+      </div>
+    </form>
+    <aside class="scenario-preview">
+      <section id="public-preview" aria-label="교사 화면 미리보기">
+        <h2>교사 화면 미리보기</h2><p class="visibility-badge">교사에게 공개</p>
+        {% for key in editor.public_lesson_fields %}
+        {% if key == 'title' %}<h3 data-preview="{{ key }}"></h3>{% else %}<p data-preview="{{ key }}"></p>{% endif %}
+        {% endfor %}
+      </section>
+      <section aria-label="실행 설정 확인"><h2>실행 설정 확인</h2><p id="execution-summary"></p><p id="validation-summary">보완 항목 0개</p></section>
+    </aside>
+  </div>
+</div>
+<script id="scenario-editor-data" type="application/json">{{ editor|tojson }}</script>
+<script type="module" src="/static/js/scenario-editor.js"></script>
+{% endblock %}

@@ -1,5 +1,6 @@
 """Official SQLite install/upgrade entry point; historical SQL stays immutable."""
 
+import argparse
 import asyncio
 import sqlite3
 from pathlib import Path
@@ -53,10 +54,16 @@ async def _record(conn, filename):
     )
 
 
-async def run_migration(migration_file: Path):
+async def run_migration(
+    migration_file: Path, *, cutover_receipt=None, db_engine=None
+):
     """DDL and history commit together, with an explicit SQLite transaction."""
-    async with engine.connect() as conn:
-        rebuild_runs = migration_file.name == "028_generation_providers.sql"
+    async with (db_engine or engine).connect() as conn:
+        rebuild_runs = migration_file.name in (
+            "028_generation_providers.sql",
+            "029_scenario_config.sql",
+            "031_scenario_contract.sql",
+        )
         try:
             if rebuild_runs:
                 # Dropping a referenced table with FKs enabled would mutate children.
@@ -65,6 +72,12 @@ async def run_migration(migration_file: Path):
             await conn.exec_driver_sql("BEGIN IMMEDIATE")
             await _history(conn)
             if not await _applied(conn, migration_file.name):
+                if migration_file.name == "031_scenario_contract.sql":
+                    from src.db.s2_verification import verify_cleanup
+
+                    await conn.run_sync(
+                        lambda sync: verify_cleanup(sync, cutover_receipt)
+                    )
                 for statement in statements(migration_file.read_text()):
                     await conn.exec_driver_sql(statement)
                 if (
@@ -74,7 +87,7 @@ async def run_migration(migration_file: Path):
                     ).all()
                 ):
                     raise ValueError(
-                        "Foreign key violations during run rebuild"
+                        "Foreign key violations during table rebuild"
                     )
                 await _record(conn, migration_file.name)
             await conn.commit()
@@ -91,7 +104,7 @@ async def run_migration(migration_file: Path):
                 await conn.commit()
 
 
-async def _install_baseline():
+async def _install_baseline(*, db_engine=None):
     sql = (DIRECTORY / "baseline.sql").read_text()
     with sqlite3.connect(":memory:") as reference:
         reference.executescript(sql)
@@ -104,7 +117,7 @@ async def _install_baseline():
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-    async with engine.connect() as conn:
+    async with (db_engine or engine).connect() as conn:
         # Rebuild is required to align NULL, FK actions, CHECKs and indexes.
         # Disable FKs before BEGIN, then validate every reference before commit.
         await conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
@@ -191,15 +204,30 @@ async def _install_baseline():
             await conn.commit()
 
 
-async def run_all_migrations():
-    await _install_baseline()
+async def run_all_migrations(
+    *, through=None, cutover_receipt=None, db_engine=None
+):
+    await _install_baseline(db_engine=db_engine)
     # 001–022 are archived upgrade history, not fresh-install scripts.
     for path in sorted(DIRECTORY.glob("[0-9]*.sql")):
-        if int(path.name.split("_")[0]) > 23 and not path.name.endswith(
-            "_down.sql"
+        revision = int(path.name.split("_")[0])
+        if (
+            revision > 23
+            and (through is None or revision <= through)
+            and not path.name.endswith("_down.sql")
         ):
-            await run_migration(path)
+            await run_migration(
+                path, cutover_receipt=cutover_receipt, db_engine=db_engine
+            )
 
 
 if __name__ == "__main__":
-    asyncio.run(run_all_migrations())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--through", type=int, choices=range(23, 32))
+    parser.add_argument("--cutover-receipt", type=Path)
+    args = parser.parse_args()
+    asyncio.run(
+        run_all_migrations(
+            through=args.through, cutover_receipt=args.cutover_receipt
+        )
+    )

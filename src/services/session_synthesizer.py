@@ -13,6 +13,7 @@ import json
 import logging
 from typing import Any, Optional
 
+from src.api.schemas.scenario_config import AnalysisConfig
 from src.services.analysis_invocations import AnalysisCaller
 from src.services.invocation_types import InvocationError
 from src.services.role_output_contracts import RuntimeSynthesis
@@ -44,13 +45,14 @@ class SessionSynthesizer(AnalysisCaller):
 
     Usage::
 
-        synth = SessionSynthesizer(factory)
+        synth = SessionSynthesizer(factory, selection=analysis.resolved_model_config,
+                                   session_id=session_id, owner_id=teacher_id)
         payload, status = await synth.synthesize(
             messages=[...],
             question_analyses=[...],
             scenario="분수 덧셈 탐색",
             misconception="분모 통분 불가",
-            framework=framework,
+            analysis=analysis,
             student_profile="초등학교 5학년",
         )
     """
@@ -63,11 +65,11 @@ class SessionSynthesizer(AnalysisCaller):
     async def synthesize(
         self,
         messages: list[dict[str, Any]],
+        analysis: AnalysisConfig,
         question_analyses: Optional[list[dict]] = None,
         scenario: str = "",
         misconception: str = "",
         student_profile: str = "",
-        framework: Optional[Any] = None,
     ) -> tuple[dict[str, Any], str]:
         """Generate structured coaching feedback.
 
@@ -79,28 +81,36 @@ class SessionSynthesizer(AnalysisCaller):
             scenario: Scenario title.
             misconception: Target misconception text.
             student_profile: Student profile description.
-            framework: AnalysisFramework for labels.
+            analysis: Frozen evaluation settings and rubric.
 
         Returns:
             (payload, status) where status is "ok", "degraded",
             or "failed".
         """
         dialogue = self._format_dialogue(messages)
-        labels_section = self._format_labels(framework)
+        labels_section = self._format_labels(analysis)
         question_analyses_section = self._format_question_analyses(
             question_analyses
         )
 
         prompt = self._template.format(
-            framework_name=getattr(framework, "name", "Unknown"),
-            framework_labels_with_criteria=labels_section,
-            framework_labels=self._format_label_names(framework),
+            rubric_name=analysis.rubric_name,
+            rubric_labels_with_criteria=labels_section,
+            rubric_labels=self._format_label_names(analysis),
             question_analyses_section=question_analyses_section,
             scenario_title=scenario,
             misconception=misconception,
             student_profile=student_profile or "Not specified",
             dialogue_transcript=dialogue,
         )
+
+        prompt += (
+            f"\n평가 맥락\n{analysis.context}\n기대 이해\n{analysis.expected_understanding}"
+            f"\n평가 지시\n{analysis.instruction}\n분류 설명\n{analysis.rubric_description}"
+            f"\n분류 범주\n{analysis.category_name}"
+        )
+        if not analysis.classification_enabled:
+            prompt += "\n분류 미사용: 분류 결과 없이 전체 대화에서 총평, 강점, 개선점과 대안 질문을 작성하세요."
 
         status = None
 
@@ -114,7 +124,7 @@ class SessionSynthesizer(AnalysisCaller):
 
         try:
             payload, _ = await self.structured(
-                prompt, RuntimeSynthesis, "synthesis", 2500, normalize=normalize
+                prompt, RuntimeSynthesis, "synthesis", normalize=normalize
             )
         except InvocationError as e:
             logger.error("Synthesis invocation failed: %s", e.code)
@@ -127,7 +137,7 @@ class SessionSynthesizer(AnalysisCaller):
         role_map = {
             "teacher": "선생님",
             "student": "지수(학생)",
-            "tutor": "엔토(멘토)",
+            "tutor": "멘토",
         }
         lines = []
         for msg in messages:
@@ -137,21 +147,25 @@ class SessionSynthesizer(AnalysisCaller):
             )
         return "\n".join(lines)
 
-    def _format_labels(self, framework: Optional[Any]) -> str:
-        """Format framework labels with criteria."""
-        if framework is None:
-            return "No framework specified"
-        criteria_map = getattr(framework, "label_criteria_map", {})
+    def _format_labels(self, analysis: AnalysisConfig) -> str:
+        """Format rubric labels with criteria."""
+        criteria_map = (
+            {r.id: f"{r.name}: {r.criteria}" for r in analysis.rubric}
+            if analysis.classification_enabled
+            else {}
+        )
         return "\n".join(
             f"- **{name}**: {criteria}" if criteria else f"- **{name}**"
             for name, criteria in criteria_map.items()
         )
 
-    def _format_label_names(self, framework: Optional[Any]) -> str:
-        """Format framework label names as comma-separated list."""
-        if framework is None:
-            return "N/A"
-        names = getattr(framework, "label_names", [])
+    def _format_label_names(self, analysis: AnalysisConfig) -> str:
+        """Format rubric label names as comma-separated list."""
+        names = (
+            [r.id for r in analysis.rubric]
+            if analysis.classification_enabled
+            else []
+        )
         return ", ".join(names)
 
     def _format_question_analyses(

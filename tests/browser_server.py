@@ -15,17 +15,88 @@ os.environ.update(
     OPENAI_API_KEY="test",
 )
 from src.api.dependencies import templates  # noqa: E402
+from tests.s2_screen_fixtures import editor_fixture  # noqa: E402
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path)
         query = parse_qs(path.query)
-        if path.path in {"/chat", "/scenarios", "/admin/scenarios-page"}:
-            framework = SimpleNamespace(id=1, name="Framework")
-            student_template = SimpleNamespace(
-                id=1, template_name="Student template", version=1
+        if path.path == "/fixtures/s2/editor":
+            body = (
+                templates.get_template("admin/scenario_editor.html")
+                .render(
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    editor=editor_fixture(
+                        new="new" in query,
+                        published="published" in query,
+                        legacy=query.get("legacy", [""])[0],
+                    ),
+                )
+                .encode()
             )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/s2/analysis":
+            enabled = "off" not in query
+            body = (
+                templates.get_template("analysis.html")
+                .render(
+                    user=SimpleNamespace(nickname="Teacher", role="teacher"),
+                    session_id=1,
+                    feedback="Narrative feedback",
+                    feedback_status="ok",
+                    classification_enabled=enabled,
+                    label_names={"stable_1": "Frozen display name"},
+                    distribution={"stable_1": 1} if enabled else {},
+                    framework_label_criteria={},
+                    grade_counts={"우수": 1 if enabled else 0, "개선": 0},
+                    stats=dict(
+                        duration_seconds=60,
+                        teacher_question_count=1,
+                        student_response_count=1,
+                        tutor_intervention_count=0,
+                    ),
+                    messages=[
+                        dict(
+                            role="teacher",
+                            content="Why?",
+                            turn_index=1,
+                            level="high" if enabled else None,
+                        )
+                    ],
+                    questions=(
+                        [
+                            dict(
+                                content="Why?",
+                                label="stable_1",
+                                label_name="Frozen display name",
+                                grade="우수",
+                                reasoning=dict(summary="Classified reason"),
+                            )
+                        ]
+                        if enabled
+                        else []
+                    ),
+                    feedback_sections=dict(
+                        brief_feedback=["Narrative feedback"],
+                        strengths=[
+                            dict(quote="Why?", reason="Narrative strength")
+                        ],
+                        improvements=[
+                            dict(
+                                student_quote="Two thirds",
+                                missed_reason="Narrative improvement",
+                                alternative_question="What about halves?",
+                                alternative_reason="Compare parts",
+                            )
+                        ],
+                        dialogue_coaching=[],
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path in {"/chat", "/scenarios", "/admin/scenarios-page"}:
             scenario = SimpleNamespace(
                 id=1,
                 title="Browser regression",
@@ -36,15 +107,20 @@ class Handler(BaseHTTPRequestHandler):
                     " " if "missing_problem" in query else "Problem"
                 ),
                 greeting_message="Hello",
+                mentor_mode=(
+                    ("manual" if "mentor_manual" in query else "auto")
+                    if any(key.startswith("mentor") for key in query)
+                    else "off"
+                ),
+                mentor_name="멘토",
                 prompt="PRIVATE STUDENT PROMPT",
                 video_url="https://www.youtube.com/watch?v=legacy-secret",
                 video_transcript="PRIVATE LEGACY TRANSCRIPT",
                 is_active=1,
-                framework_id=1,
-                framework=framework,
-                student_template_id=1,
-                tutor_template_id=2 if "mentor" in query else None,
-                tutor_template=None,
+                status="draft",
+                config_version=1,
+                config_json={"problem": {"public_text": "Problem"}},
+                review_required=False,
             )
             template = {
                 "/chat": "chat.html",
@@ -66,6 +142,16 @@ class Handler(BaseHTTPRequestHandler):
                         (11, "student", "Stored student"),
                     ]
                 ]
+            if "mentor_coached" in query:
+                messages.append(
+                    SimpleNamespace(
+                        id=12,
+                        role="tutor",
+                        content="Stored coaching",
+                        created_at=None,
+                        turn_id="turn-1",
+                    )
+                )
             if "mentor_legacy" in query:
                 messages = [
                     SimpleNamespace(
@@ -99,9 +185,6 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                     messages=messages,
                     session_ended="ended" in query,
-                    frameworks=[framework],
-                    student_templates=[student_template],
-                    tutor_templates=[],
                     groups=[],
                     scenario_group_map={},
                     session_counts={1: 0},

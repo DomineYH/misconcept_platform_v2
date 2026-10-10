@@ -97,13 +97,37 @@ async def test_wal_backup_upgrade_readers_and_restore(
                     backup.backup(copy)
 
             monkeypatch.setattr(migrate, "engine", copy_engine)
-            await migrate.run_all_migrations()
-            await migrate.run_all_migrations()
+            await migrate.run_all_migrations(through=30)
+            await migrate.run_all_migrations(through=30)
             with sqlite3.connect(copy_path) as copy:
                 after = snapshot(copy)
                 for table, rows in before.items():
-                    if table not in {"message", "api_usage_log", "_migrations"}:
+                    if table not in {
+                        "scenario",
+                        "session",
+                        "message",
+                        "api_usage_log",
+                        "_migrations",
+                        "generation_run",
+                    }:
                         assert after[table] == rows
+                scenario_width = len(before["scenario"][0])
+                assert [
+                    row[:scenario_width] for row in after["scenario"]
+                ] == before["scenario"]
+                assert all(
+                    row[scenario_width:]
+                    == (None, "published", 1, 1, None, 0, "[]", None, None)
+                    for row in after["scenario"]
+                )
+                session_width = len(before["session"][0])
+                assert [
+                    row[:session_width] for row in after["session"]
+                ] == before["session"]
+                assert all(
+                    row[session_width:] == (None, None, None, None, None)
+                    for row in after["session"]
+                )
                 width = len(before["message"][0])
                 assert [row[:width] for row in after["message"]] == before[
                     "message"
@@ -111,9 +135,10 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 assert all(
                     row[6:] == (None, None, None) for row in after["message"]
                 )
-                assert after["generation_run"] == before.get(
-                    "generation_run", []
-                )
+                assert after["generation_run"] == [
+                    tuple(row) + (None,)
+                    for row in before.get("generation_run", [])
+                ]
                 usage_width = len(before["api_usage_log"][0])
                 assert [
                     row[:usage_width] for row in after["api_usage_log"]
@@ -122,7 +147,8 @@ async def test_wal_backup_upgrade_readers_and_restore(
                     all(value is None for value in row[usage_width:])
                     for row in after["api_usage_log"]
                 )
-                assert len(after["_migrations"]) == 6
+                assert len(after["_migrations"]) == 8
+                assert after["_migrations"][-1][1] == "030_mentor_policy.sql"
                 assert copy.execute(
                     "SELECT count(*) FROM _migrations "
                     "WHERE filename='025_provider_connection.sql'"
@@ -139,8 +165,8 @@ async def test_wal_backup_upgrade_readers_and_restore(
             async with copy_engine.connect() as conn:
                 upgraded_schema = await schema(conn)
             monkeypatch.setattr(migrate, "engine", fresh_engine)
-            await migrate.run_all_migrations()
-            await migrate.run_all_migrations()
+            await migrate.run_all_migrations(through=30)
+            await migrate.run_all_migrations(through=30)
             async with fresh_engine.connect() as conn:
                 assert await schema(conn) == upgraded_schema
 
@@ -154,7 +180,8 @@ async def test_wal_backup_upgrade_readers_and_restore(
             assert analysis.json()["feedback"] == "Preserved feedback"
             assert analysis.json()["distribution"] == {"A": 1}
             reused = await client.post("/sessions/1/analyze")
-            assert reused.json()["feedback_status"] == "ok"
+            assert reused.status_code == 409
+            assert reused.json()["detail"]["code"] == "legacy_read_only"
             updates = await client.get("/sessions/1/messages/updates")
             assert [
                 updates.text.index(f'data-message-id="{identity}"')
@@ -176,6 +203,12 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "label",
                 "confidence",
                 "feedback",
+                "classification_status",
+                "student_name",
+                "snapshot_origin",
+                "snapshot_created_at",
+                "source_scenario_version",
+                "config_hash_kind",
             ]
             assert [row[4] for row in rows[1:]] == [
                 "teacher",
@@ -184,7 +217,10 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "summary",
             ]
             assert rows[1][5:8] == ["'=Legacy question", "A", "0.90"]
-            assert rows[-1][-1] == "Preserved feedback"
+            assert rows[-1][8] == "Preserved feedback"
+            assert all(row[9] == "legacy" for row in rows[1:])
+            assert all(row[-4] == "legacy_unconverted" for row in rows[1:])
+            assert all(row[-1] == "unknown" for row in rows[1:])
             assert data.owner.username not in exported.text
             login(client, data.other)
             for path in (
@@ -243,6 +279,12 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "confidence",
                 "meta_json",
                 "feedback",
+                "classification_status",
+                "student_name",
+                "snapshot_origin",
+                "snapshot_created_at",
+                "source_scenario_version",
+                "config_hash_kind",
             ]
             assert [row["message_id"] for row in rows[:-1]] == [
                 "41",
@@ -250,6 +292,7 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "43",
             ]
             assert rows[0]["meta_json"] == '{"reasoning":"old"}'
+            assert all(row["classification_status"] == "legacy" for row in rows)
 
             await copy_engine.dispose()
             with sqlite3.connect(copy_path) as copy:

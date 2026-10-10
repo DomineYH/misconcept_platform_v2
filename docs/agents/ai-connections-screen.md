@@ -275,12 +275,15 @@ NULL은 알 수 없음, 0은 관측한 0이다. 누적 usage는 합산하지 않
 단가 연결까지 NULL이며 다른 모델 가격으로 대체하지 않는다. 과거 행은
 invocation_id=NULL인 채 기존 관측값을 유지한다. A4 화면은 양쪽을 표시한다.
 
-기존 수업 학생/멘토/분석 경로는 A12–A14까지 기존 설정을 사용한다.
+S2 수업 학생/멘토/분석 경로는 아래 A12/A13과 고정 analysis 설정을 사용한다.
 FastAPI/Google용 HTTPX와 OpenAI SDK용 HTTPX2 구분을 유지한다.
 이 단계는 운영 전환 승인이 아니다.
 
-A14의 실제 사후 분석은 정확한 기존 OpenAI 모델/옵션을 A12 resolver로
-조회하고 analysis 역할 검증을 확인한 뒤 공통 구조화 호출 경계를 사용한다.
+실제 사후 분석은 native snapshot의 analysis.resolved_model_config를
+`resolve_frozen_model`로 조회하고 현재 analysis 역할 검증을 확인한 뒤
+선택한 제공자의 공통 구조화 호출 경계를 사용한다. 모든 하위 호출은 같은
+저장 옵션을 사용하고 전체 교사–학생 대화를 평가한다. classification_enabled=false면
+인사/분류를 건너뛰고 종합 피드백만 실행하며 UI/CSV에 분류 미사용을 표시한다.
 실행용 `RuntimeClassification`/`RuntimeSynthesis` 계약은 선택·nullable 필드를
 포함한 기존 구조를 검증하며, 기존 분류 정규화와 종합 `_validate`가 공통
 경계의 원장 최종화 전에 최종 의미 검증 및 ok/degraded/failed를 결정한다.
@@ -358,15 +361,24 @@ invocation의 재시도 행은 invocation_id를 공유하고 attempt_no=1,2를 �
 남기고 새 호출을 만들지 않는다. 최종화 DB 장애로 남은 running은 다음 부팅에서
 interrupted/usage unknown으로 정리한다. 취소 직전 시작 트랜잭션도 짧게 정리한
 뒤 HTTP/슬롯을 닫는다. 재시작은 verifying/running을 정리할 뿐 재호출하지 않는다.
-기존 수업 경로의 실제 전환은 A12–A14이며 여기서는 모의 일반 호출로 여유를 검증한다.
+수업 경로도 같은 승인·원장 경계를 사용한다. 테스트는 모의 제공자 HTTP로 검증한다.
 
 ## A12 lesson execution contract
 
-`src/services/lesson_connections.resolve_lesson_model(db, model_id, role, options)`
-is the temporary S1 resolver for existing lesson settings. It selects only the
-exact registered OpenAI ID, checks enabled/current role verification and validates
-legacy per-call options. It never reads authoring defaults or environment keys.
-A13/A14 should reuse this resolver with their existing role IDs/options.
+`src/services/lesson_connections.resolve_frozen_model(db, selection, role)`
+checks the snapshot's exact model_config_id/provider_connection_id/provider/model_id
+against current registration, credential and role verification, and validates saved
+options against current capabilities. OpenAI, Anthropic and Google use this same
+boundary. Current model defaults never replace or invalidate valid saved options.
+Student, mentor and analysis all reuse it; environment model/key fallback is absent.
+
+Both lesson starts atomically freeze published v1 config, display context, source
+revision and canonical hash. Literal authored text is never evaluated as a template.
+Current ownership/groups, activation/deletion and role authorization gate execution;
+timeouts and capacity are live S1 policy at admission, outside the snapshot.
+Draft edits block new starts but preserve started lessons. Reconstructed legacy
+sessions are read-only and never execute. Final runtime requires schema 031;
+through=30 is only an offline preparation/test boundary. See `docs/s2-cutover.md`.
 
 Student admission occurs under the common execution lock before committing a new
 turn. The reserved `CallPermit` transfers to the response worker; the common
@@ -400,7 +412,7 @@ message/attempt references and execution uniqueness constraints.
 OpenAI `generate_structured`를 호출하고 서버 검증 이후에 원장을 최종화한다.
 성공 `CallEvent.structured`에는 검증된 객체만, `text`에는 빈 문자열이 들어간다.
 실패에는 객체나 부분 JSON을 반환하지 않는다. 공개 probe/state 응답과 원장은
-출력 본문을 저장·반환하지 않는다. 수업 호출 전환은 A13/A14 범위다.
+출력 본문을 저장·반환하지 않는다. 수업 호출은 아래 고정 역할 설정 계약을 따른다.
 
 `structured_output.strict_schema`는 Pydantic JSON Schema의 닫힌 object,
 primitive, array, $defs/$ref, enum/const, 중첩 anyOf를 strict text.format으로
@@ -513,16 +525,21 @@ write와 같아야 한다. 지역/등급/TTL/모델/필수 수치가 미확인�
 
 ## A13 mentor lesson execution contract
 
-Mentor coaching keeps `config.ANALYSIS_MODEL`, `TUTOR_REASONING` and
-`TUTOR_MAX_TOKENS`; semantic judgment keeps `config.DIALOGUE_ANALYSIS_MODEL`,
-200 output tokens and no added reasoning option. Both require exact registered
-OpenAI models with current mentor verification through `resolve_lesson_model`.
-Authoring defaults and environment provider keys never replace these selections.
+Mentor coaching and auto judgment both use the snapshot's exact
+mentor.resolved_model_config provider/model/options through `resolve_frozen_model`.
+off makes zero calls and hides welcome; manual makes one coaching call; auto
+checks the authored condition before optional coaching. Both auto subcalls share
+the first admission's overall deadline. No environment model, sensitivity or
+Jaccard fallback remains. Authoring defaults never replace saved selections.
 
-The existing local policy determines whether a provider call is needed. A local
-`no_intervention` result creates no invocation attempt or slot. Otherwise mentor
-reservation validates the potentially used models and reserves the first call
-under the shared execution lock before committing the run/question counter.
+The saved policy counts completed teacher–student pairs (default start 3,
+minimum interval 2, rolling window 10, maximum 3 committed coaching results).
+Admitted negative/failed auto checks consume interval; negative checks do not
+consume coaching count. Manual help bypasses auto start/interval/judgment and,
+in auto mode, shares its rolling cap. In-flight reservations prevent oversubscription.
+Request replay and per-turn deduplication return saved results without new calls.
+Mentor reservation validates the selected model and reserves the first call
+under the shared execution lock before committing the run.
 Configuration/capacity refusals return safe 503/429 guidance, with no run, attempt
 or counter change. The first permit transfers to the feedback worker; a subsequent
 coaching call obtains its own current admission. Both calls use `execute_call`
@@ -530,14 +547,11 @@ with real run/session/request IDs, zero retries and the mentor role deadline. Th
 final-only SSE, target turn, explicit retry, independent student progression and
 commit-before-completed behavior remain unchanged.
 
-`LessonInterventionJudgment` is the runtime compatibility structure: absent
-booleans default to false, absent reason to an empty string, and legacy nullable
-fields remain accepted. It uses the strict structured transport without applying
-A7's stronger pedagogical judgment validator. Existing local fallback decides
-the result after normalized provider/JSON failures; configuration, capacity,
-cancellation and total deadline failures stop execution. A7's
-`InterventionJudgment` probe contract and `s1-v1` version are unchanged; a valid
-probe judgment also satisfies the runtime structure.
+Auto uses the same strict `InterventionJudgment` shape as the S1 probe, interpreting
+its booleans as satisfaction of the authored condition. A negative result saves
+`no_intervention`; provider/JSON failures fail the check without heuristic coaching.
+Explicit manual help remains available after a negative/failed check. The S1 probe
+output contract and `s1-v1` version remain unchanged; single-call redesign is S3.
 
 Each actual judgment uses operation `mentor_judgment`; coaching uses `mentor`.
 Each has one invocation/attempt row, including failed/refused/cancelled/timed-out

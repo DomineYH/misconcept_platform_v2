@@ -37,8 +37,8 @@ async def test_024_preserves_legacy_and_matches_fresh(tmp_path, monkeypatch):
             "INSERT INTO message VALUES "
             "(17,1,'tutor','Old coaching','{\"legacy\":true}','2026-01-01')"
         )
-    await migrate.run_all_migrations()
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
+    await migrate.run_all_migrations(through=30)
     async with engine.connect() as conn:
         assert (
             await conn.exec_driver_sql(
@@ -69,7 +69,7 @@ async def test_024_preserves_legacy_and_matches_fresh(tmp_path, monkeypatch):
         ).all()
     fresh = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'new.db'}")
     monkeypatch.setattr(migrate, "engine", fresh)
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
     async with fresh.connect() as conn:
         assert (
             await conn.exec_driver_sql(
@@ -89,6 +89,8 @@ async def test_024_preserves_legacy_and_matches_fresh(tmp_path, monkeypatch):
             "026_model_settings.sql",
             "027_probe_attempts.sql",
             "028_generation_providers.sql",
+            "029_scenario_config.sql",
+            "030_mentor_policy.sql",
         ]
     await engine.dispose()
     await fresh.dispose()
@@ -100,7 +102,7 @@ async def test_024_constraints_indexes_and_owner_deletion(data, monkeypatch):
     from sqlalchemy.exc import IntegrityError
 
     monkeypatch.setattr(migrate, "engine", data.engine)
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
     insert = text(
         "INSERT INTO generation_run "
         "(id,owner_id,session_id,turn_id,operation,request_id,input_hash,"

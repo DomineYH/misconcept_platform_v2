@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.db import seed
 from src.db.connection import set_sqlite_pragma
 from src.db.migrations import migrate
-from src.models import AnalysisFramework, PromptTemplate, Scenario, User
+from src.models import Scenario, User
 
 
 @pytest.mark.parametrize("legacy", [False, True], ids=["fresh", "legacy"])
@@ -35,31 +35,41 @@ async def test_seed_installs_and_repeats_without_changing_data(
                 )
 
         await seed.seed_database()
-        await seed.seed_prompts()
         async with factory() as db:
             admin = (await db.scalars(select(User))).one()
-            framework = (await db.scalars(select(AnalysisFramework))).one()
             scenario = (await db.scalars(select(Scenario))).one()
-            templates = (await db.scalars(select(PromptTemplate))).all()
             assert admin.is_admin and admin.verify_password(
                 "seed-test-password"
             )
-            assert scenario.framework_id == framework.id
             assert scenario.created_by == admin.id
-            assert scenario.tutor_sensitivity == "medium"
-            assert {t.bot_type for t in templates} == {"student", "tutor"}
-            assert scenario.student_template_id == next(
-                t.id for t in templates if t.bot_type == "student"
+            assert scenario.status == "draft" and scenario.config_version == 1
+            assert not {
+                "framework_id",
+                "student_template_id",
+                "tutor_template_id",
+            } & set(Scenario.__table__.columns.keys())
+            assert (
+                scenario.config_json["problem"]["public_text"]
+                == "1/4 + 1/2은 얼마인가요?"
             )
-            assert all(t.created_at and t.updated_at for t in templates)
-            assert scenario.created_at and framework.created_at
+            assert scenario.config_json["student"]["name"] == "민수"
+            assert scenario.config_json["mentor"]["mode"] == "off"
+            assert (
+                scenario.config_json["student"]["resolved_model_config"] is None
+            )
+            assert scenario.created_at
+
+        async with engine.connect() as conn:
+            assert (
+                await conn.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE name IN ('analysis_framework','prompt_template')"
+                )
+            ).all() == []
 
         tables = [
             "user_group",
             "user",
-            "analysis_framework",
             "scenario",
-            "prompt_template",
         ]
         async with engine.connect() as conn:
             before = {
@@ -72,7 +82,6 @@ async def test_seed_installs_and_repeats_without_changing_data(
             seed.config, "ADMIN_DEFAULT_PASSWORD", "must-not-replace"
         )
         await seed.seed_database()
-        await seed.seed_prompts()
         async with engine.connect() as conn:
             for table in tables:
                 assert (

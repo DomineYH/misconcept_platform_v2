@@ -51,6 +51,7 @@ async def test_simultaneous_first_requests_make_one_provider_call(
             f"/sessions/{data.session.id}/messages/updates"
         )
         assert updates.text.count("data-message-id=") == 1
+        await asyncio.wait_for(student.stream.read_started.wait(), 5)
         assert student.responses.create.await_count == 1
     finally:
         gate.set()

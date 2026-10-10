@@ -6,25 +6,27 @@ For analysis endpoints, see session_analysis.py
 """
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, ConfigDict, StrictInt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_current_user, get_db_session
+from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_analysis import router as analysis_router
 from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
-    validate_public_problem,
-    validate_scenario_access,
 )
 
 # Import sub-routers to include all session routes
 from src.api.routes.session_messages import router as messages_router
 from src.api.routes.student_generation import router as student_router
 from src.config import config
-from src.models import Session, User
+from src.models import Message, User
+from src.services.lesson_snapshots import start_lesson
+from src.services.session_history import session_display
 
 router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
@@ -38,7 +40,8 @@ router.include_router(student_router)
 class CreateSessionRequest(BaseModel):
     """Request schema for creating session."""
 
-    scenario_id: int
+    model_config = ConfigDict(extra="forbid")
+    scenario_id: StrictInt
 
 
 class SessionResponse(BaseModel):
@@ -57,6 +60,33 @@ class CloseSessionResponse(BaseModel):
     already_ended: bool
 
 
+@router.get("/sessions/{session_id}", response_class=HTMLResponse)
+async def session_history(
+    request: Request,
+    session_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    session = await load_session(session_id, user, db)
+    messages = (
+        await db.scalars(
+            select(Message)
+            .where(Message.session_id == session_id)
+            .order_by(Message.created_at, Message.id)
+        )
+    ).all()
+    return templates.TemplateResponse(
+        "session_history.html",
+        dict(
+            request=request,
+            user=user,
+            session=session,
+            messages=messages,
+            **session_display(session),
+        ),
+    )
+
+
 @router.post("/sessions", status_code=201)
 @limiter.limit("10/minute")
 async def create_session(
@@ -66,12 +96,7 @@ async def create_session(
     db: AsyncSession = Depends(get_db_session),
 ) -> SessionResponse:
     """Start new dialogue session."""
-    scenario = await validate_scenario_access(data.scenario_id, user, db)
-    validate_public_problem(scenario)
-    session = Session(scenario_id=data.scenario_id, teacher_id=user.id)
-    db.add(session)
-    await db.flush()
-    await db.refresh(session)
+    session = await start_lesson(db, data.scenario_id, user)
 
     return SessionResponse(
         id=session.id,

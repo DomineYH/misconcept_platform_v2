@@ -62,9 +62,6 @@ class User(Base):
     scenarios: Mapped[list["Scenario"]] = relationship(  # noqa: F821
         "Scenario", back_populates="creator"
     )
-    prompt_updates: Mapped[list["PromptTemplate"]] = relationship(  # noqa: F821
-        "PromptTemplate", back_populates="updater"
-    )
     ui_events: Mapped[list["UiEvent"]] = relationship(  # noqa: F821
         "UiEvent",
         back_populates="user",

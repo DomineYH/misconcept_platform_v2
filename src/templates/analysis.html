@@ -6,8 +6,11 @@
 <div class="analysis-container">
     <div class="analysis-header">
         <h1>세션 분석 리포트</h1>
+        {% if scenario_title %}<p>{{ scenario_title }} · {{ student_name }}</p>{% endif %}
         <p>세션 종료 시간: {{ session_ended_at }}</p>
+        <a href="/sessions/{{ session_id }}">원래 대화 보기</a>
     </div>
+    {% include "partials/snapshot_provenance.html" %}
 
     {% set feedback_status = feedback_status | default('legacy') %}
 

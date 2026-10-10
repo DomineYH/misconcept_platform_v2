@@ -50,7 +50,6 @@ def test_gpt56_reasoning_loads_from_dotenv(tmp_path, monkeypatch):
         monkeypatch.delenv(field, raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "CHAT_MODEL=gpt-5.6\nANALYSIS_MODEL=gpt-5.6\n"
         "ANALYSIS_REASONING=max\nSTUDENT_REASONING=xhigh\n"
         "TUTOR_REASONING=xhigh\n"
     )

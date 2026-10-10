@@ -5,7 +5,6 @@ import logging
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Request,
     status,
 )
@@ -14,26 +13,30 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
-from src.api.schemas import (
-    AdminScenarioResponse,
-    ScenarioCreate,
-    ScenarioUpdate,
+from src.api.routes.scenario_input import ScenarioRoute
+from src.api.schemas.scenario_config import (
+    DraftCreate,
+    DraftSaved,
+    DraftUpdate,
+    RevisionInput,
+    ScenarioConfig,
 )
-from src.models.analysis_framework import AnalysisFramework
-from src.models.prompt_template import PromptTemplate
 from src.models.scenario import Scenario
 from src.models.scenario_group import ScenarioGroup
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
-from src.services.admin_scenario_ops import (
-    soft_delete_scenario_record,
-    update_scenario_record,
+from src.services.lesson_snapshots import PUBLIC_LESSON_FIELDS
+from src.services.scenario_drafts import (
+    delete_draft,
+    draft_view,
+    native_scenario,
+    save_scenario,
 )
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Admin Scenarios"])
+router = APIRouter(tags=["Admin Scenarios"], route_class=ScenarioRoute)
 
 
 @router.get("/admin/scenarios", response_class=HTMLResponse)
@@ -46,47 +49,23 @@ async def list_all_scenarios(
 
     query = (
         select(Scenario)
-        .join(AnalysisFramework)
         .where(Scenario.deleted_at.is_(None))
         .order_by(Scenario.id.desc())
     )
     result = await db.execute(query)
     scenarios = result.scalars().all()
 
-    # Load frameworks for dropdown
-    frameworks_query = select(AnalysisFramework).order_by(
-        AnalysisFramework.name
+    session_counts = dict(
+        (
+            await db.execute(
+                select(Session.scenario_id, func.count(Session.id)).group_by(
+                    Session.scenario_id
+                )
+            )
+        ).all()
     )
-    frameworks_result = await db.execute(frameworks_query)
-    frameworks = frameworks_result.scalars().all()
 
-    # Load prompt templates for dropdowns
-    student_templates_query = (
-        select(PromptTemplate)
-        .where(PromptTemplate.bot_type == "student")
-        .order_by(PromptTemplate.template_name)
-    )
-    student_templates_result = await db.execute(student_templates_query)
-    student_templates = student_templates_result.scalars().all()
-
-    tutor_templates_query = (
-        select(PromptTemplate)
-        .where(PromptTemplate.bot_type == "tutor")
-        .order_by(PromptTemplate.template_name)
-    )
-    tutor_templates_result = await db.execute(tutor_templates_query)
-    tutor_templates = tutor_templates_result.scalars().all()
-
-    # Get session counts for each scenario
-    session_counts = {}
-    for scenario in scenarios:
-        count_query = select(func.count(Session.id)).where(
-            Session.scenario_id == scenario.id
-        )
-        count = await db.scalar(count_query)
-        session_counts[scenario.id] = count or 0
-
-    # Load groups for assignment checkboxes
+    # Load group names for the list
     groups_result = await db.execute(select(UserGroup).order_by(UserGroup.name))
     groups = groups_result.scalars().all()
 
@@ -103,10 +82,7 @@ async def list_all_scenarios(
             "request": request,
             "user": user,
             "scenarios": scenarios,
-            "frameworks": frameworks,
             "session_counts": session_counts,
-            "student_templates": student_templates,
-            "tutor_templates": tutor_templates,
             "groups": groups,
             "scenario_group_map": scenario_group_map,
         },
@@ -115,103 +91,124 @@ async def list_all_scenarios(
 
 @router.post(
     "/admin/scenarios",
-    response_model=AdminScenarioResponse,
+    response_model=DraftSaved,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_scenario(
-    scenario_data: ScenarioCreate,
+    scenario_data: DraftCreate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """POST /admin/scenarios - Create new scenario (T078)."""
 
-    # Verify framework exists
-    framework = await db.get(AnalysisFramework, scenario_data.framework_id)
-    if not framework:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Framework not found",
-        )
-
-    # Verify student template exists and is correct type
-    student_template = await db.get(
-        PromptTemplate, scenario_data.student_template_id
-    )
-    if not student_template or student_template.bot_type != "student":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid student template",
-        )
-
-    # Verify tutor template if provided
-    if scenario_data.tutor_template_id is not None:
-        tutor_template = await db.get(
-            PromptTemplate, scenario_data.tutor_template_id
-        )
-        if not tutor_template or tutor_template.bot_type != "tutor":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid tutor template",
-            )
-
-    # Create scenario with bot configuration overrides
-    scenario = Scenario(
-        title=scenario_data.title,
-        prompt=scenario_data.prompt,
-        student_profile=scenario_data.student_profile,
-        framework_id=scenario_data.framework_id,
-        is_active=1 if scenario_data.is_active else 0,
-        student_name=scenario_data.student_name,
-        subject=scenario_data.subject,
-        # Phase 2: Bot configuration overrides
-        chat_model=scenario_data.chat_model,
-        chat_temperature=scenario_data.chat_temperature,
-        tutor_intervention_threshold=(
-            scenario_data.tutor_intervention_threshold
-        ),
-        tutor_sensitivity=scenario_data.tutor_sensitivity,
-        # Template selections
-        student_template_id=scenario_data.student_template_id,
-        tutor_template_id=scenario_data.tutor_template_id,
-        # Problem situation for preservice teachers
-        problem_situation=scenario_data.problem_situation,
-        # Greeting message for mentor introduction
-        greeting_message=scenario_data.greeting_message,
-    )
-
-    db.add(scenario)
-    await db.flush()
-
-    # Handle group assignments
-    if scenario_data.group_ids:
-        for gid in scenario_data.group_ids:
-            sg = ScenarioGroup(scenario_id=scenario.id, group_id=gid)
-            db.add(sg)
-
-    await db.flush()
-    await db.refresh(scenario)
-
-    return scenario
+    return await save_scenario(db, scenario_data, user.id)
 
 
 @router.post(
     "/admin/scenarios/{scenario_id}/update",
-    response_model=AdminScenarioResponse,
+    response_model=DraftSaved,
 )
 async def update_scenario(
     scenario_id: int,
-    scenario_data: ScenarioUpdate,
+    scenario_data: DraftUpdate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """POST /admin/scenarios/{id}/update - Update scenario (T079, T080)."""
 
-    return await update_scenario_record(db, scenario_id, scenario_data, logger)
+    return await save_scenario(db, scenario_data, user.id, scenario_id)
+
+
+@router.get("/admin/scenarios/new", response_class=HTMLResponse)
+async def new_scenario_editor(
+    request: Request,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    editor = dict(
+        id=None,
+        title="",
+        subject="",
+        target_grade="",
+        is_active=True,
+        groups=[],
+        config_schema_version=1,
+        config_version=1,
+        status="draft",
+        review_required=False,
+        review_reasons=[],
+        config=ScenarioConfig(
+            problem={}, student={}, mentor={}, analysis={}, runtime={}
+        ).model_dump(),
+    )
+    return await render_editor(request, user, db, editor)
+
+
+@router.get("/admin/scenarios/{scenario_id}")
+async def get_scenario_draft(
+    scenario_id: int,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await draft_view(db, await native_scenario(db, scenario_id))
+
+
+@router.get("/admin/scenarios/{scenario_id}/edit", response_class=HTMLResponse)
+async def edit_scenario_draft(
+    request: Request,
+    scenario_id: int,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await render_editor(
+        request,
+        user,
+        db,
+        await draft_view(db, await native_scenario(db, scenario_id)),
+    )
+
+
+async def render_editor(request, user, db, editor):
+    from src.models.provider_connection import ProviderConnection
+    from src.services.model_configuration import configuration_state
+    from src.services.model_verification import connection_ready
+
+    connections = {
+        c.provider: c
+        for c in (await db.scalars(select(ProviderConnection))).all()
+    }
+    state = await configuration_state(db, connections)
+    editor["model_choices"] = [
+        dict(
+            model,
+            provider_connection_id=connections[model["provider"]].id,
+            connection_available=connection_ready(
+                connections[model["provider"]]
+            ),
+        )
+        for model in state["models"]
+    ]
+    editor["role_defaults"] = (
+        state["settings"]["defaults"] if state["settings"] else {}
+    )
+    editor["available_groups"] = [
+        dict(id=g.id, name=g.name)
+        for g in (
+            await db.scalars(select(UserGroup).order_by(UserGroup.name))
+        ).all()
+    ]
+    editor["public_lesson_fields"] = PUBLIC_LESSON_FIELDS
+    editor["publication_available"] = True
+    return templates.TemplateResponse(
+        "admin/scenario_editor.html",
+        dict(request=request, user=user, editor=editor),
+    )
 
 
 @router.post("/admin/scenarios/{scenario_id}/delete")
 async def delete_scenario(
     scenario_id: int,
+    data: RevisionInput,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -220,4 +217,6 @@ async def delete_scenario(
     Policy: Soft delete all related sessions along with the scenario.
     """
 
-    return await soft_delete_scenario_record(db, scenario_id, user.id, logger)
+    return await delete_draft(
+        db, scenario_id, data.expected_version, user.id, logger
+    )

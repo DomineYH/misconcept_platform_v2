@@ -113,7 +113,134 @@ Browser setup (Node 24): `npm ci` and `npx playwright install --with-deps chromi
 Browser checks: `npm run test:browser` (optional filename filters: `npm run test:browser -- student_stream`).
 Live streaming check (localhost, no paid calls): `uv run --frozen python tests/check_student_live.py`.
 
+S2-02 draft authoring (#59): open `/admin/scenarios/new` as an administrator.
+The existing create/update URLs store typed v1 drafts, and `/admin/scenarios/{id}`
+returns the saved administrator envelope; `/admin/scenarios/{id}/edit` reopens it.
+Drafts preserve hidden mentor/rubric values and unavailable model selections;
+updates and deletions require `expected_version`. Drafts cannot start lessons.
+`npm run test:browser -- s2_draft_live` rehearses the real form, login, CSRF,
+save and reopen against migrated temporary SQLite, with external sockets blocked.
+S2-03 publication (#60) uses the same form and save URLs with `action=publish`.
+Active roles require current S1 authorization and supported saved options;
+publication never probes a model or merges its current defaults. Converted
+drafts keep server-managed review reasons: repair blocking fields, save the
+draft, then acknowledge the remaining warnings for that exact revision.
+Failed publication and stale writes preserve the stored revision and browser
+input. Every successful edit, activation, group change or deletion advances the
+revision once. Migration 029 preserves legacy rows and adds snapshot storage
+only. S2-05 (#62) connects both lesson-start paths to current publication,
+assignment and role-model checks, atomically storing a native configuration
+snapshot and canonical hash. Reopening a lesson preserves its public problem,
+student introduction and title; current activation and assignment still apply.
+Missing/corrupt native snapshots fail closed. Unconverted scenarios cannot start
+new lessons. S2-06 (#63) executes student streaming, nonstreaming and explicit
+failed-turn retries from that snapshot's literal student instructions, exact
+provider/model/options and completed-turn context limit. Runs use the session's
+configuration hash. Current access and S1 role authorization still gate calls;
+model defaults never replace saved options. S2-07 (#64) executes mentor help from
+the same snapshot: off blocks requests and welcome, manual sends one coaching
+call, and auto checks the authored condition before optional coaching. Both auto
+subcalls share the saved provider/model/options and the first overall deadline.
+Automatic admission uses completed-pair start/interval positions and a rolling
+coaching cap; negative checks and failures remain replayable without preventing
+explicit manual help. Migration 030 adjusts run uniqueness and records explicit
+manual/auto triggers. The teacher help button and automatic events follow snapshot
+mode; slow or failed coaching leaves the next student turn available.
+S2-08 (#65) also executes native
+post-session analysis from frozen evaluation text and rubric IDs using the same
+saved provider/model/options for every subcall and the full teacher–student
+dialogue. Classification off skips greeting/classification and keeps narrative
+feedback; reports and CSV explicitly show its disabled state. CSV appends a
+`classification_status` column and maps native IDs to frozen display names.
+This is not a production cutover.
+
+S2-09 (#66) extends the same explicit-copy conversion command below to store
+`legacy_reconstructed` session candidates, reconstruction time, a null source
+revision and unknown historical fields. These candidates and their hashes do
+not prove the model, instructions or rubric used at the original start time.
+Original dialogue, results, usage and timestamps remain unchanged. Legacy and
+unconverted sessions are read-only: resume, new messages, mentor requests,
+ending and analysis writes return `409 legacy_read_only`. Start a separate
+native session from a published scenario for new practice. Owners can read
+`/sessions/{id}`, existing reports and CSV; administrators use the session
+detail/results screens. History and CSV use frozen native or explicitly
+reconstructed display data, with no current-framework lookup. CSV appends the
+public student name and provenance columns; it never exports internal criteria
+or raw configuration. Unconverted display metadata remains unknown until the
+explicit conversion. The browser rehearsal includes mixed native/legacy
+history on desktop and mobile.
+
+S2-10 (#67) administration uses only `/admin/scenarios/new` and the unified editor.
+Template/framework management routes and legacy scenario writes are retired;
+retired video and template fields are rejected by the native API. The seed installs
+a template-free draft with public problem text. Select verified student and
+analysis models in the editor before publishing; no model is selected implicitly.
+The scenario list shows publication/activation/review state and grouped session
+counts. AI connection impact includes saved scenario roles and distinguishes
+mentor off and drafts/inactive scenarios from new-lesson execution references.
+Legacy tables/columns remain private conversion inputs until the verified S2
+cutover; they do not supply runtime settings or public video resources.
+
+S2-04 legacy review (#61) runs only on an explicitly selected consistent DB copy
+with migration 029 already applied. Capture actual deployment inputs in a private
+JSON file; `tests/fixtures/s2_legacy_effective.json` documents its shape with
+synthetic values, not deployment defaults. Supply the old effective BASE text,
+student options (the scenario's exact chat_model override still applies), mentor
+coaching/judgment and analysis synthesis/greeting/classification model/options,
+threshold N and context turn limit. Unknown inputs are explicit nulls; no keys,
+passwords or master keys are accepted. No environment model defaults are read.
+
+```sh
+uv run --frozen python -m src.db.convert_scenarios \
+  --database-copy /private/s2-copy.sqlite3 --settings /private/effective.json \
+  --archive /private/s2-source.json --manifest /private/s2-manifest.json
+```
+
+The default is a deterministic dry run. It creates private (0600) source and
+manifest files without writing the DB; existing files must match. Keep the same
+artifacts and append `--apply` to convert the selected copy to review drafts.
+Each row reports converted/skipped/conflict; conflicts cause a nonzero exit and
+never overwrite native edits. Original IDs, groups, activation, deletion and
+historical sessions/results stay intact. Video originals exist only in the
+private archive, never in conversion provenance or the form. Oversized or
+damaged sources remain archived with blocking reasons and bounded drafts.
+The administrator editor shows source/target evidence, archive references and
+hashes. Repair blocking fields, save, acknowledge the new revision's warnings,
+then publish. The live browser rehearsal includes this actual conversion flow.
+This command does not back up the operating DB, perform an operating cutover
+or call a paid provider. Its reconstructed session candidates cannot establish
+the settings used at the original lesson start.
+
+S2-01 screen fixtures (#58): `npm run test:browser -- s2_` exercises the five-step
+editor, public preview, model options, synthetic save errors/conflicts, conversion
+review. To inspect the screens, run
+`uv run --frozen python tests/browser_server.py` and open
+`http://127.0.0.1:8765/fixtures/s2/editor` (also `?new=1`, `?published=1`,
+`?legacy=blocked` or `?legacy=review`).
+The isolated server never writes a database or calls a provider; save
+responses are intercepted only by browser tests. These fixture routes and query
+switches do not exist in the application. Production uses the native routes
+described above.
+
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it
 contains the original product code, without credentials, databases or caches.
 See [refactoring checks](docs/refactoring.md) for subsequent verification.
+
+S2-11 (#68) preparation: see [the S2 cutover runbook](docs/s2-cutover.md).
+`python -m src.db.s2_cutover --source-copy COPY --workspace PRIVATE_DIR
+--settings EFFECTIVE_JSON` defaults to dry-run; `--apply` converts, verifies,
+restores and contracts only the rehearsal copy. Populated installations require
+validated preservation evidence before final migration 031. Existing 030 mentor
+policy SQL stays unchanged. No operating deployment is performed by this tool.
+
+S2-12 (#69) offline integration: `uv run --frozen python -m pytest -q
+tests/test_s2_integration.py` exercises final-schema fresh seed and verified
+legacy-copy conversion/restore, real login/CSRF, draft repair/review/publication,
+both lesson starts, frozen student/mentor/analysis execution and CSV with all
+three pinned SDKs over mocked HTTP. It includes concurrent version conflicts,
+durable replay, failed reanalysis preservation and private-role separation.
+Run the full pytest, lint/format, browser and localhost streaming checks above
+before integration review. Mock success verifies the execution contract;
+real model educational quality, provider latency and operating deployment
+remain separate work.

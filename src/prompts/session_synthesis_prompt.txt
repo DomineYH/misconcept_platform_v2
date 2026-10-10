@@ -10,12 +10,12 @@ confusing perimeter with area, treating inequality signs as equals).
 Your feedback should help the teacher recognize both what they did well
 and specific, actionable ways to improve their questioning strategy.
 
-## Framework: {framework_name}
+## Framework: {rubric_name}
 
 Labels and their meanings:
-{framework_labels_with_criteria}
+{rubric_labels_with_criteria}
 
-Allowed Labels: {framework_labels}
+Allowed Labels: {rubric_labels}
 
 ## Per-Question Analysis Results
 

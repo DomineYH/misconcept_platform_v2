@@ -7,6 +7,7 @@
 
 <!-- Modal Body -->
 <div class="modal-body">
+    {% include "partials/snapshot_provenance.html" %}
     {% set feedback_status = feedback_status | default('legacy') %}
 
     {# ── Wedge: feedback hero + stat grid + toggle ── #}

@@ -4,41 +4,45 @@ import asyncio
 from contextlib import aclosing
 from uuid import uuid4
 
-from src.config import config
 from src.services.call_admission import admit_call
 from src.services.call_execution import execute_call
 from src.services.invocation_types import InvocationError, StructuredRequest
-from src.services.lesson_connections import resolve_lesson_model
+from src.services.lesson_connections import resolve_frozen_model
 
 
 class AnalysisCaller:
     def __init__(
-        self, factory, *, session_id=None, owner_id=None, request_id=None
+        self,
+        factory,
+        *,
+        selection,
+        session_id,
+        owner_id,
+        actor_id=None,
+        request_id=None,
     ):
         self.factory = factory
         self.session_id = session_id
         self.owner_id = owner_id
         self.request_id = request_id or str(uuid4())
-        self.model = config.ANALYSIS_MODEL or "gpt-5"
-        self.reasoning_effort = config.ANALYSIS_REASONING
+        self.selection = selection
+        self.model = selection.model_id
+        self.actor_id = actor_id or owner_id
 
-    async def structured(
-        self, prompt, schema, operation, max_tokens, *, normalize=None
-    ):
+    async def structured(self, prompt, schema, operation, *, normalize=None):
         # Each parallel call gets its own short-lived DB session.
         async with self.factory() as db:
-            connection, model, options = await resolve_lesson_model(
-                db,
-                self.model,
-                "analysis",
-                {
-                    "max_output_tokens": max_tokens,
-                    "reasoning": {"effort": self.reasoning_effort},
-                },
+            connection, model, options = await resolve_frozen_model(
+                db, self.selection, "analysis"
             )
-        validation = {"normalize": normalize} if normalize else {}
+            from src.services.analysis_pipeline import load_analysis_lesson
+
+            await load_analysis_lesson(db, self.session_id, self.actor_id)
+        validation = {"actor_id": self.actor_id}
+        if normalize:
+            validation["normalize"] = normalize
         request = StructuredRequest(
-            "openai",
+            connection.provider,
             self.model,
             "analysis",
             "",
@@ -58,6 +62,7 @@ class AnalysisCaller:
             expected_connection_version=connection.connection_version,
             model_config_id=model.id,
             expected_model_version=model.config_version,
+            model_options=options,
         )
         async with aclosing(
             execute_call(

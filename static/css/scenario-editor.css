@@ -1,0 +1,27 @@
+.scenario-editor { max-width: 1250px; padding-bottom: 2rem; }
+.scenario-editor [hidden], .lesson-controls [hidden] { display: none !important; }
+.scenario-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.5rem; align-items: start; }
+.scenario-steps { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .4rem; }
+.scenario-steps button { flex: 1 1 130px; padding: .7rem; cursor: pointer; border: 1px solid var(--color-border-medium); border-radius: 6px; background: var(--color-bg-surface); color: var(--color-text-primary); }
+.scenario-steps [aria-current="step"] { border-color: var(--color-primary); font-weight: bold; box-shadow: inset 0 -3px var(--color-primary); }
+.scenario-editor form, .scenario-editor section, .scenario-editor fieldset { min-width: 0; }
+.scenario-editor form > section { padding: 1rem; border: 1px solid var(--color-border-medium); border-radius: 8px; }
+.scenario-editor label { display: block; margin-bottom: .3rem; }
+.scenario-editor input:not([type="checkbox"]), .scenario-editor textarea, .scenario-editor select { width: 100%; padding: .6rem; font: inherit; border: 1px solid var(--color-border-medium); border-radius: 4px; background: var(--color-bg-surface); }
+.scenario-editor textarea { resize: vertical; }
+.scenario-editor fieldset { padding: 1rem; margin: 1rem 0; }
+.scenario-editor small { color: var(--color-text-secondary); }
+.scenario-preview { position: sticky; top: 76px; padding: 1rem; border: 1px solid var(--color-border-medium); border-radius: 8px; background: var(--color-bg-secondary); }
+.scenario-preview p, .scenario-review pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.scenario-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; margin-top: 1rem; }
+.visibility-badge { display: inline-block; padding: .2rem .5rem; border: 1px solid var(--color-border-medium); border-radius: 5px; font-size: .85rem; }
+.scenario-error { color: var(--color-error, #b42318); }
+.scenario-error-summary, #editor-conflict { padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--color-error, #b42318); }
+.scenario-error-summary button { background: transparent; border: 0; font: inherit; text-align: left; color: var(--color-error, #b42318); text-decoration: underline; cursor: pointer; padding: .3rem; }
+.scenario-editor [aria-invalid="true"] { border: 2px solid var(--color-error, #b42318) !important; }
+.scenario-editor :focus-visible, .lesson-controls :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+@media (max-width: 800px) {
+  .scenario-layout { display: block; }
+  .scenario-steps { margin-bottom: 1rem; }
+  .scenario-preview { position: static; margin-top: 1rem; }
+}

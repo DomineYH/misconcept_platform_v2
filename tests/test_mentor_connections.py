@@ -43,14 +43,16 @@ async def test_coaching_uses_db_key_exact_options_and_one_linked_attempt(
             ).one()
             assert attempt.status == "running" and attempt.run_id
         assert body["model"] == "gpt-5.2"
-        assert body["reasoning"] == {"effort": "low"}
+        assert body["reasoning"] == {"effort": "medium"}
         assert body["max_output_tokens"] == 1500
-        assert body["instructions"].startswith("Coach Test:")
+        assert (
+            'Coach {literal} {{braces}} {"json":true}' in body["instructions"]
+        )
         assert len(body["input"]) == 1 and body["input"][0]["role"] == "user"
         return SimpleNamespace(output_text="DB mentor coaching", usage=None)
 
     mentor.responses.create.side_effect = upstream
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "manual"}
     response = await client.post(mentor_url(data, turn), json=payload)
     result = frames(response)[-1][1]
     assert result["message"]["content"] == "DB mentor coaching"
@@ -74,16 +76,13 @@ async def test_coaching_uses_db_key_exact_options_and_one_linked_attempt(
         assert attempt.attempt_no == 1 and attempt.input_tokens is None
 
 
-async def test_judgment_uses_its_exact_model_and_records_a_separate_attempt(
+async def test_judgment_and_coaching_share_frozen_model_and_options(
     data, client, mentor, monkeypatch
 ):
-    data.scenario.tutor_sensitivity = "high"
-    mentor.model.verification_state = {
-        **mentor.model.verification_state,
-        "mentor": mentor.mentor_model.verification_state["mentor"],
-    }
-    await data.db.commit()
-    monkeypatch.setattr(config, "DIALOGUE_ANALYSIS_MODEL", "gpt-5-mini")
+    from lesson_fixtures import configure_mentor
+
+    await configure_mentor(data, mentor, "auto", start_turn=1)
+    monkeypatch.setenv("DIALOGUE_ANALYSIS_MODEL", "unregistered-hidden-model")
     login(client, data.owner)
     await complete_turn(client, data, "Explain how you solved the problem")
     mentor.stream.events[-1].response.output_text = "Entirely distinct solution"
@@ -93,21 +92,21 @@ async def test_judgment_uses_its_exact_model_and_records_a_separate_attempt(
     async def upstream(**body):
         calls.append(body)
         if len(calls) == 1:
-            assert body["model"] == "gpt-5-mini"
-            assert body["max_output_tokens"] == 200
-            assert "reasoning" not in body
+            assert body["model"] == "gpt-5.2"
+            assert body["max_output_tokens"] == 1500
+            assert body["reasoning"] == {"effort": "medium"}
             assert body["text"]["format"]["type"] == "json_schema"
             assert body["text"]["format"]["strict"] is True
-            # Runtime keeps the legacy defaults for omitted judgment fields.
             return SimpleNamespace(
-                output_text='{"is_repetitive": true}', usage=None
+                output_text='{"is_repetitive":true,"is_inappropriate":false,"reason":"Author condition"}',
+                usage=None,
             )
         assert body["model"] == "gpt-5.2"
-        assert "반복적인 대화 패턴 감지" in body["input"][0]["content"]
+        assert "Author condition" in body["input"][0]["content"]
         return SimpleNamespace(output_text="Judgment coaching", usage=None)
 
     mentor.responses.create.side_effect = upstream
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "auto"}
     response = await client.post(mentor_url(data, turn), json=payload)
     result = frames(response)[-1][1]
     assert result["message"]["content"] == "Judgment coaching"
@@ -121,7 +120,7 @@ async def test_judgment_uses_its_exact_model_and_records_a_separate_attempt(
             )
         ).all()
         assert [a.operation for a in attempts] == ["mentor_judgment", "mentor"]
-        assert [a.model for a in attempts] == ["gpt-5-mini", "gpt-5.2"]
+        assert [a.model for a in attempts] == ["gpt-5.2", "gpt-5.2"]
         assert all(
             a.status == "completed" and a.attempt_no == 1 for a in attempts
         )
@@ -140,7 +139,7 @@ async def test_judgment_uses_its_exact_model_and_records_a_separate_attempt(
         "stale",
         "model_missing",
         "invalid_options",
-        "template_invalid",
+        "snapshot_invalid",
     ],
 )
 async def test_unavailable_configuration_blocks_mentor_before_acceptance(
@@ -168,30 +167,30 @@ async def test_unavailable_configuration_blocks_mentor_before_acceptance(
             }
         }
     elif mode == "model_missing":
-        from src.models import AppSetting
-
-        setting = await data.db.get(AppSetting, 1)
-        setting.mentor_model_config_id = mentor.mentor_model.id
-        monkeypatch.setattr(
-            config, "ANALYSIS_MODEL", "unregistered-exact-model"
-        )
+        mentor.mentor_model.model_id = "unregistered-exact-model"
     elif mode == "invalid_options":
-        monkeypatch.setattr(config, "TUTOR_REASONING", "unsupported-effort")
-    else:
-        from src.models.prompt_template import PromptTemplate
+        from copy import deepcopy
 
-        template = await data.db.get(
-            PromptTemplate, data.scenario.tutor_template_id
-        )
-        template.template_text = "{PRIVATE_MALFORMED_TEMPLATE}"
+        from src.services.lesson_snapshots import canonical_hash
+
+        envelope = deepcopy(data.session.config_snapshot_json)
+        envelope["config"]["mentor"]["resolved_model_config"]["options"][
+            "reasoning"
+        ]["effort"] = "minimal"
+        data.session.config_snapshot_json = envelope
+        data.session.config_hash = canonical_hash(envelope)
+    else:
+        data.session.config_hash = "0" * 64
     await data.db.commit()
     mentor.responses.create.reset_mock()
     response = await client.post(
-        mentor_url(data, turn), json={"request_id": str(uuid4())}
+        mentor_url(data, turn),
+        json={"request_id": str(uuid4()), "trigger": "manual"},
     )
-    assert response.status_code == 503
+    assert response.status_code == (400 if mode == "snapshot_invalid" else 503)
     assert response.json()["detail"]["code"] == "configuration_unavailable"
-    assert "관리자" in response.json()["detail"]["message"]
+    if mode != "snapshot_invalid":
+        assert "관리자" in response.json()["detail"]["message"]
     assert LESSON_KEY not in response.text + caplog.text
     assert "PRIVATE_MALFORMED_TEMPLATE" not in response.text + caplog.text
     mentor.responses.create.assert_not_awaited()
@@ -260,7 +259,7 @@ async def test_coaching_failures_record_one_attempt_without_promoting_output(
     clients, calls = sdk_transport(
         monkeypatch, upstream, budget=1500, key=LESSON_KEY, model="gpt-5.2"
     )
-    payload = {"request_id": str(uuid4())}
+    payload = {"request_id": str(uuid4()), "trigger": "manual"}
     response = await client.post(mentor_url(data, turn), json=payload)
     assert frames(response)[-1][0] == "run.failed"
     assert frames(response)[-1][1]["code"] == code

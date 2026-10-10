@@ -20,10 +20,10 @@ from src.api.routes.admin_sessions import (
     safe_int,
 )
 from src.models.message import Message
-from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.user import User
 from src.services.export import CSVExporter
+from src.services.session_history import session_display
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -228,14 +228,8 @@ async def list_user_sessions(
 
     query = (
         select(
-            Session.id,
-            Session.started_at,
-            Scenario.title.label("scenario_title"),
+            Session,
             func.count(Message.id).label("message_count"),
-        )
-        .join(
-            Scenario,
-            Session.scenario_id == Scenario.id,
         )
         .outerjoin(
             Message,
@@ -246,7 +240,7 @@ async def list_user_sessions(
             Session.deleted_at.is_(None),
             Session.ended_at.isnot(None),
         )
-        .group_by(Session.id, Scenario.title)
+        .group_by(Session.id)
         .order_by(desc(Session.started_at))
     )
     result = await db.execute(query)
@@ -254,12 +248,12 @@ async def list_user_sessions(
 
     return [
         {
-            "id": row.id,
-            "started_at": row.started_at.strftime("%Y-%m-%d %H:%M"),
-            "scenario_title": row.scenario_title,
-            "message_count": row.message_count,
+            "id": session.id,
+            "started_at": session.started_at.strftime("%Y-%m-%d %H:%M"),
+            **session_display(session),
+            "message_count": message_count,
         }
-        for row in rows
+        for session, message_count in rows
     ]
 
 

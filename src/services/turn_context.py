@@ -7,7 +7,9 @@ from src.config import config
 from src.models import Message
 
 
-async def load_completed_turns(db, session_id, *, before_turn_index=None):
+async def load_completed_turns(
+    db, session_id, *, before_turn_index=None, limit=None
+):
     """Return the last N completed pairs, in teacher–student turn order."""
     students = select(
         Message.turn_id, Message.turn_index, Message.content
@@ -21,7 +23,7 @@ async def load_completed_turns(db, session_id, *, before_turn_index=None):
         students = students.where(Message.turn_index < before_turn_index)
     recent = (
         students.order_by(Message.turn_index.desc())
-        .limit(config.CONTEXT_WINDOW_TURNS)
+        .limit(config.CONTEXT_WINDOW_TURNS if limit is None else limit)
         .subquery()
     )
     rows = await db.execute(
@@ -41,7 +43,7 @@ async def load_completed_turns(db, session_id, *, before_turn_index=None):
     ]
 
 
-async def load_mentor_context(db, session_id, turn_id):
+async def load_mentor_context(db, session_id, turn_id, *, limit=None):
     """Return N preceding completed pairs plus the completed target pair.
 
     Pass the last pair as current teacher/student and the rest as history to
@@ -66,7 +68,7 @@ async def load_mentor_context(db, session_id, turn_id):
         )
     ).one()
     history = await load_completed_turns(
-        db, session_id, before_turn_index=turn_index
+        db, session_id, before_turn_index=turn_index, limit=limit
     )
     return history + [
         {"role": "teacher", "content": teacher},

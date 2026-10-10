@@ -1,5 +1,6 @@
 """Authenticated student generation and persisted run lookup."""
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -20,7 +21,7 @@ from src.services.student_stream import StudentStreamingResponse
 router = APIRouter(tags=["Sessions"])
 
 
-class MentorRequest(BaseModel):
+class GenerationRequest(BaseModel):
     request_id: str
 
     @field_validator("request_id")
@@ -31,7 +32,11 @@ class MentorRequest(BaseModel):
         return value
 
 
-class StudentRequest(MentorRequest):
+class MentorRequest(GenerationRequest):
+    trigger: Literal["manual", "auto"]
+
+
+class StudentRequest(GenerationRequest):
     content: str = Field(min_length=1, max_length=5000)
     turn_id: str | None = None
 
@@ -56,7 +61,7 @@ async def mentor_turn(
     )
     await db.close()
     accepted, execution = await reserve_mentor(
-        factory, session_id, str(turn_id), user, body.request_id
+        factory, session_id, str(turn_id), user, body.request_id, body.trigger
     )
     if execution is None:
         return JSONResponse(accepted)

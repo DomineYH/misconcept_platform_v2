@@ -23,7 +23,7 @@ def settings_values(setting):
         ) from None
 
 
-def connection_impact(provider, models, settings):
+def connection_impact(provider, models, settings, scenarios):
     registered = [m for m in models if m["provider"] == provider]
     impact = [
         f"등록 모델: {m['display_name']} ({m['model_id']})" for m in registered
@@ -35,6 +35,31 @@ def connection_impact(provider, models, settings):
                 impact.append(
                     f"{role} 작성 기본 모델: {by_id[default['model_config_id']]['display_name']}"
                 )
+    for scenario in scenarios:
+        config = scenario.config_json
+        if not config:
+            continue
+        state = "게시" if scenario.status == "published" else "초안"
+        state += " · 활성" if scenario.is_active else " · 비활성"
+        for role in ROLES:
+            role_config = config[role]
+            selection = role_config["resolved_model_config"]
+            if not selection or selection["provider"] != provider:
+                continue
+            disabled = role == "mentor" and role_config["mode"] == "off"
+            execution = (
+                "멘토 off · 실행 제외"
+                if disabled
+                else (
+                    "새 수업 실행 참조"
+                    if scenario.status == "published" and scenario.is_active
+                    else "새 수업 실행 제외"
+                )
+            )
+            impact.append(
+                f"시나리오 #{scenario.id} {scenario.title} · {role} "
+                f"({selection['model_id']}) · {state} · {execution}"
+            )
     return impact
 
 

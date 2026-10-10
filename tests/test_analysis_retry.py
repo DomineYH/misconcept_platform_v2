@@ -1,11 +1,18 @@
 from unittest.mock import AsyncMock
 
+import pytest
+from analysis_fixtures import install_analysis_snapshot
 from sqlalchemy import select
 from test_regressions import request
 
 from src.api.routes import session_analysis as routes
 from src.models import SessionFeedbackReport, SessionSummary
 from src.services import analysis_pipeline as pipeline
+
+
+@pytest.fixture(autouse=True)
+async def native_configuration(data, monkeypatch):
+    await install_analysis_snapshot(data, monkeypatch)
 
 
 async def test_failed_analysis_retries_then_reuses_success(data, monkeypatch):
@@ -92,10 +99,8 @@ async def test_concurrent_retries_and_late_fallback_keep_success(
     import asyncio
 
     from src.models import (
-        AnalysisFramework,
         Message,
         QuestionAnalysis,
-        Scenario,
         Session,
     )
 
@@ -128,11 +133,7 @@ async def test_concurrent_retries_and_late_fallback_keep_success(
     async def retry():
         async with data.factory() as db:
             session = await db.get(Session, sid)
-            scenario = await db.get(Scenario, session.scenario_id)
-            framework = await db.get(AnalysisFramework, scenario.framework_id)
-            return await pipeline.analyze_session(
-                sid, session, scenario, framework, db
-            )
+            return await pipeline.analyze_session(sid, session, db)
 
     results = await asyncio.wait_for(
         asyncio.gather(retry(), retry()), timeout=5
@@ -167,7 +168,7 @@ async def test_admin_cannot_replace_good_result_with_failed_or_degraded(
     )
     for status in ("failed", "degraded"):
         monkeypatch.setattr(
-            actions,
+            pipeline,
             "run_llm_pipeline",
             AsyncMock(return_value=({}, [], {}, status, "test", "hash", [])),
         )

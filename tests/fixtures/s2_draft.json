@@ -1,0 +1,19 @@
+{
+  "title": "새 통합 초안 \\",
+  "subject": "과학",
+  "target_grade": "중학교 1학년",
+  "groups": [],
+  "config_schema_version": 1,
+  "action": "save_draft",
+  "config": {
+    "problem": {"public_text": "문제 {x}와 {{literal}} 및 {\"answer\":1}", "learning_objective": ""},
+    "student": {"name": "", "public_profile": "", "internal_profile": "내부 전용 <script>unsafe()</script>", "misconception": "", "behavior_instruction": "", "resolved_model_config": null},
+    "mentor": {
+      "mode": "off", "name": "멘토", "welcome_message": "", "behavior_instruction": "숨긴 멘토 지시",
+      "intervention_policy": {"condition": "숨긴 조건", "start_turn": 3, "min_interval_turns": 2, "window_turns": 10, "max_interventions": 3},
+      "resolved_model_config": null
+    },
+    "analysis": {"context": "", "expected_understanding": "", "instruction": "", "rubric_name": "", "rubric_description": "", "category_name": "", "classification_enabled": false, "rubric": [{"id": "", "name": "", "criteria": "", "level": null}], "resolved_model_config": null},
+    "runtime": {"context_turn_limit": 10}
+  }
+}

@@ -93,12 +93,12 @@ async def test_provider_expansion_preserves_references_and_unique_rights(
             assert not await migrate._applied(
                 conn, "028_generation_providers.sql"
             )
-    await migrate.run_all_migrations()
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
+    await migrate.run_all_migrations(through=30)
     async with data.engine.begin() as conn:
         assert (
             await conn.exec_driver_sql("SELECT * FROM generation_run")
-        ).all() == before
+        ).all() == [tuple(row) + (None,) for row in before]
         assert (
             await conn.exec_driver_sql(
                 "SELECT generation_run_id,content FROM message WHERE id=10"
@@ -116,7 +116,7 @@ async def test_provider_expansion_preserves_references_and_unique_rights(
         for provider in ("anthropic", "google"):
             await conn.execute(
                 text(
-                    "INSERT INTO generation_run SELECT :id,owner_id,session_id,:turn,operation,:request,input_hash,config_hash,:provider,model,'failed',partial_text,NULL,error_code,started_at,first_output_at,finished_at FROM generation_run WHERE id='old'"
+                    "INSERT INTO generation_run SELECT :id,owner_id,session_id,:turn,operation,:request,input_hash,config_hash,:provider,model,'failed',partial_text,NULL,error_code,started_at,first_output_at,finished_at,mentor_trigger FROM generation_run WHERE id='old'"
                 ),
                 dict(
                     id=provider,

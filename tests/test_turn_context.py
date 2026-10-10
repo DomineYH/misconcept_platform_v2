@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import pytest
+from lesson_fixtures import STUDENT_INSTRUCTION
 from sqlalchemy import event
 from test_scenario_api import login
 from test_student_generation import client, frames, scenario_payload, student
@@ -11,7 +12,6 @@ from test_student_generation import client, frames, scenario_payload, student
 from src.config import config
 from src.db.migrations import migrate
 from src.models import GenerationRun, Message, Session
-from src.services.student_bot import BASE_STUDENT_PROMPT
 
 __all__ = ["client", "scenario_payload", "student"]
 UNFINISHED_TURN = "00000000-0000-0000-0000-000000000061"
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 @pytest.fixture
 async def long_dialogue(data, monkeypatch):
     monkeypatch.setattr(migrate, "engine", data.engine)
-    await migrate.run_all_migrations()
+    await migrate.run_all_migrations(through=30)
     # Timestamps tie and insertion order opposes turn order deliberately.
     for index in range(60, 0, -1):
         for role in ("student", "tutor", "teacher"):
@@ -88,6 +88,11 @@ async def test_student_route_receives_n_completed_pairs_and_current_once(
     data, client, student, long_dialogue, monkeypatch
 ):
     monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
+    from lesson_fixtures import install_snapshot
+
+    await install_snapshot(
+        data, student.connection, student.model, context_turn_limit=4
+    )
     login(client, data.owner)
     response = await client.post(
         f"/sessions/{data.session.id}/turns/stream",
@@ -99,8 +104,9 @@ async def test_student_route_receives_n_completed_pairs_and_current_once(
     )
     assert frames(response)[-1][0] == "output.completed"
     actual = student.responses.create.call_args.kwargs["input"]
-    assert student.responses.create.call_args.kwargs["instructions"] == (
-        BASE_STUDENT_PROMPT + "\n\nTest misconception Student profile"
+    assert (
+        student.responses.create.call_args.kwargs["instructions"]
+        == STUDENT_INSTRUCTION
     )
     assert actual == [
         {"role": "user", "content": "Teacher 57"},
@@ -126,7 +132,6 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
     data, long_dialogue, monkeypatch
 ):
     from src.services.turn_context import load_mentor_context
-    from src.services.tutor_bot import TutorBot
 
     monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
     context = await load_mentor_context(data.db, data.session.id, "turn-50")
@@ -142,42 +147,39 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
         {"role": "teacher", "content": "Teacher 50"},
         {"role": "student", "content": "Student 50"},
     ]
-    import httpx2
+    # New paid generation for an older target is forbidden, even without a newer mentor run.
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
     from lesson_fixtures import (
-        LESSON_KEY,
+        configure_mentor,
         install_connection,
         install_mentor_model,
+        install_snapshot,
     )
-    from test_student_probe import response_body, sdk_transport
 
-    connection, _ = await install_connection(data, monkeypatch)
-    await install_mentor_model(data, connection)
+    from src.services.mentor_generation import reserve_mentor
 
-    async def upstream(request, body):
-        return httpx2.Response(
-            200,
-            json=response_body(
-                '{"is_repetitive": false, "is_inappropriate": false}'
-            ),
-        )
-
-    clients, calls = sdk_transport(
-        monkeypatch, upstream, budget=200, key=LESSON_KEY, model="gpt-5.2"
+    connection, model = await install_connection(data, monkeypatch)
+    await install_snapshot(data, connection, model)
+    mentor_model = await install_mentor_model(data, connection)
+    await configure_mentor(
+        data, SimpleNamespace(connection=connection, mentor_model=mentor_model)
     )
-    async with TutorBot(data.db, 1) as mentor:
-        result = await mentor.generate_feedback(
-            context[-2]["content"], context[-1]["content"], context[:-2]
+    with pytest.raises(HTTPException) as denied:
+        await reserve_mentor(
+            data.factory,
+            data.session.id,
+            "turn-50",
+            data.owner,
+            str(uuid4()),
+            "manual",
         )
-    assert result == (None, None)
-    assert len(calls) == 1 and all(sdk.is_closed() for sdk in clients)
-    prompt = calls[0]["input"][0]["content"]
-    assert "교사: Teacher 48\n학생: Student 48" in prompt
-    assert "교사: Teacher 49\n학생: Student 49" in prompt
-    assert "교사: Teacher 50\n학생: Student 50" in prompt
-    assert "Teacher 51" not in prompt and "Teacher 47" not in prompt
+    assert denied.value.status_code == 409
+    assert denied.value.detail == {"code": "mentor_turn_obsolete"}
 
 
-async def test_legacy_generation_also_uses_only_completed_pairs(
+async def test_nonstream_generation_also_uses_only_completed_pairs(
     data, scenario_payload, long_dialogue, monkeypatch
 ):
     from src.services.session_mgr import SessionManager
@@ -189,7 +191,10 @@ async def test_legacy_generation_also_uses_only_completed_pairs(
 
     from src.services.invocation_types import InvocationError
 
-    await install_connection(data, monkeypatch)
+    connection, model = await install_connection(data, monkeypatch)
+    from lesson_fixtures import install_snapshot
+
+    await install_snapshot(data, connection, model, context_turn_limit=4)
 
     async def upstream(request, body):
         return httpx2.Response(
@@ -208,10 +213,7 @@ async def test_legacy_generation_also_uses_only_completed_pairs(
             await manager.process_teacher_message("Legacy caller question")
         actual = calls[0]["input"]
         assert len(actual) == 9  # Four pairs and the current question.
-        assert (
-            calls[0]["instructions"]
-            == BASE_STUDENT_PROMPT + "\n\nTest misconception Student profile"
-        )
+        assert calls[0]["instructions"] == STUDENT_INSTRUCTION
         assert actual[0] == {"role": "user", "content": "Teacher 57"}
         assert actual[-2:] == [
             {"role": "assistant", "content": "Student 60"},

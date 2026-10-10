@@ -1,14 +1,14 @@
 """
 Analyzer service for teacher question classification (T060).
 
-Stateless LLM-based classification using framework-specific
+Stateless LLM-based classification using rubric-specific
 prompts with structured JSON output.
 """
 
 import logging
 from typing import Any, Dict, Optional
 
-from src.models.analysis_framework import AnalysisFramework
+from src.api.schemas.scenario_config import AnalysisConfig
 from src.prompts.example_templates import generate_examples
 from src.services.analysis_invocations import AnalysisCaller
 from src.services.role_output_contracts import (
@@ -28,6 +28,7 @@ class Analyzer(AnalysisCaller):
         # Load cached prompt templates (T111 optimization)
         self.prompt_template = load_prompt_template("analysis_prompt.txt")
         self.greeting_template = load_prompt_template("greeting_detection.txt")
+        self.greeting_failed = False
 
     def _normalize_reasoning(self, reasoning: Any) -> dict:
         """
@@ -57,18 +58,18 @@ class Analyzer(AnalysisCaller):
     async def classify_question(
         self,
         question: str,
-        framework: AnalysisFramework,
+        analysis: AnalysisConfig,
         context: Optional[str] = None,
         scenario_title: Optional[str] = None,
         misconception_prompt: Optional[str] = None,
         student_profile: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Classify a teacher question using the analysis framework.
+        Classify a teacher question using the frozen rubric.
 
         Args:
             question: Teacher's question text
-            framework: Analysis framework with labels
+            analysis: Frozen evaluation settings and rubric
             context: Optional conversation context (previous messages)
             scenario_title: Optional scenario title for context
             misconception_prompt: Optional misconception being addressed
@@ -83,20 +84,20 @@ class Analyzer(AnalysisCaller):
         """
         # Generate dynamic few-shot examples
         few_shot_examples = generate_examples(
-            framework.labels,
-            framework.description or "",
+            [
+                dict(name=r.id, criteria=r.criteria, level=r.level)
+                for r in analysis.rubric
+            ],
+            analysis.rubric_description,
         )
 
         # Build criteria-formatted labels for prompt.
         # Issue #33: include `level` in the prompt so the LLM knows which
         # labels need an `improved_sentence`.
-        criteria_map = framework.label_criteria_map
-        level_map: dict[str, str | None] = {}
-        for raw in framework.labels or []:
-            if isinstance(raw, dict):
-                name = raw.get("name")
-                if name:
-                    level_map[name] = raw.get("level")
+        criteria_map = {
+            r.id: f"{r.name}: {r.criteria}" for r in analysis.rubric
+        }
+        level_map = {r.id: r.level for r in analysis.rubric}
 
         def _format_label(name: str, criteria: str) -> str:
             level = level_map.get(name)
@@ -108,20 +109,26 @@ class Analyzer(AnalysisCaller):
             _format_label(name, criteria)
             for name, criteria in criteria_map.items()
         )
-        label_names = framework.label_names
+        label_names = [r.id for r in analysis.rubric]
 
-        # Format prompt with framework and scenario context
+        # Format prompt with analysis and scenario context
         prompt = self.prompt_template.format(
-            framework_name=framework.name,
-            framework_description=(framework.description or ""),
-            framework_labels=", ".join(label_names),
-            framework_labels_with_criteria=(labels_with_criteria),
+            rubric_name=analysis.rubric_name,
+            rubric_description=(analysis.rubric_description),
+            rubric_labels=", ".join(label_names),
+            rubric_labels_with_criteria=(labels_with_criteria),
             few_shot_examples=few_shot_examples,
             scenario_title=(scenario_title or "Not specified"),
             misconception_prompt=(misconception_prompt or "Not specified"),
             student_profile=(student_profile or "Not specified"),
             question=question,
             context=context or "No prior context",
+        )
+
+        prompt += (
+            f"\n평가 맥락\n{analysis.context}\n기대 이해\n{analysis.expected_understanding}"
+            f"\n평가 지시\n{analysis.instruction}\n분류 설명\n{analysis.rubric_description}"
+            f"\n분류 범주\n{analysis.category_name}"
         )
 
         def normalize(result):
@@ -131,14 +138,9 @@ class Analyzer(AnalysisCaller):
                     "Invalid response format: missing required fields"
                 )
 
-            # Validate label is in framework
+            # Validate label is in the rubric
             if result["label"] not in label_names:
-                logger.warning(
-                    "LLM returned invalid label "
-                    f"'{result['label']}', "
-                    "using first framework label"
-                )
-                result["label"] = label_names[0]
+                raise ValueError("Unknown rubric ID")
 
             # Validate confidence range
             confidence = float(result["confidence"])
@@ -159,7 +161,6 @@ class Analyzer(AnalysisCaller):
                 prompt,
                 RuntimeClassification,
                 "classification",
-                1500,
                 normalize=normalize,
             )
             if api_usage is not None:
@@ -174,7 +175,7 @@ class Analyzer(AnalysisCaller):
     async def batch_classify(
         self,
         questions: list[str],
-        framework: AnalysisFramework,
+        analysis: AnalysisConfig,
         context: Optional[str] = None,
         scenario_title: Optional[str] = None,
         misconception_prompt: Optional[str] = None,
@@ -185,7 +186,7 @@ class Analyzer(AnalysisCaller):
 
         Args:
             questions: List of teacher questions
-            framework: Analysis framework
+            analysis: Frozen evaluation settings and rubric
             context: Optional shared context
             scenario_title: Optional scenario title for context
             misconception_prompt: Optional misconception being addressed
@@ -199,7 +200,7 @@ class Analyzer(AnalysisCaller):
             try:
                 result = await self.classify_question(
                     question=question,
-                    framework=framework,
+                    analysis=analysis,
                     context=context,
                     scenario_title=scenario_title,
                     misconception_prompt=misconception_prompt,
@@ -213,7 +214,7 @@ class Analyzer(AnalysisCaller):
                 # Return default classification on failure
                 results.append(
                     {
-                        "label": framework.label_names[0],
+                        "label": analysis.rubric[0].id,
                         "confidence": 0.0,
                         "reasoning": (f"Classification failed: {e}"),
                     }
@@ -250,7 +251,7 @@ class Analyzer(AnalysisCaller):
 
         try:
             payload, _ = await self.structured(
-                prompt, RuntimeGreetings, "greeting", 500
+                prompt, RuntimeGreetings, "greeting"
             )
             results = payload["results"]
 
@@ -274,6 +275,7 @@ class Analyzer(AnalysisCaller):
             return validated_results
 
         except Exception as e:
+            self.greeting_failed = True
             logger.warning("Greeting detection failed: %s", e)
             # Return safe defaults (assume no greetings)
             return [

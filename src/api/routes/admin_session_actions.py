@@ -13,24 +13,22 @@ from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
-from src.api.routes.session_helpers import mark_session_ended
-from src.config import config
-from src.models import (
-    AnalysisFramework,
-    Message,
+from src.api.routes.session_helpers import (
+    mark_session_ended,
+    require_native_session,
 )
-from src.models.scenario import Scenario
+from src.config import config
 from src.models.session import Session
 from src.models.user import User
-from src.services.analysis_pipeline import analyze_session, run_llm_pipeline
+from src.services.analysis_pipeline import analyze_session, load_analysis_lesson
 from src.services.analysis_results import (
     load_analysis_response as _load_analysis_response,
 )
-from src.services.analysis_results import save_analysis
+from src.services.session_history import session_display
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -65,6 +63,7 @@ async def end_session(
             detail="Session not found",
         )
 
+    require_native_session(session)
     if session.ended_at is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -75,25 +74,7 @@ async def end_session(
 
     # Trigger analysis
     try:
-        scenario_result = await db.execute(
-            select(Scenario).where(Scenario.id == session.scenario_id)
-        )
-        scenario = scenario_result.scalar_one_or_none()
-        if scenario and scenario.framework_id:
-            framework_result = await db.execute(
-                select(AnalysisFramework).where(
-                    AnalysisFramework.id == scenario.framework_id
-                )
-            )
-            framework = framework_result.scalar_one_or_none()
-            if framework:
-                await analyze_session(
-                    session_id,
-                    session,
-                    scenario,
-                    framework,
-                    db,
-                )
+        await analyze_session(session_id, session, db, actor_id=user.id)
     except Exception as e:
         await db.rollback()
         logger.warning(f"Analysis failed for session {session_id}: {e}")
@@ -109,7 +90,11 @@ async def end_session(
 
     return templates.TemplateResponse(
         "partials/session_row.html",
-        {"request": request, "session": session},
+        {
+            "request": request,
+            "session": session,
+            "session_display": session_display,
+        },
     )
 
 
@@ -158,6 +143,7 @@ async def session_detail(
         .options(
             joinedload(Session.scenario),
             joinedload(Session.teacher),
+            selectinload(Session.messages),
         )
         .where(Session.id == session_id)
     )
@@ -172,7 +158,7 @@ async def session_detail(
 
     return templates.TemplateResponse(
         "partials/session_detail.html",
-        {"request": request, "session": session},
+        {"request": request, "session": session, **session_display(session)},
     )
 
 
@@ -253,91 +239,26 @@ async def regenerate_analysis(
             detail="Session not found",
         )
 
+    require_native_session(session)
     if not session.ended_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Session must be ended before analysis",
         )
 
-    scenario = session.scenario
-    if not scenario:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Scenario not found",
-        )
-
-    framework_result = await db.execute(
-        select(AnalysisFramework).where(
-            AnalysisFramework.id == scenario.framework_id
-        )
-    )
-    framework = framework_result.scalar_one_or_none()
-    if not framework:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Framework not found",
-        )
-
-    # Load all messages
-    all_messages_result = await db.execute(
-        select(Message)
-        .where(Message.session_id == session_id)
-        .order_by(Message.created_at)
-    )
-    all_messages = all_messages_result.scalars().all()
-    teacher_messages = [m for m in all_messages if m.role == "teacher"]
-
-    await db.commit()  # Release the read transaction before external calls.
-
-    # Run LLM pipeline before replacing results; attempts use separate transactions.
+    await load_analysis_lesson(db, session_id, user.id)
     try:
-        (
-            distribution,
-            question_analyses,
-            payload,
-            synthesis_status,
-            synth_model,
-            synth_hash,
-            api_usage_logs,
-        ) = await run_llm_pipeline(
-            session_id,
-            all_messages,
-            teacher_messages,
-            scenario,
-            framework,
-            async_sessionmaker(
-                db.bind, expire_on_commit=False, autoflush=False
-            ),
-            session.teacher_id,
+        saved = await analyze_session(
+            session_id, session, db, actor_id=user.id, regenerate=True
         )
-    except Exception as e:
-        logger.error(
-            "Regeneration LLM failed for session %d: %s",
-            session_id,
-            e,
-            exc_info=True,
-        )
+    except Exception:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Analysis regeneration failed",
+        logger.exception(
+            "Analysis regeneration failed for session %d", session_id
         )
-
-    saved = await save_analysis(
-        session_id,
-        (
-            distribution,
-            question_analyses,
-            payload,
-            synthesis_status,
-            synth_model,
-            synth_hash,
-            api_usage_logs,
-        ),
-        db,
-        regenerate=True,
-    )
-
+        raise HTTPException(
+            500, detail="Analysis regeneration failed"
+        ) from None
     analysis_data = await _load_analysis_response(session_id, db)
     if analysis_data is None:
         raise HTTPException(

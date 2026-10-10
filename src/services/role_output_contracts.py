@@ -33,14 +33,6 @@ class InterventionJudgment(RoleOutput):
         return self
 
 
-class LessonInterventionJudgment(BaseModel):
-    """Runtime structure preserves legacy missing-field defaults and fallback."""
-
-    is_repetitive: bool | None = False
-    is_inappropriate: bool | None = False
-    reason: str | None = ""
-
-
 class ClassificationReasoning(DetailedReasoning):
     model_config = ConfigDict(extra="forbid", strict=True)
 

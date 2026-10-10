@@ -28,6 +28,7 @@ from src.api.dependencies import (
 )
 from src.config import config
 from src.models.provider_connection import ProviderAuditLog, ProviderConnection
+from src.models.scenario import Scenario
 from src.models.user import User
 from src.services.call_admission import (
     active_connection_count,
@@ -154,6 +155,19 @@ async def provider_state(
         for c in (await db.scalars(select(ProviderConnection))).all()
     }
     configuration = await configuration_state(db, connections)
+    scenarios = (
+        await db.execute(
+            select(
+                Scenario.id,
+                Scenario.title,
+                Scenario.status,
+                Scenario.is_active,
+                Scenario.config_json,
+            )
+            .where(Scenario.deleted_at.is_(None))
+            .order_by(Scenario.id)
+        )
+    ).all()
     return JSONResponse(
         jsonable_encoder(
             {
@@ -165,6 +179,7 @@ async def provider_state(
                             p,
                             configuration["models"],
                             configuration["settings"],
+                            scenarios,
                         )
                         + [f"활성 호출: {active_connection_count(p)}건"],
                     }

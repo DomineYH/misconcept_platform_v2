@@ -5,12 +5,13 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import select, text
+from sqlalchemy.orm import aliased
 
 from src.api.routes.session_helpers import (
     load_session,
+    require_native_session,
     validate_scenario_access,
 )
-from src.config import config
 from src.models import (
     AppSetting,
     GenerationRun,
@@ -22,18 +23,19 @@ from src.models.scenario_group import ScenarioGroup
 from src.services.call_admission import approve_call, execution_lock
 from src.services.generation_runs import conflict, digest, snapshot
 from src.services.invocation_types import InvocationError
-from src.services.lesson_connections import resolve_lesson_model
+from src.services.lesson_connections import resolve_frozen_model
+from src.services.lesson_snapshots import read_lesson_snapshot
 from src.services.model_verification import ROLE_CONTRACT_VERSIONS
-from src.services.prompt_manager import PromptManager
 from src.services.turn_context import load_mentor_context
-from src.services.tutor_bot import TutorBot, advance_question_count
 
 
-async def reserve_mentor(factory, session_id, turn_id, user, request_id):
+async def reserve_mentor(
+    factory, session_id, turn_id, user, request_id, trigger
+):
     async with execution_lock():
         try:
             return await _reserve_mentor(
-                factory, session_id, turn_id, user, request_id
+                factory, session_id, turn_id, user, request_id, trigger
             )
         except InvocationError as error:
             raise HTTPException(
@@ -50,13 +52,16 @@ async def reserve_mentor(factory, session_id, turn_id, user, request_id):
             ) from None
 
 
-async def _reserve_mentor(factory, session_id, turn_id, user, request_id):
+async def _reserve_mentor(
+    factory, session_id, turn_id, user, request_id, trigger
+):
     input_hash = digest(
         {
             "owner": user.id,
             "session": session_id,
             "operation": "mentor",
             "turn_id": turn_id,
+            "trigger": trigger,
         }
     )
     async with factory() as db:
@@ -72,6 +77,7 @@ async def _reserve_mentor(factory, session_id, turn_id, user, request_id):
             )
             if access is None:
                 raise HTTPException(403, detail="Forbidden")
+        require_native_session(session)
         existing = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.owner_id == user.id,
@@ -98,6 +104,7 @@ async def _reserve_mentor(factory, session_id, turn_id, user, request_id):
                 GenerationRun.turn_id == turn_id,
                 GenerationRun.operation == "mentor",
                 GenerationRun.status == "completed",
+                GenerationRun.result_kind == "message",
             )
         )
         if completed:
@@ -105,8 +112,13 @@ async def _reserve_mentor(factory, session_id, turn_id, user, request_id):
         if session.ended_at:
             raise HTTPException(400, detail={"code": "session_ended"})
         await validate_scenario_access(scenario.id, user, db)
-        if scenario.tutor_template_id is None:
+        if not scenario.is_active:
+            raise HTTPException(404, detail="Scenario not found")
+        lesson = read_lesson_snapshot(session)
+        if lesson.config.mentor.mode == "off":
             raise HTTPException(400, detail={"code": "mentor_disabled"})
+        if trigger == "auto" and lesson.config.mentor.mode != "auto":
+            raise HTTPException(400, detail={"code": "mentor_auto_disabled"})
         student = await db.scalar(
             select(Message.id).where(
                 Message.session_id == session_id,
@@ -116,23 +128,79 @@ async def _reserve_mentor(factory, session_id, turn_id, user, request_id):
         )
         if student is None:
             conflict("turn_incomplete")
-        newer = await db.scalar(
-            select(GenerationRun.id)
-            .join(
-                Message,
-                (Message.session_id == GenerationRun.session_id)
-                & (Message.turn_id == GenerationRun.turn_id)
-                & (Message.role == "teacher"),
+        answers = aliased(Message)
+        completed_turns = (
+            await db.scalars(
+                select(Message.turn_id)
+                .join(
+                    answers,
+                    (answers.session_id == Message.session_id)
+                    & (answers.turn_id == Message.turn_id)
+                    & (answers.role == "student"),
+                )
+                .where(
+                    Message.session_id == session_id,
+                    Message.role == "teacher",
+                    Message.turn_id.is_not(None),
+                    Message.turn_index.is_not(None),
+                )
+                .order_by(Message.turn_index)
             )
-            .where(
-                GenerationRun.session_id == session_id,
-                GenerationRun.operation == "mentor",
-                Message.turn_index > teacher.turn_index,
-            )
-            .limit(1)
-        )
-        if newer:
+        ).all()
+        if not completed_turns or completed_turns[-1] != turn_id:
             conflict("mentor_turn_obsolete")
+        positions = {
+            target: index for index, target in enumerate(completed_turns, 1)
+        }
+        runs = (
+            await db.scalars(
+                select(GenerationRun).where(
+                    GenerationRun.session_id == session_id,
+                    GenerationRun.operation == "mentor",
+                )
+            )
+        ).all()
+        if trigger == "auto":
+            prior = next(
+                (
+                    run
+                    for run in reversed(runs)
+                    if run.turn_id == turn_id and run.mentor_trigger == "auto"
+                ),
+                None,
+            )
+            if prior is not None:
+                return await snapshot(db, prior), None
+            policy = lesson.config.mentor.intervention_policy
+            position = positions[turn_id]
+            if position < policy.start_turn:
+                conflict("mentor_start_turn")
+            last_check = max(
+                (
+                    positions.get(run.turn_id, 0)
+                    for run in runs
+                    if run.mentor_trigger == "auto"
+                ),
+                default=0,
+            )
+            if last_check and position - last_check < policy.min_interval_turns:
+                conflict("mentor_interval")
+        if lesson.config.mentor.mode == "auto":
+            policy = lesson.config.mentor.intervention_policy
+            first = max(1, positions[turn_id] - policy.window_turns + 1)
+            reserved = sum(
+                first <= positions.get(run.turn_id, 0) <= positions[turn_id]
+                and (
+                    run.status == "running"
+                    or (
+                        run.status == "completed"
+                        and run.result_kind == "message"
+                    )
+                )
+                for run in runs
+            )
+            if reserved >= policy.max_interventions:
+                conflict("mentor_limit")
         busy = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.session_id == session_id,
@@ -151,123 +219,60 @@ async def _reserve_mentor(factory, session_id, turn_id, user, request_id):
             )
             .limit(1)
         )
-        try:
-            template = await PromptManager.get_template_text_by_id(
-                db, scenario.tutor_template_id
-            )
-            template.format(
-                scenario_title=scenario.title,
-                prompt=scenario.prompt,
-                student_profile=scenario.student_profile or "Grade 5 student",
-            )
-        except (ValueError, KeyError):
-            raise InvocationError("configuration_unavailable") from None
-        history = await load_mentor_context(db, session_id, turn_id)
-        if previous is None:
-            (session.tutor_question_count, session.tutor_intervention_count) = (
-                advance_question_count(
-                    session.tutor_question_count,
-                    session.tutor_intervention_count,
-                )
-            )
-        options = {
-            "template_id": scenario.tutor_template_id,
-            "scenario_title": scenario.title,
-            "prompt": scenario.prompt,
-            "student_profile": scenario.student_profile or "Grade 5 student",
-            "model": config.ANALYSIS_MODEL,
-            "reasoning_effort": config.TUTOR_REASONING,
-            "max_tokens": config.TUTOR_MAX_TOKENS,
-            "intervention_threshold": (
-                scenario.tutor_intervention_threshold
-                or config.TUTOR_INTERVENTION_THRESHOLD
-            ),
-            "sensitivity": scenario.tutor_sensitivity,
-            "judgment_model": config.DIALOGUE_ANALYSIS_MODEL,
-        }
-        counts = {
-            "initial_question_count": session.tutor_question_count,
-            "initial_intervention_count": session.tutor_intervention_count,
-        }
-        bot = TutorBot(db, **options, **counts)
-        decision, _ = bot.intervention_decision(
-            history[:-2],
-            history[-2]["content"],
-            history[-1]["content"],
-            question_counted=True,
+        history = await load_mentor_context(
+            db,
+            session_id,
+            turn_id,
+            limit=lesson.config.runtime.context_turn_limit,
         )
-        first = None
-        if decision is not False:
-            coaching_options = {
-                "reasoning": {"effort": options["reasoning_effort"]},
-                "max_output_tokens": options["max_tokens"],
-            }
-            connection, model, _ = await resolve_lesson_model(
-                db, options["model"], "mentor", coaching_options
-            )
-            operation = "mentor"
-            if decision is None:
-                connection, model, _ = await resolve_lesson_model(
-                    db,
-                    options["judgment_model"],
-                    "mentor",
-                    {"max_output_tokens": 200},
-                )
-                operation = "mentor_judgment"
-            first = connection, model, operation
+        connection, model, options = await resolve_frozen_model(
+            db, lesson.config.mentor.resolved_model_config, "mentor"
+        )
+        operation = "mentor_judgment" if trigger == "auto" else "mentor"
         run = GenerationRun(
             id=str(uuid4()),
             owner_id=user.id,
             session_id=session_id,
             turn_id=turn_id,
             operation="mentor",
+            mentor_trigger=trigger,
             request_id=request_id,
             input_hash=input_hash,
-            config_hash=digest(
-                {
-                    **options,
-                    "template": template,
-                    "dialogue_model": config.DIALOGUE_ANALYSIS_MODEL,
-                }
-            ),
-            provider="openai",
-            model=options["model"],
+            config_hash=session.config_hash,
+            provider=connection.provider,
+            model=model.model_id,
             status="running",
         )
         db.add(run)
         await db.flush()
         accepted = await snapshot(db, run)
-        permit = None
-        if first is not None:
-            connection, model, operation = first
-            setting = await db.get(AppSetting, 1)
-            if setting is None:
-                raise InvocationError("configuration_unavailable")
-            permit = approve_call(
-                factory,
-                connection,
-                setting,
-                owner_id=user.id,
-                operation=operation,
-                role="mentor",
-                admin=False,
-            )
-            permit.model_config_id = model.id
-            permit.config_version = model.config_version
-            permit.model_id = model.model_id
-            permit.capability_version = model.capability_definition_version
-            permit.contract_version = ROLE_CONTRACT_VERSIONS["mentor"]
+        setting = await db.get(AppSetting, 1)
+        if setting is None:
+            raise InvocationError("configuration_unavailable")
+        permit = approve_call(
+            factory,
+            connection,
+            setting,
+            owner_id=user.id,
+            operation=operation,
+            role="mentor",
+            admin=False,
+        )
+        permit.model_config_id = model.id
+        permit.config_version = model.config_version
+        permit.model_id = model.model_id
+        permit.capability_version = model.capability_definition_version
+        permit.contract_version = ROLE_CONTRACT_VERSIONS["mentor"]
+        permit.model_options = options
+        if previous is None:
+            session.tutor_question_count += 1
         execution = {
             "owner_id": user.id,
-            "options": {**options, **counts},
-            "template": template,
+            "lesson": lesson,
+            "trigger": trigger,
             "history": history,
             "permit": permit,
-            "deadline": (
-                permit.admitted_at + permit.timeouts["mentor_total"]
-                if permit
-                else None
-            ),
+            "deadline": permit.admitted_at + permit.timeouts["mentor_total"],
         }
         try:
             await db.commit()

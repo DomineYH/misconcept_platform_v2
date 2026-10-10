@@ -141,7 +141,7 @@ export default async function checkMentorStream(page) {
   assert(await page.evaluate(() => mentorFixture.mentors.length === 5), 'busy has no automatic queue or retry');
   await page.evaluate(() => { mentorFixture.reply = {status:409, body:{code:'mentor_turn_obsolete'}}; });
   await slot('turn-4').getByRole('button', {name:'멘토 다시 요청'}).click();
-  await slot('turn-4').getByText('더 최신 턴의 멘토 요청이 있어 이 턴은 더 이상 재요청할 수 없습니다.', {exact:true}).waitFor();
+  await slot('turn-4').getByText('더 최신 학생 턴이 완료되어 이 턴은 더 이상 재요청할 수 없습니다.', {exact:true}).waitFor();
   assert(await slot('turn-4').getByRole('button').count() === 0, 'obsolete has an explanation without retry');
 
   await page.setViewportSize({width:390, height:844});

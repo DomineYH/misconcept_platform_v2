@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block title %}{{ scenario_title }} - 과거 기록{% endblock %}
+{% block content %}
+<div class="container">
+  <h1>{{ scenario_title }} · 대화 기록</h1>
+  {% include "partials/snapshot_provenance.html" %}
+  <p>시작: {{ session.started_at }} · 종료: {{ session.ended_at or '종료 기록 없음' }}</p>
+  <a href="/sessions/{{ session.id }}/export.csv" class="btn btn-primary">CSV 다운로드</a>
+  {% if session.ended_at %}<a href="/sessions/{{ session.id }}/analysis_page" class="btn btn-secondary">기존 분석 보기</a>{% endif %}
+  <a href="/scenarios" class="btn btn-secondary">새 연습 선택</a>
+  <section aria-label="원래 대화">
+    {% for message in messages %}{% include "partials/message.html" %}{% endfor %}
+  </section>
+</div>
+{% endblock %}

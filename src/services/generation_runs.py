@@ -10,10 +10,9 @@ from sqlalchemy import func, select, text
 
 from src.api.routes.session_helpers import (
     load_session,
-    validate_public_problem,
+    require_native_session,
     validate_scenario_access,
 )
-from src.config import config
 from src.models import (
     AppSetting,
     GenerationRun,
@@ -24,9 +23,9 @@ from src.models import (
 from src.models.scenario_group import ScenarioGroup
 from src.services.call_admission import approve_call, execution_lock
 from src.services.invocation_types import InvocationError, TextRequest
-from src.services.lesson_connections import resolve_lesson_model
+from src.services.lesson_connections import resolve_frozen_model
+from src.services.lesson_snapshots import read_lesson_snapshot
 from src.services.model_verification import ROLE_CONTRACT_VERSIONS
-from src.services.prompt_manager import PromptManager
 from src.services.student_bot import build_student_input
 from src.services.turn_context import load_completed_turns
 
@@ -112,6 +111,7 @@ async def _reserve_student(factory, session_id, user, request):
             )
             if access is None:
                 raise HTTPException(403, detail="Forbidden")
+        require_native_session(session)
         existing = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.owner_id == user.id,
@@ -150,7 +150,8 @@ async def _reserve_student(factory, session_id, user, request):
         if session.ended_at:
             raise HTTPException(400, detail="Session already ended")
         await validate_scenario_access(scenario.id, user, db)
-        validate_public_problem(scenario)
+        if not scenario.is_active:
+            raise HTTPException(404, detail="Scenario not found")
         busy = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.session_id == session_id,
@@ -161,22 +162,11 @@ async def _reserve_student(factory, session_id, user, request):
         if busy:
             conflict("student_busy", run_id=busy.id)
         try:
-            connection, model, options = await resolve_lesson_model(
-                db,
-                scenario.chat_model or config.CHAT_MODEL,
-                "student",
-                {
-                    "reasoning": {"effort": config.STUDENT_REASONING},
-                    "max_output_tokens": config.STUDENT_MAX_TOKENS,
-                },
+            lesson = read_lesson_snapshot(session)
+            connection, model, options = await resolve_frozen_model(
+                db, lesson.config.student.resolved_model_config, "student"
             )
-            try:
-                template = await PromptManager.get_template_text_by_id(
-                    db, scenario.student_template_id
-                )
-            except (ValueError, KeyError):
-                raise InvocationError("configuration_unavailable") from None
-        except InvocationError:
+        except (InvocationError, HTTPException):
             raise HTTPException(
                 503,
                 detail={
@@ -215,21 +205,12 @@ async def _reserve_student(factory, session_id, user, request):
             db.add(teacher)
             await db.flush()
         history = await load_completed_turns(
-            db, session_id, before_turn_index=teacher.turn_index
+            db,
+            session_id,
+            before_turn_index=teacher.turn_index,
+            limit=lesson.config.runtime.context_turn_limit,
         )
-        kwargs = {
-            "model": scenario.chat_model or config.CHAT_MODEL,
-            "reasoning": {"effort": config.STUDENT_REASONING},
-            "max_output_tokens": config.STUDENT_MAX_TOKENS,
-            "input": build_student_input(
-                template,
-                scenario.prompt,
-                scenario.title,
-                scenario.student_profile or "Grade 5 student",
-                request.content,
-                history,
-            ),
-        }
+        messages = build_student_input(lesson, request.content, history)
         run = GenerationRun(
             id=str(uuid4()),
             owner_id=user.id,
@@ -238,18 +219,9 @@ async def _reserve_student(factory, session_id, user, request):
             operation="student",
             request_id=request.request_id,
             input_hash=input_hash,
-            config_hash=digest(
-                {
-                    **{
-                        key: value
-                        for key, value in kwargs.items()
-                        if key != "input"
-                    },
-                    "instructions": kwargs["input"][:2],
-                }
-            ),
-            provider="openai",
-            model=kwargs["model"],
+            config_hash=session.config_hash,
+            provider=connection.provider,
+            model=model.model_id,
             status="running",
         )
         db.add(run)
@@ -278,17 +250,18 @@ async def _reserve_student(factory, session_id, user, request):
                     "message": "관리자에게 AI 설정을 확인하거나 잠시 후 다시 시도해주세요.",
                 },
             ) from None
+        permit.model_options = options
         permit.model_config_id = model.id
         permit.config_version = model.config_version
         permit.model_id = model.model_id
         permit.capability_version = model.capability_definition_version
         permit.contract_version = ROLE_CONTRACT_VERSIONS["student"]
         call = TextRequest(
-            "openai",
+            connection.provider,
             model.model_id,
             "student",
-            "\n\n".join(m["content"] for m in kwargs["input"][:2]),
-            kwargs["input"][2:],
+            messages[0]["content"],
+            messages[1:],
             options,
             request.request_id,
         )

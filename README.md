@@ -260,3 +260,13 @@ Run the full pytest, lint/format, browser and localhost streaming checks above
 before integration review. Mock success verifies the execution contract;
 real model educational quality, provider latency and operating deployment
 remain separate work.
+
+S3-05 (#76) offline integration: `uv run --frozen python -m pytest -q
+tests/test_s3_integration.py tests/test_s3_migration.py tests/test_s3_load.py`
+reuses the S2 installation/SDK fixtures and S1 load checks for explicit role
+probes, student-only execution, single mentor events, zero-call refusals,
+S2-final WAL backup/restore and additive 032/033 preservation. Injected provider
+delay/failure verifies student independence and slot cleanup, without claiming
+real p95 or educational quality. [S3 cutover and handoff](docs/s3-cutover.md)
+documents drain, backup/restore, stale roles, explicit reverification and the
+rollback boundary after new writes. Actual comparison panels remain S5 work.

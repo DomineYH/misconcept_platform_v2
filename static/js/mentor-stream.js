@@ -209,7 +209,7 @@ export function mountMentorStream(ui) {
         } else if (response.status === 429 && data.code === 'call_limit_reached') {
           finish(turn, 'failed', 'AI 호출이 많습니다. 잠시 후 멘토를 다시 요청해주세요.', true);
         } else if (response.status === 422 && data.code === 'context_limit') {
-          finish(turn, 'failed', failureText(data.code), true);
+          finish(turn, 'failed', failureText(data.code));
         } else {
           finish(turn, 'failed', '멘토 요청을 처리하지 못했습니다.', ![400, 401, 403, 404, 422].includes(response.status));
         }

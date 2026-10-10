@@ -167,10 +167,7 @@ async def execute_call(
                 entry_id = await starting
                 raise
             await recheck_call(permit)
-            if (
-                permit.operation in ("student", "mentor", "mentor_judgment")
-                and not permit.admin
-            ):
+            if permit.operation in ("student", "mentor") and not permit.admin:
                 async with permit.factory() as db:
                     try:
                         await load_active_lesson(

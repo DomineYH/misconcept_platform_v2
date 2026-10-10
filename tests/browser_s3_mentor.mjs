@@ -80,14 +80,10 @@ export default async function checkMentorOutcomes(page) {
   assert.equal(await slot.locator('.mentor-run-status').getAttribute('role'), 'status');
   assert(!(await slot.innerText()).includes('PRIVATE'));
   assert(!(await slot.innerText()).includes('99999'));
-  await page.evaluate(() => { outcomeFixture.outcome = 'coaching'; });
-  await slot.getByRole('button', {name:'멘토 다시 요청', exact:true}).click();
-  await slot.getByText('명시적으로 다시 요청한 코칭', {exact:true}).waitFor();
+  assert.equal(await slot.getByRole('button').count(), 0, 'preflight 422 offers no retry control');
   const posts = await page.evaluate(() => outcomeFixture.posts);
-  assert.equal(posts.length, 2);
+  assert.equal(posts.length, 1);
   assert.equal(posts[0].trigger, 'auto');
-  assert.equal(posts[1].trigger, 'manual');
-  assert.notEqual(posts[0].request_id, posts[1].request_id);
   await page.clock.install();
   for (const [code, guidance] of Object.entries({
     invalid_output:'멘토 응답 형식이 올바르지 않습니다.',
@@ -119,6 +115,7 @@ export default async function checkMentorOutcomes(page) {
     await slot.getByText('명시적으로 다시 요청한 코칭', {exact:true}).waitFor();
     const requests = await page.evaluate(() => outcomeFixture.posts);
     assert.equal(requests.length, 2);
+    assert.equal(requests[0].trigger, 'auto');
     assert.equal(requests[1].trigger, 'manual');
     assert.notEqual(requests[0].request_id, requests[1].request_id);
   }
@@ -139,7 +136,7 @@ export default async function checkMentorOutcomes(page) {
   assert(!(await slot.innerText()).includes('종료 뒤 폐기할 코칭'));
   assert.equal(await slot.getAttribute('data-status'), 'cancelled');
   assert.equal(await slot.getByRole('button').count(), 0);
-  return {checks:['mentor context_limit guidance and explicit same-turn manual retry',
+  return {checks:['mentor preflight context_limit guidance without a retry control',
     'invalid output, timeouts, refusal and context failures stay distinct from coaching/no-intervention',
     'SSE and JSON failures hide raw output and only retry through keyboard action',
     'late completion after session end is discarded even when upstream ignores cancellation']};

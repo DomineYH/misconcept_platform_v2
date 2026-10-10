@@ -13,6 +13,8 @@ from test_native_analysis import api, connection_api, native_analysis
 from test_scenario_api import login
 
 from src.models import (
+    ApiUsageLog,
+    GenerationRun,
     Message,
     QuestionAnalysis,
     SessionFeedbackReport,
@@ -71,7 +73,7 @@ async def test_saved_results_use_shared_projection_on_every_http_surface_and_kee
 ):
     state, fixture = stored_result
     sid = data.session.id
-    expected_status = 404 if state == "no_accepted" else 200
+    expected_status = 200
     response = await api.get(f"/sessions/{sid}/analysis")
     assert response.status_code == expected_status
     if expected_status == 200:
@@ -80,7 +82,19 @@ async def test_saved_results_use_shared_projection_on_every_http_surface_and_kee
             m["id"] for m in fixture["messages"]
         ]
         accepted = public["accepted_report"]
-        if state == "failed":
+        if state == "no_accepted":
+            assert (
+                accepted is None and public["latest_run"]["status"] == "ready"
+            )
+            assert public["plan"]["mode"] == "single"
+            assert public["plan"]["message_ids"] == [
+                m["id"]
+                for m in fixture["messages"]
+                if m["role"] in {"teacher", "student"}
+            ]
+            assert list(await data.db.scalars(select(GenerationRun))) == []
+            assert list(await data.db.scalars(select(ApiUsageLog))) == []
+        elif state == "failed":
             assert (
                 accepted is None and public["latest_run"]["status"] == "failed"
             )
@@ -174,6 +188,29 @@ async def test_saved_results_use_shared_projection_on_every_http_surface_and_kee
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
     assert exported.status_code == 200 and "PRIVATE" not in exported.text
+
+
+@pytest.mark.parametrize("stored_result", ["no_accepted"], indirect=True)
+@pytest.mark.parametrize("absence", ["legacy", "open_native"])
+async def test_unplannable_session_without_saved_result_remains_unavailable(
+    data, api, stored_result, absence
+):
+    if absence == "legacy":
+        data.session.snapshot_origin = "legacy_reconstructed"
+    else:
+        data.session.ended_at = None
+    await data.db.commit()
+    sid = data.session.id
+    expected_status = 404 if absence == "legacy" else 400
+    for path in ["analysis", "analysis_page", "analysis_modal"]:
+        assert (
+            await api.get(f"/sessions/{sid}/{path}")
+        ).status_code == expected_status
+    login(api, data.admin)
+    for path in ["analysis", "analysis_modal"]:
+        assert (
+            await api.get(f"/admin/sessions/{sid}/{path}")
+        ).status_code == expected_status
 
 
 @pytest.mark.parametrize("structured", [False, True])

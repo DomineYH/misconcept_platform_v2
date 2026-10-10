@@ -26,4 +26,10 @@ def analysis_reply(messages, *, enabled=True, label="A"):
 def prompt_inputs(body):
     import json
 
-    return json.loads(body["input"][0]["content"].split("입력 JSON\n", 1)[1])
+    if "input" in body:
+        text = body["input"][0]["content"]
+    elif "messages" in body:
+        text = body["messages"][0]["content"]
+    else:
+        text = body["contents"][0]["parts"][0]["text"]
+    return json.loads(text.split("입력 JSON\n", 1)[1])

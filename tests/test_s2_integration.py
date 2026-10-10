@@ -307,9 +307,14 @@ async def test_contracted_installation_authoring_to_csv(
     assert regenerated.status_code == 200, regenerated.text
     assert regenerated.json()["regeneration_status"].endswith("_preserved")
     await authenticate(api, "owner")
-    assert (
-        await api.get(f"/sessions/{session_id}/analysis")
-    ).json() == public.json()
+    preserved = (await api.get(f"/sessions/{session_id}/analysis")).json()
+    assert preserved["accepted_report"] == public.json()["accepted_report"]
+    assert preserved["latest_run"] == dict(
+        status="failed", preserved=True, error_code="invalid_json"
+    )
+    assert {k: v for k, v in preserved.items() if k != "latest_run"} == {
+        k: v for k, v in public.json().items() if k != "latest_run"
+    }
     if installation.converted:
         historical = await api.get("/sessions/1/export.csv")
         assert (
@@ -376,9 +381,9 @@ async def test_contracted_installation_authoring_to_csv(
             and payload is not transport.payloads[0]
         ):
             assert "PRIVATE_MENTOR" in text and "PRIVATE_ANALYSIS" not in text
-    assert sum("results" in s for s in transport.schemas) == (
-        2 if entry == "api" else 0
-    )
+    assert sum("results" in s for s in transport.schemas) == 0
+    assert sum("label" in s for s in transport.schemas) == 0
+    assert sum("message_classifications" in s for s in transport.schemas) == 2
     assert all(
         (c.is_closed if provider == "google" else c.is_closed())
         for c in transport.clients

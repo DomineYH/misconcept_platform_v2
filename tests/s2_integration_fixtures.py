@@ -9,6 +9,7 @@ import httpx
 import httpx2
 import pytest
 from pydantic import SecretStr
+from s4_analysis_fixtures import analysis_reply, prompt_inputs
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette_csrf import CSRFMiddleware
@@ -133,6 +134,14 @@ def workflow_transport(monkeypatch, provider, *, budget=1024):
             return json.dumps(state.structured_results.pop(0))
         if state.fail_analysis and "brief_feedback" in properties:
             return "invalid JSON"
+        if "message_classifications" in properties:
+            inputs = prompt_inputs(body)
+            return json.dumps(
+                analysis_reply(
+                    inputs["messages"],
+                    enabled=inputs["analysis"]["classification_enabled"],
+                )
+            )
         if "results" in properties:
             return json.dumps({"results": [{"index": 0, "is_greeting": False}]})
         if "label" in properties:

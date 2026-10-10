@@ -57,7 +57,7 @@ and the APIs later tickets must reuse.
 Saving keys or models does not call a provider. Explicit OpenAI, Claude and Gemini role probes
 reserve a durable request and make at most two sequential synthetic calls:
 student text/stream, mentor judgment JSON/coaching text, or analysis
-classification JSON/synthesis JSON. Each stops on the first failure with no retries.
+v2 unified JSON/evidence-subset merge JSON. Each stops on the first failure with no retries.
 Strict structured transport is followed by server type and semantic validation;
 invalid JSON, references, refusals, output limits and empty results fail the role.
 Reopening the page reads
@@ -68,7 +68,7 @@ for ordinary calls globally and per provider. Capacity refusals return 429 witho
 a queue. Each administrator can run one probe bundle. Disable/delete immediately
 block admission and request cancellation of every active credential revision.
 Limits and absolute deadlines are read for new calls; reducing limits preserves
-existing calls. Ordinary classification/synthesis calls may retry once;
+existing calls. Ordinary classification/synthesis and analysis_unified/analysis_merge calls may retry once;
 backoff returns capacity and reacquires it under the current limits. This service
 requires one asynchronous worker in one app instance. Student lesson calls now
 require an enabled, student-verified DB registration
@@ -84,8 +84,11 @@ shared admission with zero retries. Their existing sensitivity, counters and loc
 fallback remain unchanged; local no-intervention decisions make no provider call.
 Judgment attempts are recorded separately as `mentor_judgment`, including failures
 without usage. Post-session analysis also uses DB registrations and common
-invocations while preserving its configured OpenAI model IDs and existing
-normalization. Greeting detection has no retries.
+invocations while preserving configured model IDs and options. One structured
+v2 call uses the frozen lesson and completed teacher/student dialogue; the server
+validates exact evidence and computes statistics and rubric grades. No dialogue
+makes no provider call. Existing v1 reports remain readable; analysis models need
+explicit s4-v2 role revalidation, while student and mentor evidence stays current.
 Do not treat this stage as the final production cutover.
 
 Encryption uses the exactly pinned [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/)

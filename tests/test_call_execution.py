@@ -20,6 +20,7 @@ from test_student_probe import (
 
 from src.services import call_admission
 from src.services.invocation_types import InvocationError, TextRequest
+from src.services.model_verification import ROLE_CONTRACT_VERSIONS
 
 api = probe_api
 pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
@@ -67,8 +68,9 @@ async def verified_model(data, api, monkeypatch):
     async with data.engine.begin() as db:
         await db.execute(
             text(
-                "UPDATE model_config SET verification_state=json_set(verification_state,'$.analysis',json_extract(verification_state,'$.student'))"
-            )
+                "UPDATE model_config SET verification_state=json_set(verification_state,'$.analysis',json_extract(verification_state,'$.student'),'$.analysis.role_contract_version',:contract)"
+            ),
+            {"contract": ROLE_CONTRACT_VERSIONS["analysis"]},
         )
     return TextRequest(
         "openai",

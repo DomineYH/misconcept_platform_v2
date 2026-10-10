@@ -483,7 +483,7 @@ async def test_only_successful_role_can_run_and_failed_retest_revokes_success(
     arguments = dict(
         connection_id=1,
         owner_id=data.admin.id,
-        operation="classification" if role == "analysis" else "mentor",
+        operation="analysis_unified" if role == "analysis" else "mentor",
         admin=False,
         model_config_id=1,
         expected_model_version=2,

@@ -27,6 +27,11 @@ def test_s4_retry_allowlist_is_limited_to_runtime_analysis(
     assert retry_limit("greeting", role, admin) == 0
 
 
+@pytest.mark.parametrize("operation", ["classification", "synthesis"])
+def test_removed_s2_operations_are_not_runtime_retry_paths(operation):
+    assert retry_limit(operation, "analysis", False) == 0
+
+
 @pytest.mark.parametrize(
     "value,seconds",
     [

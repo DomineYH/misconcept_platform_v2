@@ -4,10 +4,11 @@ import asyncio
 import json
 import logging
 
+from s2_analyzer import Analyzer
+from s2_session_synthesizer import FAILED_PAYLOAD, SessionSynthesizer
+
 from src.models import ApiUsageLog, AppSetting, Message, QuestionAnalysis
-from src.services.analyzer import Analyzer
 from src.services.model_configuration import settings_values
-from src.services.session_synthesizer import FAILED_PAYLOAD, SessionSynthesizer
 
 logger = logging.getLogger(__name__)
 

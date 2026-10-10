@@ -6,6 +6,7 @@ All LLM calls complete before result writes; attempts use separate transactions.
 Failed attempts preserve an existing accepted report.
 """
 
+import hashlib
 import json
 from typing import Any
 
@@ -38,7 +39,6 @@ from src.services.lesson_snapshots import (
     configuration_error,
     read_lesson_snapshot,
 )
-from src.services.session_synthesizer import FAILED_PAYLOAD, prompt_hash
 from src.utils.cache import load_prompt_template
 
 FALLBACK_FEEDBACK = (
@@ -136,7 +136,7 @@ async def run_llm_pipeline(
         dict(id=m.id, role=m.role, content=m.content) for m in all_messages
     ]
     template = load_prompt_template("analysis_v2.txt")
-    source_hash = prompt_hash(template)
+    source_hash = hashlib.sha256(template.encode("utf-8")).hexdigest()
     context = dict(
         messages=messages,
         labels={r.id: r.level for r in analysis.rubric},
@@ -231,7 +231,13 @@ async def create_fallback_summary(
         (
             {label: 0 for label in label_names},
             [],
-            dict(FAILED_PAYLOAD),
+            dict(
+                version=1,
+                brief_feedback=[FALLBACK_FEEDBACK],
+                strengths=[],
+                improvements=[],
+                dialogue_coaching=[],
+            ),
             "failed",
             "unknown",
             "unknown",

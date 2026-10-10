@@ -1,5 +1,6 @@
 """Versioned, conservative analysis plans; estimates never represent usage."""
 
+import hashlib
 import json
 import math
 from types import SimpleNamespace
@@ -15,7 +16,6 @@ from src.services.invocation_types import StructuredRequest
 from src.services.lesson_snapshots import canonical_hash
 from src.services.model_capabilities import capabilities, metadata_conflict
 from src.services.model_verification import ROLE_CONTRACT_VERSIONS
-from src.services.session_synthesizer import prompt_hash
 from src.utils.cache import load_prompt_template
 
 ESTIMATOR_VERSION = "utf8-v1-s4-20pct"
@@ -108,10 +108,12 @@ def build_plan(snapshot, messages, *, regenerate=False, catalog=None):
         status="single",
         schema_version=2,
         contract_version=ROLE_CONTRACT_VERSIONS["analysis"],
-        prompt_version=prompt_hash(load_prompt_template("analysis_v2.txt")),
-        merge_prompt_version=prompt_hash(
-            load_prompt_template("analysis_merge_v2.txt")
-        ),
+        prompt_version=hashlib.sha256(
+            load_prompt_template("analysis_v2.txt").encode("utf-8")
+        ).hexdigest(),
+        merge_prompt_version=hashlib.sha256(
+            load_prompt_template("analysis_merge_v2.txt").encode("utf-8")
+        ).hexdigest(),
         estimator_version=ESTIMATOR_VERSION,
         formula=FORMULA,
         input_hash=canonical_hash(messages),

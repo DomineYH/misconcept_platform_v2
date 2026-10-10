@@ -13,10 +13,11 @@ import json
 import logging
 from typing import Any, Optional
 
+from s2_analysis_contracts import RuntimeSynthesis
+from s2_analysis_invocations import AnalysisCaller
+
 from src.api.schemas.scenario_config import AnalysisConfig
-from src.services.analysis_invocations import AnalysisCaller
 from src.services.invocation_types import InvocationError
-from src.services.role_output_contracts import RuntimeSynthesis
 from src.utils.cache import load_prompt_template
 
 logger = logging.getLogger(__name__)

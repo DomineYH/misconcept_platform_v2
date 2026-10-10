@@ -3,6 +3,8 @@ import json
 import httpx2 as httpx
 import pytest
 from lesson_fixtures import install_connection, install_snapshot
+from s2_analyzer import Analyzer
+from s2_session_synthesizer import SessionSynthesizer
 from test_analysis_invocations import analysis_transport
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
@@ -11,8 +13,6 @@ from test_student_probe import response_body
 
 from src.models import Message
 from src.services import analysis_pipeline
-from src.services.analyzer import Analyzer
-from src.services.session_synthesizer import SessionSynthesizer
 from src.services.student_bot import StudentBot
 
 USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}

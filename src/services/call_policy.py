@@ -52,8 +52,6 @@ def retry_limit(operation, role, admin):
     return int(
         operation
         in (
-            "classification",
-            "synthesis",
             "analysis_unified",
             "analysis_chunk",
             "analysis_merge",

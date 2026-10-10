@@ -40,6 +40,7 @@ class AnalysisCaller:
         schema,
         operation,
         *,
+        normalize=None,
         validation_context=None,
         context_budget=None,
     ):
@@ -62,6 +63,8 @@ class AnalysisCaller:
             validation_context if validation_context is not None else {}
         )
         validation["actor_id"] = self.actor_id
+        if normalize:
+            validation["normalize"] = normalize
         request = StructuredRequest(
             connection.provider,
             self.model,
@@ -142,6 +145,6 @@ class AnalysisCaller:
                         return validation["validated_analysis"], legacy_usage
                     raise InvocationError(event.error_code)
                 return (
-                    event.structured,
+                    validation.get("normalized", event.structured),
                     legacy_usage,
                 )

@@ -22,12 +22,14 @@ __all__ = ["client"]
 
 
 @pytest.mark.parametrize("provider", ["openai", "anthropic", "google"])
-@pytest.mark.parametrize("trim", [False, True])
+@pytest.mark.parametrize(
+    "prior_pairs,trim", [(0, False), (1, False), (2, False), (2, True)]
+)
 @pytest.mark.parametrize(
     "trigger,positive", [("manual", True), ("auto", True), ("auto", False)]
 )
 async def test_mentor_single_structured_call_uses_frozen_provider_config(
-    data, client, monkeypatch, provider, trigger, positive, trim
+    data, client, monkeypatch, provider, trigger, positive, prior_pairs, trim
 ):
     from test_provider_connections import KEY
     from test_student_probe import response_body, sdk_transport
@@ -106,6 +108,8 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
         ],
         1,
     ):
+        if prior_pairs < 2 and index <= 3 - prior_pairs:
+            continue
         prior = str(uuid4())
         data.db.add_all(
             Message(
@@ -234,8 +238,9 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
             )
             assert body["generationConfig"]["temperature"] == 0.4
             instruction = body["systemInstruction"]["parts"][0]["text"]
+            assert [item["role"] for item in body["contents"]] == ["user"]
             messages = [
-                dict(role="user", content=item["parts"][0]["text"])
+                dict(role=item["role"], content=item["parts"][0]["text"])
                 for item in body["contents"]
             ]
             schema = body["generationConfig"]["responseJsonSchema"]
@@ -252,14 +257,28 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
             else "수동 도움" in instruction
         )
         dialogue = "\n".join(item["content"] for item in messages)
-        assert len(messages) == (4 if trim else 6)
+        assert len(messages) == 1 and messages[0]["role"] == "user"
+        expected_dialogue = "teacher: Known teacher\nstudent: Known student"
+        if prior_pairs:
+            expected_dialogue = (
+                "teacher: Recent teacher\nstudent: Prior answer 3\n"
+                + expected_dialogue
+            )
+        old_included = prior_pairs == 2 and not trim
+        if old_included:
+            expected_dialogue = (
+                "teacher: Old 한🙂 {x}\nstudent: Prior answer 2\n"
+                + expected_dialogue
+            )
+        assert messages == [dict(role="user", content=expected_dialogue)]
         assert (
             "OUTSIDE WINDOW" not in dialogue
             and "PRIVATE MENTOR HISTORY" not in dialogue
         )
-        assert ("Old 한🙂" not in dialogue) == trim
-        assert ("Prior answer 2" not in dialogue) == trim
-        assert "Recent teacher" in dialogue and "Prior answer 3" in dialogue
+        assert ("Old 한🙂" in dialogue) == old_included
+        assert ("Prior answer 2" in dialogue) == old_included
+        assert ("Recent teacher" in dialogue) == (prior_pairs > 0)
+        assert ("Prior answer 3" in dialogue) == (prior_pairs > 0)
         assert (
             dialogue.count("Known teacher")
             == dialogue.count("Known student")
@@ -320,8 +339,8 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
             ),
             reserved_output_tokens=1024,
             configured_prior_turn_limit=2,
-            selected_prior_pairs=2,
-            kept_prior_pairs=1 if trim else 2,
+            selected_prior_pairs=prior_pairs,
+            kept_prior_pairs=prior_pairs - int(trim),
             dropped_prior_pairs=1 if trim else 0,
             target_pair_included=True,
             capability_definition_version=version,

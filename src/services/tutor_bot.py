@@ -42,15 +42,24 @@ def build_mentor_request(lesson, history, trigger, options, request_id):
         "최대 2000자로 쓰세요. 원문 추론은 요구하지 않습니다.\n" + policy
     )
     selection = mentor.resolved_model_config
+
+    def dialogue_messages(dropped):
+        return [
+            {
+                "role": "user",
+                "content": "\n".join(
+                    f"{row['role']}: {row['content']}"
+                    for row in history[2 * dropped :]
+                ),
+            }
+        ]
+
     request = StructuredRequest(
         provider=selection.provider,
         model_id=selection.model_id,
         role="mentor",
         system_instruction=instruction,
-        messages=[
-            {"role": "user", "content": f"{row['role']}: {row['content']}"}
-            for row in history
-        ],
+        messages=dialogue_messages(0),
         validated_options=options,
         request_id=request_id,
         output_schema=MentorOutput,
@@ -61,6 +70,7 @@ def build_mentor_request(lesson, history, trigger, options, request_id):
         prior_pair_count=len(history) // 2 - 1,
         configured_prior_turn_limit=lesson.config.runtime.context_turn_limit,
         target_pair_included=True,
+        rebuild_messages=dialogue_messages,
     )
 
 

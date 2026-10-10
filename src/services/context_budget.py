@@ -71,16 +71,24 @@ def fit_context(
     prior_pair_count,
     configured_prior_turn_limit,
     target_pair_included=False,
+    rebuild_messages=None,
 ):
-    """Trim a complete paired-message prefix; keep the required suffix intact."""
+    """Trim oldest pairs, optionally rebuilding messages for the final payload."""
     budget, reserve, version = input_budget(request)
     estimate = estimate_input(request)
     dropped = 0
     while estimate > budget:
         if dropped == prior_pair_count:
             raise InvocationError("context_limit")
-        request = replace(request, messages=request.messages[2:])
         dropped += 1
+        request = replace(
+            request,
+            messages=(
+                rebuild_messages(dropped)
+                if rebuild_messages is not None
+                else request.messages[2:]
+            ),
+        )
         estimate = estimate_input(request)
     return replace(
         request,

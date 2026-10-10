@@ -23,6 +23,7 @@ export default async function checkHistory(page, base) {
   for (const width of [1280, 390]) {
     await page.setViewportSize({width, height: 900});
     await page.goto(`${base}/sessions/${legacy.id}`);
+    await page.locator('[data-analysis-result]').getByRole('heading', {name: '채택된 보고서: 과거 분석'}).waitFor();
     const provenance = await page.locator('#snapshot-provenance').innerText();
     assert(provenance.includes('읽기 전용') && provenance.includes('실제 시작 시점'));
     assert(provenance.includes('학생봇 소개·지시·모델·옵션'));

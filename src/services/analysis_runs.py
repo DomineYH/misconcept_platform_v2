@@ -356,7 +356,7 @@ async def request_analysis(
         status_code=(
             202
             if execution is not None
-            or accepted.get("latest_run", {}).get("status") == "running"
+            or (accepted.get("latest_run") or {}).get("status") == "running"
             else 200
         ),
     )

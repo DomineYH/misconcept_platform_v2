@@ -80,13 +80,17 @@ try {
   for (const path of ['/sessions/1/export.csv', '/sessions/1/messages/updates', '/sessions/1', '/scenarios/1']) {
     const response = await page.request.get(`${base}${path}`);
     assert.equal(response.status(), 200, path);
-    assert(!(await response.text()).includes('PRIVATE-LIVE-REASON'), path);
+    const text = await response.text();
+    assert(!text.includes('PRIVATE-LIVE-REASON'), path);
+    assert(!text.includes('context_budget_json') && !text.includes('estimated_input_tokens'), path);
   }
   assert(!JSON.stringify([status, replay]).includes('reason_summary'));
+  assert(!JSON.stringify([status, replay]).includes('context_budget_json'));
   await page.waitForFunction(() => window.mentorWire.length > 0);
   const sse = await page.evaluate(() => window.mentorWire[0]);
   assert.deepEqual([...sse.matchAll(/^event: (.+)$/gm)].map(match => match[1]), ['run.accepted', 'output.completed']);
   assert(!sse.includes('PRIVATE-LIVE-REASON') && !sse.includes('should_intervene'));
+  assert(!sse.includes('context_budget_json') && !sse.includes('estimated_input_tokens'));
   assert(!(await page.content()).includes('PRIVATE-LIVE-REASON'));
   await page.locator('#request-mentor').click();
   await page.locator('.mentor-slot').last().locator('[role=status]').filter({hasText:'멘토 처리 중'}).waitFor();

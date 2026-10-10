@@ -258,7 +258,7 @@ async def test_mentor_context_uses_frozen_window_and_excludes_other_roles(
     response = await request_mentor(client, data, latest)
     assert frames(response)[-1][1]["result_kind"] == "message"
     body = mentor.responses.create.call_args.kwargs
-    dialogue = body["input"][0]["content"]
+    dialogue = "\n".join(message["content"] for message in body["input"])
     assert "Outside frozen window" not in dialogue
     assert "Previous teacher A" in dialogue and "Previous teacher B" in dialogue
     assert dialogue.count("Current teacher once") == 1

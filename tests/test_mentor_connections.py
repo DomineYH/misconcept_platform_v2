@@ -42,13 +42,17 @@ async def test_coaching_uses_db_key_exact_options_and_one_linked_attempt(
                 )
             ).one()
             assert attempt.status == "running" and attempt.run_id
+            assert attempt.context_budget_json["target_pair_included"] is True
         assert body["model"] == "gpt-5.2"
         assert body["reasoning"] == {"effort": "medium"}
         assert body["max_output_tokens"] == 1500
         assert (
             'Coach {literal} {{braces}} {"json":true}' in body["instructions"]
         )
-        assert len(body["input"]) == 1 and body["input"][0]["role"] == "user"
+        assert body["input"] == [
+            {"role": "user", "content": "teacher: Why?"},
+            {"role": "user", "content": "student: Student answer"},
+        ]
         return SimpleNamespace(
             output_text=mentor_output("DB mentor coaching"), usage=None
         )

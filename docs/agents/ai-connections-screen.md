@@ -650,15 +650,18 @@ and 1,024 is the estimated input. output_schema uses the existing adapter's
 provider-facing conversion. This is a conservative app estimate, not an exact
 tokenizer count or a guarantee that the provider accepts the request.
 
-Only student callers apply this policy in #74. They select at most frozen N
+Student and mentor callers apply this policy. They select at most frozen N
 prior complete pairs using bounded SQL, retain chronological order and the
-current question once, then drop whole oldest prior pairs until estimate<=B.
+current question once (student) or completed target pair (mentor), then drop
+whole oldest prior pairs until estimate<=B. Mentor input is at most N+1 pairs;
+later turns, other mentor messages and private analysis settings are excluded.
 No global adapter truncation, summaries, remote token counting or output-option
 changes occur. `input_budget(request)` returns B, R and the definition version
-for any role; `estimate_input(request)` supports the existing mentor's packed
-dialogue format and native schema. `fit_context` trims only a paired-message
-prefix and preserves its required suffix, including a target pair. #75 owns
-mentor history trimming and metadata; mentor budgeting is not enabled here.
+for any role; `estimate_input(request)` includes the native structured schema.
+`fit_context` trims only a paired-message prefix and preserves its required
+suffix. Mentor dialogue messages retain teacher/student text labels as user
+data; the mentor remains the assistant. Preflight fixes the request before run
+admission, so later student completion cannot replace its target or context.
 
 New input rejected at preflight creates no teacher/run/attempt. Retry rejection
 preserves the previous failed turn. HTTP422 detail exposes only context_limit
@@ -669,6 +672,12 @@ pair counts, target inclusion and capability version contain no text or secrets.
 Old and non-target attempts remain NULL. Raw usage and pricing are unchanged;
 initial ledger failure blocks the provider and failure/cancellation retain
 already-written budget evidence. Evidence is not added to teacher surfaces.
+Mentor preflight rejection consumes no run, interval, rolling reservation or
+counter. An admitted automatic check consumes its interval even on provider
+context failure; repeating it replays the original result without another call.
+Explicit manual retry uses the latest completed target and current authorization
+and capacity, while preserving the frozen lesson and model options. Only total
+timeout applies to mentor structured calls, fixed at admission from live settings.
 
 Definition changes stale all roles through existing effective role checks.
 Registration, explicit model edits and explicit role probes refresh the DB

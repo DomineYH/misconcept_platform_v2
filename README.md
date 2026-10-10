@@ -100,11 +100,14 @@ counted individual messages (including mentor rows), and now counts complete
 pairs. Existing values are preserved, so administrators should adjust them
 before starting new sessions. Failed attempts and greetings consume no slots.
 
-Student stream and nonstream calls fit the frozen prior-turn limit into a local
+Student stream/nonstream and single structured mentor calls fit the frozen prior-turn limit into a local
 input budget by dropping the oldest complete pairs. The role instruction,
-problem, current question and frozen output options are preserved. Required
-input that still exceeds the budget returns HTTP 422 `context_limit` before a
-new turn or provider attempt is stored; shorten the question or ask an
+problem, current question or completed mentor target pair, intervention condition,
+provider-facing output schema and frozen output options are preserved. Mentor
+input contains at most N prior pairs plus the target pair (N+1 pairs), excluding
+later turns and other mentor messages. Required input that still exceeds the
+budget returns HTTP 422 `context_limit` before a new run or provider attempt is
+stored and consumes no mentor interval, rolling capacity or counter; shorten the question or ask an
 administrator to review the configuration. Provider context failures are recorded
 as failed attempts and are never automatically retried.
 

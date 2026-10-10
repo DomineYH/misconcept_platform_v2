@@ -378,6 +378,17 @@ async def check():
                         ("mentor", "completed", 1),
                         ("mentor", "cancelled", 1),
                     ]
+                    assert all(
+                        row.context_budget_json["target_pair_included"]
+                        and row.context_budget_json["estimator"] == "utf8-v1"
+                        and row.context_budget_json["estimated_input_tokens"]
+                        <= row.context_budget_json["input_budget_tokens"]
+                        for row in attempts
+                    )
+                    assert [
+                        row.context_budget_json["selected_prior_pairs"]
+                        for row in attempts
+                    ] == [0, 1]
                     saved = await db.get(Session, session_id)
                     assert (
                         saved.tutor_intervention_count == 1

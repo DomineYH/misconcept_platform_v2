@@ -94,12 +94,9 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
         if cancelled.is_set():
             raise StudentStreamError("session_ended")
         bot = TutorBot(
-            lesson=execution["lesson"],
-            history=execution["history"],
-            trigger=execution["trigger"],
+            request=execution["request"],
             session_id=accepted["session_id"],
             run_id=accepted["run_id"],
-            request_id=accepted["request_id"],
             permit=execution["permit"],
         )
         task = asyncio.create_task(bot.generate_feedback())

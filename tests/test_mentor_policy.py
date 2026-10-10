@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import httpx2 as httpx
 import pytest
+from lesson_fixtures import mentor_output
 from openai import APIError
 from test_mentor_generation import (
     client,
@@ -46,7 +47,7 @@ async def test_manual_help_ignores_legacy_sensitivity_and_session_cap(
 
 
 @pytest.mark.parametrize("semantic", ["intervene", "fallback", "invalid_json"])
-async def test_auto_judgment_errors_fail_without_heuristic_coaching(
+async def test_auto_structured_errors_fail_without_heuristic_coaching(
     data, client, mentor, semantic, caplog
 ):
     from types import SimpleNamespace
@@ -79,10 +80,12 @@ async def test_auto_judgment_errors_fail_without_heuristic_coaching(
             if semantic == "invalid_json":
                 return SimpleNamespace(output_text="not JSON", usage=None)
             return SimpleNamespace(
-                output_text='{"is_repetitive":true,"is_inappropriate":false,"reason":"Semantic loop"}',
+                output_text=mentor_output("Semantic coaching", "Semantic loop"),
                 usage=None,
             )
-        return SimpleNamespace(output_text="Semantic coaching", usage=None)
+        return SimpleNamespace(
+            output_text=mentor_output("Semantic coaching"), usage=None
+        )
 
     mentor.responses.create.side_effect = create
     result = await client.post(
@@ -96,7 +99,7 @@ async def test_auto_judgment_errors_fail_without_heuristic_coaching(
         assert frames(result)[-1][1]["code"] == (
             "invalid_json" if semantic == "invalid_json" else "invalid_output"
         )
-    assert len(calls) == (2 if semantic == "intervene" else 1)
+    assert len(calls) == 1
     assert "SECRET" not in result.text + caplog.text
     assert calls[0]["max_output_tokens"] == 1500
     from sqlalchemy import select
@@ -111,11 +114,7 @@ async def test_auto_judgment_errors_fail_without_heuristic_coaching(
                 .order_by(ApiUsageLog.id)
             )
         ).all()
-        assert [a.operation for a in attempts] == (
-            ["mentor_judgment", "mentor"]
-            if semantic == "intervene"
-            else ["mentor_judgment"]
-        )
+        assert [a.operation for a in attempts] == ["mentor"]
         assert attempts[0].status == (
             "completed" if semantic == "intervene" else "failed"
         )
@@ -145,7 +144,7 @@ async def test_newer_accepted_mentor_makes_failed_old_turn_obsolete(
     mentor.responses.create.return_value = mentor.stream
     new = await complete_turn(client, data)
     mentor.responses.create.return_value = SimpleNamespace(
-        output_text="Newer coaching", usage=None
+        output_text=mentor_output("Newer coaching"), usage=None
     )
     completed = await client.post(
         mentor_url(data, new),
@@ -182,7 +181,7 @@ async def test_repetition_does_not_bypass_author_condition(
     mentor.responses.create.reset_mock()
     mentor.responses.create.side_effect = None
     mentor.responses.create.return_value = SimpleNamespace(
-        output_text='{"is_repetitive":false,"is_inappropriate":false,"reason":"Condition not met"}',
+        output_text=mentor_output(None, "Condition not met"),
         usage=None,
     )
     result = await client.post(

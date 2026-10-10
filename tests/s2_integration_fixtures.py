@@ -52,6 +52,8 @@ async def installation(request, data, source, tmp_path, monkeypatch):
     try:
         if request.param == "fresh":
             await seed.seed_database()
+        else:
+            await migrate.run_all_migrations()
         async with factory() as db:
             group = await db.scalar(select(UserGroup).order_by(UserGroup.id))
             for username in ("admin", "owner", "other"):
@@ -140,12 +142,12 @@ def workflow_transport(monkeypatch, provider):
                     dialogue_coaching=[],
                 )
             )
-        if "is_repetitive" in properties:
+        if "should_intervene" in properties:
             return json.dumps(
                 dict(
-                    is_repetitive=True,
-                    is_inappropriate=False,
-                    reason="Authored condition",
+                    should_intervene=True,
+                    feedback="Mentor coaching",
+                    reason_summary="Authored condition",
                 )
             )
         return "Student answer" if body.get("stream") else "Mentor coaching"

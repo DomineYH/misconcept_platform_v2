@@ -9,7 +9,12 @@ from sqlalchemy import text
 from test_google_catalog import install, save_key
 from test_google_invocations import response, sse
 from test_model_management import write
-from test_role_probes import CLASSIFICATION, JUDGMENT, SYNTHESIS
+from test_role_probes import (
+    CLASSIFICATION,
+    MENTOR_NEGATIVE,
+    MENTOR_POSITIVE,
+    SYNTHESIS,
+)
 from test_student_probe import api as probe_api
 from test_student_probe import cleanup_probes as cleanup_probes
 from test_student_probe import completed
@@ -58,11 +63,11 @@ async def test_google_role_probe_is_versioned_idempotent_and_has_two_attempts(
             ).one()
             assert row == ("google", "running", 1)
         content = "학생의 생각을 물어보세요."
-        if role == "analysis" or (role == "mentor" and len(calls) == 1):
+        if role in ("analysis", "mentor"):
             assert config["responseMimeType"] == "application/json"
             assert config["responseJsonSchema"]["type"] == "object"
             content = json.dumps(
-                JUDGMENT
+                (MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE)
                 if role == "mentor"
                 else CLASSIFICATION if len(calls) == 1 else SYNTHESIS
             )
@@ -99,9 +104,10 @@ async def test_google_role_probe_is_versioned_idempotent_and_has_two_attempts(
         evidence["status"] == "succeeded"
         and evidence["credential_revision"] == 1
     )
-    assert (
-        evidence["capability_definition_version"] == "google-2026-10-09-v1"
-        and evidence["role_contract_version"] == "s1-v1"
+    assert evidence[
+        "capability_definition_version"
+    ] == "google-2026-10-09-v1" and evidence["role_contract_version"] == (
+        "s3-v1" if role == "mentor" else "s1-v1"
     )
     assert all(
         value["status"] == "unverified"
@@ -148,12 +154,12 @@ async def test_structured_google_probe_uses_server_validation_and_stops_on_failu
 
     async def upstream(request):
         value = deepcopy(
-            JUDGMENT
+            MENTOR_POSITIVE
             if role == "mentor"
             else CLASSIFICATION if len(calls) == 1 else SYNTHESIS
         )
         if mode == "type":
-            value["is_repetitive"] = "false"
+            value["should_intervene"] = "false"
         if mode == "label":
             value["label"] = "PRIVATE-OUTPUT"
         if mode == "quote" and len(calls) == 2:

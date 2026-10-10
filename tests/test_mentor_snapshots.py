@@ -3,7 +3,7 @@
 from uuid import uuid4
 
 import pytest
-from lesson_fixtures import configure_mentor
+from lesson_fixtures import configure_mentor, mentor_output
 from test_mentor_generation import (
     client,
     complete_turn,
@@ -71,7 +71,7 @@ async def test_negative_auto_check_allows_manual_help_and_trigger_conflicts(
     mentor.responses.create.reset_mock()
     mentor.responses.create.side_effect = None
     mentor.responses.create.return_value = SimpleNamespace(
-        output_text='{"is_repetitive":false,"is_inappropriate":false,"reason":"Condition not met"}',
+        output_text=mentor_output(None, "Condition not met"),
         usage=None,
     )
     request_id = str(uuid4())
@@ -86,7 +86,7 @@ async def test_negative_auto_check_allows_manual_help_and_trigger_conflicts(
         mentor.responses.create.call_args.kwargs
     )
     mentor.responses.create.return_value = SimpleNamespace(
-        output_text="Explicit help", usage=None
+        output_text=mentor_output("Explicit help"), usage=None
     )
     manual = await request_mentor(client, data, turn)
     assert frames(manual)[-1][1]["message"]["content"] == "Explicit help"
@@ -192,11 +192,7 @@ async def test_auto_policy_counts_completed_pairs_and_sliding_interventions(
 
     async def coaching(**body):
         return SimpleNamespace(
-            output_text=(
-                '{"is_repetitive":true,"is_inappropriate":false,"reason":"Author condition"}'
-                if "text" in body
-                else "Policy coaching"
-            ),
+            output_text=(mentor_output("Policy coaching", "Author condition")),
             usage=None,
         )
 

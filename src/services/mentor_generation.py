@@ -228,7 +228,6 @@ async def _reserve_mentor(
         connection, model, options = await resolve_frozen_model(
             db, lesson.config.mentor.resolved_model_config, "mentor"
         )
-        operation = "mentor_judgment" if trigger == "auto" else "mentor"
         run = GenerationRun(
             id=str(uuid4()),
             owner_id=user.id,
@@ -254,7 +253,7 @@ async def _reserve_mentor(
             connection,
             setting,
             owner_id=user.id,
-            operation=operation,
+            operation="mentor",
             role="mentor",
             admin=False,
         )
@@ -267,7 +266,6 @@ async def _reserve_mentor(
         if previous is None:
             session.tutor_question_count += 1
         execution = {
-            "owner_id": user.id,
             "lesson": lesson,
             "trigger": trigger,
             "history": history,
@@ -289,6 +287,7 @@ async def finish_mentor(
     *,
     status,
     content=None,
+    reason_summary=None,
     error_code=None,
 ):
     async with factory() as db:
@@ -303,6 +302,7 @@ async def finish_mentor(
         run.error_code = error_code
         run.finished_at = datetime.now(timezone.utc)
         if status == "completed":
+            run.mentor_reason_summary = reason_summary
             run.result_kind = "message" if content else "no_intervention"
             if content:
                 teacher = await db.scalar(

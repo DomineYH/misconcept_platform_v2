@@ -484,6 +484,13 @@ async def test_contract_archives_unreferenced_sources_and_matches_fresh_schema(
         == "Unreferenced original {text}"
     )
     assert archive["analysis_frameworks"][-1]["id"] == 91
+    upgraded = create_async_engine(
+        f"sqlite+aiosqlite:///{workspace / 'rehearsal.db'}"
+    )
+    try:
+        await migrate.run_all_migrations(db_engine=upgraded)
+    finally:
+        await upgraded.dispose()
     fresh = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'fresh.db'}")
     try:
         await migrate.run_all_migrations(db_engine=fresh)

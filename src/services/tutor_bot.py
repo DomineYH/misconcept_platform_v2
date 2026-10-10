@@ -3,96 +3,33 @@
 import asyncio
 from contextlib import aclosing
 
-from src.services.call_admission import admit_call
 from src.services.call_execution import execute_call
 from src.services.invocation_types import (
     InvocationError,
     StructuredRequest,
-    TextRequest,
 )
-from src.services.lesson_connections import resolve_frozen_model
-from src.services.role_output_contracts import InterventionJudgment
+from src.services.role_output_contracts import MentorOutput
 
 
 class TutorBot:
     def __init__(
         self,
         *,
-        factory,
         lesson,
         history,
         trigger,
-        owner_id,
         session_id,
         run_id,
         request_id,
         permit,
     ):
-        self.factory, self.lesson, self.history = factory, lesson, history
-        self.trigger, self.owner_id, self.session_id = (
-            trigger,
-            owner_id,
+        self.lesson, self.history, self.trigger = lesson, history, trigger
+        self.session_id, self.run_id, self.request_id = (
             session_id,
+            run_id,
+            request_id,
         )
-        self.run_id, self.request_id, self.permit = run_id, request_id, permit
-        self.admitted_at, self.timeouts = permit.admitted_at, permit.timeouts
-
-    async def invoke(self, operation, instruction, messages):
-        selection = self.lesson.config.mentor.resolved_model_config
-        options = selection.options.model_dump(exclude_unset=True)
-        if self.permit is not None:
-            permit, self.permit = self.permit, None
-            permit.task = asyncio.current_task()
-        else:
-            async with self.factory() as db:
-                connection, model, options = await resolve_frozen_model(
-                    db, selection, "mentor"
-                )
-            permit = await admit_call(
-                self.factory,
-                connection_id=connection.id,
-                owner_id=self.owner_id,
-                operation=operation,
-                role="mentor",
-                admin=False,
-                expected_connection_version=connection.connection_version,
-                model_config_id=model.id,
-                expected_model_version=model.config_version,
-                model_options=options,
-            )
-            permit.admitted_at, permit.timeouts = (
-                self.admitted_at,
-                self.timeouts,
-            )
-        values = dict(
-            provider=selection.provider,
-            model_id=selection.model_id,
-            role="mentor",
-            system_instruction=instruction,
-            messages=messages,
-            validated_options=options,
-            request_id=self.request_id,
-        )
-        judgment = operation == "mentor_judgment"
-        request = (
-            StructuredRequest(**values, output_schema=InterventionJudgment)
-            if judgment
-            else TextRequest(**values)
-        )
-        async with aclosing(
-            execute_call(
-                permit,
-                request,
-                kind="structured" if judgment else "text",
-                run_id=self.run_id,
-                session_id=self.session_id,
-            )
-        ) as events:
-            async for event in events:
-                if event.type == "completed":
-                    return event
-                if event.type in ("error", "refused", "interrupted"):
-                    raise InvocationError(event.error_code or event.type)
+        self.permit = permit
 
     async def generate_feedback(self):
         config = self.lesson.config
@@ -114,34 +51,46 @@ class TutorBot:
         dialogue = "\n".join(
             f"{row['role']}: {row['content']}" for row in self.history
         )
-        reason = ""
-        if self.trigger == "auto":
-            response = await self.invoke(
-                "mentor_judgment",
-                instruction,
-                [
-                    {
-                        "role": "user",
-                        "content": f"{dialogue}\n\n개입 조건\n{mentor.intervention_policy.condition}\n"
-                        "작성된 조건만으로 코칭 필요 여부를 판단하세요. 조건 충족 시 기존 JSON 필드 is_repetitive 또는 is_inappropriate를 true로, 미충족 시 둘 다 false로 응답하고 reason에 근거를 적으세요.",
-                    }
-                ],
-            )
-            judgment = response.structured
-            if not (judgment["is_repetitive"] or judgment["is_inappropriate"]):
-                return None, None
-            reason = judgment["reason"] or ""
-        response = await self.invoke(
-            "mentor",
-            instruction,
-            [
-                {
-                    "role": "user",
-                    "content": f"{dialogue}\n\n개입 이유: {reason}\n교사를 위한 코칭을 제공하세요.",
-                }
-            ],
+        policy = (
+            "수동 도움입니다. 자동 조건 판별을 건너뛰고 should_intervene=true로 코칭하세요."
+            if self.trigger == "manual"
+            else f"자동 검사입니다. 다음 조건만으로 개입 여부를 판단하세요.\n개입 조건\n{mentor.intervention_policy.condition}"
         )
-        return response.text, None
+        instruction += (
+            "\n\nshould_intervene, feedback, reason_summary의 구조화 결과를 반환하세요. "
+            "개입이면 feedback에 교사 코칭을, 미개입이면 정확히 빈 문자열을 넣으세요. "
+            "feedback은 최대 50000자입니다. reason_summary에는 공백이 아닌 짧은 판단 설명을 "
+            "최대 2000자로 쓰세요. 원문 추론은 요구하지 않습니다.\n" + policy
+        )
+        selection = mentor.resolved_model_config
+        request = StructuredRequest(
+            provider=selection.provider,
+            model_id=selection.model_id,
+            role="mentor",
+            system_instruction=instruction,
+            messages=[{"role": "user", "content": dialogue}],
+            validated_options=self.permit.model_options,
+            request_id=self.request_id,
+            output_schema=MentorOutput,
+            validation_context={"trigger": self.trigger},
+        )
+        permit, self.permit = self.permit, None
+        permit.task = asyncio.current_task()
+        async with aclosing(
+            execute_call(
+                permit,
+                request,
+                kind="structured",
+                run_id=self.run_id,
+                session_id=self.session_id,
+            )
+        ) as events:
+            async for event in events:
+                if event.type == "completed":
+                    result = event.structured
+                    return result["feedback"], result["reason_summary"]
+                if event.type in ("error", "refused", "interrupted"):
+                    raise InvocationError(event.error_code or event.type)
 
     async def close(self):
         if self.permit is not None:

@@ -34,7 +34,7 @@ async def test_provider_unknowns_and_zero_writes_reach_dashboard(
 
     from test_model_management import write
     from test_provider_connections import KEY, PASSWORD
-    from test_role_probes import JUDGMENT
+    from test_role_probes import MENTOR_NEGATIVE, MENTOR_POSITIVE
     from test_student_probe import completed
 
     if case.startswith("google"):
@@ -47,7 +47,9 @@ async def test_provider_unknowns_and_zero_writes_reach_dashboard(
 
         async def upstream(request):
             value = response(
-                json.dumps(JUDGMENT) if len(calls) == 1 else "Coaching",
+                json.dumps(
+                    MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE
+                ),
                 usage={
                     "promptTokenCount": 10,
                     "cachedContentTokenCount": 0,
@@ -69,7 +71,9 @@ async def test_provider_unknowns_and_zero_writes_reach_dashboard(
 
         async def upstream(request):
             value = claude_body(
-                json.dumps(JUDGMENT) if len(calls) == 1 else "Coaching"
+                json.dumps(
+                    MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE
+                )
             )
             value["usage"].update(
                 cache_creation_input_tokens=(

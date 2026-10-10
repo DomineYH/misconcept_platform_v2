@@ -9,7 +9,12 @@ from sqlalchemy import text
 from test_anthropic_catalog import MODEL, save_key, sdk_transport
 from test_model_management import write
 from test_provider_connections import api as provider_api
-from test_role_probes import CLASSIFICATION, JUDGMENT, SYNTHESIS
+from test_role_probes import (
+    CLASSIFICATION,
+    MENTOR_NEGATIVE,
+    MENTOR_POSITIVE,
+    SYNTHESIS,
+)
 from test_student_probe import cleanup_probes as cleanup_probes
 from test_student_probe import completed, sse
 
@@ -186,25 +191,18 @@ async def test_claude_structured_role_probe_validates_existing_contract(
     async def upstream(request):
         payload = json.loads(request.content)
         assert payload["max_tokens"] == budget and "stream" not in payload
-        if role == "mentor" and len(calls) == 2:
-            assert "output_config" not in payload
-            value = "학생에게 근거를 물어보세요."
-        else:
-            schema = payload["output_config"]["format"]
-            assert (
-                schema["type"] == "json_schema"
-                and schema["schema"]["additionalProperties"] is False
-            )
-            if role == "analysis" and len(calls) == 1:
-                assert (
-                    "maximum"
-                    not in schema["schema"]["properties"]["confidence"]
-                )
-            value = json.dumps(
-                JUDGMENT
-                if role == "mentor"
-                else CLASSIFICATION if len(calls) == 1 else SYNTHESIS
-            )
+        schema = payload["output_config"]["format"]
+        assert (
+            schema["type"] == "json_schema"
+            and schema["schema"]["additionalProperties"] is False
+        )
+        if role == "analysis" and len(calls) == 1:
+            assert "maximum" not in schema["schema"]["properties"]["confidence"]
+        value = json.dumps(
+            (MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE)
+            if role == "mentor"
+            else CLASSIFICATION if len(calls) == 1 else SYNTHESIS
+        )
         return httpx2.Response(200, json=response_body(value))
 
     clients, calls = sdk_transport(
@@ -228,8 +226,11 @@ async def test_claude_structured_role_probe_validates_existing_contract(
             )
         ).all()
         assert rows == [
-            ("judgment" if role == "mentor" else "classification", "completed"),
-            ("coaching" if role == "mentor" else "synthesis", "completed"),
+            (
+                "manual_positive" if role == "mentor" else "classification",
+                "completed",
+            ),
+            ("auto_negative" if role == "mentor" else "synthesis", "completed"),
         ]
 
 
@@ -267,7 +268,7 @@ async def test_claude_failures_stop_bundle_preserve_usage_and_hide_bodies(
         payload = json.loads(request.content)
         current = len(calls) - start_count
         value = (
-            JUDGMENT
+            MENTOR_POSITIVE
             if role == "mentor"
             else CLASSIFICATION if current == 1 else SYNTHESIS
         )
@@ -303,9 +304,9 @@ async def test_claude_failures_stop_bundle_preserve_usage_and_hide_bodies(
             }:
                 value = json.loads(json.dumps(value))
                 if mode == "type":
-                    value["is_repetitive"] = "false"
+                    value["should_intervene"] = "false"
                 if mode == "reason_empty":
-                    value["reason"] = " "
+                    value["reason_summary"] = " "
                 if mode == "label":
                     value["label"] = "unknown"
                 if mode == "confidence":

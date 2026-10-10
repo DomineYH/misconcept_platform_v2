@@ -21,9 +21,11 @@ __all__ = ["client"]
 
 
 @pytest.mark.parametrize("provider", ["openai", "anthropic", "google"])
-@pytest.mark.parametrize("trigger", ["manual", "auto"])
-async def test_mentor_uses_one_frozen_provider_config_for_all_subcalls(
-    data, client, monkeypatch, provider, trigger
+@pytest.mark.parametrize(
+    "trigger,positive", [("manual", True), ("auto", True), ("auto", False)]
+)
+async def test_mentor_single_structured_call_uses_frozen_provider_config(
+    data, client, monkeypatch, provider, trigger, positive
 ):
     from test_provider_connections import KEY
     from test_student_probe import response_body, sdk_transport
@@ -44,7 +46,10 @@ async def test_mentor_uses_one_frozen_provider_config_for_all_subcalls(
         capability_definition_version=version,
         role_contract_version="s1-v1",
     )
-    model.verification_state = {"student": evidence, "mentor": evidence}
+    model.verification_state = {
+        "student": evidence,
+        "mentor": {**evidence, "role_contract_version": "s3-v1"},
+    }
     connection.encrypted_key, connection.nonce = encrypt_key(connection, KEY, 1)
     options = {
         "openai": dict(max_output_tokens=1024, reasoning={"effort": "low"}),
@@ -93,10 +98,12 @@ async def test_mentor_uses_one_frozen_provider_config_for_all_subcalls(
     await data.db.commit()
 
     def content():
-        return (
-            '{"is_repetitive":true,"is_inappropriate":false,"reason":"Author condition"}'
-            if trigger == "auto" and len(calls) == 1
-            else "Frozen coaching"
+        return json.dumps(
+            dict(
+                should_intervene=positive,
+                feedback="Frozen coaching" if positive else "",
+                reason_summary="PRIVATE-REASON-SENTINEL",
+            )
         )
 
     if provider == "openai":
@@ -131,10 +138,17 @@ async def test_mentor_uses_one_frozen_provider_config_for_all_subcalls(
         f"/sessions/{data.session.id}/turns/{turn_id}/mentor/stream",
         json=dict(request_id=request_id, trigger=trigger),
     )
-    assert (
-        frames(result)[-1][1]["message"]["content"] == "Frozen coaching"
+    final = frames(result)[-1][1]
+    assert final["result_kind"] == (
+        "message" if positive else "no_intervention"
     ), result.text
-    assert len(calls) == (2 if trigger == "auto" else 1)
+    assert (
+        final["message"]["content"] == "Frozen coaching"
+        if positive
+        else final["message"] is None
+    )
+    assert "PRIVATE-REASON-SENTINEL" not in result.text
+    assert len(calls) == 1
     for call in calls:
         body = call if provider == "openai" else json.loads(call.content)
         if provider == "openai":
@@ -142,12 +156,15 @@ async def test_mentor_uses_one_frozen_provider_config_for_all_subcalls(
             assert body["max_output_tokens"] == 1024
             assert body["reasoning"] == {"effort": "low"}
             instruction = body["instructions"]
+            schema = body["text"]["format"]["schema"]
+            assert body["text"]["format"]["strict"] is True
         elif provider == "anthropic":
             assert body["model"] == "claude-sonnet-4-6"
             assert body["max_tokens"] == 1024
             assert body["thinking"] == {"type": "disabled"}
             assert body["temperature"] == 0.4
             instruction = body["system"]
+            schema = body["output_config"]["format"]["schema"]
         else:
             assert call.url.path.endswith("gemini-2.5-flash:generateContent")
             assert body["generationConfig"]["maxOutputTokens"] == 1024
@@ -157,6 +174,13 @@ async def test_mentor_uses_one_frozen_provider_config_for_all_subcalls(
             )
             assert body["generationConfig"]["temperature"] == 0.4
             instruction = body["systemInstruction"]["parts"][0]["text"]
+            schema = body["generationConfig"]["responseJsonSchema"]
+        assert set(schema["required"]) == {
+            "should_intervene",
+            "feedback",
+            "reason_summary",
+        }
+        assert schema["additionalProperties"] is False
         assert "Coach {literal}" in instruction
         assert (
             "PRIVATE ANALYSIS" not in instruction
@@ -173,12 +197,12 @@ async def test_mentor_uses_one_frozen_provider_config_for_all_subcalls(
             model.model_id,
             data.session.config_hash,
         )
+        assert run.mentor_reason_summary == "PRIVATE-REASON-SENTINEL"
+        assert run.mentor_trigger == trigger
         attempts = (
             await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))
         ).all()
-        assert [row.operation for row in attempts] == (
-            ["mentor_judgment", "mentor"] if trigger == "auto" else ["mentor"]
-        )
+        assert [row.operation for row in attempts] == ["mentor"]
         assert all(
             row.status == "completed"
             and row.run_id == run.id

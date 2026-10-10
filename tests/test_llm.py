@@ -150,6 +150,7 @@ async def test_explicit_mentor_retry_keeps_state_and_one_attempt_per_invocation(
         LESSON_KEY,
         configure_mentor,
         install_mentor_model,
+        mentor_output,
     )
     from test_student_generation import frames
     from test_student_probe import sdk_transport
@@ -180,7 +181,9 @@ async def test_explicit_mentor_retry_keeps_state_and_one_attempt_per_invocation(
             raise httpx.ConnectError(
                 "SECRET connection failure", request=request
             )
-        return httpx.Response(200, json=response_body("Feedback", USAGE))
+        return httpx.Response(
+            200, json=response_body(mentor_output("Feedback"), USAGE)
+        )
 
     clients, calls = sdk_transport(
         monkeypatch, upstream, budget=1500, key=LESSON_KEY, model="gpt-5.2"

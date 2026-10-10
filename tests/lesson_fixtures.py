@@ -1,6 +1,7 @@
 """Encrypted, verified S1 lesson configurations in isolated test databases."""
 
 import base64
+import json
 
 from pydantic import SecretStr
 from sqlalchemy import inspect, select
@@ -10,6 +11,17 @@ from src.db.migrations import migrate
 from src.models import AppSetting, ModelConfig, ProviderConnection
 from src.services.model_capabilities import DEFINITION_VERSION
 from src.services.provider_secrets import encrypt_key
+
+
+def mentor_output(feedback, reason_summary="PRIVATE-REASON"):
+    return json.dumps(
+        dict(
+            should_intervene=feedback is not None,
+            feedback="" if feedback is None else feedback,
+            reason_summary=reason_summary,
+        )
+    )
+
 
 LESSON_KEY = "sk-PRIVATE-DB-LESSON-KEY"
 STUDENT_INSTRUCTION = (
@@ -38,6 +50,18 @@ async def install_connection(data, monkeypatch):
     if not installed:
         monkeypatch.setattr(migrate, "engine", data.engine)
         await migrate.run_all_migrations(through=30)
+    async with data.engine.connect() as conn:
+        has_reason = await conn.run_sync(
+            lambda sync: any(
+                column["name"] == "mentor_reason_summary"
+                for column in inspect(sync).get_columns("generation_run")
+            )
+        )
+    if not has_reason:
+        await migrate.run_migration(
+            migrate.DIRECTORY / "032_mentor_reason_summary.sql",
+            db_engine=data.engine,
+        )
     connection = await data.db.scalar(
         select(ProviderConnection).where(
             ProviderConnection.provider == "openai"
@@ -108,7 +132,7 @@ async def install_mentor_model(data, connection):
                 "credential_revision": connection.credential_revision,
                 "connection_version": connection.connection_version,
                 "capability_definition_version": DEFINITION_VERSION,
-                "role_contract_version": "s1-v1",
+                "role_contract_version": "s3-v1",
             }
         },
     )

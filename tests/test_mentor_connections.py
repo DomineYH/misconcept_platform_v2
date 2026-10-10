@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from lesson_fixtures import LESSON_KEY
+from lesson_fixtures import LESSON_KEY, mentor_output
 from sqlalchemy import select
 from test_mentor_generation import (
     client,
@@ -49,7 +49,9 @@ async def test_coaching_uses_db_key_exact_options_and_one_linked_attempt(
             'Coach {literal} {{braces}} {"json":true}' in body["instructions"]
         )
         assert len(body["input"]) == 1 and body["input"][0]["role"] == "user"
-        return SimpleNamespace(output_text="DB mentor coaching", usage=None)
+        return SimpleNamespace(
+            output_text=mentor_output("DB mentor coaching"), usage=None
+        )
 
     mentor.responses.create.side_effect = upstream
     payload = {"request_id": str(uuid4()), "trigger": "manual"}
@@ -76,7 +78,7 @@ async def test_coaching_uses_db_key_exact_options_and_one_linked_attempt(
         assert attempt.attempt_no == 1 and attempt.input_tokens is None
 
 
-async def test_judgment_and_coaching_share_frozen_model_and_options(
+async def test_single_structured_auto_call_uses_frozen_model_and_options(
     data, client, mentor, monkeypatch
 ):
     from lesson_fixtures import configure_mentor
@@ -91,26 +93,23 @@ async def test_judgment_and_coaching_share_frozen_model_and_options(
 
     async def upstream(**body):
         calls.append(body)
-        if len(calls) == 1:
-            assert body["model"] == "gpt-5.2"
-            assert body["max_output_tokens"] == 1500
-            assert body["reasoning"] == {"effort": "medium"}
-            assert body["text"]["format"]["type"] == "json_schema"
-            assert body["text"]["format"]["strict"] is True
-            return SimpleNamespace(
-                output_text='{"is_repetitive":true,"is_inappropriate":false,"reason":"Author condition"}',
-                usage=None,
-            )
         assert body["model"] == "gpt-5.2"
-        assert "Author condition" in body["input"][0]["content"]
-        return SimpleNamespace(output_text="Judgment coaching", usage=None)
+        assert body["max_output_tokens"] == 1500
+        assert body["reasoning"] == {"effort": "medium"}
+        assert body["text"]["format"]["type"] == "json_schema"
+        assert body["text"]["format"]["strict"] is True
+        assert "PRIVATE CONDITION" in body["instructions"]
+        return SimpleNamespace(
+            output_text=mentor_output("Judgment coaching", "Author condition"),
+            usage=None,
+        )
 
     mentor.responses.create.side_effect = upstream
     payload = {"request_id": str(uuid4()), "trigger": "auto"}
     response = await client.post(mentor_url(data, turn), json=payload)
     result = frames(response)[-1][1]
     assert result["message"]["content"] == "Judgment coaching"
-    assert len(calls) == 2
+    assert len(calls) == 1
     async with data.factory() as db:
         attempts = (
             await db.scalars(
@@ -119,15 +118,15 @@ async def test_judgment_and_coaching_share_frozen_model_and_options(
                 .order_by(ApiUsageLog.id)
             )
         ).all()
-        assert [a.operation for a in attempts] == ["mentor_judgment", "mentor"]
-        assert [a.model for a in attempts] == ["gpt-5.2", "gpt-5.2"]
+        assert [a.operation for a in attempts] == ["mentor"]
+        assert [a.model for a in attempts] == ["gpt-5.2"]
         assert all(
             a.status == "completed" and a.attempt_no == 1 for a in attempts
         )
         assert all(
             a.run_id == frames(response)[0][1]["run_id"] for a in attempts
         )
-        assert len({a.invocation_id for a in attempts}) == 2
+        assert len({a.invocation_id for a in attempts}) == 1
 
 
 @pytest.mark.parametrize(
@@ -137,6 +136,7 @@ async def test_judgment_and_coaching_share_frozen_model_and_options(
         "key_missing",
         "unverified",
         "stale",
+        "old_contract",
         "model_missing",
         "invalid_options",
         "snapshot_invalid",
@@ -164,6 +164,13 @@ async def test_unavailable_configuration_blocks_mentor_before_acceptance(
             "mentor": {
                 **mentor.mentor_model.verification_state["mentor"],
                 "credential_revision": 0,
+            }
+        }
+    elif mode == "old_contract":
+        mentor.mentor_model.verification_state = {
+            "mentor": {
+                **mentor.mentor_model.verification_state["mentor"],
+                "role_contract_version": "s1-v1",
             }
         }
     elif mode == "model_missing":
@@ -217,11 +224,18 @@ async def test_unavailable_configuration_blocks_mentor_before_acceptance(
         ("output_limit", "output_limit", "failed"),
         ("transient", "transient", "failed"),
         ("empty", "empty_response", "failed"),
+        ("invalid_json", "invalid_json", "failed"),
+        ("manual_false", "invalid_output", "failed"),
+        ("empty_reason", "empty_response", "failed"),
+        ("wrong_type", "invalid_output", "failed"),
+        ("contradiction", "invalid_output", "failed"),
     ],
 )
 async def test_coaching_failures_record_one_attempt_without_promoting_output(
     data, client, mentor, monkeypatch, caplog, mode, code, status
 ):
+    import json
+
     import httpx2
     from test_student_probe import response_body, sdk_transport
 
@@ -252,8 +266,27 @@ async def test_coaching_failures_record_one_attempt_without_promoting_output(
         elif mode == "output_limit":
             response["status"] = "incomplete"
             response["incomplete_details"] = {"reason": "max_output_tokens"}
-        else:
+        elif mode == "empty":
             response["output"] = []
+        elif mode == "invalid_json":
+            response = response_body('{"PRIVATE-PARTIAL":')
+        else:
+            value = json.loads(mentor_output("Coaching"))
+            if mode == "manual_false":
+                value.update(should_intervene=False, feedback="")
+            elif mode == "empty_reason":
+                value["reason_summary"] = " "
+            elif mode == "wrong_type":
+                value["should_intervene"] = "true"
+            elif mode == "contradiction":
+                value["should_intervene"] = False
+            response = response_body(json.dumps(value))
+            if mode == "empty_reason":
+                response["usage"] = {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                }
         return httpx2.Response(200, json=response)
 
     clients, calls = sdk_transport(
@@ -275,7 +308,23 @@ async def test_coaching_failures_record_one_attempt_without_promoting_output(
         ).one()
         assert attempt.status == status and attempt.error_code == code
         assert attempt.run_id == frames(response)[0][1]["run_id"]
-        assert attempt.input_tokens is None and attempt.output_tokens is None
+        if mode == "empty_reason":
+            assert (
+                attempt.input_tokens
+                == attempt.output_tokens
+                == attempt.total_tokens
+                == 0
+            )
+        else:
+            assert (
+                attempt.input_tokens is None and attempt.output_tokens is None
+            )
+        run = await db.get(GenerationRun, attempt.run_id)
+        assert (
+            run.mentor_reason_summary is None
+            and run.result_kind is None
+            and run.partial_text is None
+        )
         assert attempt.finished_at is not None and attempt.attempt_no == 1
         assert (
             await db.scalars(select(Message).where(Message.role == "tutor"))

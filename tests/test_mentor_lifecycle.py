@@ -4,6 +4,7 @@ import asyncio
 from uuid import uuid4
 
 import pytest
+from lesson_fixtures import mentor_output
 from sqlalchemy import event as sql_event
 from test_mentor_generation import (
     client,
@@ -192,6 +193,21 @@ async def test_coaching_commit_failure_rolls_back_intervention_count(
         await client.get(f"/runs/{frames(response)[0][1]['run_id']}")
     ).json()
     assert snapshot["message"] is None
+    from sqlalchemy import select
+
+    from src.models import ApiUsageLog, GenerationRun
+
+    async with data.factory() as db:
+        run = await db.get(GenerationRun, snapshot["run_id"])
+        assert run.mentor_reason_summary is None and run.result_kind is None
+        attempt = (
+            await db.scalars(
+                select(ApiUsageLog).where(ApiUsageLog.run_id == run.id)
+            )
+        ).one()
+        assert (
+            attempt.status == "completed"
+        )  # Provider success is separate from storage failure.
     retry = await client.post(
         mentor_url(data, turn),
         json={"request_id": str(uuid4()), "trigger": "manual"},
@@ -342,7 +358,9 @@ async def test_persisted_end_wins_even_when_live_cancel_signal_is_missed(
     async def create(**kwargs):
         entered.set()
         await gate.wait()
-        return SimpleNamespace(output_text="Too late coaching", usage=None)
+        return SimpleNamespace(
+            output_text=mentor_output("Too late coaching"), usage=None
+        )
 
     mentor.responses.create.side_effect = create
     payload = {"request_id": str(uuid4()), "trigger": "manual"}
@@ -367,6 +385,11 @@ async def test_persisted_end_wins_even_when_live_cancel_signal_is_missed(
         assert frames(result)[-1][0] == "run.cancelled"
         state = (await client.get(f"/runs/{state['run_id']}")).json()
         assert state["message"] is None
+        from src.models import GenerationRun
+
+        async with data.factory() as db:
+            run = await db.get(GenerationRun, state["run_id"])
+            assert run.mentor_reason_summary is None and run.result_kind is None
         await data.db.refresh(data.session)
         assert data.session.tutor_intervention_count == 0
         updates = await client.get(

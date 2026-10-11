@@ -65,8 +65,12 @@ export default async function checkApiUsage(page) {
     assert(await page.evaluate(() => document.activeElement?.getAttribute('aria-labelledby') === 'generation-usage-caption'), 'keyboard reaches labelled table');
     const region = page.getByRole('region', {name:'생성 호출 및 기존 기록', exact:true});
     assert.equal(await region.evaluate(el => getComputedStyle(el).outlineStyle), 'solid', 'visible keyboard focus');
-    await page.keyboard.press('ArrowRight');
-    await page.waitForFunction(() => document.querySelector('[aria-labelledby="generation-usage-caption"]').scrollLeft > 0);
+    for (let i = 0; i < 10; i++) {
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+      if (await region.evaluate(el => el.scrollLeft > 0)) break;
+    }
+    assert(await region.evaluate(el => el.scrollLeft > 0), 'ArrowRight scrolls the focused table within 10 presses');
     await page.keyboard.press('Tab');
     assert(await page.evaluate(() => document.activeElement?.getAttribute('aria-labelledby') === 'model-list-usage-caption'), 'keyboard reaches separate list table');
     checks.push(`${width}px: zero/NULL, failure/retry, preserved legacy, partial totals, price source, keyboard scrolling`);

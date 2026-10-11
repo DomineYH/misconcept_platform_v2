@@ -168,9 +168,10 @@ async def test_deleted_original_opens_fixed_new_draft_without_saving_or_extendin
     assert detail["source_available"] is False
     response = await client.get(
         "/admin/scenarios/new",
-        params={"comparison_id": accepted["comparison_run_id"]},
+        params={"from_comparison": accepted["comparison_run_id"]},
     )
     assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
     assert "비교의 고정 조건을 새 초안에 열었습니다" in response.text
     editor = json.loads(
         re.search(
@@ -183,7 +184,7 @@ async def test_deleted_original_opens_fixed_new_draft_without_saving_or_extendin
     assert editor["config"] == before["source_snapshot"]["config"]
     assert editor["title"] == "<img src=x onerror=alert(1)>"
     assert "<img src=x onerror=alert(1)>" not in response.text
-    assert editor["comparison_source_id"] == accepted["comparison_run_id"]
+    assert editor["comparison_draft_id"] == accepted["comparison_run_id"]
     assert (await client.get(path)).json()["expires_at"] == before["expires_at"]
     async with data.factory() as db:
         assert len((await db.scalars(select(Scenario))).all()) == 1

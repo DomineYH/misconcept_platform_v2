@@ -10,7 +10,7 @@ export function mountScenarioModels(data, onChange) {
     const status = document.getElementById(`${role}-model-status`);
     let saved = data.config[role].resolved_model_config;
     const defaultModel = data.role_defaults?.[role];
-    if (data.id == null && !data.comparison_source_id && saved == null && defaultModel?.available) {
+    if (data.id == null && !data.comparison_draft_id && saved == null && defaultModel?.available) {
       const model = data.model_choices.find(m => m.id === defaultModel.model_config_id);
       if (model) saved = identity(model);
     }

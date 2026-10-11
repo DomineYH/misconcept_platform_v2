@@ -25,7 +25,7 @@ export function mountComparison(data, draft) {
   const errors = node('div', null, {role:'alert', tabindex:'-1'});
   const total = node('p', null, {id:'comparison-total'});
   const editorLocks = new Map();
-  let reset, previousRole = 'student';
+  let reset, previousRole = 'student', parentRunId = null;
   const rolePanels = new Map();
   let recovery = null, streamToken = null;
   function remember(id) {
@@ -161,6 +161,7 @@ export function mountComparison(data, draft) {
     previousRole = target.value;
     recovery = streamToken = null;
     remember(null);
+    parentRunId = run?.comparison_run_id || parentRunId;
     run = null;
     total.textContent = '';
     defaults();
@@ -219,18 +220,27 @@ export function mountComparison(data, draft) {
     question.value = '';
     notice.textContent = '다음 비교의 기준 대화 이력을 준비했습니다. 원본 비교는 유지됩니다.';
   }
-  function apply(state, comparison = run) {
+  async function apply(state, comparison = run) {
     if (locked()) return;
-    const model = data.model_choices.find(m => m.id === state.model_config.model_config_id);
-    if (!model?.enabled || !model.connection_available || model.verification_state[comparison.target_role]?.status !== 'succeeded') {
-      notice.textContent = '현재 역할 검증·연결을 확인한 뒤 적용하세요.';
+    if (comparison.source_snapshot?.scenario_id !== data.id && data.comparison_draft_id !== comparison.comparison_run_id) {
+      notice.textContent = '현재 원본 편집 폼 또는 이 조건의 새 초안을 열어 적용하세요.';
       return;
     }
-    const select = document.getElementById(`${comparison.target_role}.resolved_model_config`);
-    select.dispatchEvent(new CustomEvent('model:apply', {detail:state.model_config}));
-    document.querySelector(`[data-step="${{student:2,mentor:3,analysis:4}[comparison.target_role]}"]`).click();
-    select.focus();
-    notice.textContent = '대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.';
+    const token = streamToken;
+    try {
+      const response = await request(`/admin/comparisons/${comparison.comparison_run_id}/panels/${state.panel_id}/model`);
+      if (!response.ok) throw new Error();
+      const selection = await response.json();
+      if (locked() || streamToken !== token) return;
+      const select = document.getElementById(`${selection.target_role}.resolved_model_config`);
+      select.dispatchEvent(new CustomEvent('model:apply', {detail:selection.model_config}));
+      document.querySelector(`[data-step="${{student:2,mentor:3,analysis:4}[selection.target_role]}"]`).click();
+      select.focus();
+      if (selection.target_role === 'mentor' && document.activeElement !== select) document.getElementById('mentor.mode').focus();
+      notice.textContent = '대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.';
+    } catch {
+      notice.textContent = '현재 역할 검증·연결·옵션을 확인한 뒤 적용하세요.';
+    }
   }
   async function request(url, method = 'GET', body, signal) {
     return fetch(url, {method, signal, credentials:'same-origin', headers:{'Content-Type':'application/json',
@@ -240,6 +250,7 @@ export function mountComparison(data, draft) {
     errors.replaceChildren();
     if ([401,403,404].includes(response.status)) {
       recovery = streamToken = null;
+      parentRunId = null;
       run = null;
       remember(null);
       for (const panel of panels) panel.output.replaceChildren();
@@ -322,7 +333,7 @@ export function mountComparison(data, draft) {
       source_snapshot:{...sourceDraft, scenario_id:data.id, source_version:data.id == null ? null : data.config_version, source_kind:'unsaved_draft'},
       canonical_context:commonHistory(), current_message:target.value === 'mentor' ? null : question.value,
       panels:panels.map(p => ({panel_id:p.id, model_config:structuredClone(p.control.selection)})),
-      parent_run_id:run?.comparison_run_id || null,
+      parent_run_id:run?.comparison_run_id || parentRunId,
     };
     submitting = true;
     errors.replaceChildren();
@@ -430,6 +441,7 @@ export function mountComparison(data, draft) {
     if (locked()) return;
     recovery = streamToken = null;
     remember(null);
+    parentRunId = null;
     run = null;
     pairs.splice(0);
     history.replaceChildren();
@@ -445,7 +457,8 @@ export function mountComparison(data, draft) {
     target.focus();
   });
   root.append(reset);
-  mountComparisonHistory(root, {request, apply, sourceId:() => data.id, invalidate:id => {
+  mountComparisonHistory(root, {request, apply, sourceId:() => data.id, sourceComparisonId:() => data.comparison_draft_id, invalidate:id => {
+    if (parentRunId === id) parentRunId = null;
     if (run?.comparison_run_id !== id) return;
     recovery = streamToken = null;
     remember(null);
@@ -465,10 +478,11 @@ export function mountComparison(data, draft) {
     heading.focus();
   });
   const params = new URLSearchParams(window.location.search);
-  if (params.get('compare') === '1' || params.has('comparison_id')) open.click();
-  if (params.has('comparison_id')) {
+  const restoreId = params.get('comparison_id') || data.comparison_draft_id;
+  if (params.get('compare') === '1' || restoreId) open.click();
+  if (restoreId) {
     submitting = true;
     sync();
-    recoverRun(params.get('comparison_id'), true);
+    recoverRun(restoreId, true);
   }
 }

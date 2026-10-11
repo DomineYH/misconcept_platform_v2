@@ -27,6 +27,7 @@ from src.models.scenario_group import ScenarioGroup
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
+from src.services.comparison_state import owned_comparison
 from src.services.lesson_snapshots import PUBLIC_LESSON_FIELDS
 from src.services.scenario_drafts import (
     delete_draft,
@@ -123,9 +124,9 @@ async def update_scenario(
 @router.get("/admin/scenarios/new", response_class=HTMLResponse)
 async def new_scenario_editor(
     request: Request,
+    from_comparison: UUID | None = None,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
-    comparison_id: UUID | None = None,
 ):
     editor = dict(
         id=None,
@@ -143,13 +144,12 @@ async def new_scenario_editor(
             problem={}, student={}, mentor={}, analysis={}, runtime={}
         ).model_dump(),
     )
-    if comparison_id is not None:
-        from src.services.comparison_state import owned_comparison
-
-        comparison = await owned_comparison(db, str(comparison_id), user.id)
+    if from_comparison is not None:
+        comparison = await owned_comparison(db, str(from_comparison), user.id)
+        source = comparison.source_snapshot
         editor.update(
             {
-                key: comparison.source_snapshot[key]
+                key: source[key]
                 for key in (
                     "title",
                     "subject",
@@ -161,9 +161,9 @@ async def new_scenario_editor(
                 )
             }
         )
-        editor["comparison_source_id"] = comparison.id
+        editor["comparison_draft_id"] = comparison.id
     response = await render_editor(request, user, db, editor)
-    if comparison_id is not None:
+    if from_comparison is not None:
         response.headers["Cache-Control"] = "no-store"
     return response
 

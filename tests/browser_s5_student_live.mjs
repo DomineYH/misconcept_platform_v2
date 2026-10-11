@@ -10,5 +10,6 @@ export default async function check() {
   assert.equal(code,0,output);
   assert(output.includes('PASS: real student comparison HTTP/SSE/CSRF/SQLite/recovery'),output);
   assert(output.includes('PASS: real mentor comparison HTTP/SSE/CSRF/SQLite/final-only'),output);
+  assert(output.includes('PASS: adoption child comparison, live model-copy, separate save and dirty 409'),output);
   return {pageErrors:[]};
 }

@@ -28,7 +28,7 @@
 <link rel="stylesheet" href="/static/css/scenario-comparison.css">
 <div class="container scenario-editor">
   <h1>시나리오 작성</h1>
-  {% if editor.comparison_source_id|default(none) %}<p role="status">비교의 고정 조건을 새 초안에 열었습니다. 별도 저장 또는 게시 전에는 시나리오가 생성되지 않습니다.</p>{% endif %}
+  {% if editor.comparison_draft_id|default(none) %}<p role="status">비교의 고정 조건을 새 초안에 열었습니다. 별도 저장 또는 게시 전에는 시나리오가 생성되지 않습니다.</p>{% endif %}
   <p>공개 내용과 내부 지시를 나누어 작성하세요. 실제 학생의 식별 정보 대신 가명·교육 페르소나를 사용하세요.</p>
   <p id="editor-status" role="status" aria-live="polite"></p>
   <div id="editor-errors" class="scenario-error-summary" role="alert" tabindex="-1" hidden><h2>게시 전 보완 항목</h2><ul id="editor-error-links"></ul></div>

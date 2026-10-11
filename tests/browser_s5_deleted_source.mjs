@@ -15,7 +15,7 @@ export default async function checkDeletedSource(page) {
   const detail = page.getByRole('region',{name:'비교 이력 상세',exact:true});
   const copy = detail.getByRole('link',{name:'이 조건으로 새 초안 열기',exact:true});
   await copy.waitFor();
-  assert.match(await copy.getAttribute('href'), /^\/admin\/scenarios\/new\?comparison_id=comparison-1$/);
+  assert.match(await copy.getAttribute('href'), /^\/admin\/scenarios\/new\?from_comparison=comparison-1$/);
   assert.equal(await detail.getByRole('link',{name:'원본 시나리오 편집 폼 열기',exact:true}).count(),0);
   assert.equal(await detail.getByRole('button',{name:'이 모델 적용',exact:true}).count(),0);
   assert.equal(await detail.locator('img').count(),0);
@@ -24,7 +24,7 @@ export default async function checkDeletedSource(page) {
     const response = await route.fetch();
     const html = (await response.text()).replace(/(<script id="scenario-editor-data" type="application\/json">)([\s\S]*?)(<\/script>)/, (_, before, json, after) => {
       const data = JSON.parse(json);
-      data.comparison_source_id = 'comparison-1';
+      data.comparison_draft_id = 'comparison-1';
       data.title = '고정 조건 사본';
       data.config.student.resolved_model_config = null;
       data.role_defaults.student = {available:true,model_config_id:data.model_choices[0].id};
@@ -35,5 +35,13 @@ export default async function checkDeletedSource(page) {
   await page.goto(new URL('/fixtures/s2/editor?new=1',page.url()).href);
   assert.equal(await page.getByLabel('제목',{exact:true}).inputValue(),'고정 조건 사본');
   assert.equal(await page.getByLabel('학생봇 제공자 / 모델').inputValue(),'','copy preserves an unselected role instead of current defaults');
+  await page.getByRole('button',{name:'비교 이력',exact:true}).click();
+  await page.getByRole('button',{name:'과거 비교 상세',exact:true}).click();
+  const draftDetail = page.getByRole('region',{name:'비교 이력 상세',exact:true});
+  await draftDetail.getByRole('button',{name:'이 모델 적용',exact:true}).first().click();
+  await page.getByText('대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.',{exact:true}).waitFor();
+  assert.equal(await page.getByLabel('학생봇 최대 출력 토큰').inputValue(),String(fixture.current().panels[0].model_config.options.max_output_tokens));
+  assert.equal(await page.getByLabel('제목',{exact:true}).inputValue(),'고정 조건 사본');
+  assert.deepEqual(fixture.unexpected, [], 'applying a deleted original comparison to its new draft never saves');
   return {pageErrors:[]};
 }

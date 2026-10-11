@@ -254,7 +254,7 @@ async def test_retry_is_cancelled_at_retention_deadline_without_extending_expiry
     assert (
         await client.get(
             "/admin/scenarios/new",
-            params={"comparison_id": accepted["comparison_run_id"]},
+            params={"from_comparison": accepted["comparison_run_id"]},
         )
     ).status_code == 404
     async with data.factory() as db:

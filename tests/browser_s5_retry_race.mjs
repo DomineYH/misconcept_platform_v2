@@ -31,6 +31,8 @@ export default async function checkLateStop(page) {
   await response;
   await page.waitForTimeout(100);
   assert.equal(await p2.innerText(), rendered, 'late old stop response cannot overwrite a completed retry');
+  await p2.getByRole('button',{name:'학생 응답 채택',exact:true}).click();
+  assert.equal(await page.getByLabel('이력 1 학생').inputValue(), fixture.current().panels[1].text, 'adoption uses the completed latest retry');
   assert.equal(fixture.requests.length, 2);
   return {pageErrors:[]};
 }

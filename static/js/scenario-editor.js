@@ -8,7 +8,7 @@ const fields = [...document.querySelectorAll('[data-field]')];
 const form = document.getElementById('scenario-form');
 const status = document.getElementById('editor-status');
 const publish = document.getElementById('publish-scenario');
-let dirty = Boolean(data.comparison_source_id), busy = false, edits = 0;
+let dirty = Boolean(data.comparison_draft_id), busy = false, edits = 0;
 function markDirty() { dirty = true; edits++; preview(); }
 for (const input of fields) {
   if (input.type === 'checkbox') input.checked = get(input.dataset.field);

@@ -30,7 +30,7 @@ async def test_history_delete_and_copy_require_owner_admin_and_delete_csrf(
     accepted = frames(result)[0][1]
     path = f"/admin/comparisons/{accepted['comparison_run_id']}"
     copy_path = (
-        f"/admin/scenarios/new?comparison_id={accepted['comparison_run_id']}"
+        f"/admin/scenarios/new?from_comparison={accepted['comparison_run_id']}"
     )
     client.cookies.clear()
     assert (await client.delete(path)).status_code == 401
@@ -88,7 +88,7 @@ async def test_exact_expiry_blocks_list_read_copy_retry_stop_delete_and_child(
     assert (
         await client.get(
             "/admin/scenarios/new",
-            params={"comparison_id": accepted["comparison_run_id"]},
+            params={"from_comparison": accepted["comparison_run_id"]},
         )
     ).status_code == 404
     assert (

@@ -1,4 +1,5 @@
 import {node, button, field} from './ai-render.js';
+import {mountComparison} from './scenario-comparison.js';
 import {mountScenarioModels} from './scenario-models.js';
 
 const data = JSON.parse(document.getElementById('scenario-editor-data').textContent);
@@ -7,7 +8,7 @@ const fields = [...document.querySelectorAll('[data-field]')];
 const form = document.getElementById('scenario-form');
 const status = document.getElementById('editor-status');
 const publish = document.getElementById('publish-scenario');
-let dirty = false, busy = false, edits = 0;
+let dirty = Boolean(data.comparison_draft_id), busy = false, edits = 0;
 function markDirty() { dirty = true; edits++; preview(); }
 for (const input of fields) {
   if (input.type === 'checkbox') input.checked = get(input.dataset.field);
@@ -227,3 +228,5 @@ if (data.review_required) {
   document.getElementById('acknowledge-review').addEventListener('change', () => { markDirty(); reviewState(); });
 }
 reviewState();
+
+mountComparison(data, () => payload('compare'));

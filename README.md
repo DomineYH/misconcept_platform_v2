@@ -258,6 +258,81 @@ responses are intercepted only by browser tests. These fixture routes and query
 switches do not exist in the application. Production uses the native routes
 described above.
 
+S5-01 comparison screens (#91): `npm run test:browser -- s5_` checks the
+unsaved editor, role/model variants, result states, adoption/application,
+comparison history, responsive tabs and safe rendering. The isolated server's
+`/fixtures/s5/menu` opens the administrator entry point. Comparison HTTP/SSE
+responses for the later comparison slices are injected by Playwright only.
+S5-02 (#92) connects student single-panel comparisons to `POST /admin/comparisons`
+(SSE) and owner-only `GET /admin/comparisons/{id}` recovery. Migration 035 isolates
+comparison runs and usage from classroom records. Current draft inputs and all
+completed history pairs are frozen without saving a scenario; validation and
+admission refusals make no provider calls or execution records. Replay returns
+stored JSON, and comparison calls never automatically retry. S5-02 initially
+accepts student starts; subsequent tickets add other roles, retry APIs and
+history management. The existing shared
+`readSSE` transport renders the real student events.
+S5-03 (#93) adds 2–3 concurrent panels with atomic all-panel admission and one
+active comparison per administrator. Insufficient shared total/provider/admin
+capacity returns 429 with `Retry-After: 1`, without new records or provider calls.
+The single POST SSE multiplexes per-generation sequence numbers and a common
+turn/context identity. Each child owns its permit and opens independent database
+sessions. A failed or revoked child leaves its siblings running; disconnect
+interrupts only unfinished children and preserves committed results.
+`POST /admin/comparisons/{id}/panels/{panel_id}/stop` accepts `generation_id`;
+`POST /admin/comparisons/{id}/stop` accepts `generations` containing each remaining
+`panel_id` and `generation_id`. Both require the owner administrator and CSRF,
+reject stale generations, and preserve completed results.
+`npm run test:browser -- s5_student_live` rehearses unsaved/saved forms,
+login/CSRF, 1–3 panels, real SSE, independent/all stop, reload interruption,
+safe output and GET/replay recovery with temporary migrated SQLite and mocked
+provider HTTP.
+No production success fixtures or paid calls are used.
+S5-04 (#94) adds owner-only
+`POST /admin/comparisons/{id}/panels/{panel_id}/retry` with a new `request_id`
+and the latest `generation_id`. After all current panels finish, only a failed,
+cancelled, interrupted or degraded panel can start another attempt. Admission
+rechecks the fixed inputs/options against live authorization and limits;
+refusals preserve the prior result, and matching request replays make no calls.
+Previous attempts retain their output, timing and usage; retries do not extend
+the 30-day expiry. Reload/disconnect recovery uses the comparison ID in the URL
+and GET only, with at most ten seconds of one-second recovery polling, followed
+by manual refresh/stop guidance. Normal streaming has no polling or automatic
+retry. `npm run test:browser -- s5_recovery s5_student_live` covers this flow.
+
+S5-08 (#98) connects owner-only history (newest first, 20 per page), attempt
+details and terminal deletion. Creation + 30 days is fixed in UTC across
+reads, copies and retries; active deletion returns 409. Comparison costs retain
+their scope and remain on the existing API usage screen after content deletion.
+See [comparison retention operations](docs/s5-comparison-retention.md) for the
+dry-run/execute cleanup CLI, daily external schedule example and monitoring.
+
+S5-06 (#96) adds post-session analysis comparisons: each panel makes one strict
+S4 structured call over the same full transcript and local message IDs. The
+last unanswered teacher message is optional. Input, expected output and
+thinking reserves must fit every selected panel before any calls or comparison
+records are created; comparison analysis never splits, truncates or automatically
+retries. Failed or degraded panels can use the explicit S5-04 retry path with
+their frozen conditions and prior results preserved.
+S4 quote/ID/rubric validation and server statistics retain verified partial
+results as `degraded`, with coverage and links into the comparison's own dialogue.
+Only comparison generation records store results; classroom reports,
+classifications, summaries, statistics and CSV remain unchanged. Analysis panels
+show progress and a validated final result, with text TTFT N/A. Model comparisons
+do not replace S4 educational quality approval.
+The existing `s5_student_live` browser check also rehearses three analysis
+panels (normal/partial/failed), local evidence links, replay and zero-call
+budget rejection over the real authenticated API with mocked provider HTTP.
+
+S5-05 (#95) adds mentor comparisons over the same completed teacher–student
+history, with its last pair as the common target. Manual mode requires coaching;
+auto mode judges intervention and coaching in one structured call per panel.
+Off blocks execution. Comparisons use the full history without classroom
+start/interval/cap policies or counter/message writes. Only validated, committed
+coaching or no-intervention results reach SSE and recovery; judgment reasons stay
+private. The same browser rehearsal also checks mentor options, verification,
+independent panel stops and safe final-only output.
+
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it
 contains the original product code, without credentials, databases or caches.

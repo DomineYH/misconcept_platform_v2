@@ -36,6 +36,8 @@ class CallEvent:
     response_received: bool = False
     models: list[dict] | None = None
     structured: dict | None = None
+    provider_model_id: str | None = None
+    provider_request_id: str | None = None
 
 
 class InvocationError(Exception):

@@ -31,7 +31,7 @@ async def test_s4_wal_copy_migration_restore_preserves_hashes_readers_and_acl(
         for path in migrate.DIRECTORY.glob("*.sql")
         if path.name[0].isdigit() and int(path.name.split("_", 1)[0]) >= 24
     ]
-    assert max(numbers) == 34 and len(numbers) == len(set(numbers))
+    assert max(numbers) == 35 and len(numbers) == len(set(numbers))
     workspace = tmp_path / "s3"
     await rehearse(
         source,
@@ -166,6 +166,9 @@ async def test_s4_wal_copy_migration_restore_preserves_hashes_readers_and_acl(
                     )
         (tmp_path / "preservation-hashes.json").write_text(
             json.dumps(hashes), encoding="utf-8"
+        )
+        await migrate.run_migration(
+            migrate.DIRECTORY / "035_comparison_run.sql", db_engine=engine
         )
         login(client, data.owner)
         result = await client.get("/sessions/1/analysis")

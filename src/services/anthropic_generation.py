@@ -188,7 +188,7 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
     text = ""
     blocks = {}
     started = received = False
-    model_id = None
+    model_id = request_id = None
     try:
         values = parameters(request)
         async with deadline.total() if owned else nullcontext():
@@ -214,6 +214,7 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
                                     raise InvocationError("invalid_output")
                                 started = True
                                 model_id = event.message.model
+                                request_id = event.message.id
                                 usage = normalize_usage(
                                     event.message.usage,
                                     usage,
@@ -282,6 +283,8 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
                                 outcome = replace(
                                     terminal(reason, text, usage),
                                     response_received=True,
+                                    provider_model_id=model_id,
+                                    provider_request_id=request_id,
                                 )
                                 break
     except asyncio.CancelledError:

@@ -31,7 +31,7 @@
         <td>{{ 'openai' if legacy else observed(log.provider) }}</td>
         <td>{{ observed(log.model) }}</td>
         <td>{{ {'student': '학생봇', 'tutor': '멘토', 'mentor': '멘토', 'analysis': '사후 분석'}.get(role, observed(role)) }}{% if role %} ({{ role }}){% endif %}</td>
-        <td>{{ observed(log.operation) }}</td>
+        <td>{{ observed(log.operation) }}{% if log.usage_scope|default(none) == "comparison" %}<div>관리자 비교 (comparison)</div>{% endif %}</td>
         <td>
           {{ {'succeeded': '성공', 'completed': '성공', 'failed': '실패', 'refused': '거절', 'cancelled': '취소', 'timed_out': '시간 초과', 'interrupted': '중단', 'running': '진행 중'}.get(status, observed(status)) }}
           {% if log.error_code is defined and log.error_code %}<div>오류: {{ log.error_code }}</div>{% endif %}

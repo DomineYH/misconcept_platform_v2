@@ -146,7 +146,13 @@ def result(response, previous_usage=None):
     text = response.output_text
     if not isinstance(text, str) or not text.strip():
         return CallEvent("error", usage=usage, error_code="empty_response")
-    return CallEvent("completed", text=text, usage=usage)
+    return CallEvent(
+        "completed",
+        text=text,
+        usage=usage,
+        provider_model_id=getattr(response, "model", None),
+        provider_request_id=getattr(response, "id", None),
+    )
 
 
 async def generate_text(request, secret, timeouts, *, deadline=None):

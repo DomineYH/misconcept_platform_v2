@@ -77,8 +77,8 @@ async def test_034_preserves_033_records_and_matches_fresh(tmp_path):
                 )
             ).one() == (None, None, None, None)
             upgraded = await schema(db)
-        await migrate.run_all_migrations(db_engine=fresh)
-        await migrate.run_all_migrations(db_engine=fresh)
+        await migrate.run_all_migrations(through=34, db_engine=fresh)
+        await migrate.run_all_migrations(through=34, db_engine=fresh)
         async with fresh.connect() as db:
             assert await schema(db) == upgraded
     finally:

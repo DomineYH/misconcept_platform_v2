@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import {comparisonFixture, openComparison} from './s5_browser_fixtures.mjs';
+
+export default async function checkComparisonAdmissionAndStop(page) {
+  page.setDefaultTimeout(3000);
+  const fixture = await comparisonFixture(page, ['running','running','running']);
+  await openComparison(page);
+  const p1 = page.getByRole('article',{name:'패널 1',exact:true});
+  const p2 = page.getByRole('article',{name:'패널 2',exact:true});
+  const p3 = page.getByRole('article',{name:'패널 3',exact:true});
+  await p1.getByText('대기', {exact:true}).waitFor();
+  fixture.block();
+  await page.getByRole('button',{name:'비교 실행',exact:true}).click();
+  await page.getByRole('button',{name:'패널 2 입력 한도 초과 · 공통 이력을 줄이세요.',exact:true}).waitFor();
+  assert.equal(fixture.current(), undefined, 'preflight blocks every panel');
+  assert.equal(await page.getByLabel('학생 현재 질문').inputValue(), '같은 전체에서 비교하면?');
+  await page.getByRole('button',{name:'패널 2 입력 한도 초과 · 공통 이력을 줄이세요.',exact:true}).click();
+  assert(await page.getByRole('button',{name:'완료 쌍 추가',exact:true}).evaluate(el => document.activeElement === el));
+  fixture.block(false);
+  await page.getByRole('button',{name:'비교 실행',exact:true}).click();
+  await p1.getByText('스트리밍',{exact:true}).waitFor();
+  assert(await page.getByLabel('학생 현재 질문').isDisabled());
+  assert(await page.getByLabel('제목',{exact:true}).isDisabled());
+  assert(await page.getByRole('button',{name:'비교 실행',exact:true}).isDisabled());
+  assert(await p2.getByRole('button',{name:'패널 재시도',exact:true}).isDisabled());
+  await page.setViewportSize({width:390,height:900});
+  await page.getByRole('tab',{name:'패널 2',exact:true}).click();
+  assert(await p2.getByText('스트리밍',{exact:true}).isVisible());
+  assert.equal(fixture.current().panels[0].status, 'running', 'hiding a panel does not stop it');
+  await page.setViewportSize({width:1280,height:900});
+  await p1.getByRole('button',{name:'패널 중지',exact:true}).click();
+  await p1.getByText('취소',{exact:true}).waitFor();
+  assert(await p2.getByText('스트리밍',{exact:true}).isVisible());
+  assert(await p3.getByText('스트리밍',{exact:true}).isVisible());
+  assert(await p1.getByRole('button',{name:'패널 재시도',exact:true}).isDisabled());
+  await page.getByRole('button',{name:'전체 중지',exact:true}).click();
+  await p2.getByText('취소',{exact:true}).waitFor();
+  assert(await p3.getByText('취소',{exact:true}).isVisible());
+  assert(!(await page.getByLabel('학생 현재 질문').isDisabled()));
+  assert(await p1.getByRole('button',{name:'패널 재시도',exact:true}).isEnabled());
+  await page.getByRole('button',{name:'비교 입력 초기화',exact:true}).click();
+  assert.equal(await page.getByLabel('학생 현재 질문').inputValue(),'');
+  assert.equal(fixture.current().comparison_run_id,'comparison-1', 'reset does not delete stored comparison');
+  assert.deepEqual(fixture.unexpected,[]);
+  return {pageErrors:[]};
+}

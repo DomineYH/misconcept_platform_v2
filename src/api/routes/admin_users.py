@@ -23,10 +23,12 @@ from src.api.schemas import (
     UserCreate,
     UserUpdate,
 )
+from src.models.generation_run import GenerationRun
 from src.models.model_probe import ModelProbe
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
+from src.services.generation_lifecycle import active_runs
 
 logger = logging.getLogger(__name__)
 
@@ -304,8 +306,20 @@ async def delete_user(
         .values(teacher_id=None)
     )
 
+    comparison_generations = (
+        await db.scalars(
+            select(GenerationRun.id).where(
+                GenerationRun.owner_id == user_id,
+                GenerationRun.comparison_run_id.is_not(None),
+                GenerationRun.status == "running",
+            )
+        )
+    ).all()
     await db.delete(target)
     await db.flush()
+    for run_id in comparison_generations:
+        if signal := active_runs.get(run_id):
+            signal.set()
 
     return {
         "status": "deleted",

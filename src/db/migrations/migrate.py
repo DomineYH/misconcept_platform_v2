@@ -64,6 +64,7 @@ async def run_migration(
             "029_scenario_config.sql",
             "031_scenario_contract.sql",
             "034_analysis_run.sql",
+            "035_comparison_run.sql",
         )
         try:
             if rebuild_runs:
@@ -224,7 +225,7 @@ async def run_all_migrations(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--through", type=int, choices=range(23, 35))
+    parser.add_argument("--through", type=int, choices=range(23, 36))
     parser.add_argument("--cutover-receipt", type=Path)
     args = parser.parse_args()
     asyncio.run(

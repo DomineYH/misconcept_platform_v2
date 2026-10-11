@@ -72,6 +72,14 @@ def estimate_request(request):
     return math.ceil(len(serialized.encode("utf-8")) * 1.2)
 
 
+def estimate_output(messages, thinking):
+    return (
+        1200
+        + sum(160 if m["role"] == "teacher" else 120 for m in messages)
+        + thinking
+    )
+
+
 def thinking_reserve(provider, options, definition, cap):
     if provider == "openai":
         effort = options.get("reasoning", {}).get(
@@ -174,9 +182,7 @@ def build_plan(snapshot, messages, *, regenerate=False, catalog=None):
             estimated_input_tokens=estimate_request(
                 analysis_request(snapshot, analysis_prompt(snapshot, messages))
             ),
-            estimated_output_tokens=1200
-            + sum(160 if m["role"] == "teacher" else 120 for m in messages)
-            + reserve,
+            estimated_output_tokens=estimate_output(messages, reserve),
         )
         if messages and (
             plan["estimated_output_tokens"] > cap
@@ -236,9 +242,9 @@ def chunk_plan(snapshot, messages, plan):
             estimated_input_tokens=estimate_request(
                 analysis_request(snapshot, prompt)
             ),
-            estimated_output_tokens=1200
-            + sum(160 if m["role"] == "teacher" else 120 for m in owned)
-            + plan["reserved_thinking_tokens"],
+            estimated_output_tokens=estimate_output(
+                owned, plan["reserved_thinking_tokens"]
+            ),
         )
 
     def fits(chunk):
@@ -294,7 +300,9 @@ def chunk_plan(snapshot, messages, plan):
         estimated_input_tokens=estimate_request(
             analysis_request(snapshot, prompt, MergeAnalysisOutput)
         ),
-        estimated_output_tokens=1200 + plan["reserved_thinking_tokens"],
+        estimated_output_tokens=estimate_output(
+            [], plan["reserved_thinking_tokens"]
+        ),
     )
     plan["merge"] = merge
     if (

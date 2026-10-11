@@ -12,9 +12,10 @@ from src.services.invocation_types import (
 from src.services.role_output_contracts import MentorOutput
 
 
-def build_mentor_request(lesson, history, trigger, options, request_id):
-    """Fit N preceding pairs while preserving the completed target and instructions."""
-    config = lesson.config
+def build_mentor_input(
+    config, history, trigger, selection, options, request_id
+):
+    """Build the shared structured request without selecting or trimming history."""
     problem, student, mentor = config.problem, config.student, config.mentor
     instruction = "\n\n".join(
         [
@@ -41,36 +42,45 @@ def build_mentor_request(lesson, history, trigger, options, request_id):
         "feedback은 최대 50000자입니다. reason_summary에는 공백이 아닌 짧은 판단 설명을 "
         "최대 2000자로 쓰세요. 원문 추론은 요구하지 않습니다.\n" + policy
     )
-    selection = mentor.resolved_model_config
-
-    def dialogue_messages(dropped):
-        return [
-            {
-                "role": "user",
-                "content": "\n".join(
-                    f"{row['role']}: {row['content']}"
-                    for row in history[2 * dropped :]
-                ),
-            }
-        ]
-
-    request = StructuredRequest(
+    return StructuredRequest(
         provider=selection.provider,
         model_id=selection.model_id,
         role="mentor",
         system_instruction=instruction,
-        messages=dialogue_messages(0),
+        messages=[
+            {
+                "role": "user",
+                "content": "\n".join(
+                    f"{row['role']}: {row['content']}" for row in history
+                ),
+            }
+        ],
         validated_options=options,
         request_id=request_id,
         output_schema=MentorOutput,
         validation_context={"trigger": trigger},
+    )
+
+
+def build_mentor_request(lesson, history, trigger, options, request_id):
+    """Fit N preceding pairs while preserving the completed target and instructions."""
+    selection = lesson.config.mentor.resolved_model_config
+    request = build_mentor_input(
+        lesson.config, history, trigger, selection, options, request_id
     )
     return fit_context(
         request,
         prior_pair_count=len(history) // 2 - 1,
         configured_prior_turn_limit=lesson.config.runtime.context_turn_limit,
         target_pair_included=True,
-        rebuild_messages=dialogue_messages,
+        rebuild_messages=lambda dropped: build_mentor_input(
+            lesson.config,
+            history[2 * dropped :],
+            trigger,
+            selection,
+            options,
+            request_id,
+        ).messages,
     )
 
 

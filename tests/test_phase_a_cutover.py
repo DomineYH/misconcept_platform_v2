@@ -181,6 +181,9 @@ async def test_wal_backup_upgrade_readers_and_restore(
             await migrate.run_migration(
                 migrate.DIRECTORY / "034_analysis_run.sql"
             )
+            await migrate.run_migration(
+                migrate.DIRECTORY / "035_comparison_run.sql"
+            )
             data.factory = async_sessionmaker(
                 copy_engine, expire_on_commit=False, autoflush=False
             )

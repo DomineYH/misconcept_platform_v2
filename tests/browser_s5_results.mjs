@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import {comparisonFixture, openComparison, hidden} from './s5_browser_fixtures.mjs';
+
+export default async function checkComparisonResults(page) {
+  page.setDefaultTimeout(3000);
+  const fixture = await comparisonFixture(page);
+  await openComparison(page);
+  await page.getByLabel('제목', {exact:true}).fill('미저장 실행 제목');
+  await page.getByLabel('패널 2 제공자 / 모델', {exact:true}).selectOption('1');
+  await page.getByLabel('패널 2 최대 출력 토큰').fill('700');
+  const start = page.getByRole('button', {name:'비교 실행',exact:true});
+  await start.click();
+  const p1 = page.getByRole('article', {name:'패널 1',exact:true});
+  const p2 = page.getByRole('article', {name:'패널 2',exact:true});
+  const p3 = page.getByRole('article', {name:'패널 3',exact:true});
+  await p1.getByText('완료', {exact:true}).waitFor();
+  assert(await p2.getByText('실패',{exact:true}).isVisible());
+  assert(await p3.getByText('중단',{exact:true}).isVisible());
+  assert.match(await p1.innerText(), /첫 본문 120 ms/);
+  assert.match(await p2.innerText(), /비용 unknown/);
+  assert.match(await page.locator('#comparison-total').innerText(), /부분 합계.*0.01/);
+  assert(!(await page.locator('#scenario-comparison').innerText()).includes(hidden));
+  assert.equal(await page.evaluate(() => window.s5xss), undefined);
+  await p1.getByRole('button', {name:'학생 응답 채택',exact:true}).click();
+  await p1.getByRole('button', {name:'학생 응답 채택',exact:true}).click();
+  assert.equal(await page.getByLabel('이력 1 교사').inputValue(), '같은 전체에서 비교하면?');
+  assert.equal(await page.getByLabel('이력 1 학생').inputValue(), '완료 응답 1 <img src=x onerror="window.s5xss=1">');
+  assert.equal(await page.locator('#comparison-history-input fieldset').count(),1);
+  assert(await p2.getByRole('button', {name:'학생 응답 채택',exact:true}).isDisabled());
+  assert.match(await p2.innerText(), /재시도.*추가 비용/);
+  await p2.getByRole('button', {name:'패널 재시도',exact:true}).click();
+  await p2.getByText('완료', {exact:true}).waitFor();
+  assert.match(await p2.innerText(), /이전 시도 1.*실패/s);
+  assert.equal(fixture.requests.length, 2);
+  assert.equal(fixture.requests[1].generation_id, 'run-1-1');
+  assert.equal(fixture.requests[0].source_snapshot.scenario_id, 1);
+  assert.equal(fixture.requests[0].source_snapshot.source_version, 1);
+  assert.equal(fixture.requests[0].source_snapshot.title, '미저장 실행 제목');
+  await p2.getByRole('button', {name:'학생 응답 채택',exact:true}).click();
+  assert.equal(await page.getByLabel('이력 1 학생').inputValue(), '완료 응답 2 <img src=x onerror="window.s5xss=1">');
+  assert.equal(await page.locator('#comparison-history-input fieldset').count(),1);
+  await p2.getByRole('button', {name:'이 모델 적용',exact:true}).click();
+  await page.getByText('대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.', {exact:true}).waitFor();
+  assert.equal(await page.getByLabel('학생봇 최대 출력 토큰').inputValue(), '700', 'application never remerges defaults');
+  assert.deepEqual(fixture.unexpected, [], 'zero provider, lesson, or scenario-save calls');
+  return {pageErrors:[]};
+}

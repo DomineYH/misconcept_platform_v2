@@ -98,7 +98,7 @@ class ComparisonRequest(ConfigValue):
     @field_validator("current_message")
     @classmethod
     def nonblank(cls, value):
-        return ComparisonMessage.nonblank(value) if value else value
+        return ComparisonMessage.nonblank(value) if value else None
 
     @model_validator(mode="after")
     def complete_pairs(self):

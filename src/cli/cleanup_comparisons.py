@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import URL, event
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.services.comparison_retention import cleanup_comparisons
@@ -47,7 +46,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
         counts = asyncio.run(run(args.database, args.execute))
-    except (SQLAlchemyError, OSError):
+    except Exception:
         counts = dict(targets=0, deleted=0, failed=1, skipped_running=0)
     exit_status = int(counts["failed"] > 0)
     print(

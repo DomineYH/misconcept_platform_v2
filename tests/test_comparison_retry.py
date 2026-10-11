@@ -7,7 +7,9 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
+from test_comparison_analysis import analysis_comparison
 from test_comparison_concurrency import add_panels, panel_streams
+from test_comparison_mentor import mentor_comparison
 from test_comparison_student import (
     client,
     comparison,
@@ -21,7 +23,14 @@ from src.models import AppSetting, ComparisonRun, GenerationRun
 from src.services.call_admission import active_calls, registered_calls
 from src.services.comparison_state import utcnow
 
-__all__ = ["client", "comparison", "scenario_payload", "student"]
+__all__ = [
+    "client",
+    "comparison",
+    "scenario_payload",
+    "student",
+    "mentor_comparison",
+    "analysis_comparison",
+]
 
 
 async def failed_comparison(data, client, student, comparison):
@@ -324,12 +333,68 @@ async def test_retry_uses_frozen_options_after_defaults_change(
     )
 
 
+@pytest.fixture
+def race_comparison(request):
+    return request.getfixturevalue(request.param)
+
+
+@pytest.mark.parametrize(
+    "race_comparison",
+    ["comparison", "mentor_comparison", "analysis_comparison"],
+    indirect=True,
+)
 async def test_late_cancelled_retry_stream_never_emits_new_attempt_result(
-    data, client, student, comparison
+    data, client, student, race_comparison
 ):
     from test_comparison_streaming import live_comparison, next_event
 
-    path, before = await failed_comparison(data, client, student, comparison)
+    comparison = race_comparison
+    if comparison["target_role"] == "student":
+        path, before = await failed_comparison(
+            data, client, student, comparison
+        )
+    else:
+        import json
+        from types import SimpleNamespace
+
+        from lesson_fixtures import mentor_output
+        from s4_analysis_fixtures import analysis_reply, prompt_inputs
+
+        login(client, data.admin)
+        add_panels(comparison, 2)
+        cap = comparison["panels"][0]["model_config"]["options"][
+            "max_output_tokens"
+        ]
+        comparison["panels"][1]["model_config"]["options"][
+            "max_output_tokens"
+        ] = (cap + 1)
+        failing = True
+
+        async def create(**kwargs):
+            result = (
+                mentor_output("Mentor coaching")
+                if comparison["target_role"] == "mentor"
+                else json.dumps(
+                    analysis_reply(prompt_inputs(kwargs)["messages"])
+                )
+            )
+            return SimpleNamespace(
+                output_text=(
+                    "INVALID_JSON"
+                    if failing and kwargs["max_output_tokens"] == cap + 1
+                    else result
+                ),
+                usage=None,
+            )
+
+        student.responses.create.side_effect = create
+        initial = await client.post("/admin/comparisons", json=comparison)
+        path = (
+            f"/admin/comparisons/{frames(initial)[0][1]['comparison_run_id']}"
+        )
+        before = (await client.get(path)).json()
+        assert before["panels"][1]["status"] == "failed"
+        failing = False
     headers, release = asyncio.Event(), asyncio.Event()
     login(client, data.admin)
 

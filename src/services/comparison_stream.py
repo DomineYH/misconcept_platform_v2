@@ -101,8 +101,13 @@ class ComparisonStreamingResponse(StreamingResponse):
                     pending.discard(task)
                     child["execution"]["permit"].release()
                     active_runs.pop(child["accepted"]["run_id"], None)
+                    error = None if task.cancelled() else task.exception()
+                    if child.get("recovering") and error is not None:
+                        logger.error(
+                            "Comparison recovery task failed", exc_info=error
+                        )
                     if not child.get("recovering") and (
-                        task.cancelled() or task.exception() is not None
+                        task.cancelled() or error is not None
                     ):
                         child["recovering"] = True
                         child["task"] = asyncio.create_task(self.recover(child))
@@ -124,7 +129,7 @@ class ComparisonStreamingResponse(StreamingResponse):
             )
             terminal = terminal_frame(accepted, result, max(1, child["seq"]))
         except Exception:
-            logger.error("Comparison child recovery failed")
+            logger.exception("Comparison child recovery failed")
             terminal = sse_frame(
                 accepted,
                 "run.failed",

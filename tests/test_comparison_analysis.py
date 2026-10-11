@@ -191,6 +191,13 @@ async def test_analysis_optional_last_teacher_and_classification_boundaries(
         if boundary.startswith("complete")
         else 3 if boundary == "off" else 1
     )
+    if boundary == "complete_empty":
+        state = (
+            await client.get(
+                f"/admin/comparisons/{events[0][1]['comparison_run_id']}"
+            )
+        ).json()
+        assert state["current_message"] is None
     terminal = events[-1][1]
     assert terminal["outcome_status"] == "ok" and len(calls) == 1
     report = terminal["result"]["report"]

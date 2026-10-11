@@ -229,7 +229,13 @@ export function mountComparison(data, draft) {
     const token = streamToken;
     try {
       const response = await request(`/admin/comparisons/${comparison.comparison_run_id}/panels/${state.panel_id}/model`);
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const messages = {409:'비교가 진행 중입니다. 종료 후 적용하세요.',
+          404:'비교 또는 패널이 없거나 만료되었습니다. 이력을 다시 확인하세요.',
+          422:'현재 역할 검증·연결·옵션을 확인한 뒤 적용하세요.'};
+        notice.textContent = messages[response.status] || '모델을 적용하지 못했습니다. 다시 확인하세요.';
+        return;
+      }
       const selection = await response.json();
       if (locked() || streamToken !== token) return;
       const select = document.getElementById(`${selection.target_role}.resolved_model_config`);
@@ -246,11 +252,12 @@ export function mountComparison(data, draft) {
     return fetch(url, {method, signal, credentials:'same-origin', headers:{'Content-Type':'application/json',
       'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}, body:body == null ? undefined : JSON.stringify(body)});
   }
-  function showError(response, result) {
+  function showError(response, result, missingId = run?.comparison_run_id) {
     errors.replaceChildren();
-    if ([401,403,404].includes(response.status)) {
+    const missingComparison = response.status === 404 && (!result || result.detail?.code === 'comparison_not_found');
+    if (missingComparison && parentRunId === missingId) parentRunId = null;
+    if ([401,403].includes(response.status) || missingComparison && run?.comparison_run_id === missingId) {
       recovery = streamToken = null;
-      parentRunId = null;
       run = null;
       remember(null);
       for (const panel of panels) panel.output.replaceChildren();
@@ -260,7 +267,7 @@ export function mountComparison(data, draft) {
     const messages = {404:'비교가 만료되었거나 삭제되었습니다. 보존기간은 생성 후 30일입니다.',
       409:'진행 중 비교 또는 변경된 시도가 있습니다. 상태를 새로 확인하세요.', 429:'전체 패널 슬롯을 확보하지 못했습니다. 잠시 후 다시 실행하세요.',
       503:'AI 연결·모델 설정을 확인하세요.', 422:'공통 입력·모델 옵션을 확인하세요.', 413:'입력이 너무 큽니다.', 401:'로그인이 필요합니다.', 403:'권한 또는 보안 토큰을 확인하세요.'};
-    errors.append(node('p', messages[response.status] || '비교 요청을 처리하지 못했습니다. 입력을 보존했습니다.'));
+    errors.append(node('p', result?.detail?.code === 'scenario_not_found' ? '원본 시나리오를 찾을 수 없습니다. 새 초안에서 비교하세요.' : messages[response.status] || '비교 요청을 처리하지 못했습니다. 입력을 보존했습니다.'));
     for (const error of result?.detail?.errors || []) {
       const panel = panels.find(p => p.id === error.panel_id);
       const input = error.field === 'current_message' ? question : error.field === 'history' ? addHistory : panel?.settings.querySelector('select');
@@ -344,7 +351,7 @@ export function mountComparison(data, draft) {
     try {
       const url = retry ? `/admin/comparisons/${run.comparison_run_id}/panels/${retry.panel_id}/retry` : '/admin/comparisons';
       const response = await request(url, 'POST', body);
-      if (!response.ok) { showError(response, await response.json().catch(() => null)); return; }
+      if (!response.ok) { showError(response, await response.json().catch(() => null), retry ? run.comparison_run_id : body.parent_run_id); return; }
       if (retry) {
         retry.attempts = [...(retry.attempts || []), structuredClone({...retry, attempts:[]})];
         Object.assign(retry, {run_id:null, status:'waiting', lastSeq:-1, text:''});
@@ -372,7 +379,7 @@ export function mountComparison(data, draft) {
       while (recovery === token) {
         const response = await request(`/admin/comparisons/${id}`, 'GET', null, controller.signal);
         if (recovery !== token) return;
-        if (!response.ok) { showError(response, null); return; }
+        if (!response.ok) { showError(response, null, id); return; }
         const snapshot = await response.json();
         if (recovery !== token) return;
         if (restore) {

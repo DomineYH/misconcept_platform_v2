@@ -1,4 +1,4 @@
-"""Student comparison SSE using the shared invocation and response lifecycle."""
+"""Comparison SSE using the shared invocation and response lifecycle."""
 
 import asyncio
 import json
@@ -230,7 +230,11 @@ async def stream_comparison(factory, accepted, execution, cancelled):
             execute_call(
                 permit,
                 execution["request"],
-                kind="stream",
+                kind=(
+                    "stream"
+                    if execution["request"].role == "student"
+                    else "structured"
+                ),
                 run_id=accepted["run_id"],
                 usage_scope="comparison",
             )
@@ -273,7 +277,11 @@ async def stream_comparison(factory, accepted, execution, cancelled):
                     raise RuntimeError("upstream_ended")
                 yield ": ping\n\n"
             event = reading.result()
-            if event.type == "text_delta" and event.text:
+            if (
+                execution["request"].role == "student"
+                and event.type == "text_delta"
+                and event.text
+            ):
                 partial += event.text
                 if first_output is None and event.text.strip():
                     first_output = datetime.now(timezone.utc).replace(
@@ -287,6 +295,11 @@ async def stream_comparison(factory, accepted, execution, cancelled):
                     content=event.text or partial,
                     provider_model_id=event.provider_model_id,
                     provider_request_id=event.provider_request_id,
+                    mentor_result=(
+                        event.structured
+                        if execution["request"].role == "mentor"
+                        else None
+                    ),
                 )
                 terminal = True
                 yield terminal_frame(accepted, result, seq)

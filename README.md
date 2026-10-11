@@ -289,6 +289,15 @@ safe output and GET/replay recovery with temporary migrated SQLite and mocked
 provider HTTP.
 No production success fixtures or paid calls are used.
 
+S5-05 (#95) adds mentor comparisons over the same completed teacher–student
+history, with its last pair as the common target. Manual mode requires coaching;
+auto mode judges intervention and coaching in one structured call per panel.
+Off blocks execution. Comparisons use the full history without classroom
+start/interval/cap policies or counter/message writes. Only validated, committed
+coaching or no-intervention results reach SSE and recovery; judgment reasons stay
+private. The same browser rehearsal also checks mentor options, verification,
+independent panel stops and safe final-only output.
+
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it
 contains the original product code, without credentials, databases or caches.

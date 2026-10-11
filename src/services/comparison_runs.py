@@ -37,9 +37,11 @@ from src.services.model_capabilities import (
 from src.services.model_verification import ROLE_CONTRACT_VERSIONS
 from src.services.scenario_publication import publication_errors
 from src.services.student_bot import build_student_input
+from src.services.tutor_bot import build_mentor_input
 
 # Bump with changes to build_student_input's prompt contract.
 PROMPT_VERSION = "student-v1"
+MENTOR_PROMPT_VERSION = "mentor-v1"
 
 
 def input_error(code, field, panel_id=None):
@@ -86,6 +88,9 @@ async def reserve_comparison(factory, user, body):
             if busy:
                 conflict("comparison_busy", comparison_run_id=busy.id)
             source = body.source_snapshot
+            role = body.target_role
+            if role == "mentor" and source.config.mentor.mode == "off":
+                input_error("mentor_disabled", "config.mentor.mode")
             if source.scenario_id is not None:
                 scenario = await db.get(Scenario, source.scenario_id)
                 if scenario is None or scenario.deleted_at is not None:
@@ -99,6 +104,7 @@ async def reserve_comparison(factory, user, body):
                 for error in publication_errors(source.config)
                 if error["path"].startswith(
                     ("config.problem.", "config.student.")
+                    + (("config.mentor.",) if role == "mentor" else ())
                 )
                 and not error["path"].endswith("resolved_model_config")
             ]
@@ -108,10 +114,17 @@ async def reserve_comparison(factory, user, body):
                 dict(id=index + 1, **message.model_dump())
                 for index, message in enumerate(body.canonical_context)
             ]
-            messages = build_student_input(
-                SimpleNamespace(config=source.config),
-                body.current_message,
-                history,
+            prior_pairs = len(history) // 2
+            if role == "mentor":
+                prior_pairs -= 1
+            messages = (
+                build_student_input(
+                    SimpleNamespace(config=source.config),
+                    body.current_message,
+                    history,
+                )
+                if role == "student"
+                else None
             )
             prepared = []
             for panel in body.panels:
@@ -135,16 +148,27 @@ async def reserve_comparison(factory, user, body):
                         )
                 try:
                     connection, model, options = await resolve_frozen_model(
-                        db, panel.selection, "student"
+                        db, panel.selection, role
                     )
-                    call = TextRequest(
-                        connection.provider,
-                        model.model_id,
-                        "student",
-                        messages[0]["content"],
-                        messages[1:],
-                        options,
-                        body.request_id,
+                    call = (
+                        TextRequest(
+                            connection.provider,
+                            model.model_id,
+                            role,
+                            messages[0]["content"],
+                            messages[1:],
+                            options,
+                            body.request_id,
+                        )
+                        if role == "student"
+                        else build_mentor_input(
+                            source.config,
+                            history,
+                            source.config.mentor.mode,
+                            panel.selection,
+                            options,
+                            body.request_id,
+                        )
                     )
                     budget, reserve, version = input_budget(call)
                     applied = provider_parameters(call)
@@ -165,6 +189,14 @@ async def reserve_comparison(factory, user, body):
                             "extra_body",
                         }
                     }
+                    if "output_config" in applied:
+                        applied["output_config"] = {
+                            key: value
+                            for key, value in applied["output_config"].items()
+                            if key != "format"
+                        }
+                        if not applied["output_config"]:
+                            del applied["output_config"]
                     estimate = estimate_input(call)
                     if estimate > budget:
                         input_error("context_limit", "history", panel.panel_id)
@@ -175,9 +207,10 @@ async def reserve_comparison(factory, user, body):
                             estimated_input_tokens=estimate,
                             input_budget_tokens=budget,
                             reserved_output_tokens=reserve,
-                            selected_prior_pairs=len(history) // 2,
-                            kept_prior_pairs=len(history) // 2,
+                            selected_prior_pairs=prior_pairs,
+                            kept_prior_pairs=prior_pairs,
                             dropped_prior_pairs=0,
+                            target_pair_included=role == "mentor",
                             capability_definition_version=version,
                         ),
                     )
@@ -211,8 +244,8 @@ async def reserve_comparison(factory, user, body):
                         connection,
                         setting,
                         owner_id=user.id,
-                        operation="comparison_student",
-                        role="student",
+                        operation=f"comparison_{role}",
+                        role=role,
                         admin=True,
                     )
                     permit.model_options = options
@@ -222,7 +255,7 @@ async def reserve_comparison(factory, user, body):
                     permit.capability_version = (
                         model.capability_definition_version
                     )
-                    permit.contract_version = ROLE_CONTRACT_VERSIONS["student"]
+                    permit.contract_version = ROLE_CONTRACT_VERSIONS[role]
                     executions.append(dict(request=call, permit=permit))
                     frozen_panels.append(
                         dict(
@@ -236,7 +269,11 @@ async def reserve_comparison(factory, user, body):
                             connection_version=connection.connection_version,
                             capability_version=version,
                             contract_version=permit.contract_version,
-                            prompt_version=PROMPT_VERSION,
+                            prompt_version=(
+                                PROMPT_VERSION
+                                if role == "student"
+                                else MENTOR_PROMPT_VERSION
+                            ),
                             estimator_version="utf8-v1",
                         )
                     )
@@ -267,16 +304,18 @@ async def reserve_comparison(factory, user, body):
                     source_version=source.source_version,
                     source_snapshot=frozen_source,
                     source_hash=digest(frozen_source),
-                    target_role="student",
+                    target_role=role,
                     mode="same_context",
                     canonical_context=history,
                     current_message=body.current_message,
                     context_hash=digest(
                         dict(
-                            instruction=messages[0]["content"],
+                            instruction=executions[0][
+                                "request"
+                            ].system_instruction,
                             history=history,
                             current_message=body.current_message,
-                            target_role="student",
+                            target_role=role,
                         )
                     ),
                     panel_configs=frozen_panels,
@@ -297,7 +336,12 @@ async def reserve_comparison(factory, user, body):
                         comparison_run_id=comparison.id,
                         panel_id=frozen_panel["panel_id"],
                         turn_id=turn_id,
-                        operation="student",
+                        operation=role,
+                        mentor_trigger=(
+                            source.config.mentor.mode
+                            if role == "mentor"
+                            else None
+                        ),
                         request_id=body.request_id,
                         input_hash=input_hash,
                         config_hash=digest(frozen_panel),
@@ -333,6 +377,7 @@ async def finish_comparison(
     first_output_at=None,
     provider_model_id=None,
     provider_request_id=None,
+    mentor_result=None,
 ):
     async with factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
@@ -353,10 +398,23 @@ async def finish_comparison(
             run.status, run.error_code = status, error_code
             run.first_output_at, run.finished_at = first_output_at, utcnow()
             run.partial_text = None if status == "completed" else partial_text
+            public_result = {}
+            if status == "completed" and mentor_result is not None:
+                run.mentor_reason_summary = mentor_result["reason_summary"]
+                run.result_kind = (
+                    "message"
+                    if mentor_result["should_intervene"]
+                    else "no_intervention"
+                )
+                public_result["result"] = dict(
+                    should_intervene=mentor_result["should_intervene"],
+                    coaching=mentor_result["feedback"],
+                )
             run.outcome_json = (
                 json.dumps(
                     dict(
                         text=content,
+                        **public_result,
                         provider_model_id=provider_model_id,
                         provider_request_id=provider_request_id,
                     ),

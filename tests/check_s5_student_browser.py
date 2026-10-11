@@ -93,7 +93,14 @@ async def check():
                         connection_version=connection.connection_version,
                         capability_definition_version=DEFINITION_VERSION,
                         role_contract_version="s1-v1",
-                    )
+                    ),
+                    "mentor": dict(
+                        status="succeeded",
+                        credential_revision=1,
+                        connection_version=connection.connection_version,
+                        capability_definition_version=DEFINITION_VERSION,
+                        role_contract_version="s3-v1",
+                    ),
                 },
             )
             db.add(model)
@@ -142,6 +149,30 @@ async def check():
         async def upstream(request):
             body = json.loads(request.content)
             calls.append(body)
+            if "text" in body:
+                budget = body["max_output_tokens"]
+                if budget == 1801:
+                    await asyncio.Event().wait()
+                await asyncio.sleep(0.15)
+                intervene = not (
+                    "자동 검사입니다" in body["instructions"] and budget == 1500
+                )
+                return httpx2.Response(
+                    200,
+                    json=response_body(
+                        json.dumps(
+                            dict(
+                                should_intervene=intervene,
+                                feedback=(
+                                    'Live coaching <img src=x onerror="window.s5xss=1">'
+                                    if intervene
+                                    else ""
+                                ),
+                                reason_summary="PRIVATE MENTOR REASON",
+                            )
+                        ),
+                    ),
+                )
             stream = MockStream(body["max_output_tokens"])
             streams.append(stream)
             return httpx2.Response(
@@ -252,6 +283,71 @@ async def check():
             assert all(stream.closed for stream in streams)
             assert all(client.is_closed() for client in clients)
             print("PASS: real student comparison HTTP/SSE/CSRF/SQLite/recovery")
+            process = await asyncio.create_subprocess_exec(
+                "node",
+                "tests/check_s5_mentor_browser.mjs",
+                str(listener.getsockname()[1]),
+                cwd=ROOT,
+            )
+            try:
+                async with asyncio.timeout(90):
+                    assert await process.wait() == 0
+            finally:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+            mentor_calls = calls[10:]
+            assert len(mentor_calls) == 6
+            assert all(
+                "stream" not in call
+                and call["text"]["format"]["name"] == "MentorOutput"
+                for call in mentor_calls
+            )
+            async with AsyncSessionLocal() as db:
+                for model in (Session, Message):
+                    assert (
+                        await db.scalar(select(func.count()).select_from(model))
+                        == 0
+                    )
+                assert (
+                    await db.scalar(select(func.count()).select_from(Scenario))
+                    == 1
+                )
+                assert (await db.get(Scenario, saved.id)).config_version == 1
+                runs = (
+                    await db.scalars(
+                        select(GenerationRun)
+                        .where(GenerationRun.operation == "mentor")
+                        .order_by(
+                            GenerationRun.started_at, GenerationRun.panel_id
+                        )
+                    )
+                ).all()
+                assert [run.status for run in runs] == ["completed"] * 4 + [
+                    "cancelled"
+                ] * 2
+                assert all(run.session_id is None for run in runs)
+                assert all(
+                    run.mentor_reason_summary == "PRIVATE MENTOR REASON"
+                    for run in runs[:4]
+                )
+                ledger = (
+                    await db.scalars(
+                        select(ApiUsageLog).where(ApiUsageLog.role == "mentor")
+                    )
+                ).all()
+                assert len(ledger) == 6 and all(
+                    entry.status != "running"
+                    and entry.usage_scope == "comparison"
+                    and entry.attempt_no == 1
+                    for entry in ledger
+                )
+            assert not active_calls and all(
+                client.is_closed() for client in clients
+            )
+            print(
+                "PASS: real mentor comparison HTTP/SSE/CSRF/SQLite/final-only"
+            )
         finally:
             server.should_exit = True
             await task

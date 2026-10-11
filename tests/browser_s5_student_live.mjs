@@ -9,5 +9,6 @@ export default async function check() {
   const code = await new Promise((resolve,reject) => { run.on('error',reject); run.on('close',resolve); });
   assert.equal(code,0,output);
   assert(output.includes('PASS: real student comparison HTTP/SSE/CSRF/SQLite/recovery'),output);
+  assert(output.includes('PASS: real mentor comparison HTTP/SSE/CSRF/SQLite/final-only'),output);
   return {pageErrors:[]};
 }

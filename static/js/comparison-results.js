@@ -1,7 +1,7 @@
 import {node, button} from './ai-render.js';
 
 export const active = status => ['waiting', 'running', 'streaming'].includes(status);
-export const statusLabels = {waiting:'대기', running:'스트리밍', streaming:'스트리밍', completed:'완료', ok:'정상 분석', degraded:'부분 분석', failed:'실패', cancelled:'취소', interrupted:'중단'};
+export const statusLabels = {waiting:'대기', running:'처리 중', streaming:'스트리밍', completed:'완료', ok:'정상 분석', degraded:'부분 분석', failed:'실패', cancelled:'취소', interrupted:'중단'};
 
 export function renderComparisonResult(root, panel, role, actions, locked) {
   const focused = root.contains(document.activeElement) ? document.activeElement.textContent : null;

@@ -285,6 +285,7 @@ export function mountComparison(data, draft) {
   async function execute(retry = null) {
     if (locked()) return;
     const sourceDraft = draft();
+    roleNote();
     if (!retry && (target.value === 'student' && !question.value.trim() || target.value === 'mentor' && (pairs.length === 0 || sourceDraft.config.mentor.mode === 'off') || target.value === 'analysis' && pairs.length === 0 && !question.value.trim())) {
       errors.replaceChildren(node('p', target.value === 'mentor' ? '멘토를 켜고 완료 쌍을 추가하세요.' : '교사 메시지를 입력하세요.'));
       errors.focus();

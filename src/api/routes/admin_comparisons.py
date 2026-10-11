@@ -1,4 +1,4 @@
-"""Owner-only student comparisons, independent stops and saved-state recovery."""
+"""Owner-only comparisons, independent stops and saved-state recovery."""
 
 from typing import Annotated
 from uuid import UUID

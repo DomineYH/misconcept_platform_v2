@@ -233,7 +233,9 @@ async def test_comparison_failures_are_safe_and_never_retry(
     response = await client.post("/admin/comparisons", json=comparison)
     assert response.status_code == 200
     events = frames(response)
-    assert events[-1][0] == "run.failed"
+    assert events[-1][0] == (
+        "run.interrupted" if failure == "commit" else "run.failed"
+    )
     assert not any(kind == "output.completed" for kind, _ in events)
     assert (
         "PRIVATE_PROVIDER_ERROR" not in response.text
@@ -244,7 +246,12 @@ async def test_comparison_failures_are_safe_and_never_retry(
     state = (
         await client.get(f"/admin/comparisons/{accepted['comparison_run_id']}")
     ).json()
-    assert state["panels"][0]["status"] == "failed"
+    assert state["panels"][0]["status"] == (
+        "interrupted" if failure == "commit" else "failed"
+    )
+    if failure == "commit":
+        assert state["status"] == "finished"
+        assert state["panels"][0]["error_code"] == "storage_error"
     if failure == "provider":
         assert state["panels"][0]["text"] == "Provisional"
     assert student.responses.create.await_count == (

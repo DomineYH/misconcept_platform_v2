@@ -274,6 +274,7 @@ async def test_failed_terminal_save_releases_admin_for_new_comparison_and_delete
     data, client, student, comparison, table
 ):
     from uuid import uuid4
+
     from sqlalchemy import event
     from sqlalchemy.exc import SQLAlchemyError
 

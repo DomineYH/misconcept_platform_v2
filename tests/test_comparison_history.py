@@ -4,7 +4,6 @@ from datetime import timedelta
 from uuid import uuid4
 
 import pytest
-
 from sqlalchemy import select
 from test_comparison_student import (
     client,

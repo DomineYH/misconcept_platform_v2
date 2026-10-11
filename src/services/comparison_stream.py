@@ -32,13 +32,19 @@ class ComparisonStreamingResponse(StreamingResponse):
         self.children = []
         self.ready = asyncio.Event()
         self.queue = asyncio.Queue(maxsize=len(executions))
-        for panel, execution in zip(snapshot["panels"], executions):
+        for execution in executions:
+            panel = next(
+                panel
+                for panel in snapshot["panels"]
+                if panel["panel_id"] == execution["panel_id"]
+            )
             accepted = dict(
                 **snapshot,
                 run_id=panel["run_id"],
                 panel_id=panel["panel_id"],
                 turn_id=panel["turn_id"],
             )
+            accepted["request_id"] = execution["request"].request_id
             cancelled = active_runs[panel["run_id"]] = asyncio.Event()
             child = dict(accepted=accepted, execution=execution, seq=0)
             child["task"] = asyncio.create_task(self.forward(child, cancelled))
@@ -180,16 +186,22 @@ def accepted_fields(accepted):
 
 
 def terminal_frame(accepted, snapshot, seq):
-    state = next(
+    panel = next(
         panel
         for panel in snapshot["panels"]
         if panel["panel_id"] == accepted["panel_id"]
     )
+    state = next(
+        attempt
+        for attempt in [panel, *panel["attempts"]]
+        if attempt["run_id"] == accepted["run_id"]
+    )
+    state = {**state, "outcome_status": state["status"]}
     return sse_frame(
         accepted,
         (
             "output.completed"
-            if state["status"] == "completed"
+            if state["status"] in ("completed", "ok", "degraded")
             else f"run.{state['status']}"
         ),
         seq,

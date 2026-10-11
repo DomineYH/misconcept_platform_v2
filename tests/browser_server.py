@@ -18,13 +18,17 @@ os.environ.update(
 from src.api.dependencies import templates  # noqa: E402
 from tests.s2_screen_fixtures import editor_fixture  # noqa: E402
 from tests.s4_screen_fixtures import analysis_fixture  # noqa: E402
+from tests.s5_terminal_fixtures import terminal_fixtures  # noqa: E402
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path)
         query = parse_qs(path.query)
-        if path.path == "/fixtures/s4/result":
+        if path.path == "/fixtures/s5/terminal":
+            body = json.dumps(terminal_fixtures()).encode()
+            mime = "application/json"
+        elif path.path == "/fixtures/s4/result":
             body = json.dumps(
                 analysis_fixture(
                     query.get("state", ["ok"])[0], admin="admin" in query

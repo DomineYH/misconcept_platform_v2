@@ -59,6 +59,10 @@ class ComparisonStopGeneration(ConfigValue):
     generation_id: UUID = Field(strict=False)
 
 
+class ComparisonRetry(ComparisonStopGeneration):
+    request_id: UUID = Field(strict=False)
+
+
 class ComparisonStopTarget(ComparisonStopGeneration):
     panel_id: str = Field(
         min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$"

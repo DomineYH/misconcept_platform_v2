@@ -269,7 +269,7 @@ comparison runs and usage from classroom records. Current draft inputs and all
 completed history pairs are frozen without saving a scenario; validation and
 admission refusals make no provider calls or execution records. Replay returns
 stored JSON, and comparison calls never automatically retry. Only student
-starts are accepted; retry APIs, other roles and history management are later
+starts are accepted; other roles and history management are later
 tickets. The existing shared
 `readSSE` transport renders the real student events.
 S5-03 (#93) adds 2–3 concurrent panels with atomic all-panel admission and one
@@ -288,6 +288,17 @@ login/CSRF, 1–3 panels, real SSE, independent/all stop, reload interruption,
 safe output and GET/replay recovery with temporary migrated SQLite and mocked
 provider HTTP.
 No production success fixtures or paid calls are used.
+S5-04 (#94) adds owner-only
+`POST /admin/comparisons/{id}/panels/{panel_id}/retry` with a new `request_id`
+and the latest `generation_id`. After all current panels finish, only a failed,
+cancelled, interrupted or degraded panel can start another attempt. Admission
+rechecks the fixed inputs/options against live authorization and limits;
+refusals preserve the prior result, and matching request replays make no calls.
+Previous attempts retain their output, timing and usage; retries do not extend
+the 30-day expiry. Reload/disconnect recovery uses the comparison ID in the URL
+and GET only, with at most ten seconds of one-second recovery polling, followed
+by manual refresh/stop guidance. Normal streaming has no polling or automatic
+retry. `npm run test:browser -- s5_recovery s5_student_live` covers this flow.
 
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it

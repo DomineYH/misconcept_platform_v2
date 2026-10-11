@@ -84,6 +84,15 @@ try {
   assert(await p3.getByText('Panel 3 partial',{exact:true}).isVisible());
   assert(await p1.getByText('Fast final',{exact:true}).isVisible());
   assert(await page.getByRole('button',{name:'비교 실행',exact:true}).isEnabled());
+  await p2.getByRole('button',{name:'패널 재시도',exact:true}).click();
+  await p2.getByText('Live final <img src=x onerror="window.s5xss=1">',{exact:true}).waitFor();
+  assert(await p1.getByText('Fast final',{exact:true}).isVisible());
+  assert.match(await p2.innerText(), /이전 시도 1회/);
+  const retryState = await (await page.request.get(`${base}/admin/comparisons/${new URL(page.url()).searchParams.get('comparison_id')}`)).json();
+  assert.equal(retryState.panels[1].status,'completed');
+  assert.equal(retryState.panels[1].attempts[0].status,'cancelled');
+  assert.equal(retryState.panels[1].attempts[0].text,'Panel 2 partial');
+  assert.equal(retryState.panels[1].model_config.options.max_output_tokens,1801);
   await configure(2,false);
   await p1.getByText('완료',{exact:true}).waitFor();
   await p2.getByText('완료',{exact:true}).waitFor();
@@ -92,7 +101,10 @@ try {
   await p2.getByText('Panel 2 partial',{exact:true}).waitFor();
   await p3.getByText('Panel 3 partial',{exact:true}).waitFor();
   await page.reload();
-  // Wait for the server's disconnect cleanup, without a product recovery poll.
+  await p2.getByText('중단',{exact:true}).waitFor();
+  assert(await p1.getByText('Fast final',{exact:true}).isVisible());
+  assert(await p2.getByRole('button',{name:'패널 재시도',exact:true}).isEnabled());
+  // The saved-state replay remains read-only after the product's GET recovery.
   const replay = await page.request.post(`${base}/admin/comparisons`,{data:requests.at(-1),headers:{'x-csrf-token':await page.evaluate(() => document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)[1])}});
   const recovered = await replay.json();
   assert.equal(recovered.status,'finished');

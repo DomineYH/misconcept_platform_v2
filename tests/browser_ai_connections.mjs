@@ -20,7 +20,7 @@ export const state = () => ({
       config_version:2, capabilities:{fields:[{name:'max_output_tokens', label:'최대 출력 토큰', type:'integer', min:1, max:4096}]},
       default_options:{max_output_tokens:2048},
       verification_state:{student:{status:'succeeded'}, mentor:{status:'failed', error_code:'invalid_output'}, analysis:{status:'stale'}},
-      probe_budgets:{student:1024, mentor:1500, analysis:2048}},
+      probe_budgets:{student:1024, mentor:1500, analysis:2500}},
     {id:2, provider:'openai', model_id:'custom-model', display_name:'직접 입력 모델', enabled:false,
       config_version:1, capabilities:null, default_options:{},
       verification_state:{student:{status:'unverified'}, mentor:{status:'verifying', probe_request_id:'existing-probe'}, analysis:{status:'unverified'}},

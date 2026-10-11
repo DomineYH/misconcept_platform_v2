@@ -170,10 +170,16 @@ async def test_wal_backup_upgrade_readers_and_restore(
             async with fresh_engine.connect() as conn:
                 assert await schema(conn) == upgraded_schema
 
-            # Current ORM readers require the nullable context evidence column.
+            # Current readers require the later additive execution migrations.
             monkeypatch.setattr(migrate, "engine", copy_engine)
             await migrate.run_migration(
+                migrate.DIRECTORY / "032_mentor_reason_summary.sql"
+            )
+            await migrate.run_migration(
                 migrate.DIRECTORY / "033_context_budget.sql"
+            )
+            await migrate.run_migration(
+                migrate.DIRECTORY / "034_analysis_run.sql"
             )
             data.factory = async_sessionmaker(
                 copy_engine, expire_on_commit=False, autoflush=False
@@ -214,6 +220,11 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "snapshot_created_at",
                 "source_scenario_version",
                 "config_hash_kind",
+                "analysis_schema_version",
+                "analysis_status",
+                "analysis_coverage_json",
+                "misconception_findings_json",
+                "message_analysis_disposition",
             ]
             assert [row[4] for row in rows[1:]] == [
                 "teacher",
@@ -224,8 +235,12 @@ async def test_wal_backup_upgrade_readers_and_restore(
             assert rows[1][5:8] == ["'=Legacy question", "A", "0.90"]
             assert rows[-1][8] == "Preserved feedback"
             assert all(row[9] == "legacy" for row in rows[1:])
-            assert all(row[-4] == "legacy_unconverted" for row in rows[1:])
-            assert all(row[-1] == "unknown" for row in rows[1:])
+            assert all(row[11] == "legacy_unconverted" for row in rows[1:])
+            assert all(row[14] == "unknown" for row in rows[1:])
+            assert all(
+                row[15:19] == ["1", "legacy", "", ""] for row in rows[1:]
+            )
+            assert [row[19] for row in rows[1:]] == ["unknown", "", "", ""]
             assert data.owner.username not in exported.text
             login(client, data.other)
             for path in (
@@ -290,6 +305,11 @@ async def test_wal_backup_upgrade_readers_and_restore(
                 "snapshot_created_at",
                 "source_scenario_version",
                 "config_hash_kind",
+                "analysis_schema_version",
+                "analysis_status",
+                "analysis_coverage_json",
+                "misconception_findings_json",
+                "message_analysis_disposition",
             ]
             assert [row["message_id"] for row in rows[:-1]] == [
                 "41",

@@ -2,6 +2,10 @@
 
 import json
 
+from src.services.analysis_output_contract import (
+    MergeAnalysisOutput,
+    UnifiedAnalysisOutput,
+)
 from src.services.invocation_types import (
     InvocationError,
     StructuredRequest,
@@ -9,8 +13,6 @@ from src.services.invocation_types import (
 )
 from src.services.role_output_contracts import (
     MentorOutput,
-    QuestionClassification,
-    SessionSynthesis,
 )
 from src.services.student_probe_contract import (
     MESSAGES,
@@ -69,28 +71,43 @@ def probe_steps(provider, model_id, role, options, request_id):
         )
         return [("text", "text", value), ("stream", "stream", value)]
     if role == "analysis":
+        context = dict(
+            messages=ANALYSIS_MESSAGES,
+            labels=LABELS,
+            classification_enabled=True,
+        )
+        evidence = [
+            dict(message_id=m["id"], quote=m["content"])
+            for m in ANALYSIS_MESSAGES
+        ]
         return [
             (
-                "classification",
+                "unified",
                 "structured",
                 request(
-                    "교사 질문을 분류하세요. A(high)=생각 탐색, B(low)=정답 유도. "
-                    "confidence는 0~1, reasoning.summary는 근거, improved_sentence는 low일 때만 개선 질문입니다.",
-                    "교사 질문: Why? 학생: 그냥 덧셈이니까요.",
-                    QuestionClassification,
-                    {"labels": LABELS},
+                    "단일 v2 사후 분석입니다. schema_version=2. 모든 교사 메시지를 분류하세요. "
+                    "A(high)=생각 탐색, B(low)=정답 유도. confidence는 금지합니다. 인용은 정확한 원문, "
+                    "quote/alternative_question은 200자, 이유·관찰·총평은 300자 이내입니다. "
+                    "총평은 1–3개, 강점/개선점 각 최대 5개, 관찰/coaching 각 최대 10개입니다. "
+                    "관찰은 학생 근거를 사용하며 changed는 서로 다른 학생 메시지 2개 이상입니다.",
+                    json.dumps(ANALYSIS_MESSAGES, ensure_ascii=False),
+                    UnifiedAnalysisOutput,
+                    context,
                 ),
             ),
             (
-                "synthesis",
+                "merge",
                 "structured",
                 request(
-                    "대화를 종합해 교사에게 한국어 코칭을 제공하세요. brief_feedback은 문장당 70자, "
-                    "alternative_question은 60자 이내입니다. message_id와 role은 대화와 일치해야 하고 "
-                    "quote는 해당 발화의 원문이어야 합니다. 최소 하나의 구체적 강점 또는 개선점을 포함하세요.",
-                    json.dumps(ANALYSIS_MESSAGES, ensure_ascii=False),
-                    SessionSynthesis,
-                    {"messages": ANALYSIS_MESSAGES},
+                    "v2 종합 계약 시험입니다. schema_version=2, 분류 배열은 반환하지 마세요. "
+                    "입력의 검증된 근거 부분집합만 참조하세요. 새 인용/ID를 만들지 마세요. "
+                    "quote/alternative_question은 200자, 이유·관찰·총평은 300자 이내입니다. "
+                    "총평 1–3개, 강점/개선점 각 최대 5개, 관찰/coaching 각 최대 10개입니다.",
+                    json.dumps(
+                        dict(validated_evidence=evidence), ensure_ascii=False
+                    ),
+                    MergeAnalysisOutput,
+                    {**context, "allowed_evidence": evidence},
                 ),
             ),
         ]

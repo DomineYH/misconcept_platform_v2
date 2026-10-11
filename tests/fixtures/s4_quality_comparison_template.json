@@ -1,0 +1,1450 @@
+{
+  "record_version": "s4-quality-comparison-v1",
+  "mode": "unexecuted_template",
+  "release_status": "release_blocked",
+  "corpus_version": "s4-quality-corpus-v1-agent-draft",
+  "corpus_hash": "abee7c0fcf573cbdbeb597a67ed8f24142cc95a4b52677deb090ea09eb7ccaea",
+  "expected_evidence_review": {
+    "status": "agent_draft_requires_education_lead_review",
+    "reviewer": null,
+    "reviewed_at": null,
+    "frozen_corpus_hash": null
+  },
+  "intended_pilot": {
+    "provider": "unknown",
+    "exact_model_id": "unknown",
+    "options": "unknown"
+  },
+  "cost_authorization": {
+    "approved_by": null,
+    "approved_at": null,
+    "scope": null,
+    "max_cost": null,
+    "currency": null
+  },
+  "education_approval": {
+    "education_lead": "initial product owner or explicitly designated successor",
+    "approved_by": null,
+    "approved_at": null,
+    "decision": "pending",
+    "approved_record_hash": null
+  },
+  "samples": [
+    {
+      "sample_id": "math-short-01",
+      "transcript_hash": "d9b454a97b0f2fd19d62ac5f91d8b837c88321f4a87c2e739f13eb00ff0bf848",
+      "config_hash": "bfd6fd4de53e162d7d2f01bd2f48f781fd04dbabb463a6c21b9f337d1e5e5c54",
+      "sample_hash": "0b3ad9c0de467e77b57eec29989786087420445fbe4cb152793251f69001f7f0",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "math-short-02",
+      "transcript_hash": "f4811a631acf89445d0ff59242f11e35fb9d954fca929261c5f5b523eab0135a",
+      "config_hash": "ea9f6c505314c1294813a8a623ad100851e3a58d15ef8efb8cd5c88b59c243c2",
+      "sample_hash": "2c11858fcf203bbfbe7bb47f49d15de21fcc25813a22e25f7755ab7668217530",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "math-ordinary-01",
+      "transcript_hash": "a555e160c7d5edf46dd1f89de003e586d0bd0bfa403a07b36c3c2f9f4c541b1c",
+      "config_hash": "a450c205a2216b424cf8326c6d34f2e158f843769fa9167a4f5433455c043d73",
+      "sample_hash": "c9a9891e18a510adea122f4277bdd6dcadd132bced10f8ebb25e88ea653db3d5",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "math-ordinary-02",
+      "transcript_hash": "415793d092edfe7bc92484a784e63bfa452664926b7ecaba8a1b8437b7601e25",
+      "config_hash": "fb5b3b6ea666d9a4b82a184e07c7ce1e95f927b7483fa96e68190d6bab375857",
+      "sample_hash": "fc602a46f551549f2d394cb525959f247851e2d6e10477819a5b56d47afe8c69",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "math-long-01",
+      "transcript_hash": "34f80e7a69f6a042f3857a29f1617919cc9c4a8107f31b7b19cf00451c00cd04",
+      "config_hash": "b63d12a2201d8e480a3dca87199d774eeb79bb350cb40c0413fb0990ba9a6189",
+      "sample_hash": "d3e8272a4204149c212f761aea9e2016793d1eba7699d89425fbed00d0d20314",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "math-long-02",
+      "transcript_hash": "ce2f234991f354722a0404575fc96e70d3c1c7e1e38dd08d58102fc099f10dbc",
+      "config_hash": "3abf1512d01793de8f6200ebc485ed4bfa692fca2da0138a7f12b43044e0693f",
+      "sample_hash": "4216f47efc068df5646b052b0f1c7067f4f49b2887bc477556831028b9f1276d",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "science-short-01",
+      "transcript_hash": "8de29945b8a5b422cad500ebfffd16e472d8938a5acedac43d9f72ac087db92b",
+      "config_hash": "64504664996987935f42e5c346559fcbbe6abc587a7c5c0911b8eac72d3f1989",
+      "sample_hash": "02043b2e8a6d7687aa80e36aee494769b1fc3d93ed8d71558bb1a846a11e41fc",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "science-short-02",
+      "transcript_hash": "5f409004dd021db54bfbe50bedeeb1f211d07efc3b011d7bad8de9eedac807b6",
+      "config_hash": "1daa227cd2e038076c844341a0379367bad5f4cfc54969456ec8b80e726f0099",
+      "sample_hash": "7879595936aef5888eaa15338b3bb5f933bcda6641a3fbad9987f262696266dc",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "science-ordinary-01",
+      "transcript_hash": "e153bb9043f31406d948af56e4bbf78ca5f24b0d5a74f9f7c65dafbf2362ee19",
+      "config_hash": "5f2b553abd056c7235ef1fb4a8366fea6d6dcae430e45289b111e3dfdff996cd",
+      "sample_hash": "3f0ea4e21e415e8de9c74ddb4439794947f532f1d201431b9199d7f561793b3f",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "science-ordinary-02",
+      "transcript_hash": "a85d743962f29bbcab84944fca3e705363e0d70aafcd077f05fe574963fbec65",
+      "config_hash": "e014e2bad2f30e562aec53a6b23c91cdf59761d185cdf1ee658e37d6d328cad3",
+      "sample_hash": "f81eb4722c5a001f18146901fea9fcb8d3994aeff3611c1b1ef38ee393b25f7e",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "science-long-01",
+      "transcript_hash": "c9b5f1bf7ec9f317f189a1216405ff5cd186ae749ed580377a72fba2751a4d07",
+      "config_hash": "9441ccf8efd3667546b4b5ee973f3ec06157ee5c7a445343f1c85d8b87eae136",
+      "sample_hash": "d78be33db246afea3b37f94db0570a44dd9ae98ed7648d2f84a5640b2e3f0ed5",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    },
+    {
+      "sample_id": "science-long-02",
+      "transcript_hash": "d1b793d7874fd92e65ef5b3a16025c71262b3c8ed6c7b20e197a5118d20ebbc6",
+      "config_hash": "e79a7e8a2dee390c52f5e99542123b22397820134c2760c9c1e885a494dad7f7",
+      "sample_hash": "e407895bb516f5c5eb5cf2fab0491ae40739f32c972ba367c737555d5fd13c3c",
+      "baseline": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "candidate": {
+        "code_revision": "unknown",
+        "execution_contract": "unknown",
+        "provider": "unknown",
+        "exact_model_id": "unknown",
+        "options": "unknown",
+        "prompt_versions": "unknown",
+        "schema_version": "unknown",
+        "schema_hashes": "unknown",
+        "estimator_version": "unknown",
+        "chunk_policy_version": "unknown",
+        "plan_hash": "unknown",
+        "output": "unknown",
+        "raw_provider_outputs": [],
+        "validation_status": "unknown",
+        "invalid_references_accepted": "unknown",
+        "major_unsupported_claims": "unknown",
+        "dimensions": {
+          "evidence_fidelity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "classification_fit": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "misconception_finding_validity": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          },
+          "feedback_actionability": {
+            "score": "unknown",
+            "na_reason": null,
+            "evidence_ids": [],
+            "reviewer_note": null
+          }
+        },
+        "call_count": "unknown",
+        "elapsed_seconds": "unknown",
+        "input_tokens": "unknown",
+        "output_tokens": "unknown",
+        "total_tokens": "unknown",
+        "cost": "unknown",
+        "currency": "unknown",
+        "measurement_source": "unknown"
+      },
+      "baseline_comparison": {
+        "applicable_common_dimensions": [],
+        "drops": "unknown",
+        "na_reasons": {},
+        "decision": "pending"
+      },
+      "decision": "pending",
+      "review_notes": null
+    }
+  ]
+}

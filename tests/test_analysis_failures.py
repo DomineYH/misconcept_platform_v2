@@ -36,7 +36,7 @@ async def test_analysis_never_replays_a_partially_received_body(
     await prepare_analysis(data, monkeypatch)
 
     async def upstream(request, body):
-        if body["text"]["format"]["name"] == "RuntimeClassification":
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
             return httpx2.Response(200, stream=PartialBody())
         return httpx2.Response(
             200, json=response_body(json.dumps(result_for(body)), USAGE)
@@ -48,12 +48,12 @@ async def test_analysis_never_replays_a_partially_received_body(
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
     assert response.status_code == 200
-    assert len(calls) == 3 and all(c.is_closed() for c in clients)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (
             await db.scalars(
                 select(ApiUsageLog).where(
-                    ApiUsageLog.operation == "classification"
+                    ApiUsageLog.operation == "analysis_unified"
                 )
             )
         ).all()
@@ -62,9 +62,7 @@ async def test_analysis_never_replays_a_partially_received_body(
     assert "PRIVATE-PARTIAL-BODY" not in response.text
 
 
-@pytest.mark.parametrize(
-    "operation", ["classification", "synthesis", "greeting"]
-)
+@pytest.mark.parametrize("operation", ["analysis_unified"])
 @pytest.mark.parametrize(
     "mode,code,retry",
     [
@@ -87,17 +85,8 @@ async def test_analysis_records_every_failure_and_only_safe_retries(
     data, api, monkeypatch, operation, mode, code, retry
 ):
     await prepare_analysis(data, monkeypatch)
-    names = {
-        "greeting": "RuntimeGreetings",
-        "classification": "RuntimeClassification",
-        "synthesis": "RuntimeSynthesis",
-    }
 
     async def upstream(request, body):
-        if body["text"]["format"]["name"] != names[operation]:
-            return httpx2.Response(
-                200, json=response_body(json.dumps(result_for(body)), USAGE)
-            )
         if mode == "connect":
             raise httpx2.ConnectError(
                 "Synthetic connect failure", request=request
@@ -135,8 +124,8 @@ async def test_analysis_records_every_failure_and_only_safe_retries(
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
     assert response.status_code == 200
-    attempts = 2 if retry and operation != "greeting" else 1
-    assert len(calls) == attempts + 2 and all(c.is_closed() for c in clients)
+    attempts = 2 if retry else 1
+    assert len(calls) == attempts and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (
             await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))

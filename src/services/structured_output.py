@@ -87,4 +87,11 @@ def structured_event(request, event):
         value = validate_output(request, event.text)
     except InvocationError as error:
         return replace(event, type="error", text="", error_code=error.code)
+    if errors := request.validation_context.get("analysis_errors"):
+        code = (
+            "invalid_reference"
+            if any(e["code"] == "invalid_reference" for e in errors)
+            else "invalid_output"
+        )
+        return replace(event, type="error", text="", error_code=code)
     return replace(event, text="", structured=value)

@@ -113,7 +113,7 @@
             {% else %}
             <a href="/admin/sessions/{{ session.id }}/download"
               class="btn btn-sm btn-success">CSV</a>
-            {% if session.summary %}
+            {% if session.summary or session.id in analysis_session_ids %}
             <button type="button"
               class="btn btn-sm btn-info view-analysis-btn"
               data-session-id="{{ session.id }}">분석결과</button>
@@ -170,7 +170,8 @@
 </div>
 
 <!-- Analysis Modal -->
-<div id="analysis-modal" class="modal-overlay hidden">
+<div id="analysis-modal" class="modal-overlay hidden"
+     role="dialog" aria-modal="true" aria-label="세션 분석 결과">
   <div class="modal-container modal-lg">
     <div class="modal-body" id="analysis-modal-body">
     </div>

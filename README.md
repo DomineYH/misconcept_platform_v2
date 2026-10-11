@@ -57,7 +57,7 @@ and the APIs later tickets must reuse.
 Saving keys or models does not call a provider. Explicit OpenAI, Claude and Gemini role probes
 reserve a durable request and make at most two sequential synthetic calls:
 student text/stream, mentor judgment JSON/coaching text, or analysis
-classification JSON/synthesis JSON. Each stops on the first failure with no retries.
+v2 unified JSON/evidence-subset merge JSON. Each stops on the first failure with no retries.
 Strict structured transport is followed by server type and semantic validation;
 invalid JSON, references, refusals, output limits and empty results fail the role.
 Reopening the page reads
@@ -68,7 +68,7 @@ for ordinary calls globally and per provider. Capacity refusals return 429 witho
 a queue. Each administrator can run one probe bundle. Disable/delete immediately
 block admission and request cancellation of every active credential revision.
 Limits and absolute deadlines are read for new calls; reducing limits preserves
-existing calls. Ordinary classification/synthesis calls may retry once;
+existing calls. Ordinary analysis_unified/analysis_chunk/analysis_merge calls may retry once;
 backoff returns capacity and reacquires it under the current limits. This service
 requires one asynchronous worker in one app instance. Student lesson calls now
 require an enabled, student-verified DB registration
@@ -84,8 +84,28 @@ shared admission with zero retries. Their existing sensitivity, counters and loc
 fallback remain unchanged; local no-intervention decisions make no provider call.
 Judgment attempts are recorded separately as `mentor_judgment`, including failures
 without usage. Post-session analysis also uses DB registrations and common
-invocations while preserving its configured OpenAI model IDs and existing
-normalization. Greeting detection has no retries.
+invocations while preserving configured model IDs and options. Dialogue within
+budget uses one structured v2 call with the frozen lesson and stored
+teacher/student dialogue; the server validates exact evidence and computes
+statistics and rubric grades. No dialogue
+makes no provider call. Existing v1 reports remain readable; analysis models need
+explicit s4-v2 role revalidation. Student and mentor role contracts keep their
+existing versions; shared capability v3 separately makes all roles' old evidence stale.
+Analysis requests send a UUID `request_id` and receive 202 with a durable run ID
+and status/cancel paths. Replaying that request makes no new call; changed inputs
+or another active request return 409. Accepted reports and the latest execution
+status are separate. Teachers explicitly retry failed or partial analyses with a
+new request; administrators can regenerate native results. Partial results show
+coverage and valid-only classification counts, and never replace ok/legacy results.
+Long dialogue requires explicit confirmation of its frozen plan, then executes
+up to eight sequential chunks and one evidence-only merge. The first non-ok chunk
+stops execution; a failed merge retains only validated chunk results as partial
+analysis.
+Leaving the page keeps the execution; explicit cancellation,
+the 900-second run cap, permission revocation or failed storage prevent adoption.
+Startup marks unfinished runs interrupted without rerunning them. Migration 034
+preserves existing records and adds analysis execution constraints; the supported
+single worker owns the page-independent tasks.
 Do not treat this stage as the final production cutover.
 
 Encryption uses the exactly pinned [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/)
@@ -270,3 +290,21 @@ delay/failure verifies student independence and slot cleanup, without claiming
 real p95 or educational quality. [S3 cutover and handoff](docs/s3-cutover.md)
 documents drain, backup/restore, stale roles, explicit reverification and the
 rollback boundary after new writes. Actual comparison panels remain S5 work.
+
+S4-08 (#85) quality preparation: [the fixed corpus and release gate](docs/s4-quality-gate.md)
+provides 12 synthetic Korean dialogues, agent-draft expected evidence and a
+comparison record template. `uv run --frozen python -m pytest -q
+tests/test_s4_quality_corpus.py tests/test_s4_quality_comparison.py` rehearses
+the S2 baseline and S4 candidate executors with mocked SDK HTTP only.
+Actual educational approval remains separate work; release stays blocked
+until the education lead approves actual comparisons for every intended pilot
+model/config after separately authorized paid execution.
+
+S4-09 (#86) integration and cutover: [operations hand-off](docs/s4-cutover.md)
+records API/CSV changes, s4-v2 and shared capability v3 reverification,
+WAL-preserving migration 034/restore, rollback write boundaries and spec traceability.
+`tests/test_s4_integration.py` and `tests/test_s4_cutover.py` use temporary data
+and existing SDK mocks. S2 baseline execution is isolated under `tests/s2_*`;
+product runtime uses only v2 analysis. Technical completion remains
+`release_blocked` until separate paid comparison, education approval and
+production authorization have real records.

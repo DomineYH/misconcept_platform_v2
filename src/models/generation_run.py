@@ -47,15 +47,24 @@ class GenerationRun(Base):
     first_output_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
 
+    plan_json: Mapped[str | None] = mapped_column(Text)
+    outcome_json: Mapped[str | None] = mapped_column(Text)
+    accepted_report_id: Mapped[int | None] = mapped_column(Integer)
+    accepted_report_version: Mapped[int | None] = mapped_column(Integer)
+
     __table_args__ = (
         UniqueConstraint(
             "owner_id", "session_id", "request_id", name="uq_run_request"
         ),
-        CheckConstraint("operation IN ('student','mentor')"),
+        CheckConstraint("operation IN ('student','mentor','analysis')"),
         CheckConstraint("provider IN ('openai','anthropic','google')"),
         CheckConstraint(
             "status IN ('running','completed','failed',"
-            "'cancelled','interrupted')"
+            "'cancelled','interrupted','ok','degraded')"
+        ),
+        CheckConstraint(
+            "(operation = 'analysis' AND status != 'completed') OR "
+            "(operation != 'analysis' AND status NOT IN ('ok','degraded'))"
         ),
         CheckConstraint("mentor_trigger IN ('manual','auto')"),
         CheckConstraint("result_kind IN ('message','no_intervention')"),
@@ -81,6 +90,12 @@ class GenerationRun(Base):
                 "status = 'completed' AND "
                 "(operation = 'student' OR result_kind = 'message')"
             ),
+        ),
+        Index(
+            "uq_run_running_analysis",
+            "session_id",
+            unique=True,
+            sqlite_where=text("operation = 'analysis' AND status = 'running'"),
         ),
         Index("ix_run_turn", "session_id", "turn_id", "operation"),
     )

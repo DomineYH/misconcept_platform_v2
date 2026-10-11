@@ -8,13 +8,14 @@ prompts with structured JSON output.
 import logging
 from typing import Any, Dict, Optional
 
-from src.api.schemas.scenario_config import AnalysisConfig
-from src.prompts.example_templates import generate_examples
-from src.services.analysis_invocations import AnalysisCaller
-from src.services.role_output_contracts import (
+from s2_analysis_contracts import (
     RuntimeClassification,
     RuntimeGreetings,
 )
+from s2_analysis_invocations import AnalysisCaller
+from s2_example_templates import generate_examples
+
+from src.api.schemas.scenario_config import AnalysisConfig
 from src.utils.cache import load_prompt_template
 
 logger = logging.getLogger(__name__)

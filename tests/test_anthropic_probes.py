@@ -197,7 +197,7 @@ async def test_claude_structured_role_probe_validates_existing_contract(
             and schema["schema"]["additionalProperties"] is False
         )
         if role == "analysis" and len(calls) == 1:
-            assert "maximum" not in schema["schema"]["properties"]["confidence"]
+            assert "confidence" not in schema["schema"]["properties"]
         value = json.dumps(
             (MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE)
             if role == "mentor"
@@ -227,10 +227,10 @@ async def test_claude_structured_role_probe_validates_existing_contract(
         ).all()
         assert rows == [
             (
-                "manual_positive" if role == "mentor" else "classification",
+                "manual_positive" if role == "mentor" else "unified",
                 "completed",
             ),
-            ("auto_negative" if role == "mentor" else "synthesis", "completed"),
+            ("auto_negative" if role == "mentor" else "merge", "completed"),
         ]
 
 
@@ -308,7 +308,7 @@ async def test_claude_failures_stop_bundle_preserve_usage_and_hide_bodies(
                 if mode == "reason_empty":
                     value["reason_summary"] = " "
                 if mode == "label":
-                    value["label"] = "unknown"
+                    value["message_classifications"][0]["rubric_id"] = "unknown"
                 if mode == "confidence":
                     value["confidence"] = 1.1
                 if mode == "quote":

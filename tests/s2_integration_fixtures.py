@@ -9,6 +9,7 @@ import httpx
 import httpx2
 import pytest
 from pydantic import SecretStr
+from s4_analysis_fixtures import analysis_reply, prompt_inputs
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette_csrf import CSRFMiddleware
@@ -114,7 +115,9 @@ async def authenticate(api, username):
     await api.get("/scenarios")
 
 
-def workflow_transport(monkeypatch, provider, *, budget=1024):
+def workflow_transport(
+    monkeypatch, provider, *, budget=1024, analysis_budget=None
+):
     """Only the provider's HTTP boundary is replaced; SDK parsing stays real."""
     from test_student_probe import response_body, sdk_transport, sse
 
@@ -133,6 +136,14 @@ def workflow_transport(monkeypatch, provider, *, budget=1024):
             return json.dumps(state.structured_results.pop(0))
         if state.fail_analysis and "brief_feedback" in properties:
             return "invalid JSON"
+        if "message_classifications" in properties:
+            inputs = prompt_inputs(body)
+            return json.dumps(
+                analysis_reply(
+                    inputs["messages"],
+                    enabled=inputs["analysis"]["classification_enabled"],
+                )
+            )
         if "results" in properties:
             return json.dumps({"results": [{"index": 0, "is_greeting": False}]})
         if "label" in properties:
@@ -177,7 +188,11 @@ def workflow_transport(monkeypatch, provider, *, budget=1024):
             return httpx2.Response(200, json=response_body(text))
 
         clients, calls = sdk_transport(
-            monkeypatch, upstream, budget=budget, key=KEY
+            monkeypatch,
+            upstream,
+            budget=budget,
+            analysis_budget=analysis_budget,
+            key=KEY,
         )
     elif provider == "anthropic":
         from test_anthropic_catalog import sdk_transport

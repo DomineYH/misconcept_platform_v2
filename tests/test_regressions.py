@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from analysis_test_helpers import call_analysis_route
 from fastapi import HTTPException
 from sqlalchemy import select
 from starlette.requests import Request
@@ -74,11 +75,11 @@ async def test_regeneration_failure_preserves_summary(data, monkeypatch):
     await data.db.commit()
     fake = AsyncMock(side_effect=RuntimeError("offline"))
     monkeypatch.setattr(analysis_pipeline, "run_llm_pipeline", fake)
-    with pytest.raises(HTTPException) as failed:
-        await admin_actions.regenerate_analysis(
-            request(), sid, data.admin, data.db
-        )
-    assert failed.value.status_code == 500
+    result = await call_analysis_route(
+        admin_actions.regenerate_analysis, request(), sid, data.admin, data.db
+    )
+    assert result["latest_run"]["status"] == "failed"
+    assert result["latest_run"]["adopted"] is False
     assert fake.await_count == 1
     async with data.factory() as reader:
         summary = (await reader.scalars(select(SessionSummary))).one()
@@ -109,7 +110,9 @@ async def test_http_permissions_retry_and_ended_message_guard(
     from src.services import analysis_pipeline
 
     async def database():
-        yield data.db
+        async with data.factory() as db:
+            yield db
+            await db.commit()
 
     def cookie(user):
         payload = base64.b64encode(json.dumps({"user_id": user.id}).encode())
@@ -120,7 +123,18 @@ async def test_http_permissions_retry_and_ended_message_guard(
     await install_analysis_snapshot(data, monkeypatch)
 
     sid = data.session.id
-    await analysis_pipeline.create_fallback_summary(sid, ["A", "B"], data.db)
+    from src.api.routes import session_analysis as routes
+
+    monkeypatch.setattr(
+        analysis_pipeline,
+        "run_llm_pipeline",
+        AsyncMock(side_effect=RuntimeError("offline")),
+    )
+    failed = await call_analysis_route(
+        routes.analyze_session_endpoint, request(), sid, data.owner, data.db
+    )
+    assert failed["latest_run"]["status"] == "failed"
+    assert failed["accepted_report"] is None
     fake = AsyncMock(
         return_value=(
             {"A": 1},
@@ -137,7 +151,10 @@ async def test_http_permissions_retry_and_ended_message_guard(
     try:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        ) as raw_client:
+            from analysis_test_helpers import AnalysisApi
+
+            client = AnalysisApi(raw_client)
             assert (
                 await client.get(f"/sessions/{sid}/analysis")
             ).status_code == 303
@@ -168,6 +185,13 @@ async def test_http_permissions_retry_and_ended_message_guard(
             client.cookies.set("session_id", cookie(data.admin))
             modal = await client.get(f"/admin/sessions/{sid}/analysis_modal")
             assert modal.status_code == 200
-            assert "HTTP success" in modal.text
+            assert (
+                f'data-result-url="/admin/sessions/{sid}/analysis"'
+                in modal.text
+            )
+            public = await client.get(f"/admin/sessions/{sid}/analysis")
+            assert public.json()["accepted_report"]["brief_feedback"] == [
+                "HTTP success"
+            ]
     finally:
         app.dependency_overrides.clear()

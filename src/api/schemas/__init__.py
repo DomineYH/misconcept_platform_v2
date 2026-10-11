@@ -5,6 +5,7 @@ from src.api.schemas.contributor import (
     ContributorResponse,
     ContributorUpdate,
 )
+from src.api.schemas.generation import AnalysisRequest, GenerationRequest
 from src.api.schemas.group import (
     AdminGroupResponse,
     GroupCreate,
@@ -23,6 +24,8 @@ from src.api.schemas.user import (
 )
 
 __all__ = [
+    "AnalysisRequest",
+    "GenerationRequest",
     "UserCreate",
     "UserUpdate",
     "AdminUserResponse",

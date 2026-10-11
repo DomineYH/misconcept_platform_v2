@@ -11,7 +11,7 @@ PROVIDER_CAPABILITIES = {
     "google": google_capabilities,
 }
 
-DEFINITION_VERSION = "openai-2026-10-10-v2"
+DEFINITION_VERSION = "openai-2026-10-11-v3"
 MODEL_PAGES = "https://developers.openai.com/api/docs/models/"
 PARAMETER_SOURCE = (
     "https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.4"
@@ -40,6 +40,18 @@ def normalize_model_id(value, provider=None):
 
 
 def metadata_conflict(model_id, connection):
+    definition = capabilities(connection.provider, model_id)
+    for item in connection.catalog_models_json:
+        if item.get("model_id") != model_id or definition is None:
+            continue
+        for field, limit in (
+            ("input_token_limit", "input_token_limit"),
+            ("combined_context_tokens", "combined_context_tokens"),
+            ("output_token_limit", "max_output_tokens"),
+        ):
+            value, maximum = item.get(field), definition.get(limit)
+            if value is not None and maximum is not None and value < maximum:
+                return True
     if connection.provider == "anthropic":
         return anthropic_capabilities.metadata_conflict(
             model_id, connection.catalog_models_json
@@ -85,6 +97,11 @@ def capabilities(provider, model_id):
         dict(
             definition_version=DEFINITION_VERSION,
             checked_at="2026-10-10",
+            limits_checked_at="2026-10-11",
+            limit_sources={
+                k: MODEL_PAGES + name
+                for k in ("combined_context_tokens", "max_output_tokens")
+            },
             sources=(
                 [MODEL_PAGES + name, PARAMETER_SOURCE, MINI_REASONING_SOURCE]
                 if name == "gpt-5-mini"

@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,13 +17,72 @@ os.environ.update(
 )
 from src.api.dependencies import templates  # noqa: E402
 from tests.s2_screen_fixtures import editor_fixture  # noqa: E402
+from tests.s4_screen_fixtures import analysis_fixture  # noqa: E402
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path)
         query = parse_qs(path.query)
-        if path.path == "/fixtures/s2/editor":
+        if path.path == "/fixtures/s4/result":
+            body = json.dumps(
+                analysis_fixture(
+                    query.get("state", ["ok"])[0], admin="admin" in query
+                )
+            ).encode()
+            mime = "application/json"
+        elif path.path == "/fixtures/s4/history":
+            body = (
+                templates.get_template("admin/sessions.html")
+                .render(
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    sessions=[
+                        SimpleNamespace(
+                            id=1,
+                            teacher=None,
+                            summary=True,
+                            started_at=datetime(2026, 10, 1),
+                            ended_at=datetime(2026, 10, 1, 10),
+                        )
+                    ],
+                    teachers=[],
+                    total_pages=1,
+                    session_display=lambda session: dict(
+                        scenario_title="분수의 크기 비교",
+                        snapshot_provenance=dict(snapshot_origin="native"),
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/s4/modal":
+            body = (
+                templates.get_template("partials/analysis_modal.html")
+                .render(
+                    is_admin=True,
+                    session_id=1,
+                    analysis_result_url=f"/fixtures/s4/result?{path.query}",
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/s4/analysis":
+            body = (
+                templates.get_template("analysis.html")
+                .render(
+                    user=SimpleNamespace(
+                        nickname="Admin" if "admin" in query else "Teacher",
+                        role="admin" if "admin" in query else "teacher",
+                    ),
+                    session_id=1,
+                    distribution={},
+                    grade_counts={},
+                    analysis_result_url=f"/fixtures/s4/result?{path.query}",
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/s2/editor":
             body = (
                 templates.get_template("admin/scenario_editor.html")
                 .render(

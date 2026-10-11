@@ -1,6 +1,6 @@
 """Admin session action routes."""
 
-import logging
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -21,16 +21,21 @@ from src.api.routes.session_helpers import (
     mark_session_ended,
     require_native_session,
 )
+from src.api.schemas import AnalysisRequest
 from src.config import config
 from src.models.session import Session
 from src.models.user import User
-from src.services.analysis_pipeline import analyze_session, load_analysis_lesson
 from src.services.analysis_results import (
     load_analysis_response as _load_analysis_response,
 )
+from src.services.analysis_runs import (
+    cancel_analysis,
+    get_run,
+    request_analysis,
+    run_response,
+)
 from src.services.session_history import session_display
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
@@ -42,6 +47,7 @@ limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 async def end_session(
     request: Request,
     session_id: int,
+    body: AnalysisRequest | None = None,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -64,22 +70,18 @@ async def end_session(
         )
 
     require_native_session(session)
-    if session.ended_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session already ended",
-        )
+    await mark_session_ended(session, db, force=True)
+    accepted = await request_analysis(
+        db,
+        session_id,
+        user.id,
+        body.request_id if body else str(uuid4()),
+        plan_hash=body.plan_hash if body else None,
+    )
+    if body is not None:
+        return accepted
 
-    await mark_session_ended(session, db)
-
-    # Trigger analysis
-    try:
-        await analyze_session(session_id, session, db, actor_id=user.id)
-    except Exception as e:
-        await db.rollback()
-        logger.warning(f"Analysis failed for session {session_id}: {e}")
-
-    # Rollback expires scalar and relationship attributes; reload all render inputs.
+    # Reload render inputs after committing the end and analysis reservation.
     session = (
         await db.execute(
             query.options(joinedload(Session.summary)).execution_options(
@@ -94,7 +96,9 @@ async def end_session(
             "request": request,
             "session": session,
             "session_display": session_display,
+            "analysis_session_ids": {session_id},
         },
+        status_code=accepted.status_code,
     )
 
 
@@ -158,7 +162,20 @@ async def session_detail(
 
     return templates.TemplateResponse(
         "partials/session_detail.html",
-        {"request": request, "session": session, **session_display(session)},
+        {
+            "request": request,
+            "session": session,
+            **session_display(session),
+            **(
+                {
+                    "analysis_result_url": f"/admin/sessions/{session_id}/analysis"
+                }
+                if session.ended_at
+                and await _load_analysis_response(session_id, db, admin=True)
+                is not None
+                else {}
+            ),
+        },
     )
 
 
@@ -193,7 +210,7 @@ async def analysis_modal(
             detail=("Session must be ended before viewing analysis"),
         )
 
-    analysis_data = await _load_analysis_response(session_id, db)
+    analysis_data = await _load_analysis_response(session_id, db, admin=True)
     if analysis_data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -207,63 +224,83 @@ async def analysis_modal(
             "user": user,
             "session_id": session_id,
             "is_admin": True,
+            **(
+                {
+                    "analysis_result_url": f"/admin/sessions/{session_id}/analysis"
+                }
+                if "accepted_report" in analysis_data
+                else {}
+            ),
             **analysis_data,
         },
     )
+
+
+@router.get("/admin/sessions/{session_id}/analysis")
+async def get_admin_analysis(
+    session_id: int,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    session = await db.get(Session, session_id)
+    if session is None:
+        raise HTTPException(404, detail="Session not found")
+    if not session.ended_at:
+        raise HTTPException(
+            400, detail="Session must be ended before viewing analysis"
+        )
+    result = await _load_analysis_response(session_id, db, admin=True)
+    if result is None:
+        raise HTTPException(404, detail="Analysis not found")
+    return result
 
 
 @router.post("/admin/sessions/{session_id}/analyze_regenerate")
 @limiter.limit("2/minute")
 async def regenerate_analysis(
     request: Request,
+    body: AnalysisRequest,
     session_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
-    """Regenerate session analysis (admin-only).
-
-    Runs full synthesis pipeline. On LLM failure, old data is preserved.
-    On success, replaces old report and summary atomically.
-    """
-    query = (
-        select(Session)
-        .options(joinedload(Session.scenario))
-        .where(Session.id == session_id)
+):
+    """Reserve a new analysis while preserving the accepted report."""
+    return await request_analysis(
+        db,
+        session_id,
+        user.id,
+        body.request_id,
+        regenerate=True,
+        plan_hash=body.plan_hash,
     )
-    result = await db.execute(query)
-    session = result.unique().scalar_one_or_none()
 
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
 
-    require_native_session(session)
-    if not session.ended_at:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session must be ended before analysis",
-        )
+@router.get("/admin/sessions/{session_id}/analysis/runs/{run_id}")
+async def get_admin_analysis_run(
+    session_id: int,
+    run_id: str,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    run = await get_run(db, session_id, run_id)
+    session = await db.get(Session, session_id)
+    if session is None or session.deleted_at is not None:
+        raise HTTPException(404, detail="Session not found")
+    return await run_response(db, run, admin=True)
 
-    await load_analysis_lesson(db, session_id, user.id)
-    try:
-        saved = await analyze_session(
-            session_id, session, db, actor_id=user.id, regenerate=True
-        )
-    except Exception:
-        await db.rollback()
-        logger.exception(
-            "Analysis regeneration failed for session %d", session_id
-        )
-        raise HTTPException(
-            500, detail="Analysis regeneration failed"
-        ) from None
-    analysis_data = await _load_analysis_response(session_id, db)
-    if analysis_data is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Analysis regeneration failed",
-        )
-    analysis_data["regeneration_status"] = saved["regeneration_status"]
-    return analysis_data
+
+@router.post(
+    "/admin/sessions/{session_id}/analysis/runs/{run_id}/cancel",
+    status_code=202,
+)
+async def cancel_admin_analysis_run(
+    session_id: int,
+    run_id: str,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await get_run(db, session_id, run_id)
+    session = await db.get(Session, session_id)
+    if session is None or session.deleted_at is not None:
+        raise HTTPException(404, detail="Session not found")
+    return await cancel_analysis(db, session_id, run_id, user.id, admin=True)

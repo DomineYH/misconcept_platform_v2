@@ -43,6 +43,10 @@ def conflict(code, **extra):
 
 
 async def snapshot(db, run):
+    if run.operation == "analysis":
+        from src.services.analysis_runs import run_response
+
+        return await run_response(db, run)
     teacher = (
         await db.scalars(
             select(Message).where(

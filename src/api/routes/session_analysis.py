@@ -1,40 +1,35 @@
 """Session analysis routes."""
 
-import logging
+from datetime import timezone
+from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
-    require_native_session,
 )
+from src.api.schemas import AnalysisRequest
 from src.config import config
 from src.models import (
     UiEvent,
     User,
 )
-from src.services.analysis_pipeline import (
-    analyze_session,
-    handle_analysis_failure,
-    handle_duplicate_session_state,
-    load_analysis_lesson,
-)
 from src.services.analysis_results import (
-    analysis_status,
     load_analysis_response,
-    load_summary,
-    summary_response,
+)
+from src.services.analysis_runs import (
+    cancel_analysis,
+    get_run,
+    request_analysis,
+    run_response,
 )
 from src.services.export import CSVExporter
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
@@ -45,63 +40,46 @@ limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 async def end_session(
     request: Request,
     session_id: int,
+    body: AnalysisRequest | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
-    """End session without running analysis.
-
-    This endpoint only marks the session as ended. Use the /analyze
-    endpoint to run the analysis separately.
-    """
+):
+    """Commit the end, then reserve analysis or return its confirmation plan."""
     session = await load_session(session_id, user, db)
-    await mark_session_ended(session, db, force=True)
-
-    return {
-        "ended": True,
-        "ended_at": session.ended_at.isoformat() if session.ended_at else None,
-    }
+    ended_at, _ = await mark_session_ended(session, db, force=True)
+    request_id = (
+        body.request_id
+        if body
+        else str(
+            uuid5(
+                NAMESPACE_URL,
+                f"teacher-end:{session_id}:{user.id}:{ended_at.replace(tzinfo=timezone.utc).isoformat()}",
+            )
+        )
+    )
+    return await request_analysis(
+        db,
+        session_id,
+        user.id,
+        request_id,
+        plan_hash=body.plan_hash if body else None,
+    )
 
 
 @router.post("/sessions/{session_id}/analyze")
 @limiter.limit("5/minute")
 async def analyze_session_endpoint(
     request: Request,
+    body: AnalysisRequest,
     session_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
-    """Analyze questions and generate summary for an ended session."""
-    session = await load_session(session_id, user, db)
-    require_native_session(session)
-
-    # Session must be ended before analysis
-    if not session.ended_at:
-        raise HTTPException(
-            status_code=400,
-            detail="Session must be ended before analysis",
-        )
-
-    existing_summary, existing_report = await load_summary(session_id, db)
-    if (
-        existing_summary
-        and analysis_status(existing_summary, existing_report) != "failed"
-    ):
-        return summary_response(existing_summary, existing_report)
-
-    snapshot = await load_analysis_lesson(db, session_id, user.id)
-    label_names = (
-        [r.id for r in snapshot.config.analysis.rubric]
-        if snapshot.config.analysis.classification_enabled
-        else []
+):
+    """Reserve an analysis independently of the response connection."""
+    await load_session(session_id, user, db)
+    return await request_analysis(
+        db, session_id, user.id, body.request_id, plan_hash=body.plan_hash
     )
-    try:
-        return await analyze_session(session_id, session, db, actor_id=user.id)
-    except IntegrityError as e:
-        return await handle_duplicate_session_state(
-            session_id, label_names, db, e
-        )
-    except Exception as e:
-        return await handle_analysis_failure(session_id, label_names, db, e)
 
 
 @router.get("/sessions/{session_id}/analysis")
@@ -141,6 +119,11 @@ async def get_analysis_page(
             "request": request,
             "user": user,
             "session_id": session_id,
+            **(
+                {"analysis_result_url": f"/sessions/{session_id}/analysis"}
+                if "accepted_report" in analysis_data
+                else {}
+            ),
             **analysis_data,
         },
     )
@@ -164,6 +147,11 @@ async def get_analysis_modal(
             "request": request,
             "user": user,
             "session_id": session_id,
+            **(
+                {"analysis_result_url": f"/sessions/{session_id}/analysis"}
+                if "accepted_report" in analysis_data
+                else {}
+            ),
             **analysis_data,
         },
     )
@@ -217,3 +205,27 @@ async def export_session(
             )
         },
     )
+
+
+@router.get("/sessions/{session_id}/analysis/runs/{run_id}")
+async def get_analysis_run(
+    session_id: int,
+    run_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await load_session(session_id, user, db)
+    return await run_response(db, await get_run(db, session_id, run_id))
+
+
+@router.post(
+    "/sessions/{session_id}/analysis/runs/{run_id}/cancel", status_code=202
+)
+async def cancel_analysis_run(
+    session_id: int,
+    run_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await load_session(session_id, user, db)
+    return await cancel_analysis(db, session_id, run_id, user.id)

@@ -3,8 +3,13 @@
 from copy import deepcopy
 
 DEFINITION = dict(
-    definition_version="google-2026-10-10-v2",
+    definition_version="google-2026-10-11-v3",
     checked_at="2026-10-10",
+    limits_checked_at="2026-10-11",
+    limit_sources={
+        k: "https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash"
+        for k in ("input_token_limit", "max_output_tokens")
+    },
     sources=[
         "https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash",
         "https://ai.google.dev/gemini-api/docs/generate-content/thinking",

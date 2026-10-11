@@ -8,8 +8,13 @@
   <a href="/sessions/{{ session.id }}/export.csv" class="btn btn-primary">CSV 다운로드</a>
   {% if session.ended_at %}<a href="/sessions/{{ session.id }}/analysis_page" class="btn btn-secondary">기존 분석 보기</a>{% endif %}
   <a href="/scenarios" class="btn btn-secondary">새 연습 선택</a>
+  {% if analysis_result_url is defined %}
+  {% set analysis_transcript_open = true %}
+  {% include "partials/analysis_result.html" %}
+  {% else %}
   <section aria-label="원래 대화">
     {% for message in messages %}{% include "partials/message.html" %}{% endfor %}
   </section>
+  {% endif %}
 </div>
 {% endblock %}

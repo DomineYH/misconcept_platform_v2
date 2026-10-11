@@ -51,7 +51,13 @@ def sse(kind, **values):
 
 
 def sdk_transport(
-    monkeypatch, handler, *, budget=1024, key=KEY, model="gpt-5-mini"
+    monkeypatch,
+    handler,
+    *,
+    budget=1024,
+    analysis_budget=None,
+    key=KEY,
+    model="gpt-5-mini",
 ):
     from src.services import openai_generation
 
@@ -62,7 +68,14 @@ def sdk_transport(
         assert request.method == "POST" and request.url.path == "/v1/responses"
         body = json.loads(request.content)
         calls.append(body)
-        assert body["model"] == model and body["max_output_tokens"] == budget
+        cap = (
+            analysis_budget
+            if analysis_budget is not None
+            and body.get("text", {}).get("format", {}).get("name")
+            == "UnifiedAnalysisOutput"
+            else budget
+        )
+        assert body["model"] == model and body["max_output_tokens"] == cap
         assert body["store"] is False
         return await handler(request, body)
 

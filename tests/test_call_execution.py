@@ -20,6 +20,7 @@ from test_student_probe import (
 
 from src.services import call_admission
 from src.services.invocation_types import InvocationError, TextRequest
+from src.services.model_verification import ROLE_CONTRACT_VERSIONS
 
 api = probe_api
 pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
@@ -67,8 +68,9 @@ async def verified_model(data, api, monkeypatch):
     async with data.engine.begin() as db:
         await db.execute(
             text(
-                "UPDATE model_config SET verification_state=json_set(verification_state,'$.analysis',json_extract(verification_state,'$.student'))"
-            )
+                "UPDATE model_config SET verification_state=json_set(verification_state,'$.analysis',json_extract(verification_state,'$.student'),'$.analysis.role_contract_version',:contract)"
+            ),
+            {"contract": ROLE_CONTRACT_VERSIONS["analysis"]},
         )
     return TextRequest(
         "openai",
@@ -81,7 +83,7 @@ async def verified_model(data, api, monkeypatch):
     )
 
 
-async def ordinary(data, request, *, operation="classification"):
+async def ordinary(data, request, *, operation="analysis_unified"):
     return await call_admission.admit_call(
         data.factory,
         connection_id=1,
@@ -191,7 +193,7 @@ async def test_mismatched_request_is_rejected_before_sdk_or_cost_ledger(
         assert (
             await db.execute(
                 text(
-                    "SELECT count(*) FROM api_usage_log WHERE operation='classification'"
+                    "SELECT count(*) FROM api_usage_log WHERE operation='analysis_unified'"
                 )
             )
         ).scalar() == 0
@@ -229,7 +231,7 @@ async def test_model_version_is_rechecked_after_slot_approval(
         assert (
             await db.execute(
                 text(
-                    "SELECT status,error_code FROM api_usage_log WHERE operation='classification'"
+                    "SELECT status,error_code FROM api_usage_log WHERE operation='analysis_unified'"
                 )
             )
         ).one() == ("failed", "configuration_unavailable")
@@ -278,7 +280,7 @@ async def test_catalog_conflict_after_activation_blocks_admission_and_recheck(
             assert (
                 await db.execute(
                     text(
-                        "SELECT status,error_code FROM api_usage_log WHERE operation='classification'"
+                        "SELECT status,error_code FROM api_usage_log WHERE operation='analysis_unified'"
                     )
                 )
             ).one() == ("failed", "configuration_unavailable")

@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 MODEL = "claude-sonnet-4-6"
-VERSION = "anthropic-2026-10-10-v2"
+VERSION = "anthropic-2026-10-11-v3"
 SOURCES = [
     "https://platform.claude.com/docs/en/models/sonnet-4-6/overview",
     "https://platform.claude.com/docs/en/api/messages/create",
@@ -20,6 +20,11 @@ def capabilities(model_id):
     return dict(
         definition_version=VERSION,
         checked_at="2026-10-10",
+        limits_checked_at="2026-10-11",
+        limit_sources={
+            k: SOURCES[0]
+            for k in ("combined_context_tokens", "max_output_tokens")
+        },
         sources=list(SOURCES),
         text=True,
         streaming=True,

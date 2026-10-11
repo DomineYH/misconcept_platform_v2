@@ -97,8 +97,8 @@ async def test_032_fresh_install_and_rerun(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'fresh.db'}")
     event.listen(engine.sync_engine, "connect", set_sqlite_pragma)
     try:
-        await migrate.run_all_migrations(db_engine=engine)
-        await migrate.run_all_migrations(db_engine=engine)
+        await migrate.run_all_migrations(through=32, db_engine=engine)
+        await migrate.run_all_migrations(through=32, db_engine=engine)
         async with engine.connect() as db:
             columns = (
                 await db.exec_driver_sql("PRAGMA table_info(generation_run)")

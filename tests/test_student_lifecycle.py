@@ -70,22 +70,38 @@ async def test_end_cancels_running_student_before_upstream_finishes(
             from src.services.session_mgr import SessionManager
 
             await SessionManager(data.db, data.session.id).end_session()
-        elif entry == "admin":
-            login(client, data.admin)
+        elif entry in {"end", "admin"}:
             # End must survive unavailable analysis.
-            from src.api.routes import admin_session_actions
+            from src.services import analysis_pipeline
+            from src.services.analysis_runs import active_analyses
+            from src.services.model_verification import ROLE_CONTRACT_VERSIONS
 
-            async def unavailable(*args):
+            student.model.verification_state = {
+                **student.model.verification_state,
+                "analysis": {
+                    **student.model.verification_state["student"],
+                    "role_contract_version": ROLE_CONTRACT_VERSIONS["analysis"],
+                },
+            }
+            await data.db.commit()
+
+            async def unavailable(*args, **kwargs):
                 raise RuntimeError("Analysis unavailable")
 
             monkeypatch.setattr(
-                admin_session_actions, "analyze_session", unavailable
+                analysis_pipeline, "run_llm_pipeline", unavailable
             )
-            response = await client.post(f"/admin{path}/end")
+            if entry == "admin":
+                login(client, data.admin)
+            prefix = "/admin" if entry == "admin" else ""
+            response = await client.post(f"{prefix}{path}/end")
+            if entry == "end":
+                assert response.json()["run_id"]
+            await asyncio.gather(*list(active_analyses.values()))
         else:
             response = await client.post(f"{path}/{entry}")
         if entry != "manager":
-            assert response.status_code == 200
+            assert response.status_code == (200 if entry == "close" else 202)
         login(client, data.owner)
         snapshot = (
             await client.get(

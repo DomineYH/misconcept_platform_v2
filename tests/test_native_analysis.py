@@ -24,7 +24,10 @@ async def native_analysis(data, monkeypatch, *, enabled=True):
     connection, model = await install_connection(data, monkeypatch)
     model.verification_state = {
         **model.verification_state,
-        "analysis": dict(model.verification_state["student"]),
+        "analysis": {
+            **model.verification_state["student"],
+            "role_contract_version": "s4-v2",
+        },
     }
     await install_snapshot(data, connection, model, context_turn_limit=1)
     envelope = copy.deepcopy(data.session.config_snapshot_json)
@@ -44,6 +47,9 @@ async def native_analysis(data, monkeypatch, *, enabled=True):
             dict(id="C", name="Other", criteria="PRIVATE NEUTRAL", level=None),
         ],
     )
+    envelope["config"]["analysis"]["resolved_model_config"]["options"][
+        "max_output_tokens"
+    ] = 8192
     data.session.config_snapshot_json = envelope
     data.session.config_hash = canonical_hash(envelope)
     data.session.ended_at = datetime.now(timezone.utc)
@@ -98,13 +104,13 @@ async def test_analysis_uses_frozen_inputs_and_one_model_option_set(
     )
     assert response.status_code == 200
     assert response.json()["distribution"] == {"A": 2, "B": 0, "C": 0}
-    assert len(calls) == 4 and all(c.is_closed() for c in clients)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
     assert all(
-        c["max_output_tokens"] == 1500
+        c["max_output_tokens"] == 8192
         and c["reasoning"] == {"effort": "medium"}
         for c in calls
     )
-    for body in calls[1:]:
+    for body in calls:
         prompt = body["input"][0]["content"]
         assert "Late mentor coaching" not in prompt
         assert all(
@@ -137,6 +143,9 @@ async def test_classification_off_keeps_feedback_and_explicit_display(
         select(Message.id).where(Message.role == "student")
     )
     feedback = {
+        "schema_version": 2,
+        "message_classifications": [],
+        "misconception_findings": [],
         "brief_feedback": ["Good question"],
         "strengths": [
             {
@@ -147,8 +156,8 @@ async def test_classification_off_keeps_feedback_and_explicit_display(
         ],
         "improvements": [
             {
-                "student_message_id": student_id,
-                "student_quote": "Early answer",
+                "message_id": student_id,
+                "quote": "Early answer",
                 "missed_reason": "Narrative improvement",
                 "alternative_question": "What about halves?",
                 "alternative_reason": "Compare parts",
@@ -158,7 +167,7 @@ async def test_classification_off_keeps_feedback_and_explicit_display(
     }
 
     async def upstream(request, body):
-        assert body["text"]["format"]["name"] == "RuntimeSynthesis"
+        assert body["text"]["format"]["name"] == "UnifiedAnalysisOutput"
         return httpx2.Response(
             200, json=response_body(json.dumps(feedback), USAGE)
         )
@@ -177,11 +186,16 @@ async def test_classification_off_keeps_feedback_and_explicit_display(
     assert report.json()["classification_enabled"] is False
     assert report.json()["label_names"] == {}
     page = await api.get(f"/sessions/{data.session.id}/analysis_page")
-    assert "분류 미사용" in page.text and "PRIVATE CRITERIA" not in page.text
     assert (
-        "Narrative strength" in page.text
-        and "Narrative improvement" in page.text
-        and "What about halves?" in page.text
+        report.json()["accepted_report"]["classification_enabled"] is False
+        and "PRIVATE CRITERIA" not in page.text
+    )
+    assert "data-result-url" in page.text
+    public = report.json()["accepted_report"]
+    assert public["strengths"][0]["reason"] == "Narrative strength"
+    assert (
+        public["improvements"][0]["alternative_question"]
+        == "What about halves?"
     )
     csv = await api.get(f"/sessions/{data.session.id}/export.csv")
     assert "classification_disabled" in csv.text
@@ -203,8 +217,9 @@ async def test_rubric_ids_control_storage_display_and_levels(
 
     async def upstream(request, body):
         value = result_for(body)
-        if body["text"]["format"]["name"] == "RuntimeClassification":
-            value["label"] = label
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
+            for item in value["message_classifications"]:
+                item["rubric_id"] = label
         return httpx2.Response(
             200, json=response_body(json.dumps(value), USAGE)
         )
@@ -214,7 +229,7 @@ async def test_rubric_ids_control_storage_display_and_levels(
         f"/sessions/{data.session.id}/analyze",
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
-    assert response.status_code == 200 and len(calls) == 4
+    assert response.status_code == 200 and len(calls) == 1
     report = (await api.get(f"/sessions/{data.session.id}/analysis")).json()
     question = report["questions"][0]
     assert (
@@ -233,26 +248,39 @@ async def test_rubric_ids_control_storage_display_and_levels(
             attempts = (
                 await db.scalars(
                     select(ApiUsageLog).where(
-                        ApiUsageLog.operation == "classification"
+                        ApiUsageLog.operation == "analysis_unified"
                     )
                 )
             ).all()
             assert all(
-                a.status == "failed" and a.error_code == "invalid_output"
+                a.status == "failed" and a.error_code == "invalid_reference"
                 for a in attempts
             )
     else:
         name = {"A": "Explore", "B": "Tell", "C": "Other"}[label]
         assert question["label"] == label and question["label_name"] == name
         page = await api.get(f"/sessions/{data.session.id}/analysis_page")
-        assert name in page.text and "PRIVATE CRITERIA" not in page.text
+        assert (
+            "data-result-url" in page.text
+            and "PRIVATE CRITERIA" not in page.text
+        )
+        assert name in json.dumps(report["accepted_report"])
         csv = await api.get(f"/sessions/{data.session.id}/export.csv")
         assert name in csv.text and "PRIVATE CRITERIA" not in csv.text
 
 
 @pytest.mark.parametrize(
     "blocked",
-    ["group", "inactive", "deleted", "connection", "role", "legacy", "corrupt"],
+    [
+        "group",
+        "inactive",
+        "deleted",
+        "connection",
+        "role",
+        "stale",
+        "legacy",
+        "corrupt",
+    ],
 )
 async def test_analysis_checks_current_authority_and_native_provenance(
     data, api, monkeypatch, blocked
@@ -268,6 +296,14 @@ async def test_analysis_checks_current_authority_and_native_provenance(
         connection.enabled = False
     elif blocked == "role":
         model.verification_state = {"analysis": {"status": "unverified"}}
+    elif blocked == "stale":
+        model.verification_state = {
+            **model.verification_state,
+            "analysis": {
+                **model.verification_state["analysis"],
+                "role_contract_version": "s1-v1",
+            },
+        }
     elif blocked == "legacy":
         data.session.snapshot_origin = "legacy_reconstructed"
     else:
@@ -310,7 +346,7 @@ async def test_reanalysis_keeps_frozen_inputs_and_preserves_good_result_on_failu
     async def upstream(request, body):
         value = result_for(body)
         name = body["text"]["format"]["name"]
-        if name == "RuntimeSynthesis":
+        if name == "UnifiedAnalysisOutput":
             value["strengths"] = [
                 {
                     "message_id": teacher_id,
@@ -322,10 +358,11 @@ async def test_reanalysis_keeps_frozen_inputs_and_preserves_good_result_on_failu
                 return httpx2.Response(
                     200, json=response_body("not json", USAGE)
                 )
-        if name == "RuntimeGreetings" and mode == "greeting":
+        if name == "UnifiedAnalysisOutput" and mode == "greeting":
             return httpx2.Response(200, json=response_body("not json", USAGE))
-        if name == "RuntimeClassification" and mode == "unknown_id":
-            value["label"] = "arbitrary"
+        if name == "UnifiedAnalysisOutput" and mode == "unknown_id":
+            for item in value["message_classifications"]:
+                item["rubric_id"] = "arbitrary"
         return httpx2.Response(
             200, json=response_body(json.dumps(value), USAGE)
         )
@@ -441,9 +478,86 @@ async def test_admin_analysis_and_csv_map_frozen_names(data, api, monkeypatch):
     assert 'value="A"' in page.text
     assert page.text.count("Explore") >= 4
     assert "PRIVATE CRITERIA" not in page.text
+    assert "산정 불가" in page.text and "0%" not in page.text
     export = await api.get("/admin/sessions/export")
     assert (
         export.status_code == 200
         and "Explore" in export.text
         and "enabled" in export.text
     )
+
+
+async def test_analysis_ignores_recent_turn_window_and_excludes_reasoning_and_partial_generation(
+    data, api, monkeypatch
+):
+    from uuid import uuid4
+
+    from s4_analysis_fixtures import prompt_inputs
+    from sqlalchemy import select
+
+    from src.models import GenerationRun
+    from src.services.lesson_snapshots import read_lesson_snapshot
+
+    await native_analysis(data, monkeypatch)
+    assert (
+        read_lesson_snapshot(data.session).config.runtime.context_turn_limit
+        == 1
+    )
+    stored = list(await data.db.scalars(select(Message).order_by(Message.id)))
+    stored[1].analysis_metadata = json.dumps(
+        {"reasoning": "PRIVATE RAW REASONING"}
+    )
+    data.db.add_all(
+        [
+            Message(
+                session_id=data.session.id,
+                role="student",
+                content="Completed second answer",
+            ),
+            Message(
+                session_id=data.session.id,
+                role="teacher",
+                content="Final unanswered question",
+            ),
+            GenerationRun(
+                id=str(uuid4()),
+                owner_id=data.owner.id,
+                session_id=data.session.id,
+                turn_id=str(uuid4()),
+                operation="student",
+                request_id=str(uuid4()),
+                input_hash="a" * 64,
+                config_hash=data.session.config_hash,
+                provider="openai",
+                model="gpt-5-mini",
+                status="failed",
+                partial_text="PRIVATE PARTIAL GENERATION",
+            ),
+        ]
+    )
+    await data.db.commit()
+
+    async def upstream(request, body):
+        inputs = prompt_inputs(body)["messages"]
+        assert [m["content"] for m in inputs] == [
+            "Early question {x}",
+            "Early answer",
+            "Why?",
+            "Completed second answer",
+            "Final unanswered question",
+        ]
+        assert all(set(m) == {"id", "role", "content"} for m in inputs)
+        assert "PRIVATE RAW REASONING" not in json.dumps(body)
+        assert "PRIVATE PARTIAL GENERATION" not in json.dumps(body)
+        return httpx2.Response(
+            200, json=response_body(json.dumps(result_for(body)), USAGE)
+        )
+
+    _, calls = analysis_transport(monkeypatch, upstream)
+    response = await api.post(
+        f"/sessions/{data.session.id}/analyze",
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
+    )
+    assert response.status_code == 200
+    assert response.json()["feedback_status"] == "ok"
+    assert len(calls) == 1

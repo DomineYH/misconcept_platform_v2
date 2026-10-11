@@ -16,7 +16,10 @@ from src.models.question_analysis import QuestionAnalysis
 from src.models.scenario import Scenario
 from src.models.session import Session
 from src.models.user import User
-from src.services.analysis_results import analysis_display
+from src.services.analysis_results import (
+    analysis_display,
+    load_analysis_response,
+)
 from src.services.session_history import session_display
 from src.utils.analysis_helpers import parse_reasoning
 
@@ -85,7 +88,7 @@ async def analysis_page(
                 "label": analysis_display(session)[1].get(
                     analysis.label, analysis.label
                 ),
-                "confidence": analysis.confidence or 0,
+                "confidence": analysis.confidence,
                 "reasoning": parse_reasoning(analysis.meta_json),
                 "session_id": session.id,
                 **session_display(session),
@@ -135,7 +138,7 @@ async def analysis_page(
 
     stats = {
         "total_analyses": total,
-        "avg_confidence": avg_conf_result or 0,
+        "avg_confidence": avg_conf_result,
         "most_common_label": most_common_label,
     }
 
@@ -194,11 +197,19 @@ async def analysis_detail_modal(
         raise HTTPException(status_code=404, detail="분석을 찾을 수 없습니다")
 
     analysis, message, session = row
+    result = await load_analysis_response(session.id, db, admin=True)
 
     return templates.TemplateResponse(
         "partials/analysis_detail_modal.html",
         {
             "request": request,
+            **(
+                {
+                    "analysis_result_url": f"/admin/sessions/{session.id}/analysis"
+                }
+                if session.ended_at and result is not None
+                else {}
+            ),
             "analysis": {
                 "id": analysis.id,
                 "content": message.content,
@@ -206,6 +217,7 @@ async def analysis_detail_modal(
                     analysis.label, analysis.label
                 ),
                 "confidence": analysis.confidence,
+                "grade": analysis.grade,
                 "reasoning": parse_reasoning(analysis.meta_json),
                 "session_id": session.id,
                 **session_display(session),

@@ -68,8 +68,16 @@ async def test_user_and_admin_analysis_contract(data):
         "scenario_title",
         "student_name",
         "snapshot_provenance",
+        "accepted_report",
+        "latest_run",
+        "plan",
+        "permissions",
+        "actions",
     }
     assert normal["feedback_status"] == "legacy"
+    assert normal["accepted_report"]["coverage"] is None
+    assert normal["accepted_report"]["status"] == "legacy"
+    assert normal["latest_run"] is None
     assert [q["content"] for q in normal["questions"]] == ["first", "later"]
     assert normal["questions"][1]["label"] == "Unclassified"
     assert normal["messages"][0]["level"] == "high"

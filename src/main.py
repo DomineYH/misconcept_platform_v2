@@ -210,8 +210,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        from src.services.analysis_runs import stop_analyses
         from src.services.probe_execution import stop_probes
 
+        await stop_analyses()
         await stop_probes()
         await close_db()
         print("Database connections closed")

@@ -1,12 +1,12 @@
 """Analysis subcalls retain native options and the selected provider's limit."""
 
-import asyncio
 import copy
 import json
 
 import httpx
 import httpx2
 import pytest
+from s4_analysis_fixtures import analysis_reply
 from sqlalchemy import select
 from test_native_analysis import api as analysis_api
 from test_native_analysis import connection_api as provider_api
@@ -51,19 +51,19 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
         credential_revision=1,
         connection_version=connection.connection_version,
         capability_definition_version=definition,
-        role_contract_version="s1-v1",
+        role_contract_version="s4-v2",
     )
     model.verification_state = {"analysis": evidence}
     connection.encrypted_key, connection.nonce = encrypt_key(connection, KEY, 1)
     options = {
-        "openai": dict(max_output_tokens=1024, reasoning={"effort": "low"}),
+        "openai": dict(max_output_tokens=8192, reasoning={"effort": "low"}),
         "anthropic": dict(
-            max_output_tokens=1024,
+            max_output_tokens=8192,
             thinking={"type": "disabled"},
             temperature=0.4,
         ),
         "google": dict(
-            max_output_tokens=1024, thinking={"budget": 0}, temperature=0.4
+            max_output_tokens=8192, thinking={"budget": 0}, temperature=0.4
         ),
     }[provider]
     envelope = copy.deepcopy(data.session.config_snapshot_json)
@@ -87,36 +87,15 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
         )
     )
     await data.db.commit()
-    active = peak = 0
-    both = asyncio.Event()
+    messages = [
+        dict(id=m.id, role=m.role, content=m.content)
+        for m in await data.db.scalars(select(Message).order_by(Message.id))
+    ]
 
     async def answer(schema):
-        nonlocal active, peak
-        properties = schema["properties"]
-        if "results" in properties:
-            return {
-                "results": [
-                    {"index": 0, "is_greeting": False},
-                    {"index": 1, "is_greeting": False},
-                    {"index": 2, "is_greeting": False},
-                ]
-            }
-        if "label" in properties:
-            active += 1
-            peak = max(peak, active)
-            if active == 3:
-                both.set()
-            try:
-                await asyncio.wait_for(both.wait(), 3)
-            finally:
-                active -= 1
-            return dict(label="A", confidence=0.9, reasoning="Explore")
-        return dict(
-            brief_feedback=["Good question"],
-            strengths=[],
-            improvements=[],
-            dialogue_coaching=[],
-        )
+        assert "message_classifications" in schema["properties"]
+        assert "confidence" not in schema["properties"]
+        return analysis_reply(messages)
 
     if provider == "openai":
         from test_student_probe import response_body, sdk_transport
@@ -126,7 +105,7 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
             return httpx2.Response(200, json=response_body(json.dumps(value)))
 
         clients, calls = sdk_transport(
-            monkeypatch, upstream, budget=1024, key=KEY
+            monkeypatch, upstream, budget=8192, key=KEY
         )
     elif provider == "anthropic":
         from test_anthropic_catalog import sdk_transport
@@ -160,26 +139,26 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
         "B": 0,
         "C": 0,
     }
-    assert peak == 3 and len(calls) == 5
+    assert len(calls) == 1
     for call in calls:
         body = call if provider == "openai" else json.loads(call.content)
         if provider == "openai":
             assert (
                 body["model"] == model.model_id
-                and body["max_output_tokens"] == 1024
+                and body["max_output_tokens"] == 8192
                 and body["reasoning"] == {"effort": "low"}
             )
         elif provider == "anthropic":
             assert (
                 body["model"] == model.model_id
-                and body["max_tokens"] == 1024
+                and body["max_tokens"] == 8192
                 and body["thinking"] == {"type": "disabled"}
                 and body["temperature"] == 0.4
             )
         else:
             assert call.url.path.endswith("gemini-2.5-flash:generateContent")
             assert (
-                body["generationConfig"]["maxOutputTokens"] == 1024
+                body["generationConfig"]["maxOutputTokens"] == 8192
                 and body["generationConfig"]["thinkingConfig"][
                     "thinking_budget"
                 ]
@@ -192,10 +171,10 @@ async def test_analysis_subcalls_use_selected_provider_options_and_capacity(
     )
     async with data.factory() as db:
         attempts = (await db.scalars(select(ApiUsageLog))).all()
-        assert len(attempts) == 5 and all(
+        assert len(attempts) == 1 and all(
             a.provider == provider
             and a.model == model.model_id
             and a.status == "completed"
-            and a.context_budget_json is None
+            and a.context_budget_json["estimator"] == "utf8-v1-s4-20pct"
             for a in attempts
         )

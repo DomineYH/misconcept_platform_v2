@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from uuid import uuid4
 
 import httpx2
 import pytest
@@ -32,7 +33,7 @@ pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 @pytest.mark.parametrize(
     "limiter", [pytest.param(None, id="default"), "total", "openai"]
 )
-async def test_parallel_analysis_respects_limits_and_allows_other_session_write(
+async def test_single_analysis_respects_limits_and_allows_other_session_write(
     data, api, monkeypatch, limiter, caplog
 ):
     await prepare_analysis(data, monkeypatch)
@@ -42,7 +43,7 @@ async def test_parallel_analysis_respects_limits_and_allows_other_session_write(
         assert setting.limits_json["openai"] == 4
     else:
         setting.limits_json = {**setting.limits_json, limiter: 2, "admin": 1}
-    capacity = 4 if limiter is None else 2
+    capacity = 1
     for _ in range(5):
         data.db.add(
             Message(session_id=data.session.id, role="teacher", content="Why?")
@@ -57,7 +58,7 @@ async def test_parallel_analysis_respects_limits_and_allows_other_session_write(
 
     async def upstream(request, body):
         nonlocal active, peak
-        if body["text"]["format"]["name"] == "RuntimeClassification":
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
             active += 1
             peak = max(peak, active)
             if active == capacity:
@@ -97,12 +98,12 @@ async def test_parallel_analysis_respects_limits_and_allows_other_session_write(
     response = await asyncio.wait_for(task, 5)
     assert response.status_code == 200 and peak == capacity
     assert response.json()["distribution"] == {"A": 6, "B": 0}
-    assert response.json()["feedback_status"] == "degraded"
+    assert response.json()["feedback_status"] == "ok"
     assert "call_limit_reached" not in caplog.text
-    assert len(calls) == 8 and all(c.is_closed() for c in clients)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (await db.scalars(select(ApiUsageLog))).all()
-        assert len(rows) == 8 and all(r.status == "completed" for r in rows)
+        assert len(rows) == 1 and all(r.status == "completed" for r in rows)
         assert (
             await db.scalar(
                 select(Message.content).where(
@@ -113,7 +114,7 @@ async def test_parallel_analysis_respects_limits_and_allows_other_session_write(
         )
 
 
-async def test_competing_analysis_keeps_per_question_admission_failure(
+async def test_two_session_analyses_share_capacity(
     data, api, monkeypatch, caplog
 ):
     await prepare_analysis(data, monkeypatch)
@@ -151,7 +152,7 @@ async def test_competing_analysis_keeps_per_question_admission_failure(
 
     async def upstream(request, body):
         nonlocal classification_calls
-        if body["text"]["format"]["name"] == "RuntimeClassification":
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
             classification_calls += 1
             entered.set()
             if classification_calls == 2:
@@ -179,15 +180,15 @@ async def test_competing_analysis_keeps_per_question_admission_failure(
         asyncio.gather(competing, task), 5
     )
     assert other_response.status_code == response.status_code == 200
-    assert response.json()["distribution"] == {"A": 1, "B": 0}
-    assert response.json()["feedback_status"] == "degraded"
-    assert "call_limit_reached" in caplog.text
-    assert classification_calls == 2 and len(calls) == 6
+    assert response.json()["distribution"] == {"A": 2, "B": 0}
+    assert response.json()["feedback_status"] == "ok"
+    assert "call_limit_reached" not in caplog.text
+    assert classification_calls == 2 and len(calls) == 2
     assert all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (await db.scalars(select(ApiUsageLog))).all()
-        assert len(rows) == 6 and all(r.attempt_no == 1 for r in rows)
-        assert sum(r.session_id == data.session.id for r in rows) == 3
+        assert len(rows) == 2 and all(r.attempt_no == 1 for r in rows)
+        assert sum(r.session_id == data.session.id for r in rows) == 1
 
 
 async def test_retry_success_reuses_result_and_keeps_attempt_times(
@@ -198,7 +199,7 @@ async def test_retry_success_reuses_result_and_keeps_attempt_times(
 
     async def upstream(request, body):
         nonlocal classification_calls
-        if body["text"]["format"]["name"] == "RuntimeClassification":
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
             classification_calls += 1
             if classification_calls == 1:
                 return httpx2.Response(
@@ -216,12 +217,12 @@ async def test_retry_success_reuses_result_and_keeps_attempt_times(
     first = await api.post(path, headers=headers)
     assert first.json()["distribution"] == {"A": 1, "B": 0}
     assert (await api.post(path, headers=headers)).json() == first.json()
-    assert len(calls) == 4 and all(c.is_closed() for c in clients)
+    assert len(calls) == 2 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (
             await db.scalars(
                 select(ApiUsageLog)
-                .where(ApiUsageLog.operation == "classification")
+                .where(ApiUsageLog.operation == "analysis_unified")
                 .order_by(ApiUsageLog.id)
             )
         ).all()
@@ -245,7 +246,7 @@ async def test_analysis_does_not_retry_when_backoff_exceeds_remaining_deadline(
     await data.db.commit()
 
     async def upstream(request, body):
-        if body["text"]["format"]["name"] == "RuntimeClassification":
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
             return httpx2.Response(
                 503,
                 json={"error": {"code": "server_error"}},
@@ -261,7 +262,7 @@ async def test_analysis_does_not_retry_when_backoff_exceeds_remaining_deadline(
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
     assert response.status_code == 200
-    assert len(calls) == 3 and all(c.is_closed() for c in clients)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
 
 
 async def test_cancelled_analysis_finalizes_attempt_without_synthesis_or_retry(
@@ -271,7 +272,7 @@ async def test_cancelled_analysis_finalizes_attempt_without_synthesis_or_retry(
     entered = asyncio.Event()
 
     async def upstream(request, body):
-        if body["text"]["format"]["name"] == "RuntimeClassification":
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
             entered.set()
             await asyncio.Event().wait()
         return httpx2.Response(
@@ -279,24 +280,29 @@ async def test_cancelled_analysis_finalizes_attempt_without_synthesis_or_retry(
         )
 
     clients, calls = analysis_transport(monkeypatch, upstream)
-    task = asyncio.create_task(
-        api.post(
-            f"/sessions/{data.session.id}/analyze",
-            headers={"x-csrf-token": api.cookies["csrftoken"]},
-        )
+    accepted = await api.post(
+        f"/sessions/{data.session.id}/analyze",
+        json={"request_id": str(uuid4())},
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
+    assert accepted.status_code == 202
     await asyncio.wait_for(entered.wait(), 5)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(task, 5)
-    assert len(calls) == 2 and all(c.is_closed() for c in clients)
+    from src.services.analysis_runs import active_analyses
+
+    task = active_analyses[accepted.json()["run_id"]]
+    cancelled = await api.post(
+        accepted.json()["actions"]["cancel"],
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
+    )
+    assert cancelled.status_code == 202
+    await asyncio.wait_for(task, 5)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (
             await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))
         ).all()
         assert [(r.operation, r.status) for r in rows] == [
-            ("greeting", "completed"),
-            ("classification", "cancelled"),
+            ("analysis_unified", "cancelled"),
         ]
         assert (await db.scalars(select(SessionSummary))).all() == []
 
@@ -334,10 +340,10 @@ async def test_failed_regeneration_preserves_report_but_keeps_new_attempt_ledger
     assert (
         response.json()["regeneration_status"] == "synthesis_failed_preserved"
     )
-    assert len(calls) == 3 and all(c.is_closed() for c in clients)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (await db.scalars(select(ApiUsageLog))).all()
-    assert len(rows) == 3 and all(r.error_code == "invalid_json" for r in rows)
+    assert len(rows) == 1 and all(r.error_code == "invalid_json" for r in rows)
 
 
 async def test_cancel_during_analysis_backoff_does_not_create_another_attempt(
@@ -346,7 +352,7 @@ async def test_cancel_during_analysis_backoff_does_not_create_another_attempt(
     await prepare_analysis(data, monkeypatch)
 
     async def upstream(request, body):
-        if body["text"]["format"]["name"] == "RuntimeClassification":
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
             return httpx2.Response(
                 503,
                 json={"error": {"code": "server_error"}},
@@ -357,32 +363,38 @@ async def test_cancel_during_analysis_backoff_does_not_create_another_attempt(
         )
 
     clients, calls = analysis_transport(monkeypatch, upstream)
-    task = asyncio.create_task(
-        api.post(
-            f"/sessions/{data.session.id}/analyze",
-            headers={"x-csrf-token": api.cookies["csrftoken"]},
-        )
+    accepted = await api.post(
+        f"/sessions/{data.session.id}/analyze",
+        json={"request_id": str(uuid4())},
+        headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
+    assert accepted.status_code == 202
+    from src.services.analysis_runs import active_analyses
+
+    task = active_analyses[accepted.json()["run_id"]]
     try:
         async with asyncio.timeout(5):
             while True:
                 async with data.factory() as db:
                     status = await db.scalar(
                         select(ApiUsageLog.status).where(
-                            ApiUsageLog.operation == "classification"
+                            ApiUsageLog.operation == "analysis_unified"
                         )
                     )
                 if status == "failed":
                     break
                 await asyncio.sleep(0.01)
     finally:
-        task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(task, 5)
-    assert len(calls) == 2 and all(c.is_closed() for c in clients)
+        cancelled = await api.post(
+            accepted.json()["actions"]["cancel"],
+            headers={"x-csrf-token": api.cookies["csrftoken"]},
+        )
+        assert cancelled.status_code == 202
+    await asyncio.wait_for(task, 5)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (await db.scalars(select(ApiUsageLog))).all()
-        assert len(rows) == 2 and all(r.attempt_no == 1 for r in rows)
+        assert len(rows) == 1 and all(r.attempt_no == 1 for r in rows)
         assert (await db.scalars(select(SessionSummary))).all() == []
 
 
@@ -395,7 +407,7 @@ async def test_analysis_total_timeout_is_finalized_without_retry(
     await data.db.commit()
 
     async def upstream(request, body):
-        if body["text"]["format"]["name"] == "RuntimeClassification":
+        if body["text"]["format"]["name"] == "UnifiedAnalysisOutput":
             await asyncio.Event().wait()
         return httpx2.Response(
             200, json=response_body(json.dumps(result_for(body)), USAGE)
@@ -410,12 +422,12 @@ async def test_analysis_total_timeout_is_finalized_without_retry(
         5,
     )
     assert response.status_code == 200
-    assert len(calls) == 3 and all(c.is_closed() for c in clients)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
     async with data.factory() as db:
         rows = (
             await db.scalars(
                 select(ApiUsageLog).where(
-                    ApiUsageLog.operation == "classification"
+                    ApiUsageLog.operation == "analysis_unified"
                 )
             )
         ).all()

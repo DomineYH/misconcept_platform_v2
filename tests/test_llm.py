@@ -3,6 +3,8 @@ import json
 import httpx2 as httpx
 import pytest
 from lesson_fixtures import install_connection, install_snapshot
+from s2_analyzer import Analyzer
+from s2_session_synthesizer import SessionSynthesizer
 from test_analysis_invocations import analysis_transport
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
@@ -11,8 +13,6 @@ from test_student_probe import response_body
 
 from src.models import Message
 from src.services import analysis_pipeline
-from src.services.analyzer import Analyzer
-from src.services.session_synthesizer import SessionSynthesizer
 from src.services.student_bot import StudentBot
 
 USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
@@ -243,7 +243,7 @@ async def test_classification_and_synthesis_parse_errors_do_not_retry(
         result["label"] == "A" and result["reasoning"]["summary"] == "because"
     )
     assert result["_api_usage"]["total_tokens"] == 15
-    assert calls[0]["max_output_tokens"] == 1500
+    assert calls[0]["max_output_tokens"] == 8192
     with pytest.raises(InvocationError, match="invalid_json"):
         await analyzer.classify_question("Why?", snapshot.config.analysis)
     assert len(calls) == 2
@@ -263,7 +263,7 @@ async def test_classification_and_synthesis_parse_errors_do_not_retry(
         )
     assert row.total_tokens == 15
     assert row.status == "failed" and row.error_code == "invalid_json"
-    assert len(calls) == 3 and calls[-1]["max_output_tokens"] == 1500
+    assert len(calls) == 3 and calls[-1]["max_output_tokens"] == 8192
     assert all(sdk.is_closed() for sdk in clients)
 
 
@@ -287,13 +287,10 @@ async def test_pipeline_with_injected_client_preserves_usage_and_formats(
         "improvements": [],
         "dialogue_coaching": [],
     }
-    contents = iter(
-        [
-            '{"results":[{"index":0,"is_greeting":false}]}',
-            '{"label":"A","confidence":0.9}',
-            json.dumps(payload),
-        ]
-    )
+    from s4_analysis_fixtures import analysis_reply
+
+    payload = analysis_reply([dict(id=100, role="teacher", content="Why?")])
+    contents = iter([json.dumps(payload)])
 
     async def upstream(request, body):
         return httpx.Response(200, json=response_body(next(contents), USAGE))
@@ -324,16 +321,12 @@ async def test_pipeline_with_injected_client_preserves_usage_and_formats(
         usage = (
             await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))
         ).all()
-    assert [row.operation for row in usage] == [
-        "greeting",
-        "classification",
-        "synthesis",
-    ]
+    assert [row.operation for row in usage] == ["analysis_unified"]
     assert all(row.total_tokens == 15 for row in usage)
     assert (
         pending_usage == []
     )  # Common boundary already committed these attempts.
-    assert len(calls) == 3 and all(sdk.is_closed() for sdk in clients)
+    assert len(calls) == 1 and all(sdk.is_closed() for sdk in clients)
 
 
 async def test_pipeline_failure_closes_owned_clients(data, monkeypatch):
@@ -353,8 +346,8 @@ async def test_pipeline_failure_closes_owned_clients(data, monkeypatch):
     created, calls = analysis_transport(monkeypatch, upstream)
     result = await analysis_pipeline.run_llm_pipeline(
         data.session.id,
-        [],
-        [],
+        [Message(id=100, role="teacher", content="Why?")],
+        [Message(id=100, role="teacher", content="Why?")],
         snapshot,
         data.factory,
         data.owner.id,

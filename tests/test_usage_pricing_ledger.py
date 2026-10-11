@@ -198,7 +198,7 @@ async def test_priced_retry_and_cumulative_stream_have_durable_attempt_sums(
             await db.execute(
                 text(
                     "SELECT invocation_id,attempt_no,status,total_tokens,estimated_cost_usd,pricing_as_of,pricing_source "
-                    "FROM api_usage_log WHERE operation='classification' ORDER BY id"
+                    "FROM api_usage_log WHERE operation='analysis_unified' ORDER BY id"
                 )
             )
         ).all()

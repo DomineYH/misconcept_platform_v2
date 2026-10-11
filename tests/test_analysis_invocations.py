@@ -7,6 +7,7 @@ import pytest
 from analysis_fixtures import install_analysis_snapshot
 from lesson_fixtures import LESSON_KEY
 from openai import AsyncOpenAI
+from s4_analysis_fixtures import analysis_reply, prompt_inputs
 from sqlalchemy import select
 from test_provider_connections import api as provider_api
 from test_scenario_api import login
@@ -23,7 +24,9 @@ USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
 async def api(connection_api, data):
     login(connection_api, data.owner)
     await connection_api.get("/health")
-    yield connection_api
+    from analysis_test_helpers import AnalysisApi
+
+    yield AnalysisApi(connection_api)
 
 
 def analysis_transport(monkeypatch, handler):
@@ -63,6 +66,12 @@ async def prepare_analysis(data, monkeypatch):
 
 def result_for(body):
     name = body["text"]["format"]["name"]
+    if name == "UnifiedAnalysisOutput":
+        inputs = prompt_inputs(body)
+        return analysis_reply(
+            inputs["messages"],
+            enabled=inputs["analysis"]["classification_enabled"],
+        )
     if name == "RuntimeGreetings":
         return {"results": [{"index": 0, "is_greeting": False}]}
     if name == "RuntimeClassification":
@@ -83,8 +92,12 @@ async def test_analysis_uses_db_key_and_ledger_and_preserves_degraded(
     async def upstream(request, body):
         assert body["text"]["format"]["strict"] is True
         assert body["reasoning"] == {"effort": "medium"}
+        value = result_for(body)
+        value["message_classifications"][0].update(
+            disposition="unclassified", rubric_id=None
+        )
         return httpx2.Response(
-            200, json=response_body(json.dumps(result_for(body)), USAGE)
+            200, json=response_body(json.dumps(value), USAGE)
         )
 
     # Every subcall uses the frozen analysis role options.
@@ -95,21 +108,23 @@ async def test_analysis_uses_db_key_and_ledger_and_preserves_degraded(
     )
     assert response.status_code == 200
     assert response.json()["feedback_status"] == "degraded"
-    assert len(calls) == 3 and all(client.is_closed() for client in clients)
-    assert [c["max_output_tokens"] for c in calls] == [1500, 1500, 1500]
+    assert len(calls) == 1 and all(client.is_closed() for client in clients)
+    assert [c["max_output_tokens"] for c in calls] == [8192]
     async with data.factory() as db:
         rows = (
             await db.scalars(select(ApiUsageLog).order_by(ApiUsageLog.id))
         ).all()
     assert [(r.operation, r.attempt_no, r.status) for r in rows] == [
-        ("greeting", 1, "completed"),
-        ("classification", 1, "completed"),
-        ("synthesis", 1, "completed"),
+        ("analysis_unified", 1, "completed"),
     ]
     assert all(
         r.total_tokens == 15 and r.session_id == data.session.id for r in rows
     )
-    assert all(r.owner_id == data.owner.id and r.run_id is None for r in rows)
+    assert all(
+        r.owner_id == data.owner.id
+        and r.run_id == response.json()["latest_run"]["run_id"]
+        for r in rows
+    )
 
 
 @pytest.mark.parametrize(
@@ -128,14 +143,14 @@ async def test_semantically_failed_result_is_a_failed_ledger_attempt(
         value = result_for(body)
         if (
             operation == "synthesis"
-            and body["text"]["format"]["name"] == "RuntimeSynthesis"
+            and body["text"]["format"]["name"] == "UnifiedAnalysisOutput"
         ):
             value["brief_feedback"] = []
         if (
             operation == "classification"
-            and body["text"]["format"]["name"] == "RuntimeClassification"
+            and body["text"]["format"]["name"] == "UnifiedAnalysisOutput"
         ):
-            value["confidence"] = "invalid-number"
+            value["message_classifications"][0]["confidence"] = "invalid-number"
         return httpx2.Response(
             200, json=response_body(json.dumps(value), USAGE)
         )
@@ -148,34 +163,24 @@ async def test_semantically_failed_result_is_a_failed_ledger_attempt(
     assert response.json()["feedback_status"] == feedback_status
     async with data.factory() as db:
         row = await db.scalar(
-            select(ApiUsageLog).where(ApiUsageLog.operation == operation)
+            select(ApiUsageLog).where(
+                ApiUsageLog.operation == "analysis_unified"
+            )
         )
     assert row.status == "failed" and row.error_code == error_code
     assert row.total_tokens == 15 and row.attempt_no == 1
-    assert len(calls) == 3 and all(c.is_closed() for c in clients)
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
 
 
-async def test_runtime_preserves_repairs_and_nullable_degraded_feedback(
+async def test_runtime_rejects_legacy_repairs_and_nullable_envelope(
     data, api, monkeypatch
 ):
     await prepare_analysis(data, monkeypatch)
 
     async def upstream(request, body):
-        name = body["text"]["format"]["name"]
         value = result_for(body)
-        if name == "RuntimeClassification":
-            value = {
-                "label": "A",
-                "confidence": 9,
-                "reasoning": {"summary": "legacy", "pedagogical": "discarded"},
-            }
-        elif name == "RuntimeSynthesis":
-            value = {
-                "brief_feedback": ["가" * 80],
-                "strengths": [{"message_id": 999, "quote": "missing"}],
-                "improvements": None,
-                "dialogue_coaching": None,
-            }
+        value["message_classifications"][0]["confidence"] = 9
+        value["improvements"] = None
         return httpx2.Response(
             200, json=response_body(json.dumps(value), USAGE)
         )
@@ -185,16 +190,12 @@ async def test_runtime_preserves_repairs_and_nullable_degraded_feedback(
         f"/sessions/{data.session.id}/analyze",
         headers={"x-csrf-token": api.cookies["csrftoken"]},
     )
-    assert response.json()["feedback_status"] == "degraded"
-    assert response.json()["feedback"] == "가" * 70 + "…"
-    reader = await api.get(f"/sessions/{data.session.id}/analysis")
-    question = reader.json()["questions"][0]
-    assert question["label"] == "A" and question["confidence"] == 1.0
-    assert question["reasoning"] == {
-        "summary": "legacy",
-        "improved_sentence": None,
-    }
-    assert len(calls) == 3 and all(c.is_closed() for c in clients)
+    assert response.json()["feedback_status"] == "failed"
+    reader = (await api.get(f"/sessions/{data.session.id}/analysis")).json()
+    assert reader["accepted_report"] is None
+    assert reader["questions"][0]["label"] == "Unclassified"
+    assert reader["questions"][0]["confidence"] is None
+    assert len(calls) == 1 and all(c.is_closed() for c in clients)
 
 
 @pytest.mark.parametrize(

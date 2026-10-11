@@ -4,7 +4,32 @@ from datetime import datetime, timezone
 
 import pytest
 
-from src.services.call_policy import retry_after
+from src.services.call_policy import retry_after, retry_limit
+
+
+@pytest.mark.parametrize(
+    "operation", ["analysis_unified", "analysis_chunk", "analysis_merge"]
+)
+@pytest.mark.parametrize(
+    "role,admin,expected",
+    [
+        ("analysis", False, 1),
+        ("analysis", True, 0),
+        ("student", False, 0),
+        ("mentor", False, 0),
+    ],
+)
+def test_s4_retry_allowlist_is_limited_to_runtime_analysis(
+    operation, role, admin, expected
+):
+    assert retry_limit(operation, role, admin) == expected
+    assert retry_limit("probe", role, admin) == 0
+    assert retry_limit("greeting", role, admin) == 0
+
+
+@pytest.mark.parametrize("operation", ["classification", "synthesis"])
+def test_removed_s2_operations_are_not_runtime_retry_paths(operation):
+    assert retry_limit(operation, "analysis", False) == 0
 
 
 @pytest.mark.parametrize(

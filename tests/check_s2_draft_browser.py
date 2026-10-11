@@ -40,7 +40,11 @@ async def check():
         from src.config import config
         from src.db.connection import AsyncSessionLocal
         from src.db.convert_scenarios import convert_copy
-        from src.db.migrations.migrate import run_all_migrations
+        from src.db.migrations.migrate import (
+            DIRECTORY,
+            run_all_migrations,
+            run_migration,
+        )
         from src.main import app
         from src.models import (
             Message,
@@ -276,6 +280,13 @@ async def check():
             )
             assert dict(id=converted.id, status="converted") in results
 
+        for migration in (
+            "032_mentor_reason_summary.sql",
+            "033_context_budget.sql",
+            "034_analysis_run.sql",
+        ):
+            await run_migration(DIRECTORY / migration)
+
         original_connect = socket.socket.connect
 
         def localhost_only(sock, address):
@@ -299,7 +310,7 @@ async def check():
                 host="127.0.0.1",
                 port=listener.getsockname()[1],
                 log_level="warning",
-                # Historical conversion fixtures intentionally stop before 031.
+                # Keep historical conversion tables for this rehearsal.
                 lifespan="off",
             )
         )

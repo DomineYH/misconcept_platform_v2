@@ -112,7 +112,7 @@ async def test_explicit_probes_then_student_only_and_single_mentor_events(
     )
     assert (
         model["verification_state"]["analysis"]["role_contract_version"]
-        == "s1-v1"
+        == "s4-v2"
     )
     assert (
         await post(
@@ -291,8 +291,8 @@ async def test_explicit_probes_then_student_only_and_single_mentor_events(
             ("probe", "stream"),
             ("probe", "manual_positive"),
             ("probe", "auto_negative"),
-            ("probe", "classification"),
-            ("probe", "synthesis"),
+            ("probe", "unified"),
+            ("probe", "merge"),
         ]
         lesson_attempts = [a for a in attempts if a.session_id == session_id]
         assert [a.operation for a in lesson_attempts] == [

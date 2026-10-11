@@ -1,8 +1,4 @@
-"""Session feedback utility functions for issue #28.
-
-Provides helpers for deriving plain feedback, loading structured
-reports, validating payloads, and computing prompt hashes.
-"""
+"""Plain feedback and stored v1/v2 report readers."""
 
 import json
 import logging
@@ -88,19 +84,3 @@ async def load_feedback_sections(
         "improvements": payload.get("improvements"),
         "dialogue_coaching": payload.get("dialogue_coaching"),
     }
-
-
-def validate_payload(
-    payload: dict, session_messages: list[dict]
-) -> tuple[dict, str]:
-    """Validate payload against session messages.
-
-    Checks message_id sanity, quote verbatim, length clamps.
-    Returns (validated_payload, status).
-    """
-    from src.services.session_synthesizer import (
-        SessionSynthesizer,
-    )
-
-    synth = SessionSynthesizer.__new__(SessionSynthesizer)
-    return synth._validate(payload, session_messages)

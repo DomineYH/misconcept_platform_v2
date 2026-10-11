@@ -34,8 +34,10 @@ pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 async def test_contracted_installation_authoring_to_csv(
     installation, workflow_api, monkeypatch, provider, entry
 ):
-    api = workflow_api
-    transport = workflow_transport(monkeypatch, provider)
+    from analysis_test_helpers import AnalysisApi
+
+    api = AnalysisApi(workflow_api)
+    transport = workflow_transport(monkeypatch, provider, analysis_budget=8192)
     await authenticate(api, "admin")
     state = (await api.get("/admin/ai/state")).json()
     connection = next(
@@ -170,7 +172,10 @@ async def test_contracted_installation_authoring_to_csv(
                 level="high",
             )
         ],
-        resolved_model_config=selection,
+        resolved_model_config={
+            **selection,
+            "options": {**options, "max_output_tokens": 8192},
+        },
     )
     repaired = await post(api, "/admin/scenarios/1/update", body)
     assert repaired.status_code == 200, repaired.text
@@ -270,9 +275,13 @@ async def test_contracted_installation_authoring_to_csv(
     assert replay.json()["run_id"] == frames(coached)[-1][1]["run_id"]
     assert replay.json()["message"]["content"] == "Mentor coaching"
     assert len(transport.calls) == before
-    assert (
-        await post(api, f"/sessions/{session_id}/end", {})
-    ).status_code == 200
+    ended = await post(
+        api, f"/sessions/{session_id}/end", {"request_id": str(uuid4())}
+    )
+    assert ended.status_code == 202
+    from test_analysis_runs import terminal
+
+    await terminal(api, ended.json()["actions"]["status"])
     analyzed = await post(api, f"/sessions/{session_id}/analyze", {})
     assert analyzed.status_code == 200, analyzed.text
     assert analyzed.json()["distribution"] == (
@@ -307,9 +316,25 @@ async def test_contracted_installation_authoring_to_csv(
     assert regenerated.status_code == 200, regenerated.text
     assert regenerated.json()["regeneration_status"].endswith("_preserved")
     await authenticate(api, "owner")
-    assert (
-        await api.get(f"/sessions/{session_id}/analysis")
-    ).json() == public.json()
+    preserved = (await api.get(f"/sessions/{session_id}/analysis")).json()
+    assert preserved["accepted_report"] == public.json()["accepted_report"]
+    latest = preserved["latest_run"]
+    assert (latest["status"], latest["preserved"], latest["error_code"]) == (
+        "failed",
+        True,
+        "invalid_json",
+    )
+    assert latest["run_id"] != public.json()["latest_run"]["run_id"]
+    assert latest["adopted"] is False
+    assert {
+        k: v
+        for k, v in preserved.items()
+        if k not in {"latest_run", "regeneration_status"}
+    } == {
+        k: v
+        for k, v in public.json().items()
+        if k not in {"latest_run", "regeneration_status"}
+    }
     if installation.converted:
         historical = await api.get("/sessions/1/export.csv")
         assert (
@@ -348,22 +373,23 @@ async def test_contracted_installation_authoring_to_csv(
         and "PRIVATE_MENTOR" not in student_payload
         and "PRIVATE_ANALYSIS" not in student_payload
     )
-    for payload in transport.payloads:
+    for payload, schema in zip(transport.payloads, transport.schemas):
         text = json.dumps(payload, ensure_ascii=False)
         assert "CHANGED " not in text and KEY not in text
+        output_cap = 8192 if "message_classifications" in schema else 1024
         if provider == "openai":
-            assert payload["max_output_tokens"] == 1024 and payload[
+            assert payload["max_output_tokens"] == output_cap and payload[
                 "reasoning"
             ] == {"effort": "low"}
         elif provider == "anthropic":
             assert (
-                payload["max_tokens"] == 1024
+                payload["max_tokens"] == output_cap
                 and payload["thinking"] == {"type": "disabled"}
                 and payload["temperature"] == 0.4
             )
         else:
             assert (
-                payload["generationConfig"]["maxOutputTokens"] == 1024
+                payload["generationConfig"]["maxOutputTokens"] == output_cap
                 and payload["generationConfig"]["temperature"] == 0.4
             )
     for payload, schema in zip(transport.payloads, transport.schemas):
@@ -376,9 +402,9 @@ async def test_contracted_installation_authoring_to_csv(
             and payload is not transport.payloads[0]
         ):
             assert "PRIVATE_MENTOR" in text and "PRIVATE_ANALYSIS" not in text
-    assert sum("results" in s for s in transport.schemas) == (
-        2 if entry == "api" else 0
-    )
+    assert sum("results" in s for s in transport.schemas) == 0
+    assert sum("label" in s for s in transport.schemas) == 0
+    assert sum("message_classifications" in s for s in transport.schemas) == 2
     assert all(
         (c.is_closed if provider == "google" else c.is_closed())
         for c in transport.clients

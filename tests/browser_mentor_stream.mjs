@@ -5,7 +5,7 @@ export default async function checkMentorStream(page) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('dialog', dialog => dialog.accept());
-  await page.route('**/sessions/*/end', route => route.fulfill({status:200, contentType:'application/json', body:'{"ended":true}'}));
+  await page.route('**/sessions/*/end', route => route.fulfill({status:200, contentType:'application/json', body:'{"feedback_status":"failed","retryable":true,"error":"analysis_failed"}'}));
   await page.route('**/sessions/*/analyze', route => route.fulfill({status:200, contentType:'application/json', body:'{"feedback_status":"failed","retryable":true,"error":"analysis_failed"}'}));
   await page.context().addCookies([{name:'csrftoken', value:'mentor-csrf', url:base}]);
   await page.addInitScript(() => {

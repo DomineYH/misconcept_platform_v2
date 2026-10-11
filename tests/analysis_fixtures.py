@@ -12,7 +12,10 @@ async def install_analysis_snapshot(data, monkeypatch):
     connection, model = await install_connection(data, monkeypatch)
     model.verification_state = {
         **model.verification_state,
-        "analysis": dict(model.verification_state["student"]),
+        "analysis": {
+            **model.verification_state["student"],
+            "role_contract_version": "s4-v2",
+        },
     }
     await install_snapshot(data, connection, model)
     envelope = copy.deepcopy(data.session.config_snapshot_json)

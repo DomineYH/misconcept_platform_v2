@@ -180,20 +180,36 @@ async def test_end_cancels_waiting_mentor_without_coaching_or_increment(
     )
     try:
         await asyncio.wait_for(entered.wait(), 3)
-        if entry == "admin":
-            from src.api.routes import admin_session_actions
+        if entry != "close":
+            from src.services import analysis_pipeline
+            from src.services.analysis_runs import active_analyses
+            from src.services.model_verification import ROLE_CONTRACT_VERSIONS
 
-            async def unavailable(*args):
+            mentor.model.verification_state = {
+                **mentor.model.verification_state,
+                "analysis": {
+                    **mentor.model.verification_state["student"],
+                    "role_contract_version": ROLE_CONTRACT_VERSIONS["analysis"],
+                },
+            }
+            await data.db.commit()
+
+            async def unavailable(*args, **kwargs):
                 raise RuntimeError("Analysis unavailable")
 
             monkeypatch.setattr(
-                admin_session_actions, "analyze_session", unavailable
+                analysis_pipeline, "run_llm_pipeline", unavailable
             )
-            login(client, data.admin)
-            end = await client.post(f"/admin/sessions/{data.session.id}/end")
+            if entry == "admin":
+                login(client, data.admin)
+            prefix = "/admin" if entry == "admin" else ""
+            end = await client.post(f"{prefix}/sessions/{data.session.id}/end")
+            if entry == "end":
+                assert end.json()["run_id"]
+            await asyncio.gather(*list(active_analyses.values()))
         else:
             end = await client.post(f"/sessions/{data.session.id}/{entry}")
-        assert end.status_code == 200
+        assert end.status_code == (200 if entry == "close" else 202)
         result = await asyncio.wait_for(asyncio.shield(pending), 3)
         assert frames(result)[-1][0] == "run.cancelled"
         assert cancelled.is_set()

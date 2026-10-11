@@ -465,6 +465,7 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
 
     import httpx2
     from test_analysis_invocations import analysis_transport
+    from test_analysis_runs import terminal
     from test_student_probe import response_body
 
     from src.services.lesson_snapshots import canonical_hash
@@ -487,12 +488,14 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
     assert exported.status_code == 200
     assert "Preserved teacher question" in exported.text
     assert "UNSAVED PARTIAL OUTPUT" not in exported.text
-    assert (await client.post(f"{path}/end")).status_code == 200
     inputs = []
 
     student.model.verification_state = {
         **student.model.verification_state,
-        "analysis": dict(student.model.verification_state["student"]),
+        "analysis": {
+            **student.model.verification_state["student"],
+            "role_contract_version": "s4-v2",
+        },
     }
     envelope = deepcopy(data.session.config_snapshot_json)
     envelope["config"]["analysis"].update(
@@ -509,12 +512,13 @@ async def test_partial_output_is_excluded_from_csv_and_analysis_inputs(
         return httpx2.Response(200, json=response_body("not json"))
 
     analysis_transport(monkeypatch, analysis_response)
-    analyzed = await client.post(f"{path}/analyze")
+    ended = await client.post(f"{path}/end")
+    assert ended.status_code == 202
+    await terminal(client, ended.json()["actions"]["status"])
+    analyzed = await client.get(f"{path}/analysis")
     assert analyzed.status_code == 200
     assert analyzed.json()["feedback_status"] == "failed"
-    assert (
-        len(inputs) >= 2
-    )  # Greeting/classification and synthesis see real inputs.
+    assert len(inputs) == 1  # One analysis reviews all durable inputs.
     encoded = json.dumps(inputs)
     assert "Preserved teacher question" in encoded
     assert "UNSAVED PARTIAL OUTPUT" not in encoded

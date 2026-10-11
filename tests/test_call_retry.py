@@ -40,7 +40,7 @@ async def test_only_ordinary_analysis_retries_with_one_invocation_and_backoff(
         rows = (
             await db.execute(
                 text(
-                    "SELECT invocation_id,attempt_no,status,retry_wait_ms FROM api_usage_log WHERE operation='classification' ORDER BY id"
+                    "SELECT invocation_id,attempt_no,status,retry_wait_ms FROM api_usage_log WHERE operation='analysis_unified' ORDER BY id"
                 )
             )
         ).all()
@@ -123,7 +123,7 @@ async def test_analysis_returns_slot_during_backoff_and_rechecks_new_limits(
                     status = (
                         await db.execute(
                             text(
-                                "SELECT status FROM api_usage_log WHERE operation='classification'"
+                                "SELECT status FROM api_usage_log WHERE operation='analysis_unified'"
                             )
                         )
                     ).scalar()
@@ -163,7 +163,7 @@ async def test_analysis_returns_slot_during_backoff_and_rechecks_new_limits(
         assert (
             await db.execute(
                 text(
-                    "SELECT count(*) FROM api_usage_log WHERE operation='classification'"
+                    "SELECT count(*) FROM api_usage_log WHERE operation='analysis_unified'"
                 )
             )
         ).scalar() == 1
@@ -197,7 +197,7 @@ async def test_revocation_during_backoff_interrupts_without_new_attempt(
                     status = (
                         await db.execute(
                             text(
-                                "SELECT status FROM api_usage_log WHERE operation='classification'"
+                                "SELECT status FROM api_usage_log WHERE operation='analysis_unified'"
                             )
                         )
                     ).scalar()
@@ -341,7 +341,7 @@ async def test_http_date_retry_hint_waits_then_records_second_attempt(
                     status = (
                         await db.execute(
                             text(
-                                "SELECT status FROM api_usage_log WHERE operation='classification'"
+                                "SELECT status FROM api_usage_log WHERE operation='analysis_unified'"
                             )
                         )
                     ).scalar()
@@ -357,7 +357,7 @@ async def test_http_date_retry_hint_waits_then_records_second_attempt(
             wait = (
                 await db.execute(
                     text(
-                        "SELECT retry_wait_ms FROM api_usage_log WHERE operation='classification' AND attempt_no=2"
+                        "SELECT retry_wait_ms FROM api_usage_log WHERE operation='analysis_unified' AND attempt_no=2"
                     )
                 )
             ).scalar()
@@ -397,7 +397,7 @@ async def test_key_replacement_during_backoff_blocks_retry_with_safe_configurati
                     status = (
                         await db.execute(
                             text(
-                                "SELECT status FROM api_usage_log WHERE operation='classification'"
+                                "SELECT status FROM api_usage_log WHERE operation='analysis_unified'"
                             )
                         )
                     ).scalar()
@@ -419,7 +419,7 @@ async def test_key_replacement_during_backoff_blocks_retry_with_safe_configurati
             assert (
                 await db.execute(
                     text(
-                        "SELECT count(*) FROM api_usage_log WHERE operation='classification'"
+                        "SELECT count(*) FROM api_usage_log WHERE operation='analysis_unified'"
                     )
                 )
             ).scalar() == 1

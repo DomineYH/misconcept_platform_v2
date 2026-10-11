@@ -132,7 +132,7 @@ async def test_ordinary_call_keeps_original_key_when_replaced_after_start(
         assert (
             await db.execute(
                 text(
-                    "SELECT credential_revision,status FROM api_usage_log WHERE operation='classification'"
+                    "SELECT credential_revision,status FROM api_usage_log WHERE operation='analysis_unified'"
                 )
             )
         ).one() == (1, "completed")
@@ -184,7 +184,7 @@ async def test_starting_attempt_cancel_waits_for_short_commit_without_sdk_or_lea
             row = (
                 await db.execute(
                     text(
-                        "SELECT status,error_code,finished_at FROM api_usage_log WHERE operation='classification'"
+                        "SELECT status,error_code,finished_at FROM api_usage_log WHERE operation='analysis_unified'"
                     )
                 )
             ).one()
@@ -222,7 +222,7 @@ async def test_virtual_total_deadline_counts_from_approval_and_uses_analysis_set
         assert (
             await db.execute(
                 text(
-                    "SELECT status,error_code FROM api_usage_log WHERE operation='classification'"
+                    "SELECT status,error_code FROM api_usage_log WHERE operation='analysis_unified'"
                 )
             )
         ).one() == ("timed_out", "timeout_total")
@@ -238,7 +238,7 @@ async def test_already_finalized_cancellation_stays_interrupted_and_immutable(
         async with data.engine.begin() as db:
             await db.execute(
                 text(
-                    "UPDATE api_usage_log SET status='cancelled',error_code='interrupted',finished_at='2026-10-09',usage_complete=1 WHERE operation='classification'"
+                    "UPDATE api_usage_log SET status='cancelled',error_code='interrupted',finished_at='2026-10-09',usage_complete=1 WHERE operation='analysis_unified'"
                 )
             )
         opened.set()
@@ -265,7 +265,7 @@ async def test_already_finalized_cancellation_stays_interrupted_and_immutable(
             assert (
                 await db.execute(
                     text(
-                        "SELECT status,error_code,finished_at,usage_complete FROM api_usage_log WHERE operation='classification'"
+                        "SELECT status,error_code,finished_at,usage_complete FROM api_usage_log WHERE operation='analysis_unified'"
                     )
                 )
             ).one() == ("cancelled", "interrupted", "2026-10-09", 1)
@@ -326,7 +326,7 @@ async def test_expired_deadline_during_start_commit_blocks_sdk(
             assert (
                 await db.execute(
                     text(
-                        "SELECT status,error_code FROM api_usage_log WHERE operation='classification'"
+                        "SELECT status,error_code FROM api_usage_log WHERE operation='analysis_unified'"
                     )
                 )
             ).one() == ("timed_out", "timeout_total")

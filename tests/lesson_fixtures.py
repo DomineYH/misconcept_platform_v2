@@ -72,9 +72,18 @@ async def install_connection(data, monkeypatch):
         await migrate.run_migration(
             migrate.DIRECTORY / "033_context_budget.sql", db_engine=data.engine
         )
-    await migrate.run_migration(
-        migrate.DIRECTORY / "034_analysis_run.sql", db_engine=data.engine
-    )
+    async with data.engine.connect() as conn:
+        has_comparison = await conn.run_sync(
+            lambda sync: any(
+                column["name"] == "comparison_run_id"
+                for column in inspect(sync).get_columns("generation_run")
+            )
+        )
+    if not has_comparison:
+        for filename in ("034_analysis_run.sql", "035_comparison_run.sql"):
+            await migrate.run_migration(
+                migrate.DIRECTORY / filename, db_engine=data.engine
+            )
     connection = await data.db.scalar(
         select(ProviderConnection).where(
             ProviderConnection.provider == "openai"

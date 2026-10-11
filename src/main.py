@@ -372,6 +372,7 @@ from src.api.routes import (  # noqa: E402
     admin,
     admin_analysis,
     admin_api_usage,
+    admin_comparisons,
     admin_session_actions,
     admin_session_export,
     admin_session_stats,
@@ -388,6 +389,7 @@ app.include_router(sessions.router)
 app.include_router(about.router)
 app.include_router(admin.router)
 app.include_router(admin_analysis.router)
+app.include_router(admin_comparisons.router)
 app.include_router(admin_api_usage.router)
 app.include_router(admin_session_export.router)
 app.include_router(admin_session_actions.router)

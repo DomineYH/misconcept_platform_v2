@@ -30,6 +30,7 @@ async def start_attempt(
     run_id=None,
     session_id=None,
     context_budget_json=None,
+    usage_scope=None,
 ):
     async with factory() as db:
         entry = ApiUsageLog(
@@ -49,6 +50,7 @@ async def start_attempt(
             started_at=now(),
             run_id=run_id,
             session_id=session_id,
+            usage_scope=usage_scope,
             context_budget_json=context_budget_json,
         )
         db.add(entry)

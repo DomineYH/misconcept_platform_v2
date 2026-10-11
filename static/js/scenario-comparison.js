@@ -222,7 +222,6 @@ export function mountComparison(data, draft) {
     select.focus();
     notice.textContent = '대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.';
   }
-  // shortcut: comparison endpoints are screen scaffolding, connect the real APIs in #92 onward.
   async function request(url, method = 'GET', body) {
     return fetch(url, {method, credentials:'same-origin', headers:{'Content-Type':'application/json',
       'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}, body:body == null ? undefined : JSON.stringify(body)});
@@ -254,6 +253,10 @@ export function mountComparison(data, draft) {
       state.run_id = value.run_id;
       run.comparison_run_id = value.comparison_run_id;
       run.context_hash = value.context_hash ?? run.context_hash;
+      for (const key of ['source_snapshot', 'canonical_context', 'current_message_id', 'created_at', 'expires_at']) {
+        if (value[key] !== undefined) run[key] = value[key];
+      }
+      if (value.model_config) state.model_config = value.model_config;
     }
     if (value.run_id !== state.run_id || !active(state.status) || value.seq <= (state.lastSeq ?? -1)) return;
     state.lastSeq = value.seq;

@@ -159,6 +159,7 @@ async def test_final_runtime_reads_history_and_refuses_legacy_writes(
             "032_mentor_reason_summary.sql",
             "033_context_budget.sql",
             "034_analysis_run.sql",
+            "035_comparison_run.sql",
         ):
             await migrate.run_migration(
                 migrate.DIRECTORY / filename, db_engine=engine

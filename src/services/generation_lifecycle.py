@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text, update
 
-from src.models import GenerationRun
+from src.models import ComparisonRun, GenerationRun
 
 # DB status owns execution rights; these signals only stop upstream reads.
 active_runs: dict[str, asyncio.Event] = {}
@@ -23,6 +23,11 @@ async def interrupt_orphans(factory):
                 error_code="server_restarted",
                 finished_at=datetime.now(timezone.utc),
             )
+        )
+        await db.execute(
+            update(ComparisonRun)
+            .where(ComparisonRun.status == "running")
+            .values(status="finished")
         )
         try:
             await db.commit()

@@ -1,6 +1,7 @@
 """SQLAlchemy ORM models for dialogue simulator."""
 
 from src.models.api_usage import ApiUsageLog
+from src.models.comparison_run import ComparisonRun
 from src.models.contributor import Contributor
 from src.models.generation_run import GenerationRun
 from src.models.message import Message
@@ -28,6 +29,7 @@ __all__ = [
     "ModelProbe",
     "AppSetting",
     "GenerationRun",
+    "ComparisonRun",
     "QuestionAnalysis",
     "SessionSummary",
     "SessionFeedbackReport",

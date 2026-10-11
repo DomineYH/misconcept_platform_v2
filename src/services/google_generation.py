@@ -183,6 +183,8 @@ async def stream_text(request, secret, timeouts, *, deadline=None):
                                     usage=usage,
                                     error_code=event.error_code,
                                     response_received=True,
+                                    provider_model_id=response.model_version,
+                                    provider_request_id=response.response_id,
                                 )
                                 if event.type != "completed":
                                     break

@@ -85,7 +85,7 @@ async def get_run(
     db: AsyncSession = Depends(get_db_session),
 ):
     run = await db.get(GenerationRun, str(run_id))
-    if run is None:
+    if run is None or run.comparison_run_id is not None:
         raise HTTPException(404, detail="Run not found")
     await load_session(run.session_id, user, db)
     if run.owner_id != user.id:

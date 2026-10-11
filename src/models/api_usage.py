@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -35,6 +36,8 @@ class ApiUsageLog(Base):
     session_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("session.id"), nullable=True
     )
+
+    usage_scope: Mapped[str | None] = mapped_column(String(20))
 
     # Bot identification
     bot_type: Mapped[str | None] = mapped_column(
@@ -110,6 +113,7 @@ class ApiUsageLog(Base):
     # Indexes for query optimization
     __table_args__ = (
         UniqueConstraint("invocation_id", "attempt_no"),
+        CheckConstraint("usage_scope IN ('classroom','comparison')"),
         Index("ix_api_usage_session_id", "session_id"),
         Index("ix_api_usage_timestamp", "timestamp"),
         Index("ix_api_usage_bot_type", "bot_type"),

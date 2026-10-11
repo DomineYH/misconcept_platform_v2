@@ -144,6 +144,9 @@ async def test_s2_final_wal_restore_s3_upgrade_preserves_history_and_access(
         await migrate.run_migration(
             migrate.DIRECTORY / "034_analysis_run.sql", db_engine=upgraded
         )
+        await migrate.run_migration(
+            migrate.DIRECTORY / "035_comparison_run.sql", db_engine=upgraded
+        )
         login(client, data.owner)
         history = await client.get("/sessions/1")
         exported = await client.get("/sessions/1/export.csv")

@@ -262,9 +262,20 @@ S5-01 comparison screens (#91): `npm run test:browser -- s5_` checks the
 unsaved editor, role/model variants, result states, adoption/application,
 comparison history, responsive tabs and safe rendering. The isolated server's
 `/fixtures/s5/menu` opens the administrator entry point. Comparison HTTP/SSE
-responses are injected by Playwright only; comparison APIs, persistence and
-provider calls are connected in #92 onward. This step adds no comparison server
-or production success fixtures.
+responses for the later comparison slices are injected by Playwright only.
+S5-02 (#92) connects student single-panel comparisons to `POST /admin/comparisons`
+(SSE) and owner-only `GET /admin/comparisons/{id}` recovery. Migration 035 isolates
+comparison runs and usage from classroom records. Current draft inputs and all
+completed history pairs are frozen without saving a scenario; validation and
+admission refusals make no provider calls or execution records. Replay returns
+stored JSON, and comparison calls never automatically retry. Only student,
+one-panel starts are accepted in this slice; multi-panel execution, stop/retry
+APIs, other roles and history management are later tickets. The existing shared
+`readSSE` transport renders the real student events.
+`npm run test:browser -- s5_student_live` rehearses unsaved/saved forms,
+login/CSRF, real SSE, safe output
+and GET/replay recovery with temporary migrated SQLite and mocked provider HTTP.
+No production success fixtures or paid calls are used.
 
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it

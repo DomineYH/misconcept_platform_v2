@@ -106,6 +106,7 @@ async def execute_call(
     probe_step=None,
     run_id=None,
     session_id=None,
+    usage_scope=None,
 ):
     """Consume with aclosing; admission is never a queued or reusable token."""
     entry_id = None
@@ -157,6 +158,7 @@ async def execute_call(
                     retry_wait_ms=wait_ms,
                     run_id=run_id,
                     session_id=session_id,
+                    usage_scope=usage_scope,
                     context_budget_json=(
                         request.context_budget_json if request else None
                     ),
@@ -168,6 +170,13 @@ async def execute_call(
                 entry_id = await starting
                 raise
             await recheck_call(permit)
+            if usage_scope == "comparison":
+                from src.models import User
+
+                async with permit.factory() as db:
+                    actor = await db.get(User, permit.owner_id)
+                    if actor is None or not actor.is_admin:
+                        raise InvocationError("configuration_unavailable")
             if permit.operation in ("student", "mentor") and not permit.admin:
                 async with permit.factory() as db:
                     try:

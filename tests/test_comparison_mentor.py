@@ -232,7 +232,10 @@ async def test_mentor_failures_never_expose_raw_output_or_retry(
     response = await client.post("/admin/comparisons", json=mentor_comparison)
     assert response.status_code == 200, response.text
     events = frames(response)
-    assert [kind for kind, _ in events] == ["run.accepted", "run.failed"]
+    assert [kind for kind, _ in events] == [
+        "run.accepted",
+        "run.interrupted" if failure == "storage" else "run.failed",
+    ]
     assert events[-1][1]["error_code"] == code
     assert events[-1][1]["result"] is None and events[-1][1]["text"] == ""
     state = (

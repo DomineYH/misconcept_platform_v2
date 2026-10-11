@@ -58,6 +58,11 @@ async def list_comparisons(db, owner_id, cursor=None):
                 comparison_run_id=record.id,
                 title=record.source_snapshot.get("title"),
                 source_kind=record.source_snapshot.get("source_kind"),
+                source_origin=(
+                    "saved_scenario_edit"
+                    if record.source_snapshot.get("scenario_id") is not None
+                    else "new_draft"
+                ),
                 target_role=record.target_role,
                 created_at=record.created_at.isoformat(),
                 expires_at=record.expires_at.isoformat(),

@@ -3,6 +3,8 @@
 from datetime import timedelta
 from uuid import uuid4
 
+import pytest
+
 from sqlalchemy import select
 from test_comparison_student import (
     client,
@@ -259,3 +261,23 @@ async def test_hard_scenario_and_parent_deletion_detach_links_keep_child_snapsho
         assert after[key] == before[key]
     async with data.factory() as db:
         assert (await db.get(ComparisonRun, child)).scenario_id is None
+
+
+@pytest.mark.parametrize("saved", [False, True])
+async def test_history_list_distinguishes_new_draft_from_unsaved_scenario_edit(
+    data, client, student, comparison, saved
+):
+    if saved:
+        comparison["source_snapshot"].update(
+            scenario_id=data.scenario.id,
+            source_version=data.scenario.config_version,
+        )
+    login(client, data.admin)
+    response = await client.post("/admin/comparisons", json=comparison)
+    assert response.status_code == 200
+    item = (await client.get("/admin/comparisons")).json()["items"][0]
+    assert item["source_origin"] == (
+        "saved_scenario_edit" if saved else "new_draft"
+    )
+    assert "canonical_context" not in item and "current_message" not in item
+    assert "source_snapshot" not in item

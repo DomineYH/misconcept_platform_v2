@@ -294,6 +294,7 @@ export function mountComparison(data, draft) {
         if (value[key] !== undefined) run[key] = value[key];
       }
       if (value.model_config) state.model_config = value.model_config;
+      if (value.applied_options) state.applied_options = value.applied_options;
     }
     if (value.run_id !== state.run_id || (!active(state.status) && !(state.status === 'cancelled' && type === 'run.cancelled')) || value.seq <= (state.lastSeq ?? -1)) return;
     state.lastSeq = value.seq;

@@ -141,10 +141,13 @@ read/retry/copy even before physical cleanup; repeated cleanup is safe. Ledger
 cost survives deletion. Live content deletion does not instantly erase private
 backups: apply the existing restricted backup retention/destruction policy.
 
-If a child cannot store its terminal state, the stream reports a safe storage
-error while siblings continue. The affected durable row can remain running;
-restore storage availability, drain writers and use restart orphan recovery
-before retention. A displayed error is not evidence that its final DB write succeeded.
+If a child's terminal or ledger write fails, a fresh session records a minimal
+interrupted state with `storage_error` and closes any unfinished ledger row.
+Siblings continue; all latest attempts being terminal finishes the comparison,
+allowing the administrator to retry, start another comparison or delete it
+without restarting. No uncommitted result is adopted. If storage also rejects
+the fallback write, restore storage availability and use drained restart orphan
+recovery; a displayed error alone is not evidence of a successful DB write.
 
 ## 5. Keep the S4 educational gate and pre-release checklist
 

@@ -294,7 +294,7 @@ async def test_admitted_panel_failure_does_not_cancel_or_retry_siblings(
     ).json()
     assert state["status"] == "finished"
     assert [panel["status"] for panel in state["panels"]] == [
-        "failed",
+        "interrupted" if failure == "commit" else "failed",
         "completed",
         "completed",
     ]
@@ -302,7 +302,8 @@ async def test_admitted_panel_failure_does_not_cancel_or_retry_siblings(
         panel["text"] == "Student answer" for panel in state["panels"][1:]
     )
     assert any(
-        kind == "run.failed" and value["panel_id"] == "1"
+        kind == ("run.interrupted" if failure == "commit" else "run.failed")
+        and value["panel_id"] == "1"
         for kind, value in events
     )
     assert sum(kind == "output.completed" for kind, _ in events) == 2

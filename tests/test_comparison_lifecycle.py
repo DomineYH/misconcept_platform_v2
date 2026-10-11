@@ -267,3 +267,46 @@ async def test_retry_is_cancelled_at_retention_deadline_without_extending_expiry
         ).all()
         assert [run.status for run in runs] == ["failed", "interrupted"]
     assert not active_calls and not active_runs
+
+
+@pytest.mark.parametrize("table", ["generation_run", "api_usage_log"])
+async def test_failed_terminal_save_releases_admin_for_new_comparison_and_delete(
+    data, client, student, comparison, table
+):
+    from uuid import uuid4
+    from sqlalchemy import event
+    from sqlalchemy.exc import SQLAlchemyError
+
+    failures = 0
+
+    def reject_terminal(conn, cursor, statement, parameters, context, many):
+        nonlocal failures
+        if statement.startswith(f"UPDATE {table}") and any(
+            status in parameters for status in ("completed", "failed")
+        ):
+            failures += 1
+            raise SQLAlchemyError("PRIVATE_STORAGE_ERROR")
+
+    event.listen(
+        data.engine.sync_engine, "before_cursor_execute", reject_terminal
+    )
+    login(client, data.admin)
+    try:
+        response = await client.post("/admin/comparisons", json=comparison)
+    finally:
+        event.remove(
+            data.engine.sync_engine, "before_cursor_execute", reject_terminal
+        )
+    assert failures > 0
+    events = frames(response)
+    path = f"/admin/comparisons/{events[0][1]['comparison_run_id']}"
+    state = (await client.get(path)).json()
+    assert state["status"] == "finished"
+    assert state["panels"][0]["status"] in {"failed", "interrupted"}
+    assert state["panels"][0]["error_code"] == "storage_error"
+    assert "PRIVATE_STORAGE_ERROR" not in response.text
+    created = await client.post(
+        "/admin/comparisons", json={**comparison, "request_id": str(uuid4())}
+    )
+    assert created.status_code == 200
+    assert (await client.delete(path)).status_code == 204

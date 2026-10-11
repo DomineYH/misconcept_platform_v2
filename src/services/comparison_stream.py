@@ -199,6 +199,7 @@ def accepted_fields(accepted):
         created_at=accepted["created_at"],
         expires_at=accepted["expires_at"],
         model_config=panel["model_config"],
+        applied_options=panel["applied_options"],
     )
 
 

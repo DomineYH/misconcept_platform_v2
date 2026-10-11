@@ -1,16 +1,18 @@
 """Atomic comparison admission and durable results, without lesson writes."""
 
 import json
+import logging
 from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 
 from src.api.schemas.comparison import ComparisonRequest
 from src.models import (
+    ApiUsageLog,
     AppSetting,
     ComparisonRun,
     GenerationRun,
@@ -491,7 +493,19 @@ async def reserve_comparison(
             return accepted, executions
 
 
-async def finish_comparison(
+async def finish_comparison(factory, run_id, **outcome):
+    try:
+        return await _finish_comparison(factory, run_id, **outcome)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Comparison terminal storage failed"
+        )
+        return await _finish_comparison(
+            factory, run_id, status="interrupted", error_code="storage_error"
+        )
+
+
+async def _finish_comparison(
     factory,
     run_id,
     *,
@@ -513,6 +527,25 @@ async def finish_comparison(
         comparison = await db.get(ComparisonRun, run.comparison_run_id)
         if comparison is None:
             return None
+        unfinished_usage = await db.scalar(
+            select(ApiUsageLog.id).where(
+                ApiUsageLog.run_id == run_id, ApiUsageLog.status == "running"
+            )
+        )
+        if unfinished_usage is not None:
+            status, error_code = "interrupted", "storage_error"
+            await db.execute(
+                update(ApiUsageLog)
+                .where(
+                    ApiUsageLog.run_id == run_id,
+                    ApiUsageLog.status == "running",
+                )
+                .values(
+                    status="interrupted",
+                    error_code="storage_error",
+                    finished_at=utcnow(),
+                )
+            )
         if run.status == "running":
             actor = (
                 await db.get(User, comparison.admin_id)

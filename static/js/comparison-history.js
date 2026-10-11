@@ -24,7 +24,7 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
       list.replaceChildren(node('h3', '내 비교 이력 · 최신순 · 20개씩'));
       for (const item of data.items) {
         const row = node('article');
-        row.append(node('p', `${roles[item.target_role]} · ${item.source_kind || '초안'} · ${item.created_at} · ${item.status === 'running' ? '진행 중' : '종료'}`),
+        row.append(node('p', `${roles[item.target_role]} · ${item.source_origin === 'saved_scenario_edit' ? '저장 시나리오의 미저장 수정' : '새 초안'} · ${item.created_at} · ${item.status === 'running' ? '진행 중' : '종료'}`),
           button(`${item.title || '제목 없는 초안'} 상세`, () => show(item.comparison_run_id)));
         for (const status of item.panel_statuses || []) row.append(node('p', statusLabel(status, item.target_role) || 'unknown'));
         list.append(row);
@@ -45,6 +45,10 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
       const title = node('h3', '비교 이력 상세', {tabindex:'-1'});
       detail.append(title, node('p', `${data.source_snapshot?.title || '제목 없는 초안'} · ${roles[data.target_role]}`),
         node('p', `생성 ${data.created_at} · 만료 ${data.expires_at} · 30일 보존`));
+      detail.append(node('h4', '기준 대화 이력'));
+      for (const message of data.canonical_context || []) detail.append(node('p', `${message.role === 'teacher' ? '교사' : '학생'}: ${message.content}`, {class:'comparison-text'}));
+      detail.append(node('p', `현재 질문: ${data.current_message ?? '없음'}`, {class:'comparison-text'}),
+        node('p', `공통 입력 hash: ${data.context_hash ?? 'unknown'}`));
       const running = data.panels.some(p => active(p.status));
       for (const panel of data.panels) {
         const card = node('article', null, {'aria-label':`과거 패널 ${panel.panel_id}`});

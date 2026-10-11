@@ -300,6 +300,13 @@ and GET only, with at most ten seconds of one-second recovery polling, followed
 by manual refresh/stop guidance. Normal streaming has no polling or automatic
 retry. `npm run test:browser -- s5_recovery s5_student_live` covers this flow.
 
+S5-08 (#98) connects owner-only history (newest first, 20 per page), attempt
+details and terminal deletion. Creation + 30 days is fixed in UTC across
+reads, copies and retries; active deletion returns 409. Comparison costs retain
+their scope and remain on the existing API usage screen after content deletion.
+See [comparison retention operations](docs/s5-comparison-retention.md) for the
+dry-run/execute cleanup CLI, daily external schedule example and monitoring.
+
 S5-06 (#96) adds post-session analysis comparisons: each panel makes one strict
 S4 structured call over the same full transcript and local message IDs. The
 last unanswered teacher message is optional. Input, expected output and

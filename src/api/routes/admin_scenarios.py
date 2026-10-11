@@ -1,6 +1,7 @@
 """Admin scenario management routes (T077-T080)."""
 
 import logging
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -124,6 +125,7 @@ async def new_scenario_editor(
     request: Request,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    comparison_id: UUID | None = None,
 ):
     editor = dict(
         id=None,
@@ -141,7 +143,29 @@ async def new_scenario_editor(
             problem={}, student={}, mentor={}, analysis={}, runtime={}
         ).model_dump(),
     )
-    return await render_editor(request, user, db, editor)
+    if comparison_id is not None:
+        from src.services.comparison_state import owned_comparison
+
+        comparison = await owned_comparison(db, str(comparison_id), user.id)
+        editor.update(
+            {
+                key: comparison.source_snapshot[key]
+                for key in (
+                    "title",
+                    "subject",
+                    "target_grade",
+                    "is_active",
+                    "groups",
+                    "config_schema_version",
+                    "config",
+                )
+            }
+        )
+        editor["comparison_source_id"] = comparison.id
+    response = await render_editor(request, user, db, editor)
+    if comparison_id is not None:
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @router.get("/admin/scenarios/{scenario_id}")

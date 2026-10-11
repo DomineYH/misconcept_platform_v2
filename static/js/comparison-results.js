@@ -32,6 +32,10 @@ export function renderComparisonResult(root, panel, role, actions, locked) {
     const previous = node('details');
     previous.append(node('summary', `이전 시도 ${index + 1} · ${statusLabel(attempt.status, role) || 'unknown'}`));
     if (role === 'student') previous.append(node('p', attempt.text || '', {class:'comparison-text'}));
+    if (role === 'mentor' && attempt.status === 'completed') {
+      previous.append(node('p', attempt.result?.should_intervene === false ? '멘토 미개입' : '멘토 코칭'));
+      if (attempt.result?.should_intervene !== false) previous.append(node('p', attempt.result?.coaching || '', {class:'comparison-text'}));
+    }
     if (role === 'analysis' && attempt.result?.report) {
       const result = node('div', null, {'data-comparison':'true'});
       previous.append(result);

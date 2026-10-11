@@ -210,3 +210,60 @@ async def test_comparison_revoked_admin_before_sdk_is_zero_calls(
     assert frames(result)[-1][0] == "run.interrupted"
     student.responses.create.assert_not_awaited()
     assert not active_calls
+
+
+async def test_retry_is_cancelled_at_retention_deadline_without_extending_expiry(
+    data, client, student, comparison
+):
+    from datetime import timedelta
+    from uuid import uuid4
+
+    from src.services.comparison_state import utcnow
+
+    login(client, data.admin)
+    result = await client.post("/admin/comparisons", json=comparison)
+    accepted = frames(result)[0][1]
+    path = f"/admin/comparisons/{accepted['comparison_run_id']}"
+    async with data.factory() as db:
+        run = await db.get(GenerationRun, accepted["run_id"])
+        run.status, run.outcome_json = "failed", None
+        record = await db.get(ComparisonRun, accepted["comparison_run_id"])
+        record.expires_at = utcnow() + timedelta(seconds=1)
+        record.created_at = record.expires_at - timedelta(days=30)
+        expires = record.expires_at
+        await db.commit()
+    gate = asyncio.Event()
+    student.stream.events = [gate]
+    try:
+        result = await asyncio.wait_for(
+            client.post(
+                f"{path}/panels/1/retry",
+                json={
+                    "request_id": str(uuid4()),
+                    "generation_id": accepted["run_id"],
+                },
+            ),
+            3,
+        )
+    finally:
+        gate.set()
+    assert frames(result)[-1][0] == "run.interrupted"
+    assert (await client.get(path)).status_code == 404
+    assert (await client.get("/admin/comparisons")).json()["items"] == []
+    assert (await client.delete(path)).status_code == 404
+    assert (
+        await client.get(
+            "/admin/scenarios/new",
+            params={"comparison_id": accepted["comparison_run_id"]},
+        )
+    ).status_code == 404
+    async with data.factory() as db:
+        record = await db.get(ComparisonRun, accepted["comparison_run_id"])
+        assert record.expires_at == expires and record.status == "finished"
+        runs = (
+            await db.scalars(
+                select(GenerationRun).order_by(GenerationRun.started_at)
+            )
+        ).all()
+        assert [run.status for run in runs] == ["failed", "interrupted"]
+    assert not active_calls and not active_runs

@@ -508,7 +508,11 @@ async def finish_comparison(
     async with factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
         run = await db.get(GenerationRun, run_id)
+        if run is None:
+            return None
         comparison = await db.get(ComparisonRun, run.comparison_run_id)
+        if comparison is None:
+            return None
         if run.status == "running":
             actor = (
                 await db.get(User, comparison.admin_id)

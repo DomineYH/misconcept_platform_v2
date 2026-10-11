@@ -3,8 +3,8 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Path, Query
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.api.dependencies import get_admin_user, get_db_session
@@ -17,12 +17,25 @@ from src.api.schemas.comparison import (
     ComparisonStopTarget,
 )
 from src.models import User
+from src.services.comparison_history import delete_comparison, list_comparisons
 from src.services.comparison_runs import reserve_comparison
 from src.services.comparison_state import comparison_snapshot, owned_comparison
 from src.services.comparison_stop import stop_comparison
 from src.services.comparison_stream import comparison_response
 
 router = APIRouter(tags=["Admin Comparisons"], route_class=ComparisonRoute)
+
+
+@router.get("/admin/comparisons")
+async def comparison_history(
+    cursor: Annotated[str | None, Query(max_length=100)] = None,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return JSONResponse(
+        await list_comparisons(db, user.id, cursor),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("/admin/comparisons")
@@ -74,6 +87,16 @@ async def get_comparison(
         await comparison_snapshot(db, comparison),
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.delete("/admin/comparisons/{comparison_id}", status_code=204)
+async def remove_comparison(
+    comparison_id: UUID,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await delete_comparison(db, str(comparison_id), user.id)
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/admin/comparisons/{comparison_id}/panels/{panel_id}/stop")

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from src.models import ApiUsageLog, ComparisonRun, GenerationRun
+from src.models import ApiUsageLog, ComparisonRun, GenerationRun, Scenario
 
 
 def utcnow():
@@ -25,6 +25,11 @@ async def owned_comparison(db, comparison_id, owner_id):
 
 
 async def comparison_snapshot(db, comparison):
+    source = (
+        await db.get(Scenario, comparison.scenario_id)
+        if comparison.scenario_id is not None
+        else None
+    )
     runs = (
         await db.scalars(
             select(GenerationRun)
@@ -100,6 +105,7 @@ async def comparison_snapshot(db, comparison):
         mode=comparison.mode,
         status=comparison.status,
         source_snapshot=comparison.source_snapshot,
+        source_available=source is not None and source.deleted_at is None,
         source_hash=comparison.source_hash,
         canonical_context=comparison.canonical_context,
         current_message=comparison.current_message,

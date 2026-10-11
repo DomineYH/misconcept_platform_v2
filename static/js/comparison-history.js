@@ -49,12 +49,14 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
       for (const panel of data.panels) {
         const card = node('article', null, {'aria-label':`과거 패널 ${panel.panel_id}`});
         detail.append(card);
-        const canApply = data.source_snapshot?.scenario_id === sourceId();
+        const canApply = data.source_available !== false && data.source_snapshot?.scenario_id === sourceId();
         renderComparisonResult(card, panel, data.target_role, {stop:() => {}, retry:() => {}, adopt:() => {}, apply:() => apply(panel, data)}, true);
         card.querySelectorAll('button').forEach(control => control.remove());
         if (canApply) card.append(button('이 모델 적용', () => apply(panel, data), running));
       }
-      if (data.source_snapshot?.scenario_id != null && data.source_snapshot.scenario_id !== sourceId()) {
+      if (data.source_available === false || data.source_snapshot?.scenario_id == null) {
+        detail.append(node('a', '이 조건으로 새 초안 열기', {href:`/admin/scenarios/new?comparison_id=${encodeURIComponent(id)}`}));
+      } else if (data.source_snapshot.scenario_id !== sourceId()) {
         detail.append(node('a', '원본 시나리오 편집 폼 열기', {href:`/admin/scenarios/${data.source_snapshot.scenario_id}/edit?compare=1`}));
       }
       detail.append(button('비교 기록 삭제', async () => {

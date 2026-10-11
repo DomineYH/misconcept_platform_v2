@@ -219,6 +219,16 @@ async def stream_comparison(factory, accepted, execution, cancelled):
     task = reading = None
     queue = asyncio.Queue(maxsize=1)
     permit = execution["permit"]
+    expires = datetime.fromisoformat(accepted["expires_at"]).replace(
+        tzinfo=timezone.utc
+    )
+    remaining = max(0, (expires - datetime.now(timezone.utc)).total_seconds())
+    elapsed = asyncio.get_running_loop().time() - permit.admitted_at
+    total_key = f"{permit.role}_total"
+    permit.timeouts = {
+        **permit.timeouts,
+        total_key: min(permit.timeouts[total_key], elapsed + remaining),
+    }
     terminal, closing = False, False
     cancellation = asyncio.create_task(cancelled.wait())
 

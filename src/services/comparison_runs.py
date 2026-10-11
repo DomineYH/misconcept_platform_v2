@@ -19,6 +19,8 @@ from src.models import (
 from src.services.call_admission import approve_call, execution_lock
 from src.services.comparison_analysis import (
     PROMPT_VERSION as ANALYSIS_PROMPT_VERSION,
+)
+from src.services.comparison_analysis import (
     analysis_comparison_request,
 )
 from src.services.comparison_state import (

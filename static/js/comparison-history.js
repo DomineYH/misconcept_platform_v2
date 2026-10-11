@@ -1,5 +1,5 @@
 import {node, button, roles} from './ai-render.js';
-import {active, renderComparisonResult, statusLabels} from './comparison-results.js';
+import {active, renderComparisonResult, statusLabel} from './comparison-results.js';
 
 export function mountComparisonHistory(root, {request, apply, invalidate, sourceId}) {
   const list = node('section', null, {'aria-label':'비교 이력 목록'});
@@ -26,7 +26,7 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
         const row = node('article');
         row.append(node('p', `${roles[item.target_role]} · ${item.source_kind || '초안'} · ${item.created_at} · ${item.status === 'running' ? '진행 중' : '종료'}`),
           button(`${item.title || '제목 없는 초안'} 상세`, () => show(item.comparison_run_id)));
-        for (const status of item.panel_statuses || []) row.append(node('p', statusLabels[status] || 'unknown'));
+        for (const status of item.panel_statuses || []) row.append(node('p', statusLabel(status, item.target_role) || 'unknown'));
         list.append(row);
       }
       if (!data.items.length) list.append(node('p', '보존 중인 비교가 없습니다.'));

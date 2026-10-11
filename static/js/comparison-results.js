@@ -2,11 +2,12 @@ import {node, button} from './ai-render.js';
 
 export const active = status => ['waiting', 'running', 'streaming'].includes(status);
 export const statusLabels = {waiting:'대기', running:'처리 중', streaming:'스트리밍', completed:'완료', ok:'정상 분석', degraded:'부분 분석', failed:'실패', cancelled:'취소', interrupted:'중단'};
+export const statusLabel = (status, role) => role === 'student' && status === 'running' ? '스트리밍' : statusLabels[status];
 
 export function renderComparisonResult(root, panel, role, actions, locked) {
   const focused = root.contains(document.activeElement) ? document.activeElement.textContent : null;
   root.replaceChildren();
-  root.append(node('p', statusLabels[panel.status] || '상태 unknown', {role:'status'}));
+  root.append(node('p', statusLabel(panel.status, role) || '상태 unknown', {role:'status'}));
   if (panel.status === 'failed') root.append(node('p', '응답을 완료하지 못했습니다. 연결·모델 설정을 확인하세요.', {class:'scenario-error'}));
   if (role === 'student') root.append(node('p', panel.text || '', {class:'comparison-text'}));
   if (role === 'student' && panel.status !== 'completed') root.append(node('p', '잠정 응답 · 미완료 · 채택 불가'));
@@ -29,7 +30,7 @@ export function renderComparisonResult(root, panel, role, actions, locked) {
   root.append(node('p', `재시도는 추가 비용이 발생합니다. 이전 시도 ${attempts.length}회 · 취소해도 발생한 비용은 환불을 보장하지 않습니다.`));
   attempts.forEach((attempt, index) => {
     const previous = node('details');
-    previous.append(node('summary', `이전 시도 ${index + 1} · ${statusLabels[attempt.status] || 'unknown'}`));
+    previous.append(node('summary', `이전 시도 ${index + 1} · ${statusLabel(attempt.status, role) || 'unknown'}`));
     if (role === 'student') previous.append(node('p', attempt.text || '', {class:'comparison-text'}));
     previous.append(node('p', `전체 시간 ${attempt.timing?.total_ms ?? 'unknown'} ms · 비용 ${attempt.usage?.cost ?? 'unknown'}`));
     root.append(previous);

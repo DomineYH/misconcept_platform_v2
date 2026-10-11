@@ -229,4 +229,5 @@ if (data.review_required) {
 }
 reviewState();
 
+if (data.comparison_draft_id) markDirty();
 mountComparison(data, () => payload('compare'));

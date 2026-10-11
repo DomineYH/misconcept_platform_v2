@@ -443,6 +443,35 @@ async def check():
             print(
                 "PASS: real mentor comparison HTTP/SSE/CSRF/SQLite/final-only"
             )
+            process = await asyncio.create_subprocess_exec(
+                "node",
+                "tests/check_s5_adoption_browser.mjs",
+                str(listener.getsockname()[1]),
+                str(saved.id),
+                cwd=ROOT,
+            )
+            try:
+                async with asyncio.timeout(90):
+                    assert await process.wait() == 0
+            finally:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+            assert len(calls) == 22
+            assert not active_calls and all(
+                client.is_closed() for client in clients
+            )
+            async with AsyncSessionLocal() as db:
+                assert (
+                    await db.scalar(select(func.count()).select_from(Scenario))
+                    == 1
+                )
+                assert (await db.get(Scenario, saved.id)).config_version == 3
+                for model in (Session, Message):
+                    assert (
+                        await db.scalar(select(func.count()).select_from(model))
+                        == 0
+                    )
         finally:
             server.should_exit = True
             await task

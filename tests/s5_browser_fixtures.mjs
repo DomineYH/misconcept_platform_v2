@@ -22,6 +22,10 @@ export async function comparisonFixture(page, statuses = ['completed','failed','
   }
   await page.route('**/admin/comparisons**', async route => {
     const request = route.request(), url = new URL(request.url());
+    if (url.pathname.endsWith('/model')) {
+      const id = url.pathname.split('/').at(-2);
+      return route.fulfill({json:{target_role:current.target_role, model_config:current.panels.find(p => p.panel_id === id).model_config}});
+    }
     if (request.method() === 'POST' && url.pathname === '/admin/comparisons') {
       const body = request.postDataJSON();
       requests.push(body);

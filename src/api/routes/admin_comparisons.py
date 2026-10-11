@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -16,13 +16,52 @@ from src.api.schemas.comparison import (
     ComparisonStopGeneration,
     ComparisonStopTarget,
 )
+from src.api.schemas.scenario_config import ResolvedModelConfig
 from src.models import User
 from src.services.comparison_runs import reserve_comparison
 from src.services.comparison_state import comparison_snapshot, owned_comparison
 from src.services.comparison_stop import stop_comparison
 from src.services.comparison_stream import comparison_response
+from src.services.invocation_types import InvocationError
+from src.services.lesson_connections import resolve_frozen_model
 
 router = APIRouter(tags=["Admin Comparisons"], route_class=ComparisonRoute)
+
+
+@router.get("/admin/comparisons/{comparison_id}/panels/{panel_id}/model")
+async def comparison_model(
+    comparison_id: UUID,
+    panel_id: Annotated[
+        str, Path(min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$")
+    ],
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    comparison = await owned_comparison(db, str(comparison_id), user.id)
+    snapshot = await comparison_snapshot(db, comparison)
+    if comparison.status == "running" or any(
+        panel["status"] == "running" for panel in snapshot["panels"]
+    ):
+        raise HTTPException(409, detail={"code": "comparison_busy"})
+    panel = next(
+        (p for p in snapshot["panels"] if p["panel_id"] == panel_id), None
+    )
+    if panel is None:
+        raise HTTPException(404, detail={"code": "panel_not_found"})
+    try:
+        selection = ResolvedModelConfig.model_validate(panel["model_config"])
+        await resolve_frozen_model(db, selection, comparison.target_role)
+    except (InvocationError, ValueError):
+        raise HTTPException(
+            422, detail={"code": "configuration_unavailable"}
+        ) from None
+    return JSONResponse(
+        dict(
+            target_role=comparison.target_role,
+            model_config=selection.model_dump(),
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("/admin/comparisons")

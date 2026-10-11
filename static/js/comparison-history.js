@@ -1,7 +1,7 @@
 import {node, button, roles} from './ai-render.js';
 import {active, renderComparisonResult, statusLabel} from './comparison-results.js';
 
-export function mountComparisonHistory(root, {request, apply, invalidate, sourceId}) {
+export function mountComparisonHistory(root, {request, apply, invalidate, sourceId, sourceComparisonId = () => null}) {
   const list = node('section', null, {'aria-label':'비교 이력 목록'});
   const detail = node('section', null, {'aria-label':'비교 이력 상세', hidden:''});
   const notice = node('p', '내 비교 기록은 생성 후 30일 동안 보존합니다. 재시도해도 만료 시각은 연장되지 않습니다.', {role:'status'});
@@ -49,14 +49,16 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
       for (const panel of data.panels) {
         const card = node('article', null, {'aria-label':`과거 패널 ${panel.panel_id}`});
         detail.append(card);
-        const canApply = data.source_snapshot?.scenario_id === sourceId();
+        const canApply = data.source_snapshot?.scenario_id != null && data.source_snapshot.scenario_id === sourceId()
+          || sourceComparisonId() === data.comparison_run_id;
         renderComparisonResult(card, panel, data.target_role, {stop:() => {}, retry:() => {}, adopt:() => {}, apply:() => apply(panel, data)}, true);
         card.querySelectorAll('button').forEach(control => control.remove());
         if (canApply) card.append(button('이 모델 적용', () => apply(panel, data), running));
       }
       if (data.source_snapshot?.scenario_id != null && data.source_snapshot.scenario_id !== sourceId()) {
-        detail.append(node('a', '원본 시나리오 편집 폼 열기', {href:`/admin/scenarios/${data.source_snapshot.scenario_id}/edit?compare=1`}));
+        detail.append(node('a', '원본 시나리오 편집 폼 열기', {href:`/admin/scenarios/${data.source_snapshot.scenario_id}/edit?comparison_id=${encodeURIComponent(id)}`}));
       }
+      detail.append(node('a', '이 조건으로 새 초안 열기', {href:`/admin/scenarios/new?from_comparison=${encodeURIComponent(id)}`}));
       detail.append(button('비교 기록 삭제', async () => {
         if (!window.confirm('이 비교의 입력과 결과를 삭제하시겠습니까? 비용 원장은 보존됩니다.')) return;
         const response = await request(`/admin/comparisons/${id}`, 'DELETE');

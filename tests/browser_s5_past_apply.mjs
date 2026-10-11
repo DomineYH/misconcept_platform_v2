@@ -18,6 +18,7 @@ export default async function checkExplicitPastEditor(page) {
   fixture.current().source_snapshot.scenario_id = null;
   await page.getByRole('button', {name:'과거 비교 상세',exact:true}).click();
   assert.equal(await detail.getByRole('button', {name:'이 모델 적용',exact:true}).count(), 0);
+  await detail.getByRole('link', {name:'이 조건으로 새 초안 열기',exact:true}).waitFor();
   assert(await detail.getByRole('link', {name:'이 조건으로 새 초안 열기',exact:true}).isVisible());
   assert.deepEqual(fixture.unexpected, []);
   return {pageErrors:[]};

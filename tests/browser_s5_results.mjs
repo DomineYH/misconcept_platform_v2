@@ -40,6 +40,7 @@ export default async function checkComparisonResults(page) {
   assert.equal(await page.getByLabel('이력 1 학생').inputValue(), '완료 응답 2 <img src=x onerror="window.s5xss=1">');
   assert.equal(await page.locator('#comparison-history-input fieldset').count(),1);
   await p2.getByRole('button', {name:'이 모델 적용',exact:true}).click();
+  await page.getByText('대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.', {exact:true}).waitFor();
   assert.equal(await page.getByLabel('학생봇 최대 출력 토큰').inputValue(), '700', 'application never remerges defaults');
   assert.deepEqual(fixture.unexpected, [], 'zero provider, lesson, or scenario-save calls');
   return {pageErrors:[]};

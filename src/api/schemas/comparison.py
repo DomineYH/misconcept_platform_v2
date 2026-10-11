@@ -1,4 +1,4 @@
-"""Bounded editor inputs for a student comparison."""
+"""Bounded editor inputs for isolated role comparisons."""
 
 from typing import Annotated, Literal
 from uuid import UUID
@@ -79,10 +79,10 @@ class ComparisonStop(ConfigValue):
 
 class ComparisonRequest(ConfigValue):
     request_id: str
-    target_role: Literal["student"]
+    target_role: Literal["student", "analysis"]
     source_snapshot: ComparisonSource
-    canonical_context: list[ComparisonMessage] = Field(max_length=199)
-    current_message: str = Field(min_length=1, max_length=50000)
+    canonical_context: list[ComparisonMessage] = Field(max_length=200)
+    current_message: str | None = Field(default=None, max_length=50000)
     panels: list[ComparisonPanel] = Field(min_length=1, max_length=3)
     parent_run_id: str | None = None
 
@@ -94,10 +94,18 @@ class ComparisonRequest(ConfigValue):
     @field_validator("current_message")
     @classmethod
     def nonblank(cls, value):
-        return ComparisonMessage.nonblank(value)
+        return ComparisonMessage.nonblank(value) if value else value
 
     @model_validator(mode="after")
     def complete_pairs(self):
+        if self.target_role == "student" and not self.current_message:
+            raise ValueError("required")
+        if len(self.canonical_context) + bool(self.current_message) > 200:
+            raise ValueError("too_many_messages")
+        if self.target_role == "analysis" and not (
+            self.canonical_context or self.current_message
+        ):
+            raise ValueError("required")
         if len({panel.panel_id for panel in self.panels}) != len(self.panels):
             raise ValueError("duplicate_panel")
         if len(self.canonical_context) % 2 or any(

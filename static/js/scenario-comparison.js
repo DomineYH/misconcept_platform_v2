@@ -146,7 +146,7 @@ export function mountComparison(data, draft) {
     question.hidden = questionLabel.hidden = target.value === 'mentor';
     questionLabel.textContent = target.value === 'analysis' ? '마지막 교사 메시지 (분석, 선택)' : '학생 현재 질문';
     const mode = draft().config.mentor.mode;
-    note.textContent = '기준 대화 이력 전체를 사용합니다. 수업의 최근 N턴 제한·자동 절삭·분할은 적용하지 않습니다. ' + (target.value === 'mentor' ? mode === 'off' ? '멘토 off · 편집 폼에서 켠 뒤 실행하세요.' : mode === 'auto' ? '개입 판단 시험: 수업의 시작 턴·간격·횟수 제한은 적용하지 않음' : '마지막 완료 쌍에 수동 코칭을 요청합니다.' : target.value === 'analysis' ? '대화 전체를 단일 호출로 분석합니다.' : '현재 질문에 대한 학생 응답을 비교합니다.');
+    note.textContent = '기준 대화 이력 전체를 사용합니다. 수업의 최근 N턴 제한·자동 절삭·분할은 적용하지 않습니다. ' + (target.value === 'mentor' ? mode === 'off' ? '멘토 off · 편집 폼에서 켠 뒤 실행하세요.' : mode === 'auto' ? '개입 판단 시험: 수업의 시작 턴·간격·횟수 제한은 적용하지 않음' : '마지막 완료 쌍에 수동 코칭을 요청합니다.' : target.value === 'analysis' ? '대화 전체를 단일 호출로 분석합니다. 비교 결과는 교육 품질 승인을 대신하지 않습니다.' : '현재 질문에 대한 학생 응답을 비교합니다.');
   }
   target.addEventListener('change', () => {
     rolePanels.set(previousRole, panels.map(p => structuredClone(p.control.selection)));

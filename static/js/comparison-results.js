@@ -1,12 +1,12 @@
 import {node, button} from './ai-render.js';
 
 export const active = status => ['waiting', 'running', 'streaming'].includes(status);
-export const statusLabels = {waiting:'대기', running:'스트리밍', streaming:'스트리밍', completed:'완료', ok:'정상 분석', degraded:'부분 분석', failed:'실패', cancelled:'취소', interrupted:'중단'};
+export const statusLabels = {waiting:'대기', running:'진행 중', streaming:'스트리밍', completed:'완료', ok:'정상 분석', degraded:'부분 분석', failed:'실패', cancelled:'취소', interrupted:'중단'};
 
 export function renderComparisonResult(root, panel, role, actions, locked) {
   const focused = root.contains(document.activeElement) ? document.activeElement.textContent : null;
   root.replaceChildren();
-  root.append(node('p', statusLabels[panel.status] || '상태 unknown', {role:'status'}));
+  root.append(node('p', statusLabels[panel.status === 'running' && role === 'student' ? 'streaming' : panel.status] || '상태 unknown', {role:'status'}));
   if (panel.status === 'failed') root.append(node('p', '응답을 완료하지 못했습니다. 연결·모델 설정을 확인하세요.', {class:'scenario-error'}));
   if (role === 'student') root.append(node('p', panel.text || '', {class:'comparison-text'}));
   if (role === 'student' && panel.status !== 'completed') root.append(node('p', '잠정 응답 · 미완료 · 채택 불가'));

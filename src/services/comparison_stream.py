@@ -1,4 +1,4 @@
-"""Student comparison SSE using the shared invocation and response lifecycle."""
+"""Comparison SSE using the shared invocation and response lifecycle."""
 
 import asyncio
 import json
@@ -11,6 +11,7 @@ from starlette.responses import StreamingResponse
 
 from src.services.call_admission import recheck_call
 from src.services.call_execution import execute_call
+from src.services.comparison_analysis import analysis_comparison_result
 from src.services.comparison_runs import finish_comparison
 from src.services.generation_lifecycle import active_runs
 from src.services.invocation_types import InvocationError
@@ -189,7 +190,7 @@ def terminal_frame(accepted, snapshot, seq):
         accepted,
         (
             "output.completed"
-            if state["status"] == "completed"
+            if state["status"] in {"completed", "ok", "degraded"}
             else f"run.{state['status']}"
         ),
         seq,
@@ -230,7 +231,11 @@ async def stream_comparison(factory, accepted, execution, cancelled):
             execute_call(
                 permit,
                 execution["request"],
-                kind="stream",
+                kind=(
+                    "structured"
+                    if execution["request"].role == "analysis"
+                    else "stream"
+                ),
                 run_id=accepted["run_id"],
                 usage_scope="comparison",
             )
@@ -273,6 +278,26 @@ async def stream_comparison(factory, accepted, execution, cancelled):
                     raise RuntimeError("upstream_ended")
                 yield ": ping\n\n"
             event = reading.result()
+            analysis_result = (
+                analysis_comparison_result(
+                    accepted, execution["request"], event
+                )
+                if execution["request"].role == "analysis"
+                else None
+            )
+            if analysis_result is not None:
+                await recheck_call(permit)
+                status, validated, error_code = analysis_result
+                result = await finish(
+                    status,
+                    result=validated,
+                    error_code=error_code,
+                    provider_model_id=event.provider_model_id,
+                    provider_request_id=event.provider_request_id,
+                )
+                terminal = True
+                yield terminal_frame(accepted, result, seq)
+                return
             if event.type == "text_delta" and event.text:
                 partial += event.text
                 if first_output is None and event.text.strip():

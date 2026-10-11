@@ -17,6 +17,10 @@ from src.models import (
     User,
 )
 from src.services.call_admission import approve_call, execution_lock
+from src.services.comparison_analysis import (
+    PROMPT_VERSION as ANALYSIS_PROMPT_VERSION,
+    analysis_comparison_request,
+)
 from src.services.comparison_state import (
     comparison_snapshot,
     owned_comparison,
@@ -86,6 +90,7 @@ async def reserve_comparison(factory, user, body):
             if busy:
                 conflict("comparison_busy", comparison_run_id=busy.id)
             source = body.source_snapshot
+            role = body.target_role
             if source.scenario_id is not None:
                 scenario = await db.get(Scenario, source.scenario_id)
                 if scenario is None or scenario.deleted_at is not None:
@@ -98,12 +103,14 @@ async def reserve_comparison(factory, user, body):
                 error
                 for error in publication_errors(source.config)
                 if error["path"].startswith(
-                    ("config.problem.", "config.student.")
+                    ("config.problem.", "config.student.", "config.analysis.")
+                    if role == "analysis"
+                    else ("config.problem.", "config.student.")
                 )
                 and not error["path"].endswith("resolved_model_config")
             ]
             if errors:
-                input_error("required", errors[0]["path"])
+                input_error(errors[0]["code"], errors[0]["path"])
             history = [
                 dict(id=index + 1, **message.model_dump())
                 for index, message in enumerate(body.canonical_context)
@@ -135,7 +142,7 @@ async def reserve_comparison(factory, user, body):
                         )
                 try:
                     connection, model, options = await resolve_frozen_model(
-                        db, panel.selection, "student"
+                        db, panel.selection, role
                     )
                     call = TextRequest(
                         connection.provider,
@@ -146,6 +153,15 @@ async def reserve_comparison(factory, user, body):
                         options,
                         body.request_id,
                     )
+                    if role == "analysis":
+                        call = analysis_comparison_request(
+                            source,
+                            history,
+                            body.current_message,
+                            panel,
+                            options,
+                            body.request_id,
+                        )
                     budget, reserve, version = input_budget(call)
                     applied = provider_parameters(call)
                     if connection.provider == "google":
@@ -165,23 +181,38 @@ async def reserve_comparison(factory, user, body):
                             "extra_body",
                         }
                     }
-                    estimate = estimate_input(call)
+                    estimate = (
+                        call.context_budget_json["estimated_input_tokens"]
+                        if role == "analysis"
+                        else estimate_input(call)
+                    )
                     if estimate > budget:
                         input_error("context_limit", "history", panel.panel_id)
-                    call = replace(
-                        call,
-                        context_budget_json=dict(
-                            estimator="utf8-v1",
-                            estimated_input_tokens=estimate,
-                            input_budget_tokens=budget,
-                            reserved_output_tokens=reserve,
-                            selected_prior_pairs=len(history) // 2,
-                            kept_prior_pairs=len(history) // 2,
-                            dropped_prior_pairs=0,
-                            capability_definition_version=version,
-                        ),
-                    )
+                    if role == "student":
+                        call = replace(
+                            call,
+                            context_budget_json=dict(
+                                estimator="utf8-v1",
+                                estimated_input_tokens=estimate,
+                                input_budget_tokens=budget,
+                                reserved_output_tokens=reserve,
+                                selected_prior_pairs=len(history) // 2,
+                                kept_prior_pairs=len(history) // 2,
+                                dropped_prior_pairs=0,
+                                capability_definition_version=version,
+                            ),
+                        )
                 except InvocationError as error:
+                    if error.code in {"context_limit", "output_limit_missing"}:
+                        input_error(
+                            error.code,
+                            (
+                                "history"
+                                if error.code == "context_limit"
+                                else "model_config"
+                            ),
+                            panel.panel_id,
+                        )
                     if error.code == "invalid_options":
                         input_error(error.code, "model_config", panel.panel_id)
                     raise HTTPException(
@@ -211,8 +242,8 @@ async def reserve_comparison(factory, user, body):
                         connection,
                         setting,
                         owner_id=user.id,
-                        operation="comparison_student",
-                        role="student",
+                        operation=f"comparison_{role}",
+                        role=role,
                         admin=True,
                     )
                     permit.model_options = options
@@ -222,7 +253,7 @@ async def reserve_comparison(factory, user, body):
                     permit.capability_version = (
                         model.capability_definition_version
                     )
-                    permit.contract_version = ROLE_CONTRACT_VERSIONS["student"]
+                    permit.contract_version = ROLE_CONTRACT_VERSIONS[role]
                     executions.append(dict(request=call, permit=permit))
                     frozen_panels.append(
                         dict(
@@ -236,8 +267,14 @@ async def reserve_comparison(factory, user, body):
                             connection_version=connection.connection_version,
                             capability_version=version,
                             contract_version=permit.contract_version,
-                            prompt_version=PROMPT_VERSION,
-                            estimator_version="utf8-v1",
+                            prompt_version=(
+                                ANALYSIS_PROMPT_VERSION
+                                if role == "analysis"
+                                else PROMPT_VERSION
+                            ),
+                            estimator_version=call.context_budget_json[
+                                "estimator"
+                            ],
                         )
                     )
             except BaseException as error:
@@ -267,16 +304,20 @@ async def reserve_comparison(factory, user, body):
                     source_version=source.source_version,
                     source_snapshot=frozen_source,
                     source_hash=digest(frozen_source),
-                    target_role="student",
+                    target_role=role,
                     mode="same_context",
                     canonical_context=history,
                     current_message=body.current_message,
                     context_hash=digest(
                         dict(
-                            instruction=messages[0]["content"],
+                            instruction=(
+                                call.messages
+                                if role == "analysis"
+                                else messages[0]["content"]
+                            ),
                             history=history,
                             current_message=body.current_message,
-                            target_role="student",
+                            target_role=role,
                         )
                     ),
                     panel_configs=frozen_panels,
@@ -297,7 +338,7 @@ async def reserve_comparison(factory, user, body):
                         comparison_run_id=comparison.id,
                         panel_id=frozen_panel["panel_id"],
                         turn_id=turn_id,
-                        operation="student",
+                        operation=role,
                         request_id=body.request_id,
                         input_hash=input_hash,
                         config_hash=digest(frozen_panel),
@@ -328,6 +369,7 @@ async def finish_comparison(
     *,
     status,
     content=None,
+    result=None,
     partial_text=None,
     error_code=None,
     first_output_at=None,
@@ -357,12 +399,13 @@ async def finish_comparison(
                 json.dumps(
                     dict(
                         text=content,
+                        **(dict(result=result) if result is not None else {}),
                         provider_model_id=provider_model_id,
                         provider_request_id=provider_request_id,
                     ),
                     ensure_ascii=False,
                 )
-                if status == "completed"
+                if status in {"completed", "ok", "degraded"}
                 else None
             )
         elif run.status == "cancelled" and partial_text is not None:

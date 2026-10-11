@@ -60,7 +60,8 @@ export async function comparisonFixture(page, statuses = ['completed','failed','
     if (url.pathname === '/admin/comparisons') return route.fulfill({json:{items:current && !deleted ? [{comparison_run_id:current.comparison_run_id,target_role:current.target_role,title:'과거 비교',created_at:current.created_at,status:'finished'}] : [], next_cursor:null}});
     return route.fulfill({json:current});
   });
-  return {requests, unexpected, block(value=true) { blocked=value; }, current() { return current; }};
+  return {requests, unexpected, block(value=true) { blocked=value; }, current() { return current; },
+    finish(statuses) { current.panels = current.panels.map((input,i) => panel(input,i,statuses[i])); }};
 }
 
 export async function openComparison(page) {

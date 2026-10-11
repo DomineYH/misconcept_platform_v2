@@ -268,9 +268,9 @@ S5-02 (#92) connects student single-panel comparisons to `POST /admin/comparison
 comparison runs and usage from classroom records. Current draft inputs and all
 completed history pairs are frozen without saving a scenario; validation and
 admission refusals make no provider calls or execution records. Replay returns
-stored JSON, and comparison calls never automatically retry. Only student
-starts are accepted; retry APIs, other roles and history management are later
-tickets. The existing shared
+stored JSON, and comparison calls never automatically retry. S5-02 initially
+accepts student starts; subsequent tickets add other roles, retry APIs and
+history management. The existing shared
 `readSSE` transport renders the real student events.
 S5-03 (#93) adds 2–3 concurrent panels with atomic all-panel admission and one
 active comparison per administrator. Insufficient shared total/provider/admin
@@ -288,6 +288,21 @@ login/CSRF, 1–3 panels, real SSE, independent/all stop, reload interruption,
 safe output and GET/replay recovery with temporary migrated SQLite and mocked
 provider HTTP.
 No production success fixtures or paid calls are used.
+
+S5-06 (#96) adds post-session analysis comparisons: each panel makes one strict
+S4 structured call over the same full transcript and local message IDs. The
+last unanswered teacher message is optional. Input, expected output and
+thinking reserves must fit every selected panel before any calls or comparison
+records are created; comparison analysis never splits, truncates or retries.
+S4 quote/ID/rubric validation and server statistics retain verified partial
+results as `degraded`, with coverage and links into the comparison's own dialogue.
+Only comparison generation records store results; classroom reports,
+classifications, summaries, statistics and CSV remain unchanged. Analysis panels
+show progress and a validated final result, with text TTFT N/A. Model comparisons
+do not replace S4 educational quality approval.
+The existing `s5_student_live` browser check also rehearses three analysis
+panels (normal/partial/failed), local evidence links, replay and zero-call
+budget rejection over the real authenticated API with mocked provider HTTP.
 
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it

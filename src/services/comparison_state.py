@@ -60,6 +60,17 @@ async def comparison_snapshot(db, comparison):
                 turn_id=run.turn_id,
                 status=run.status,
                 text=outcome.get("text", run.partial_text or ""),
+                **(
+                    dict(
+                        result=outcome.get("result"),
+                        outcome_status=run.status,
+                        coverage=outcome.get("result", {})
+                        .get("report", {})
+                        .get("coverage"),
+                    )
+                    if comparison.target_role == "analysis"
+                    else {}
+                ),
                 error_code=run.error_code,
                 attempts=[],
                 timing=dict(
@@ -89,7 +100,11 @@ async def comparison_snapshot(db, comparison):
         source_hash=comparison.source_hash,
         canonical_context=comparison.canonical_context,
         current_message=comparison.current_message,
-        current_message_id=len(comparison.canonical_context) + 1,
+        current_message_id=(
+            len(comparison.canonical_context) + 1
+            if comparison.current_message
+            else None
+        ),
         context_hash=comparison.context_hash,
         parent_run_id=comparison.parent_run_id,
         created_at=comparison.created_at.isoformat(),

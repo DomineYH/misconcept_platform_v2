@@ -258,6 +258,14 @@ responses are intercepted only by browser tests. These fixture routes and query
 switches do not exist in the application. Production uses the native routes
 described above.
 
+S5-01 comparison screens (#91): `npm run test:browser -- s5_` checks the
+unsaved editor, role/model variants, result states, adoption/application,
+comparison history, responsive tabs and safe rendering. The isolated server's
+`/fixtures/s5/menu` opens the administrator entry point. Comparison HTTP/SSE
+responses are injected by Playwright only; comparison APIs, persistence and
+provider calls are connected in #92 onward. This step adds no comparison server
+or production success fixtures.
+
 The original GitHub commit remains an ancestor. The application baseline is the
 commit titled `chore: preserve local application baseline for issue #1`; it
 contains the original product code, without credentials, databases or caches.

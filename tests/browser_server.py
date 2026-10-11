@@ -82,16 +82,32 @@ class Handler(BaseHTTPRequestHandler):
                 .encode()
             )
             mime = "text/html; charset=utf-8"
-        elif path.path == "/fixtures/s2/editor":
+        elif path.path == "/fixtures/s5/menu":
+            body = (
+                templates.get_template("admin/dashboard.html")
+                .render(user=SimpleNamespace(nickname="Admin", role="admin"))
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path in {
+            "/fixtures/s2/editor",
+            "/admin/scenarios/new",
+            "/admin/scenarios/1/edit",
+        }:
+            editor = editor_fixture(
+                new="new" in query or path.path == "/admin/scenarios/new",
+                published="published" in query,
+                legacy=query.get("legacy", [""])[0],
+            )
+            if "ready" in query:
+                editor["model_choices"] = editor["model_choices"][
+                    : int(query["ready"][0])
+                ]
             body = (
                 templates.get_template("admin/scenario_editor.html")
                 .render(
                     user=SimpleNamespace(nickname="Admin", role="admin"),
-                    editor=editor_fixture(
-                        new="new" in query,
-                        published="published" in query,
-                        legacy=query.get("legacy", [""])[0],
-                    ),
+                    editor=editor,
                 )
                 .encode()
             )
@@ -156,7 +172,12 @@ class Handler(BaseHTTPRequestHandler):
                 .encode()
             )
             mime = "text/html; charset=utf-8"
-        elif path.path in {"/chat", "/scenarios", "/admin/scenarios-page"}:
+        elif path.path in {
+            "/chat",
+            "/scenarios",
+            "/admin/scenarios-page",
+            "/admin/scenarios",
+        }:
             scenario = SimpleNamespace(
                 id=1,
                 title="Browser regression",
@@ -186,6 +207,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/chat": "chat.html",
                 "/scenarios": "scenarios.html",
                 "/admin/scenarios-page": "admin/scenarios.html",
+                "/admin/scenarios": "admin/scenarios.html",
             }[path.path]
             messages = []
             if "mentor_history" in query:

@@ -18,7 +18,7 @@
     if (!Array.isArray(result.messages) || !result.permissions || !result.actions) throw new Error();
     return result;
   }
-  function mount(root) {
+  function mount(root, initialData = null) {
     if (root.dataset.mounted) return;
     root.dataset.mounted = '1';
     const prefix = `analysis-result-${++nextId}`;
@@ -218,7 +218,7 @@
       }
       if (report) {
         const section = node(root, 'section', null, 'analysis-section');
-        node(section, 'h2', `채택된 보고서: ${statuses[report.status] || '상태 확인 불가'}`);
+        node(section, 'h2', `${root.dataset.comparison ? '검증된 비교 분석' : '채택된 보고서'}: ${statuses[report.status] || '상태 확인 불가'}`);
         node(section, 'p', `생성 시각: ${report.created_at || '알 수 없음'}`);
         for (const text of report.brief_feedback) node(section, 'p', text, 'analysis-brief-feedback');
         const coverage = report.coverage;
@@ -300,13 +300,19 @@
       }
       if (focusedMessage) document.getElementById(`${prefix}-message-${focusedMessage}`)?.focus({preventScroll: true});
     }
+    if (initialData) {
+      data = initialData;
+      render();
+      return;
+    }
     fetch(root.dataset.resultUrl, {credentials: 'same-origin'})
       .then(response => { if (!response.ok) throw new Error(); return projection(response); })
       .then(result => { data = result; render(); schedulePolling(); })
       .catch(() => { node(root, 'p', '분석 결과를 불러올 수 없습니다.'); });
   }
+  window.showAnalysisResult = (root, data) => mount(root, data);
   window.mountAnalysisResults = (parent = document) => {
-    parent.querySelectorAll('[data-analysis-result]').forEach(mount);
+    parent.querySelectorAll('[data-analysis-result]').forEach(root => mount(root));
   };
   document.addEventListener('htmx:afterSwap', event => mountAnalysisResults(event.detail.target));
   mountAnalysisResults();

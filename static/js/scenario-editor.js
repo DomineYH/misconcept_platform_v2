@@ -1,4 +1,5 @@
 import {node, button, field} from './ai-render.js';
+import {mountComparison} from './scenario-comparison.js';
 import {mountScenarioModels} from './scenario-models.js';
 
 const data = JSON.parse(document.getElementById('scenario-editor-data').textContent);
@@ -227,3 +228,5 @@ if (data.review_required) {
   document.getElementById('acknowledge-review').addEventListener('change', () => { markDirty(); reviewState(); });
 }
 reviewState();
+
+mountComparison(data, () => payload('compare'));

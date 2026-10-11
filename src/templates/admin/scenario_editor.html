@@ -25,6 +25,7 @@
 {% endmacro %}
 {% block content %}
 <link rel="stylesheet" href="/static/css/scenario-editor.css">
+<link rel="stylesheet" href="/static/css/scenario-comparison.css">
 <div class="container scenario-editor">
   <h1>시나리오 작성</h1>
   <p>공개 내용과 내부 지시를 나누어 작성하세요. 실제 학생의 식별 정보 대신 가명·교육 페르소나를 사용하세요.</p>
@@ -51,6 +52,8 @@
     <p id="review-publication-status" role="status"></p>
   </section>
   {% endif %}
+  <button type="button" id="open-comparison" class="btn btn-secondary" aria-expanded="false" aria-controls="scenario-comparison">모델 비교 열기</button>
+  <section id="scenario-comparison" aria-label="동일 맥락 모델 비교" hidden></section>
   <div class="scenario-layout">
     <nav class="scenario-steps" aria-label="작성 단계">
       {% for label in ['기본 정보', '문제 상황', '학생봇', '멘토', '사후 분석'] %}

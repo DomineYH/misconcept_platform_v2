@@ -101,28 +101,44 @@ class ComparisonStreamingResponse(StreamingResponse):
                     pending.discard(task)
                     child["execution"]["permit"].release()
                     active_runs.pop(child["accepted"]["run_id"], None)
-                    if task.cancelled() or task.exception() is not None:
-                        accepted = child["accepted"]
-                        result = await finish_comparison(
-                            self.factory,
-                            accepted["run_id"],
-                            status="interrupted",
-                            error_code="configuration_unavailable",
-                        )
-                        if child["seq"] == 0:
-                            yield sse_frame(
-                                accepted,
-                                "run.accepted",
-                                0,
-                                **accepted_fields(accepted),
-                            )
-                            child["seq"] = 1
-                        yield terminal_frame(accepted, result, child["seq"])
+                    if not child.get("recovering") and (
+                        task.cancelled() or task.exception() is not None
+                    ):
+                        child["recovering"] = True
+                        child["task"] = asyncio.create_task(self.recover(child))
+                        pending.add(child["task"])
         finally:
             if reading is not None:
                 reading.cancel()
                 with suppress(asyncio.CancelledError):
                     await reading
+
+    async def recover(self, child):
+        accepted = child["accepted"]
+        try:
+            result = await finish_comparison(
+                self.factory,
+                accepted["run_id"],
+                status="interrupted",
+                error_code="configuration_unavailable",
+            )
+            terminal = terminal_frame(accepted, result, max(1, child["seq"]))
+        except Exception:
+            logger.error("Comparison child recovery failed")
+            terminal = sse_frame(
+                accepted,
+                "run.failed",
+                max(1, child["seq"]),
+                error_code="storage_error",
+            )
+        if child["seq"] == 0:
+            await self.queue.put(
+                sse_frame(
+                    accepted, "run.accepted", 0, **accepted_fields(accepted)
+                )
+            )
+        # Keep recovery behind already queued frames from this run.
+        await self.queue.put(terminal)
 
     async def __call__(self, scope, receive, send):
         try:

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from test_comparison_concurrency import add_panels, panel_streams
 from test_comparison_student import (
     client,
@@ -124,6 +124,12 @@ async def test_fast_panel_completes_before_slow_siblings_and_stop_is_independent
         ]
         assert len(active_calls) == 2
         assert len({permit.task for permit in active_calls}) == 2
+        async with asyncio.timeout(10):
+            async with data.engine.begin() as writer:
+                await writer.exec_driver_sql(
+                    "UPDATE user SET nickname='Writable during panels' WHERE id=?",
+                    (data.other.id,),
+                )
         p1, p2, p3 = state["panels"]
         busy = await client.post(
             "/admin/comparisons",
@@ -264,7 +270,9 @@ async def test_disconnect_interrupts_only_unfinished_children_and_cleans_ledger(
     assert not active_calls and not registered_calls and not active_runs
 
 
-@pytest.mark.parametrize("when", ["before_body", "during_output"])
+@pytest.mark.parametrize(
+    "when", ["before_body", "during_output", "before_body_storage_failure"]
+)
 async def test_connection_revocation_interrupts_only_its_provider_child(
     data, client, student, comparison, monkeypatch, when
 ):
@@ -336,6 +344,15 @@ async def test_connection_revocation_interrupts_only_its_provider_child(
     clients, calls = sdk_transport(
         monkeypatch, upstream, module="anthropic_generation"
     )
+    storage_failure = when == "before_body_storage_failure"
+    if storage_failure:
+        await data.db.execute(
+            text(
+                "CREATE TRIGGER reject_terminal BEFORE UPDATE ON generation_run "
+                "WHEN NEW.panel_id='1' BEGIN SELECT RAISE(ABORT, 'PRIVATE_STORAGE_ERROR'); END"
+            )
+        )
+        await data.db.commit()
 
     async def revoke():
         disabled = await client.post(
@@ -351,7 +368,7 @@ async def test_connection_revocation_interrupts_only_its_provider_child(
     async with live_comparison(
         client,
         comparison,
-        before_body=revoke if when == "before_body" else None,
+        before_body=revoke if when.startswith("before_body") else None,
     ) as live:
         accepted = await next_event(live, "run.accepted", "1")
         await asyncio.wait_for(opened.wait(), 10)
@@ -362,10 +379,17 @@ async def test_connection_revocation_interrupts_only_its_provider_child(
                 and len({permit.task for permit in active_calls}) == 2
             )
             await revoke()
-        interrupted = await next_event(live, "run.interrupted", "1")
-        assert interrupted["text"] == (
-            "Student " if when == "during_output" else ""
+        interrupted = await next_event(
+            live, "run.failed" if storage_failure else "run.interrupted", "1"
         )
+        assert interrupted["seq"] == (2 if when == "during_output" else 1)
+        if storage_failure:
+            assert interrupted["error_code"] == "storage_error"
+            assert "PRIVATE_STORAGE_ERROR" not in str(interrupted)
+        else:
+            assert interrupted["text"] == (
+                "Student " if when == "during_output" else ""
+            )
         if when == "during_output":
             assert streams[0].closed and streams[0].read_cancelled
         assert len(active_calls) == 1
@@ -376,6 +400,12 @@ async def test_connection_revocation_interrupts_only_its_provider_child(
         completed = await next_event(live, "output.completed", "2")
         assert completed["text"] == "Other provider answer"
         await asyncio.wait_for(live.task, 10)
+        if storage_failure:
+            from src.services.generation_lifecycle import interrupt_orphans
+
+            await data.db.execute(text("DROP TRIGGER reject_terminal"))
+            await data.db.commit()
+            await interrupt_orphans(data.factory)
         assert (await client.get(path)).json()["status"] == "finished"
     assert len(calls) == 1
     assert student.responses.create.await_count == int(when == "during_output")

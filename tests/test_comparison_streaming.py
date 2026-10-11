@@ -26,7 +26,11 @@ __all__ = ["client", "comparison", "scenario_payload", "student"]
 
 @asynccontextmanager
 async def live_comparison(
-    client, comparison, disconnect_when=None, before_body=None
+    client,
+    comparison,
+    disconnect_when=None,
+    before_body=None,
+    path="/admin/comparisons",
 ):
     from src.main import app
 
@@ -69,8 +73,8 @@ async def live_comparison(
         http_version="1.1",
         method="POST",
         scheme="http",
-        path="/admin/comparisons",
-        raw_path=b"/admin/comparisons",
+        path=path,
+        raw_path=path.encode(),
         query_string=b"",
         root_path="",
         headers=[

@@ -11,6 +11,7 @@ from src.api.dependencies import get_admin_user, get_db_session
 from src.api.routes.comparison_input import ComparisonRoute
 from src.api.schemas.comparison import (
     ComparisonRequest,
+    ComparisonRetry,
     ComparisonStop,
     ComparisonStopGeneration,
     ComparisonStopTarget,
@@ -35,6 +36,28 @@ async def start_comparison(
     )
     await db.close()
     snapshot, execution = await reserve_comparison(factory, user, body)
+    if execution is None:
+        return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
+    return comparison_response(factory, snapshot, execution)
+
+
+@router.post("/admin/comparisons/{comparison_id}/panels/{panel_id}/retry")
+async def retry_panel(
+    comparison_id: UUID,
+    panel_id: Annotated[
+        str, Path(min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$")
+    ],
+    body: ComparisonRetry,
+    user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    factory = async_sessionmaker(
+        db.bind, expire_on_commit=False, autoflush=False
+    )
+    await db.close()
+    snapshot, execution = await reserve_comparison(
+        factory, user, body, comparison_id=str(comparison_id), panel_id=panel_id
+    )
     if execution is None:
         return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
     return comparison_response(factory, snapshot, execution)

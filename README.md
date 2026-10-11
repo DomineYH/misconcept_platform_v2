@@ -288,12 +288,25 @@ login/CSRF, 1–3 panels, real SSE, independent/all stop, reload interruption,
 safe output and GET/replay recovery with temporary migrated SQLite and mocked
 provider HTTP.
 No production success fixtures or paid calls are used.
+S5-04 (#94) adds owner-only
+`POST /admin/comparisons/{id}/panels/{panel_id}/retry` with a new `request_id`
+and the latest `generation_id`. After all current panels finish, only a failed,
+cancelled, interrupted or degraded panel can start another attempt. Admission
+rechecks the fixed inputs/options against live authorization and limits;
+refusals preserve the prior result, and matching request replays make no calls.
+Previous attempts retain their output, timing and usage; retries do not extend
+the 30-day expiry. Reload/disconnect recovery uses the comparison ID in the URL
+and GET only, with at most ten seconds of one-second recovery polling, followed
+by manual refresh/stop guidance. Normal streaming has no polling or automatic
+retry. `npm run test:browser -- s5_recovery s5_student_live` covers this flow.
 
 S5-06 (#96) adds post-session analysis comparisons: each panel makes one strict
 S4 structured call over the same full transcript and local message IDs. The
 last unanswered teacher message is optional. Input, expected output and
 thinking reserves must fit every selected panel before any calls or comparison
-records are created; comparison analysis never splits, truncates or retries.
+records are created; comparison analysis never splits, truncates or automatically
+retries. Failed or degraded panels can use the explicit S5-04 retry path with
+their frozen conditions and prior results preserved.
 S4 quote/ID/rubric validation and server statistics retain verified partial
 results as `degraded`, with coverage and links into the comparison's own dialogue.
 Only comparison generation records store results; classroom reports,

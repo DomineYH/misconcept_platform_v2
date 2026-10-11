@@ -18,6 +18,10 @@ export default async function checkComparisonRolesAndHistory(page) {
   assert.match(await p2.innerText(), /첫 본문 N\/A/);
   assert(!(await page.locator('#scenario-comparison').innerText()).includes(hidden));
   assert.equal(await page.getByRole('button',{name:'학생 응답 채택',exact:true}).count(),0);
+  await p2.getByRole('button',{name:'패널 재시도',exact:true}).click();
+  await p2.getByRole('heading',{name:'검증된 비교 분석: 정상 분석',exact:true}).waitFor();
+  await p2.locator('details').getByText('이전 시도 1 · 부분 분석',{exact:true}).click();
+  assert(await p2.getByRole('heading',{name:'검증된 비교 분석: 부분 분석',exact:true}).isVisible());
   await page.getByRole('article',{name:'패널 3',exact:true}).getByRole('button',{name:'이 모델 적용',exact:true}).click();
   assert.equal(await page.getByLabel('사후 분석 제공자 / 모델').inputValue(),'3');
   assert.equal(await page.locator('[id="mentor.resolved_model_config"]').inputValue(),mentorBefore);

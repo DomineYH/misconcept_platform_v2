@@ -146,7 +146,12 @@ async def check():
                     output_index=0,
                     content_index=0,
                 )
-                if self.budget in (1801, 1802):
+                retried = (
+                    self.budget == 1801
+                    and sum(call["max_output_tokens"] == 1801 for call in calls)
+                    == 2
+                )
+                if self.budget in (1801, 1802) and not retried:
                     await asyncio.Event().wait()
                 await asyncio.sleep(0.5)
                 yield sse(
@@ -247,7 +252,7 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            assert len(calls) == 10
+            assert len(calls) == 11
             assert all(call["stream"] and "text" not in call for call in calls)
             async with AsyncSessionLocal() as db:
                 assert (
@@ -288,7 +293,7 @@ async def check():
                     ).all()
                 ] == ["completed", "interrupted", "interrupted"]
                 ledger = (await db.scalars(select(ApiUsageLog))).all()
-                assert len(ledger) == 10 and all(
+                assert len(ledger) == 11 and all(
                     entry.status != "running" and entry.finished_at is not None
                     for entry in ledger
                 )
@@ -311,7 +316,7 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            assert len(calls) == 13
+            assert len(calls) == 14
             assert len([call for call in calls if "text" in call]) == 3
             assert all(client.is_closed() for client in clients)
             assert not active_calls

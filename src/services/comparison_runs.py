@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import select, text
 
+from src.api.schemas.comparison import ComparisonRequest
 from src.models import (
     AppSetting,
     ComparisonRun,
@@ -64,18 +65,81 @@ def input_error(code, field, panel_id=None):
     )
 
 
-async def reserve_comparison(factory, user, body):
+async def reserve_comparison(
+    factory, user, body, *, comparison_id=None, panel_id=None
+):
     async with execution_lock():
         async with factory() as db:
             await db.execute(text("BEGIN IMMEDIATE"))
             actor = await db.get(User, user.id)
             if actor is None or not actor.is_admin:
                 raise HTTPException(403, detail={"code": "admin_required"})
-            input_hash = digest(body.model_dump(by_alias=True))
-            existing = await db.scalar(
-                select(ComparisonRun).where(
-                    ComparisonRun.admin_id == user.id,
-                    ComparisonRun.request_id == body.request_id,
+            input_hash = digest(body.model_dump(by_alias=True, mode="json"))
+            comparison = previous = frozen = None
+            if comparison_id is not None:
+                comparison = await owned_comparison(db, comparison_id, user.id)
+                snapshot = await comparison_snapshot(db, comparison)
+                frozen = next(
+                    (
+                        panel
+                        for panel in snapshot["panels"]
+                        if panel["panel_id"] == panel_id
+                    ),
+                    None,
+                )
+                if frozen is None:
+                    raise HTTPException(404, detail={"code": "panel_not_found"})
+                replay = await db.scalar(
+                    select(GenerationRun).where(
+                        GenerationRun.comparison_run_id == comparison.id,
+                        GenerationRun.panel_id == panel_id,
+                        GenerationRun.request_id == str(body.request_id),
+                    )
+                )
+                if replay:
+                    if replay.input_hash != input_hash:
+                        conflict("request_conflict")
+                    return snapshot, None
+                if frozen["run_id"] != str(body.generation_id):
+                    conflict("stale_generation")
+                if comparison.status == "running" or any(
+                    panel["status"] == "running" for panel in snapshot["panels"]
+                ):
+                    conflict("comparison_busy", comparison_run_id=comparison.id)
+                if frozen["status"] not in (
+                    "failed",
+                    "cancelled",
+                    "interrupted",
+                    "degraded",
+                ):
+                    conflict("new_comparison_required")
+                previous = await db.get(GenerationRun, frozen["run_id"])
+                body = ComparisonRequest.model_validate(
+                    dict(
+                        request_id=str(body.request_id),
+                        target_role=comparison.target_role,
+                        source_snapshot=comparison.source_snapshot,
+                        canonical_context=[
+                            {"role": item["role"], "content": item["content"]}
+                            for item in comparison.canonical_context
+                        ],
+                        current_message=comparison.current_message,
+                        panels=[
+                            dict(
+                                panel_id=panel_id,
+                                model_config=frozen["model_config"],
+                            )
+                        ],
+                    )
+                )
+            existing = (
+                None
+                if comparison is not None
+                else await db.scalar(
+                    select(ComparisonRun).where(
+                        ComparisonRun.admin_id == user.id,
+                        ComparisonRun.request_id == body.request_id,
+                    )
                 )
             )
             if existing:
@@ -93,7 +157,7 @@ async def reserve_comparison(factory, user, body):
                 conflict("comparison_busy", comparison_run_id=busy.id)
             source = body.source_snapshot
             role = body.target_role
-            if source.scenario_id is not None:
+            if comparison is None and source.scenario_id is not None:
                 scenario = await db.get(Scenario, source.scenario_id)
                 if scenario is None or scenario.deleted_at is not None:
                     raise HTTPException(
@@ -256,7 +320,11 @@ async def reserve_comparison(factory, user, body):
                         model.capability_definition_version
                     )
                     permit.contract_version = ROLE_CONTRACT_VERSIONS[role]
-                    executions.append(dict(request=call, permit=permit))
+                    executions.append(
+                        dict(
+                            panel_id=panel.panel_id, request=call, permit=permit
+                        )
+                    )
                     frozen_panels.append(
                         dict(
                             panel_id=panel.panel_id,
@@ -279,6 +347,16 @@ async def reserve_comparison(factory, user, body):
                             ],
                         )
                     )
+                    if frozen is not None and any(
+                        frozen[key] != frozen_panels[-1][key]
+                        for key in (
+                            "prompt_version",
+                            "contract_version",
+                            "capability_version",
+                            "estimator_version",
+                        )
+                    ):
+                        conflict("new_comparison_required")
             except BaseException as error:
                 for execution in executions:
                     execution["permit"].release()
@@ -299,40 +377,46 @@ async def reserve_comparison(factory, user, body):
                     source.title.strip() or "제목 없는 초안"
                 )
                 created = utcnow()
-                comparison = ComparisonRun(
-                    id=str(uuid4()),
-                    admin_id=user.id,
-                    scenario_id=source.scenario_id,
-                    source_version=source.source_version,
-                    source_snapshot=frozen_source,
-                    source_hash=digest(frozen_source),
-                    target_role=role,
-                    mode="same_context",
-                    canonical_context=history,
-                    current_message=body.current_message,
-                    context_hash=digest(
-                        dict(
-                            instruction=(
-                                call.messages
-                                if role == "analysis"
-                                else messages[0]["content"]
-                            ),
-                            history=history,
-                            current_message=body.current_message,
-                            target_role=role,
-                        )
-                    ),
-                    panel_configs=frozen_panels,
-                    request_id=body.request_id,
-                    input_hash=input_hash,
-                    parent_run_id=body.parent_run_id,
-                    created_at=created,
-                    expires_at=created + timedelta(days=30),
-                    status="running",
-                )
-                db.add(comparison)
+                if comparison is None:
+                    comparison = ComparisonRun(
+                        id=str(uuid4()),
+                        admin_id=user.id,
+                        scenario_id=source.scenario_id,
+                        source_version=source.source_version,
+                        source_snapshot=frozen_source,
+                        source_hash=digest(frozen_source),
+                        target_role=role,
+                        mode="same_context",
+                        canonical_context=history,
+                        current_message=body.current_message,
+                        context_hash=digest(
+                            dict(
+                                instruction=(
+                                    call.messages
+                                    if role == "analysis"
+                                    else messages[0]["content"]
+                                ),
+                                history=history,
+                                current_message=body.current_message,
+                                target_role=role,
+                            )
+                        ),
+                        panel_configs=frozen_panels,
+                        request_id=body.request_id,
+                        input_hash=input_hash,
+                        parent_run_id=body.parent_run_id,
+                        created_at=created,
+                        expires_at=created + timedelta(days=30),
+                        status="running",
+                    )
+                    db.add(comparison)
+                else:
+                    comparison.status = "running"
+                    created = max(
+                        created, previous.started_at + timedelta(microseconds=1)
+                    )
                 await db.flush()
-                turn_id = str(uuid4())
+                turn_id = previous.turn_id if previous else str(uuid4())
                 for frozen_panel, execution in zip(frozen_panels, executions):
                     run = GenerationRun(
                         id=str(uuid4()),

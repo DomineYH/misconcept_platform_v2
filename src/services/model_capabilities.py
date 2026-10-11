@@ -1,4 +1,4 @@
-"""Exact provider definitions, checked against official sources on 2026-10-09."""
+"""Exact provider definitions, checked against official sources on 2026-10-10."""
 
 import unicodedata
 from copy import deepcopy
@@ -11,7 +11,7 @@ PROVIDER_CAPABILITIES = {
     "google": google_capabilities,
 }
 
-DEFINITION_VERSION = "openai-2026-10-09-v1"
+DEFINITION_VERSION = "openai-2026-10-10-v2"
 MODEL_PAGES = "https://developers.openai.com/api/docs/models/"
 PARAMETER_SOURCE = (
     "https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.4"
@@ -84,7 +84,7 @@ def capabilities(provider, model_id):
     return deepcopy(
         dict(
             definition_version=DEFINITION_VERSION,
-            checked_at="2026-10-09",
+            checked_at="2026-10-10",
             sources=(
                 [MODEL_PAGES + name, PARAMETER_SOURCE, MINI_REASONING_SOURCE]
                 if name == "gpt-5-mini"
@@ -94,6 +94,7 @@ def capabilities(provider, model_id):
             streaming=True,
             structured=True,
             max_output_tokens=128000,
+            combined_context_tokens=400000,
             reasoning_efforts=efforts,
             default_reasoning_effort=default,
             temperature=sampling,

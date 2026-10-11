@@ -10,7 +10,12 @@ import pytest
 from sqlalchemy import event, text
 from test_model_management import write
 from test_provider_connections import KEY, post
-from test_role_probes import CLASSIFICATION, JUDGMENT, SYNTHESIS
+from test_role_probes import (
+    CLASSIFICATION,
+    MENTOR_NEGATIVE,
+    MENTOR_POSITIVE,
+    SYNTHESIS,
+)
 from test_scenario_api import login
 from test_student_probe import api as probe_api
 from test_student_probe import cleanup_probes as cleanup_probes
@@ -284,10 +289,8 @@ async def test_each_role_can_select_its_own_verified_model(
 
     async def upstream(request, payload):
         if role == "mentor":
-            content = (
-                json.dumps(JUDGMENT)
-                if len(calls) == 1
-                else "Synthetic coaching"
+            content = json.dumps(
+                MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE
             )
         else:
             content = json.dumps(

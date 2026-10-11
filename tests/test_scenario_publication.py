@@ -647,3 +647,47 @@ async def test_new_install_seed_publishes_without_templates_or_frameworks(
     assert response.json()["version"] == 2
     listing = await api.get("/scenarios")
     assert saved["title"] in listing.text
+
+
+async def test_s1_mentor_evidence_blocks_publication_and_new_lesson(
+    data, api, publishable
+):
+    from test_lesson_snapshots import start
+
+    publishable["config"]["mentor"].update(
+        mode="manual",
+        name="Mentor",
+        behavior_instruction="Coach",
+        resolved_model_config=copy.deepcopy(
+            publishable["config"]["student"]["resolved_model_config"]
+        ),
+    )
+    created = await post(api, "/admin/scenarios", publishable)
+    assert created.status_code == 201
+    async with data.factory() as db:
+        model = await db.get(ModelConfig, 1)
+        model.verification_state = {
+            **model.verification_state,
+            "mentor": {
+                **model.verification_state["mentor"],
+                "role_contract_version": "s1-v1",
+            },
+        }
+        await db.commit()
+    states = (await api.get("/admin/ai/state")).json()["models"][0][
+        "verification_state"
+    ]
+    assert states["mentor"]["status"] == "stale"
+    assert (
+        states["student"]["status"]
+        == states["analysis"]["status"]
+        == "succeeded"
+    )
+    rejected = await post(api, "/admin/scenarios", publishable)
+    assert rejected.status_code == 422
+    login(api, data.owner)
+    await api.get("/scenarios")
+    for entry in ("api", "detail"):
+        response, session_id = await start(api, created.json()["id"], entry)
+        assert response.status_code == 400 and session_id is None
+        assert response.json()["detail"]["code"] == "configuration_unavailable"

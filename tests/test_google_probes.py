@@ -9,7 +9,12 @@ from sqlalchemy import text
 from test_google_catalog import install, save_key
 from test_google_invocations import response, sse
 from test_model_management import write
-from test_role_probes import CLASSIFICATION, JUDGMENT, SYNTHESIS
+from test_role_probes import (
+    CLASSIFICATION,
+    MENTOR_NEGATIVE,
+    MENTOR_POSITIVE,
+    SYNTHESIS,
+)
 from test_student_probe import api as probe_api
 from test_student_probe import cleanup_probes as cleanup_probes
 from test_student_probe import completed
@@ -30,8 +35,37 @@ async def prepare(api, role):
     assert saved.status_code == 200
     model = (await api.get("/admin/ai/state")).json()["models"][0]
     assert model["model_id"] == "gemini-2.5-flash"
-    assert model["capabilities"]["definition_version"] == "google-2026-10-09-v1"
+    assert model["capabilities"]["definition_version"] == "google-2026-10-10-v2"
     return dict(expected_version=1, role=role, request_id=str(uuid4()))
+
+
+async def test_google_input_capacity_conflict_rejects_explicit_probe_without_attempt(
+    data, api
+):
+    body = await prepare(api, "student")
+    async with data.engine.begin() as db:
+        await db.execute(
+            text(
+                "UPDATE provider_connection SET catalog_models_json=:models WHERE provider='google'"
+            ),
+            {
+                "models": json.dumps(
+                    [dict(model_id="gemini-2.5-flash", input_token_limit=1024)]
+                )
+            },
+        )
+    result = await write(api, "models/1/probes", **body)
+    assert result.status_code == 422
+    assert result.json()["detail"]["code"] == "capability_definition_required"
+    state = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert state["capabilities"]["metadata_conflict"] is True
+    async with data.engine.connect() as db:
+        assert (
+            await db.execute(text("SELECT count(*) FROM model_probe"))
+        ).scalar() == 0
+        assert (
+            await db.execute(text("SELECT count(*) FROM api_usage_log"))
+        ).scalar() == 0
 
 
 @pytest.mark.parametrize("role", ["student", "mentor", "analysis"])
@@ -58,11 +92,11 @@ async def test_google_role_probe_is_versioned_idempotent_and_has_two_attempts(
             ).one()
             assert row == ("google", "running", 1)
         content = "학생의 생각을 물어보세요."
-        if role == "analysis" or (role == "mentor" and len(calls) == 1):
+        if role in ("analysis", "mentor"):
             assert config["responseMimeType"] == "application/json"
             assert config["responseJsonSchema"]["type"] == "object"
             content = json.dumps(
-                JUDGMENT
+                (MENTOR_POSITIVE if len(calls) == 1 else MENTOR_NEGATIVE)
                 if role == "mentor"
                 else CLASSIFICATION if len(calls) == 1 else SYNTHESIS
             )
@@ -99,9 +133,10 @@ async def test_google_role_probe_is_versioned_idempotent_and_has_two_attempts(
         evidence["status"] == "succeeded"
         and evidence["credential_revision"] == 1
     )
-    assert (
-        evidence["capability_definition_version"] == "google-2026-10-09-v1"
-        and evidence["role_contract_version"] == "s1-v1"
+    assert evidence[
+        "capability_definition_version"
+    ] == "google-2026-10-10-v2" and evidence["role_contract_version"] == (
+        "s3-v1" if role == "mentor" else "s1-v1"
     )
     assert all(
         value["status"] == "unverified"
@@ -148,12 +183,12 @@ async def test_structured_google_probe_uses_server_validation_and_stops_on_failu
 
     async def upstream(request):
         value = deepcopy(
-            JUDGMENT
+            MENTOR_POSITIVE
             if role == "mentor"
             else CLASSIFICATION if len(calls) == 1 else SYNTHESIS
         )
         if mode == "type":
-            value["is_repetitive"] = "false"
+            value["should_intervene"] = "false"
         if mode == "label":
             value["label"] = "PRIVATE-OUTPUT"
         if mode == "quote" and len(calls) == 2:

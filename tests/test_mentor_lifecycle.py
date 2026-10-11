@@ -4,6 +4,7 @@ import asyncio
 from uuid import uuid4
 
 import pytest
+from lesson_fixtures import mentor_output
 from sqlalchemy import event as sql_event
 from test_mentor_generation import (
     client,
@@ -91,6 +92,76 @@ async def test_mentor_deadline_heartbeats_and_cleanup(
     await data.db.refresh(data.session)
     assert data.session.tutor_question_count == 1
     assert data.session.tutor_intervention_count == 0
+
+
+async def test_mentor_uses_total_timeout_frozen_at_admission_and_next_call_reads_changes(
+    data, client, mentor
+):
+    from types import SimpleNamespace
+
+    from src.models import ApiUsageLog, AppSetting
+
+    login(client, data.owner)
+    first = await complete_turn(client, data)
+    setting = await data.db.get(AppSetting, 1)
+    setting.timeouts_json = {
+        **setting.timeouts_json,
+        "mentor_total": 3,
+        "mentor_first_output": 1,
+    }
+    await data.db.commit()
+    calls = 0
+
+    async def upstream(**body):
+        nonlocal calls
+        if body.get("stream"):
+            return mentor.stream
+        calls += 1
+        if calls == 1:
+            async with data.factory() as db:
+                current = await db.get(AppSetting, 1)
+                current.timeouts_json = {
+                    **current.timeouts_json,
+                    "mentor_total": 1,
+                }
+                await db.commit()
+        await asyncio.sleep(1.2)
+        return SimpleNamespace(
+            output_text=mentor_output("Delayed complete coaching"), usage=None
+        )
+
+    mentor.responses.create.side_effect = upstream
+    completed = await client.post(
+        mentor_url(data, first),
+        json=dict(request_id=str(uuid4()), trigger="manual"),
+    )
+    assert (
+        frames(completed)[-1][0] == "output.completed"
+    )  # Structured calls have no first-body timer.
+    second = await complete_turn(client, data, "Next target")
+    timed_out = await client.post(
+        mentor_url(data, second),
+        json=dict(request_id=str(uuid4()), trigger="manual"),
+    )
+    assert frames(timed_out)[-1][1]["code"] == "timeout_total"
+    assert calls == 2
+    from sqlalchemy import select
+
+    async with data.factory() as db:
+        attempts = (
+            await db.scalars(
+                select(ApiUsageLog)
+                .where(ApiUsageLog.operation == "mentor")
+                .order_by(ApiUsageLog.id)
+            )
+        ).all()
+        assert [row.status for row in attempts] == ["completed", "timed_out"]
+        assert all(
+            row.context_budget_json["target_pair_included"] for row in attempts
+        )
+    from src.services.call_admission import active_calls, registered_calls
+
+    assert not active_calls and not registered_calls
 
 
 @pytest.mark.parametrize("entry", ["close", "end", "admin"])
@@ -192,6 +263,21 @@ async def test_coaching_commit_failure_rolls_back_intervention_count(
         await client.get(f"/runs/{frames(response)[0][1]['run_id']}")
     ).json()
     assert snapshot["message"] is None
+    from sqlalchemy import select
+
+    from src.models import ApiUsageLog, GenerationRun
+
+    async with data.factory() as db:
+        run = await db.get(GenerationRun, snapshot["run_id"])
+        assert run.mentor_reason_summary is None and run.result_kind is None
+        attempt = (
+            await db.scalars(
+                select(ApiUsageLog).where(ApiUsageLog.run_id == run.id)
+            )
+        ).one()
+        assert (
+            attempt.status == "completed"
+        )  # Provider success is separate from storage failure.
     retry = await client.post(
         mentor_url(data, turn),
         json={"request_id": str(uuid4()), "trigger": "manual"},
@@ -342,7 +428,9 @@ async def test_persisted_end_wins_even_when_live_cancel_signal_is_missed(
     async def create(**kwargs):
         entered.set()
         await gate.wait()
-        return SimpleNamespace(output_text="Too late coaching", usage=None)
+        return SimpleNamespace(
+            output_text=mentor_output("Too late coaching"), usage=None
+        )
 
     mentor.responses.create.side_effect = create
     payload = {"request_id": str(uuid4()), "trigger": "manual"}
@@ -367,6 +455,11 @@ async def test_persisted_end_wins_even_when_live_cancel_signal_is_missed(
         assert frames(result)[-1][0] == "run.cancelled"
         state = (await client.get(f"/runs/{state['run_id']}")).json()
         assert state["message"] is None
+        from src.models import GenerationRun
+
+        async with data.factory() as db:
+            run = await db.get(GenerationRun, state["run_id"])
+            assert run.mentor_reason_summary is None and run.result_kind is None
         await data.db.refresh(data.session)
         assert data.session.tutor_intervention_count == 0
         updates = await client.get(

@@ -1,10 +1,10 @@
-"""Exact Gemini definition, checked against official sources on 2026-10-09."""
+"""Exact Gemini definition, checked against official sources on 2026-10-10."""
 
 from copy import deepcopy
 
 DEFINITION = dict(
-    definition_version="google-2026-10-09-v1",
-    checked_at="2026-10-09",
+    definition_version="google-2026-10-10-v2",
+    checked_at="2026-10-10",
     sources=[
         "https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash",
         "https://ai.google.dev/gemini-api/docs/generate-content/thinking",
@@ -17,6 +17,7 @@ DEFINITION = dict(
     streaming=True,
     structured=True,
     max_output_tokens=65536,
+    input_token_limit=1048576,
     temperature=True,
     max_temperature=2,
     thinking=True,
@@ -104,6 +105,10 @@ def metadata_conflict(model_id, item):
         or (
             item.get("supported_actions") is not None
             and "generateContent" not in item["supported_actions"]
+        )
+        or (
+            item.get("input_token_limit") is not None
+            and item["input_token_limit"] != definition["input_token_limit"]
         )
         or (
             item.get("output_token_limit") is not None

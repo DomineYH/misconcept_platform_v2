@@ -136,11 +136,30 @@ async def check():
             session.config_hash = canonical_hash(session.config_snapshot_json)
             scenario.config_json = session.config_snapshot_json["config"]
             await db.commit()
+            if sys.argv[1:] == ["--mentor-browser"]:
+                envelope = deepcopy(session.config_snapshot_json)
+                model.verification_state = {
+                    **model.verification_state,
+                    "mentor": {
+                        **model.verification_state["student"],
+                        "role_contract_version": "s3-v1",
+                    },
+                }
+                envelope["config"]["mentor"]["mode"] = "auto"
+                envelope["config"]["mentor"]["intervention_policy"].update(
+                    start_turn=1, min_interval_turns=100
+                )
+                session.config_snapshot_json = envelope
+                session.config_hash = canonical_hash(envelope)
+                scenario.config_json = envelope["config"]
+                await db.commit()
             session_id, owner_id = session.id, owner.id
 
         release = asyncio.Event()
-        if sys.argv[1:] == ["--browser"]:
+        if sys.argv[1:] in (["--browser"], ["--mentor-browser"]):
             release.set()
+        mentor_release = Path(directory) / "release-mentor"
+        mentor_calls = []
         calls, owned_clients = [], []
 
         class Upstream(httpx2.AsyncByteStream):
@@ -196,6 +215,17 @@ async def check():
             assert request.headers["authorization"] == "Bearer sk-live-db-key"
             body = json.loads(request.content)
             calls.append(body)
+            structured = "should_intervene" in body.get("text", {}).get(
+                "format", {}
+            ).get("schema", {}).get("properties", {})
+            if structured:
+                mentor_calls.append(body)
+                if len(mentor_calls) == 1:
+                    while not mentor_release.exists():
+                        await asyncio.sleep(0.01)
+                else:
+                    mentor_release.with_suffix(".started").write_text("entered")
+                    await asyncio.Event().wait()
             if not body.get("stream"):
                 return httpx2.Response(
                     200,
@@ -214,7 +244,17 @@ async def check():
                                 "content": [
                                     {
                                         "type": "output_text",
-                                        "text": "Saved body",
+                                        "text": (
+                                            json.dumps(
+                                                dict(
+                                                    should_intervene=True,
+                                                    feedback="Live late coaching",
+                                                    reason_summary="PRIVATE-LIVE-REASON",
+                                                )
+                                            )
+                                            if structured
+                                            else "Saved body"
+                                        ),
                                         "annotations": [],
                                     }
                                 ],
@@ -273,6 +313,94 @@ async def check():
             async with asyncio.timeout(30):
                 while not server.started:
                     await asyncio.sleep(0.01)
+            if sys.argv[1:] == ["--mentor-browser"]:
+                process = await asyncio.create_subprocess_exec(
+                    "node",
+                    "tests/check_s3_mentor_browser.mjs",
+                    str(port),
+                    str(mentor_release),
+                    cwd=ROOT,
+                )
+                try:
+                    async with asyncio.timeout(60):
+                        assert await process.wait() == 0
+                finally:
+                    if process.returncode is None:
+                        process.kill()
+                        await process.wait()
+                from src.services.call_admission import (
+                    active_calls,
+                    registered_calls,
+                )
+
+                assert not active_calls and not registered_calls
+                assert len(calls) == 4 and len(mentor_calls) == 2
+                assert all(sdk.is_closed() for sdk in owned_clients)
+                async with AsyncSessionLocal() as db:
+                    runs = (
+                        await db.scalars(
+                            select(GenerationRun)
+                            .where(GenerationRun.operation == "mentor")
+                            .order_by(GenerationRun.started_at)
+                        )
+                    ).all()
+                    assert len(runs) == 2
+                    assert (
+                        runs[0].status,
+                        runs[0].result_kind,
+                        runs[0].mentor_reason_summary,
+                    ) == ("completed", "message", "PRIVATE-LIVE-REASON")
+                    # The browser aborts on lock; disconnect can commit before end.
+                    assert runs[1].status in {"cancelled", "interrupted"}
+                    assert (
+                        runs[1].error_code
+                        == {
+                            "cancelled": "session_ended",
+                            "interrupted": "disconnected",
+                        }[runs[1].status]
+                    )
+                    assert (
+                        runs[1].result_kind
+                        is runs[1].mentor_reason_summary
+                        is None
+                    )
+                    attempts = (
+                        await db.scalars(
+                            select(ApiUsageLog)
+                            .where(ApiUsageLog.role == "mentor")
+                            .order_by(ApiUsageLog.id)
+                        )
+                    ).all()
+                    assert [
+                        (row.operation, row.status, row.attempt_no)
+                        for row in attempts
+                    ] == [
+                        ("mentor", "completed", 1),
+                        ("mentor", "cancelled", 1),
+                    ]
+                    assert all(
+                        row.context_budget_json["target_pair_included"]
+                        and row.context_budget_json["estimator"] == "utf8-v1"
+                        and row.context_budget_json["estimated_input_tokens"]
+                        <= row.context_budget_json["input_budget_tokens"]
+                        for row in attempts
+                    )
+                    assert [
+                        row.context_budget_json["selected_prior_pairs"]
+                        for row in attempts
+                    ] == [0, 1]
+                    saved = await db.get(Session, session_id)
+                    assert (
+                        saved.tutor_intervention_count == 1
+                        and saved.ended_at is not None
+                    )
+                    assert "PRIVATE-LIVE-REASON" not in str(
+                        [vars(row) for row in attempts]
+                    )
+                print(
+                    "PASS: real authenticated S3 mentor browser HTTP, independent student, original target/focus, final-only private output, replay, end cancellation and released slots; 2 student + 2 mentor calls"
+                )
+                return
             if sys.argv[1:] == ["--browser"]:
                 process = await asyncio.create_subprocess_exec(
                     "node",

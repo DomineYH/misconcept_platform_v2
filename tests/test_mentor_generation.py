@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from legacy_models import PromptTemplate
+from lesson_fixtures import mentor_output
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
 from test_scenario_api import scenario_payload as scenario_fixture
@@ -36,7 +37,9 @@ async def mentor(data, student):
     async def create(**kwargs):
         if kwargs.get("stream"):
             return student.stream
-        return SimpleNamespace(output_text="Mentor coaching", usage=None)
+        return SimpleNamespace(
+            output_text=mentor_output("Mentor coaching"), usage=None
+        )
 
     student.responses.create.side_effect = create
     return student
@@ -63,7 +66,7 @@ async def test_no_intervention_is_durable_and_replayed(data, client, mentor):
     turn = await complete_turn(client, data)
     mentor.responses.create.side_effect = None
     mentor.responses.create.return_value = SimpleNamespace(
-        output_text='{"is_repetitive":false,"is_inappropriate":false,"reason":"No help needed"}',
+        output_text=mentor_output(None, "No help needed"),
         usage=None,
     )
     payload = {"request_id": str(uuid4()), "trigger": "auto"}
@@ -81,18 +84,24 @@ async def test_no_intervention_is_durable_and_replayed(data, client, mentor):
         assert replay.json()["status"] == "completed"
     state = await client.get(f"/runs/{events[0][1]['run_id']}")
     assert state.json()["result_kind"] == "no_intervention"
-    assert mentor.responses.create.await_count == 2  # Student and judgment.
+    assert (
+        mentor.responses.create.await_count == 2
+    )  # Student and structured mentor.
     from sqlalchemy import select
 
-    from src.models import ApiUsageLog
+    from src.models import ApiUsageLog, GenerationRun
 
     async with data.factory() as db:
+        run = await db.get(GenerationRun, events[0][1]["run_id"])
+        assert run.mentor_reason_summary == "No help needed"
+        assert "No help needed" not in response.text + state.text + replay.text
         attempts = (
             await db.scalars(
                 select(ApiUsageLog).where(ApiUsageLog.role == "mentor")
             )
         ).all()
-        assert len(attempts) == 1 and attempts[0].operation == "mentor_judgment"
+        assert len(attempts) == 1 and attempts[0].operation == "mentor"
+        assert "No help needed" not in str(vars(attempts[0]))
     await data.db.refresh(data.session)
     assert data.session.tutor_question_count == 1
     assert data.session.tutor_intervention_count == 0
@@ -119,7 +128,7 @@ async def test_slow_mentor_does_not_block_student_and_busy_creates_nothing(
         entered.set()
         await gate.wait()
         return SimpleNamespace(
-            output_text="Coaching first turn",
+            output_text=mentor_output("Coaching first turn"),
             usage=SimpleNamespace(
                 input_tokens=10,
                 output_tokens=2,
@@ -214,7 +223,9 @@ async def test_failed_feedback_retry_counts_question_once(data, client, mentor):
         calls += 1
         if calls == 1:
             raise RuntimeError("SECRET feedback failure")
-        return SimpleNamespace(output_text="Recovered coach", usage=None)
+        return SimpleNamespace(
+            output_text=mentor_output("Recovered coach"), usage=None
+        )
 
     mentor.responses.create.side_effect = create
     first = await client.post(

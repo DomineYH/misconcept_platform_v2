@@ -39,6 +39,7 @@ class GenerationRun(Base):
     status: Mapped[str] = mapped_column(String(20))
     partial_text: Mapped[str | None] = mapped_column(Text)
     result_kind: Mapped[str | None] = mapped_column(String(20))
+    mentor_reason_summary: Mapped[str | None] = mapped_column(Text)
     error_code: Mapped[str | None] = mapped_column(String(50))
     started_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)

@@ -64,8 +64,8 @@
   "roles": {
     "planner": {
       "harness": "codex",
-      "model": "gpt-6-astra",
-      "effort": "medium",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
       "responsibility": "Under a coordinator work order, produce or revise the executable implementation plan: approach, contracts, dependencies, failure handling, verification and relevant rollout/recovery. Resolve ordinary design work inside that one plan. Return a proposal, not an approval, another task/risk/TDD classification or instructions to implementer. If a material decision remains disputed or unsupported, report it to the coordinator rather than invoking advisor.",
       "when": "Only when the coordinator issues a planning assignment for high-risk delivery, a concrete needs_design signal, or substantive replanning. A routine brief plan may be handled by the host. needs_specialist alone neither assigns planner nor requests advisor.",
       "authority": "Read only the permitted inputs. Write only named planning/report artifacts when explicitly authorized; no product-code/configuration changes, worker dispatch, scope expansion or final acceptance. The coordinator approves the executable plan through the existing work order."

@@ -17,6 +17,7 @@ from src.services.provider_secrets import (
 )
 
 ROLE_CONTRACT_VERSIONS = {role: "s1-v1" for role in ROLES}
+ROLE_CONTRACT_VERSIONS["mentor"] = "s3-v1"
 
 
 class RoleVerification(BaseModel):

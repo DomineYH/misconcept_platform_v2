@@ -100,6 +100,22 @@ counted individual messages (including mentor rows), and now counts complete
 pairs. Existing values are preserved, so administrators should adjust them
 before starting new sessions. Failed attempts and greetings consume no slots.
 
+Student stream/nonstream and single structured mentor calls fit the frozen prior-turn limit into a local
+input budget by dropping the oldest complete pairs. The role instruction,
+problem, current question or completed mentor target pair, intervention condition,
+provider-facing output schema and frozen output options are preserved. Mentor
+input contains at most N prior pairs plus the target pair (N+1 pairs), excluding
+later turns and other mentor messages. Required input that still exceeds the
+budget returns HTTP 422 `context_limit` before a new run or provider attempt is
+stored and consumes no mentor interval, rolling capacity or counter; shorten the question or ask an
+administrator to review the configuration. Provider context failures are recorded
+as failed attempts and are never automatically retried.
+
+Migration 033 adds nullable `api_usage_log.context_budget_json`, separate from
+actual tokens and costs. Capacity definition v2 makes old student, mentor and
+analysis evidence stale; administrators must explicitly reverify each required
+role. Saved lesson selections and snapshot hashes are preserved.
+
 Tests need no API credentials or network. They override configuration before
 imports, reject outbound sockets, and create databases only under pytest's
 temporary directory. The repository's dialogue_sim.db and .env are never used:
@@ -244,3 +260,13 @@ Run the full pytest, lint/format, browser and localhost streaming checks above
 before integration review. Mock success verifies the execution contract;
 real model educational quality, provider latency and operating deployment
 remain separate work.
+
+S3-05 (#76) offline integration: `uv run --frozen python -m pytest -q
+tests/test_s3_integration.py tests/test_s3_migration.py tests/test_s3_load.py`
+reuses the S2 installation/SDK fixtures and S1 load checks for explicit role
+probes, student-only execution, single mentor events, zero-call refusals,
+S2-final WAL backup/restore and additive 032/033 preservation. Injected provider
+delay/failure verifies student independence and slot cleanup, without claiming
+real p95 or educational quality. [S3 cutover and handoff](docs/s3-cutover.md)
+documents drain, backup/restore, stale roles, explicit reverification and the
+rollback boundary after new writes. Actual comparison panels remain S5 work.

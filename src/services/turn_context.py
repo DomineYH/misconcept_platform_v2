@@ -46,8 +46,8 @@ async def load_completed_turns(
 async def load_mentor_context(db, session_id, turn_id, *, limit=None):
     """Return N preceding completed pairs plus the completed target pair.
 
-    Pass the last pair as current teacher/student and the rest as history to
-    TutorBot.generate_feedback. Missing/incomplete targets raise NoResultFound.
+    Mentor budgeting protects the last pair and trims only preceding pairs.
+    Missing/incomplete targets raise NoResultFound.
     """
     student = aliased(Message)
     teacher, answer, turn_index = (

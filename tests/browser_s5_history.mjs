@@ -23,6 +23,7 @@ export default async function checkComparisonRolesAndHistory(page) {
   await p2.locator('details').getByText('이전 시도 1 · 부분 분석',{exact:true}).click();
   assert(await p2.getByRole('heading',{name:'검증된 비교 분석: 부분 분석',exact:true}).isVisible());
   await page.getByRole('article',{name:'패널 3',exact:true}).getByRole('button',{name:'이 모델 적용',exact:true}).click();
+  await page.getByText('대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.', {exact:true}).waitFor();
   assert.equal(await page.getByLabel('사후 분석 제공자 / 모델').inputValue(),'3');
   assert.equal(await page.locator('[id="mentor.resolved_model_config"]').inputValue(),mentorBefore);
   assert.equal(await page.locator('#title').inputValue(),'내 수정 제목');

@@ -226,6 +226,15 @@ async def check():
                         else json.dumps(reply)
                     ),
                 )
+            if (
+                body["max_output_tokens"] == 1803
+                and sum(call["max_output_tokens"] == 1803 for call in calls)
+                == 1
+            ):
+                return httpx2.Response(
+                    429,
+                    json={"error": {"message": "PRIVATE_PROVIDER_FAILURE"}},
+                )
             stream = MockStream(body["max_output_tokens"])
             streams.append(stream)
             return httpx2.Response(
@@ -286,8 +295,9 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            assert len(calls) == 11
+            assert len(calls) == 12
             assert all(call["stream"] and "text" not in call for call in calls)
+            assert sum(call["max_output_tokens"] == 1803 for call in calls) == 2
             async with AsyncSessionLocal() as db:
                 assert (
                     await db.scalar(select(func.count()).select_from(Scenario))
@@ -327,7 +337,7 @@ async def check():
                     ).all()
                 ] == ["completed", "interrupted", "interrupted"]
                 ledger = (await db.scalars(select(ApiUsageLog))).all()
-                assert len(ledger) == 11 and all(
+                assert len(ledger) == 12 and all(
                     entry.status != "running" and entry.finished_at is not None
                     for entry in ledger
                 )
@@ -350,7 +360,7 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            assert len(calls) == 14
+            assert len(calls) == 15
             assert len([call for call in calls if "text" in call]) == 3
             assert all(client.is_closed() for client in clients)
             assert not active_calls
@@ -391,7 +401,7 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            mentor_calls = calls[14:]
+            mentor_calls = calls[15:]
             assert len(mentor_calls) == 6
             assert all(
                 "stream" not in call
@@ -457,7 +467,7 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            assert len(calls) == 22
+            assert len(calls) == 23
             assert not active_calls and all(
                 client.is_closed() for client in clients
             )

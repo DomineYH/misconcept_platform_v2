@@ -135,8 +135,13 @@ async def test_summary_counts_whole_ledger_attempts_and_preserves_history(
 ):
     rows = [
         dict(invocation_id="retry", attempt_no=1, status="failed"),
-        dict(invocation_id="retry", attempt_no=2, estimated_cost_usd=0.25),
-        dict(invocation_id="unknown", attempt_no=1),
+        dict(
+            invocation_id="retry",
+            attempt_no=2,
+            estimated_cost_usd=0.25,
+            usage_scope="comparison",
+        ),
+        dict(invocation_id="unknown", attempt_no=1, usage_scope="comparison"),
         dict(invocation_id="list", attempt_no=1, operation="model_list"),
         dict(
             invocation_id="list-priced",

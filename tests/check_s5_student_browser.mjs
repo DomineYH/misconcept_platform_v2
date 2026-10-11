@@ -63,7 +63,8 @@ try {
       await page.getByRole('button',{name:'패널 추가',exact:true}).click();
       await page.getByLabel(`패널 ${i} 제공자 / 모델`,{exact:true}).selectOption(model);
     }
-    for (let i = 1; i <= count; i++) await page.getByLabel(`패널 ${i} 최대 출력 토큰`,{exact:true}).fill(String(stalled ? 1799+i : 1500));
+    const budgets = stalled ? [1800,1801,1802] : [1500,1803];
+    for (let i = 1; i <= count; i++) await page.getByLabel(`패널 ${i} 최대 출력 토큰`,{exact:true}).fill(String(budgets[i-1]));
     await page.getByLabel('학생 현재 질문').fill('Concurrent comparison');
     await page.getByRole('button',{name:'비교 실행',exact:true}).click();
   }
@@ -95,7 +96,19 @@ try {
   assert.equal(retryState.panels[1].model_config.options.max_output_tokens,1801);
   await configure(2,false);
   await p1.getByText('완료',{exact:true}).waitFor();
+  await p2.getByText('실패',{exact:true}).waitFor();
+  assert(!(await p2.innerText()).includes('PRIVATE_PROVIDER_FAILURE'));
+  assert(await p2.getByRole('button',{name:'학생 응답 채택',exact:true}).isDisabled());
+  const failureId = new URL(page.url()).searchParams.get('comparison_id');
+  const failed = await (await page.request.get(`${base}/admin/comparisons/${failureId}`)).json();
+  assert.deepEqual(failed.panels.map(panel => panel.status),['completed','failed']);
+  await p2.getByRole('button',{name:'패널 재시도',exact:true}).click();
   await p2.getByText('완료',{exact:true}).waitFor();
+  const retried = await (await page.request.get(`${base}/admin/comparisons/${failureId}`)).json();
+  assert.deepEqual(retried.panels[0],failed.panels[0]);
+  assert.equal(retried.panels[1].attempts[0].status,'failed');
+  assert.equal(retried.context_hash,failed.context_hash);
+  assert.equal(retried.expires_at,failed.expires_at);
   await configure(3,true);
   await p1.getByText('Fast final',{exact:true}).waitFor();
   await p2.getByText('Panel 2 partial',{exact:true}).waitFor();

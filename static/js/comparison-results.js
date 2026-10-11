@@ -1,5 +1,6 @@
 import {node, button} from './ai-render.js';
 
+export const completedStatuses = ['completed','ok','degraded'];
 export const active = status => ['waiting', 'running', 'streaming'].includes(status);
 export const statusLabels = {waiting:'대기', running:'처리 중', streaming:'스트리밍', completed:'완료', ok:'정상 분석', degraded:'부분 분석', failed:'실패', cancelled:'취소', interrupted:'중단'};
 export const statusLabel = (status, role) => status === 'running' ? role === 'student' ? '스트리밍' : role === 'analysis' ? '진행 중' : statusLabels[status] : statusLabels[status];
@@ -31,7 +32,7 @@ export function renderComparisonResult(root, panel, role, actions, locked) {
     root.append(node('p', panel.result?.should_intervene === false ? '멘토 미개입' : '멘토 코칭'));
     if (panel.result?.should_intervene !== false) root.append(node('p', panel.result?.coaching || '', {class:'comparison-text'}));
   }
-  if (role === 'analysis' && ['ok', 'degraded', 'completed'].includes(panel.status) && panel.result?.report) {
+  if (role === 'analysis' && completedStatuses.includes(panel.status) && panel.result?.report) {
     const result = node('div', null, {'data-comparison':'true'});
     root.append(result);
     window.showAnalysisResult(result, {accepted_report:panel.result.report, latest_run:{status:panel.status},

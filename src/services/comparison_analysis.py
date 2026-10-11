@@ -10,11 +10,12 @@ from src.services.analysis_plan import (
     ESTIMATOR_VERSION,
     FORMULA,
     analysis_prompt,
+    estimate_output,
     estimate_request,
     thinking_reserve,
 )
 from src.services.analysis_statistics import analysis_statistics
-from src.services.comparison_state import utcnow
+from src.services.comparison_state import draft_title, utcnow
 from src.services.context_budget import input_budget
 from src.services.invocation_types import InvocationError, StructuredRequest
 from src.services.lesson_snapshots import ScenarioContext
@@ -37,7 +38,7 @@ def analysis_comparison_request(
     snapshot = SimpleNamespace(
         config=source.config,
         scenario_context=ScenarioContext(
-            title=source.title.strip() or "제목 없는 초안",
+            title=draft_title(source.title),
             subject=source.subject,
             target_grade=source.target_grade,
         ),
@@ -70,11 +71,7 @@ def analysis_comparison_request(
         cap,
     )
     estimated_input = estimate_request(request)
-    estimated_output = (
-        1200
-        + sum(160 if m["role"] == "teacher" else 120 for m in messages)
-        + thinking
-    )
+    estimated_output = estimate_output(messages, thinking)
     if estimated_input > budget or estimated_output > cap:
         raise InvocationError("context_limit")
     return replace(

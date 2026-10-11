@@ -8,6 +8,28 @@ from sqlalchemy import select
 
 from src.models import ApiUsageLog, ComparisonRun, GenerationRun, Scenario
 
+COMPLETED_STATUSES = frozenset({"completed", "ok", "degraded"})
+
+
+def draft_title(title):
+    return title.strip() or "제목 없는 초안"
+
+
+def find_panel(snapshot, panel_id):
+    panel = next(
+        (item for item in snapshot["panels"] if item["panel_id"] == panel_id),
+        None,
+    )
+    if panel is None:
+        raise HTTPException(404, detail={"code": "panel_not_found"})
+    return panel
+
+
+def comparison_busy(snapshot):
+    return snapshot["status"] == "running" or any(
+        panel["status"] == "running" for panel in snapshot["panels"]
+    )
+
 
 def utcnow():
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -91,11 +113,9 @@ async def comparison_snapshot(db, comparison):
             if comparison.target_role in ("mentor", "analysis"):
                 attempts[-1]["result"] = outcome.get("result")
             if comparison.target_role == "analysis":
+                report = (outcome.get("result") or {}).get("report") or {}
                 attempts[-1].update(
-                    outcome_status=run.status,
-                    coverage=outcome.get("result", {})
-                    .get("report", {})
-                    .get("coverage"),
+                    outcome_status=run.status, coverage=report.get("coverage")
                 )
         panels.append({**attempts[-1], "attempts": attempts[:-1]})
     return dict(

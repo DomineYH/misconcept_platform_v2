@@ -20,11 +20,29 @@ from src.api.schemas.scenario_config import ResolvedModelConfig
 from src.models import User
 from src.services.comparison_history import delete_comparison, list_comparisons
 from src.services.comparison_runs import reserve_comparison
-from src.services.comparison_state import comparison_snapshot, owned_comparison
+from src.services.comparison_state import (
+    comparison_busy,
+    comparison_snapshot,
+    find_panel,
+    owned_comparison,
+)
 from src.services.comparison_stop import stop_comparison
-from src.services.comparison_stream import comparison_response
+from src.services.comparison_stream import ComparisonStreamingResponse
 from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
+
+PanelId = Annotated[
+    str, Path(min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$")
+]
+
+
+async def comparison_factory(db):
+    factory = async_sessionmaker(
+        db.bind, expire_on_commit=False, autoflush=False
+    )
+    await db.close()
+    return factory
+
 
 router = APIRouter(tags=["Admin Comparisons"], route_class=ComparisonRoute)
 
@@ -44,23 +62,15 @@ async def comparison_history(
 @router.get("/admin/comparisons/{comparison_id}/panels/{panel_id}/model")
 async def comparison_model(
     comparison_id: UUID,
-    panel_id: Annotated[
-        str, Path(min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$")
-    ],
+    panel_id: PanelId,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     comparison = await owned_comparison(db, str(comparison_id), user.id)
     snapshot = await comparison_snapshot(db, comparison)
-    if comparison.status == "running" or any(
-        panel["status"] == "running" for panel in snapshot["panels"]
-    ):
+    if comparison_busy(snapshot):
         raise HTTPException(409, detail={"code": "comparison_busy"})
-    panel = next(
-        (p for p in snapshot["panels"] if p["panel_id"] == panel_id), None
-    )
-    if panel is None:
-        raise HTTPException(404, detail={"code": "panel_not_found"})
+    panel = find_panel(snapshot, panel_id)
     try:
         selection = ResolvedModelConfig.model_validate(panel["model_config"])
         await resolve_frozen_model(db, selection, comparison.target_role)
@@ -83,36 +93,28 @@ async def start_comparison(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    factory = async_sessionmaker(
-        db.bind, expire_on_commit=False, autoflush=False
-    )
-    await db.close()
+    factory = await comparison_factory(db)
     snapshot, execution = await reserve_comparison(factory, user, body)
     if execution is None:
         return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
-    return comparison_response(factory, snapshot, execution)
+    return ComparisonStreamingResponse(factory, snapshot, execution)
 
 
 @router.post("/admin/comparisons/{comparison_id}/panels/{panel_id}/retry")
 async def retry_panel(
     comparison_id: UUID,
-    panel_id: Annotated[
-        str, Path(min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$")
-    ],
+    panel_id: PanelId,
     body: ComparisonRetry,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    factory = async_sessionmaker(
-        db.bind, expire_on_commit=False, autoflush=False
-    )
-    await db.close()
+    factory = await comparison_factory(db)
     snapshot, execution = await reserve_comparison(
         factory, user, body, comparison_id=str(comparison_id), panel_id=panel_id
     )
     if execution is None:
         return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
-    return comparison_response(factory, snapshot, execution)
+    return ComparisonStreamingResponse(factory, snapshot, execution)
 
 
 @router.get("/admin/comparisons/{comparison_id}")
@@ -141,17 +143,12 @@ async def remove_comparison(
 @router.post("/admin/comparisons/{comparison_id}/panels/{panel_id}/stop")
 async def stop_panel(
     comparison_id: UUID,
-    panel_id: Annotated[
-        str, Path(min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$")
-    ],
+    panel_id: PanelId,
     body: ComparisonStopGeneration,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    factory = async_sessionmaker(
-        db.bind, expire_on_commit=False, autoflush=False
-    )
-    await db.close()
+    factory = await comparison_factory(db)
     return JSONResponse(
         await stop_comparison(
             factory,
@@ -174,10 +171,7 @@ async def stop_all(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    factory = async_sessionmaker(
-        db.bind, expire_on_commit=False, autoflush=False
-    )
-    await db.close()
+    factory = await comparison_factory(db)
     return JSONResponse(
         await stop_comparison(
             factory,

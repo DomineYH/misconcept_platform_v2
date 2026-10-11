@@ -13,6 +13,7 @@ from src.services.call_admission import recheck_call
 from src.services.call_execution import execute_call
 from src.services.comparison_analysis import analysis_comparison_result
 from src.services.comparison_runs import finish_comparison
+from src.services.comparison_state import COMPLETED_STATUSES, find_panel
 from src.services.generation_lifecycle import active_runs
 from src.services.invocation_types import InvocationError
 from src.services.student_stream import (
@@ -23,10 +24,6 @@ from src.services.student_stream import (
 logger = logging.getLogger(__name__)
 
 
-def comparison_response(factory, snapshot, executions):
-    return ComparisonStreamingResponse(factory, snapshot, executions)
-
-
 class ComparisonStreamingResponse(StreamingResponse):
     def __init__(self, factory, snapshot, executions):
         self.factory = factory
@@ -34,11 +31,7 @@ class ComparisonStreamingResponse(StreamingResponse):
         self.ready = asyncio.Event()
         self.queue = asyncio.Queue(maxsize=len(executions))
         for execution in executions:
-            panel = next(
-                panel
-                for panel in snapshot["panels"]
-                if panel["panel_id"] == execution["panel_id"]
-            )
+            panel = find_panel(snapshot, execution["panel_id"])
             accepted = dict(
                 **snapshot,
                 run_id=panel["run_id"],
@@ -190,11 +183,7 @@ def sse_frame(accepted, kind, seq, **data):
 
 
 def accepted_fields(accepted):
-    panel = next(
-        panel
-        for panel in accepted["panels"]
-        if panel["panel_id"] == accepted["panel_id"]
-    )
+    panel = find_panel(accepted, accepted["panel_id"])
     return dict(
         request_id=accepted["request_id"],
         context_hash=accepted["context_hash"],
@@ -209,11 +198,7 @@ def accepted_fields(accepted):
 
 
 def terminal_frame(accepted, snapshot, seq):
-    panel = next(
-        panel
-        for panel in snapshot["panels"]
-        if panel["panel_id"] == accepted["panel_id"]
-    )
+    panel = find_panel(snapshot, accepted["panel_id"])
     state = next(
         attempt
         for attempt in [panel, *panel["attempts"]]
@@ -224,7 +209,7 @@ def terminal_frame(accepted, snapshot, seq):
         accepted,
         (
             "output.completed"
-            if state["status"] in {"completed", "ok", "degraded"}
+            if state["status"] in COMPLETED_STATUSES
             else f"run.{state['status']}"
         ),
         seq,

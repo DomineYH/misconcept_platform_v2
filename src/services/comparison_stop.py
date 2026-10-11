@@ -6,6 +6,7 @@ from sqlalchemy import text
 from src.models import GenerationRun
 from src.services.comparison_state import (
     comparison_snapshot,
+    find_panel,
     owned_comparison,
     utcnow,
 )
@@ -20,11 +21,8 @@ async def stop_comparison(
         await db.execute(text("BEGIN IMMEDIATE"))
         comparison = await owned_comparison(db, comparison_id, owner_id)
         snapshot = await comparison_snapshot(db, comparison)
-        panels = {panel["panel_id"]: panel for panel in snapshot["panels"]}
         for target in targets:
-            panel = panels.get(target.panel_id)
-            if panel is None:
-                raise HTTPException(404, detail={"code": "panel_not_found"})
+            panel = find_panel(snapshot, target.panel_id)
             if panel["run_id"] != str(target.generation_id):
                 conflict("stale_generation")
         requested = {str(target.generation_id) for target in targets}

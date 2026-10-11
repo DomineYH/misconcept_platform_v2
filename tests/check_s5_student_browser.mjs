@@ -53,5 +53,49 @@ try {
     assert((await page.locator('#scenario-comparison').innerText()).includes(state.context_hash));
     assert.equal(await page.getByLabel('학생 현재 질문').inputValue(),'Same full context?');
   }
+  const p1 = page.getByRole('article',{name:'패널 1',exact:true});
+  const p2 = page.getByRole('article',{name:'패널 2',exact:true});
+  const p3 = page.getByRole('article',{name:'패널 3',exact:true});
+  async function configure(count, stalled) {
+    await page.getByRole('button',{name:'비교 입력 초기화',exact:true}).click();
+    const model = await page.getByLabel('패널 1 제공자 / 모델',{exact:true}).inputValue();
+    for (let i = 2; i <= count; i++) {
+      await page.getByRole('button',{name:'패널 추가',exact:true}).click();
+      await page.getByLabel(`패널 ${i} 제공자 / 모델`,{exact:true}).selectOption(model);
+    }
+    for (let i = 1; i <= count; i++) await page.getByLabel(`패널 ${i} 최대 출력 토큰`,{exact:true}).fill(String(stalled ? 1799+i : 1500));
+    await page.getByLabel('학생 현재 질문').fill('Concurrent comparison');
+    await page.getByRole('button',{name:'비교 실행',exact:true}).click();
+  }
+  await configure(3,true);
+  await p1.getByText('Fast final',{exact:true}).waitFor();
+  await p2.getByText('Panel 2 partial',{exact:true}).waitFor();
+  await p3.getByText('Panel 3 partial',{exact:true}).waitFor();
+  assert(await p1.getByText('완료',{exact:true}).isVisible());
+  assert(await p2.getByText('스트리밍',{exact:true}).isVisible());
+  assert(await page.getByRole('button',{name:'비교 실행',exact:true}).isDisabled());
+  await p2.getByRole('button',{name:'패널 중지',exact:true}).click();
+  await p2.getByText('취소',{exact:true}).waitFor();
+  assert(await p2.getByText('Panel 2 partial',{exact:true}).isVisible());
+  assert(await p3.getByText('Panel 3 partial',{exact:true}).isVisible());
+  assert(await p3.getByText('스트리밍',{exact:true}).isVisible());
+  await page.getByRole('button',{name:'전체 중지',exact:true}).click();
+  await p3.getByText('취소',{exact:true}).waitFor();
+  assert(await p3.getByText('Panel 3 partial',{exact:true}).isVisible());
+  assert(await p1.getByText('Fast final',{exact:true}).isVisible());
+  assert(await page.getByRole('button',{name:'비교 실행',exact:true}).isEnabled());
+  await configure(2,false);
+  await p1.getByText('완료',{exact:true}).waitFor();
+  await p2.getByText('완료',{exact:true}).waitFor();
+  await configure(3,true);
+  await p1.getByText('Fast final',{exact:true}).waitFor();
+  await p2.getByText('Panel 2 partial',{exact:true}).waitFor();
+  await p3.getByText('Panel 3 partial',{exact:true}).waitFor();
+  await page.reload();
+  // Wait for the server's disconnect cleanup, without a product recovery poll.
+  const replay = await page.request.post(`${base}/admin/comparisons`,{data:requests.at(-1),headers:{'x-csrf-token':await page.evaluate(() => document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)[1])}});
+  const recovered = await replay.json();
+  assert.equal(recovered.status,'finished');
+  assert.deepEqual(recovered.panels.map(panel => panel.status),['completed','interrupted','interrupted']);
   assert.deepEqual(errors,[]);
 } finally { await browser.close(); }

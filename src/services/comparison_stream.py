@@ -7,6 +7,7 @@ from contextlib import aclosing, suppress
 from datetime import datetime, timezone
 
 import anyio
+from starlette.responses import StreamingResponse
 
 from src.services.call_admission import recheck_call
 from src.services.call_execution import execute_call
@@ -16,30 +17,191 @@ from src.services.invocation_types import InvocationError
 from src.services.student_stream import (
     CLEANUP_SECONDS,
     HEARTBEAT_SECONDS,
-    StudentStreamingResponse,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def comparison_response(factory, snapshot, execution):
-    panel = snapshot["panels"][0]
-    accepted = dict(
-        **snapshot,
-        run_id=panel["run_id"],
-        panel_id=panel["panel_id"],
-        turn_id=panel["turn_id"],
+def comparison_response(factory, snapshot, executions):
+    return ComparisonStreamingResponse(factory, snapshot, executions)
+
+
+class ComparisonStreamingResponse(StreamingResponse):
+    def __init__(self, factory, snapshot, executions):
+        self.factory = factory
+        self.children = []
+        self.ready = asyncio.Event()
+        self.queue = asyncio.Queue(maxsize=len(executions))
+        for panel, execution in zip(snapshot["panels"], executions):
+            accepted = dict(
+                **snapshot,
+                run_id=panel["run_id"],
+                panel_id=panel["panel_id"],
+                turn_id=panel["turn_id"],
+            )
+            cancelled = active_runs[panel["run_id"]] = asyncio.Event()
+            child = dict(accepted=accepted, execution=execution, seq=0)
+            child["task"] = asyncio.create_task(self.forward(child, cancelled))
+            execution["permit"].task = child["task"]
+            self.children.append(child)
+        super().__init__(
+            self.multiplex(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store, no-transform",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    async def forward(self, child, cancelled):
+        await self.ready.wait()
+        async with aclosing(
+            stream_comparison(
+                self.factory, child["accepted"], child["execution"], cancelled
+            )
+        ) as events:
+            async for frame in events:
+                await self.queue.put(frame)
+                if frame.startswith("event:"):
+                    child["seq"] += 1
+
+    async def multiplex(self):
+        self.ready.set()
+        pending = {child["task"] for child in self.children}
+        reading = None
+        try:
+            while (
+                pending
+                or not self.queue.empty()
+                or (reading is not None and reading.done())
+            ):
+                if reading is None:
+                    reading = asyncio.create_task(self.queue.get())
+                done, _ = await asyncio.wait(
+                    pending | {reading},
+                    timeout=HEARTBEAT_SECONDS,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if reading in done:
+                    yield reading.result()
+                    reading = None
+                elif not done:
+                    yield ": ping\n\n"
+                for child in self.children:
+                    task = child["task"]
+                    if task not in done:
+                        continue
+                    pending.discard(task)
+                    child["execution"]["permit"].release()
+                    active_runs.pop(child["accepted"]["run_id"], None)
+                    if task.cancelled() or task.exception() is not None:
+                        accepted = child["accepted"]
+                        result = await finish_comparison(
+                            self.factory,
+                            accepted["run_id"],
+                            status="interrupted",
+                            error_code="configuration_unavailable",
+                        )
+                        if child["seq"] == 0:
+                            yield sse_frame(
+                                accepted,
+                                "run.accepted",
+                                0,
+                                **accepted_fields(accepted),
+                            )
+                            child["seq"] = 1
+                        yield terminal_frame(accepted, result, child["seq"])
+        finally:
+            if reading is not None:
+                reading.cancel()
+                with suppress(asyncio.CancelledError):
+                    await reading
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            with anyio.CancelScope(shield=True):
+                with anyio.move_on_after(CLEANUP_SECONDS):
+                    for child in self.children:
+                        child["task"].cancel()
+                    await asyncio.gather(
+                        *(child["task"] for child in self.children),
+                        return_exceptions=True,
+                    )
+                    await self.body_iterator.aclose()
+                    for child in self.children:
+                        run_id = child["accepted"]["run_id"]
+                        if active_runs.pop(run_id, None) is not None:
+                            try:
+                                await finish_comparison(
+                                    self.factory,
+                                    run_id,
+                                    status="interrupted",
+                                    error_code="disconnected",
+                                )
+                            except Exception:
+                                logger.error(
+                                    "Unable to record unsent comparison"
+                                )
+                for child in self.children:
+                    active_runs.pop(child["accepted"]["run_id"], None)
+                    child["execution"]["permit"].release()
+
+
+def sse_frame(accepted, kind, seq, **data):
+    payload = dict(
+        comparison_run_id=accepted["comparison_run_id"],
+        panel_id=accepted["panel_id"],
+        run_id=accepted["run_id"],
+        turn_id=accepted["turn_id"],
+        seq=seq,
+        **data,
     )
-    return StudentStreamingResponse(
-        factory,
+    return f"event: {kind}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def accepted_fields(accepted):
+    panel = next(
+        panel
+        for panel in accepted["panels"]
+        if panel["panel_id"] == accepted["panel_id"]
+    )
+    return dict(
+        request_id=accepted["request_id"],
+        context_hash=accepted["context_hash"],
+        source_snapshot=accepted["source_snapshot"],
+        canonical_context=accepted["canonical_context"],
+        current_message_id=accepted["current_message_id"],
+        created_at=accepted["created_at"],
+        expires_at=accepted["expires_at"],
+        model_config=panel["model_config"],
+    )
+
+
+def terminal_frame(accepted, snapshot, seq):
+    state = next(
+        panel
+        for panel in snapshot["panels"]
+        if panel["panel_id"] == accepted["panel_id"]
+    )
+    return sse_frame(
         accepted,
-        execution,
-        stream_generator=stream_comparison,
-        finisher=finish_comparison,
+        (
+            "output.completed"
+            if state["status"] == "completed"
+            else f"run.{state['status']}"
+        ),
+        seq,
+        **{
+            key: value
+            for key, value in state.items()
+            if key not in ("run_id", "panel_id", "turn_id")
+        },
     )
 
 
-async def stream_comparison(factory, accepted, execution, started, cancelled):
+async def stream_comparison(factory, accepted, execution, cancelled):
     seq, partial, first_output = 0, "", None
     task = reading = None
     queue = asyncio.Queue(maxsize=1)
@@ -49,16 +211,9 @@ async def stream_comparison(factory, accepted, execution, started, cancelled):
 
     def frame(kind, **data):
         nonlocal seq
-        payload = dict(
-            comparison_run_id=accepted["comparison_run_id"],
-            panel_id=accepted["panel_id"],
-            run_id=accepted["run_id"],
-            turn_id=accepted["turn_id"],
-            seq=seq,
-            **data,
-        )
+        value = sse_frame(accepted, kind, seq, **data)
         seq += 1
-        return f"event: {kind}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        return value
 
     async def finish(status, **data):
         return await finish_comparison(
@@ -67,21 +222,6 @@ async def stream_comparison(factory, accepted, execution, started, cancelled):
             status=status,
             first_output_at=first_output,
             **data,
-        )
-
-    def terminal_frame(snapshot):
-        state = snapshot["panels"][0]
-        return frame(
-            (
-                "output.completed"
-                if state["status"] == "completed"
-                else f"run.{state['status']}"
-            ),
-            **{
-                key: value
-                for key, value in state.items()
-                if key not in ("run_id", "panel_id", "turn_id")
-            },
         )
 
     async def produce():
@@ -101,17 +241,7 @@ async def stream_comparison(factory, accepted, execution, started, cancelled):
                 await queue.put(event)
 
     try:
-        yield frame(
-            "run.accepted",
-            request_id=accepted["request_id"],
-            context_hash=accepted["context_hash"],
-            source_snapshot=accepted["source_snapshot"],
-            canonical_context=accepted["canonical_context"],
-            current_message_id=accepted["current_message_id"],
-            created_at=accepted["created_at"],
-            expires_at=accepted["expires_at"],
-            model_config=accepted["panels"][0]["model_config"],
-        )
+        yield frame("run.accepted", **accepted_fields(accepted))
         task = asyncio.create_task(produce())
         while True:
             reading = asyncio.create_task(queue.get())
@@ -122,7 +252,18 @@ async def stream_comparison(factory, accepted, execution, started, cancelled):
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if cancellation in done:
-                    raise asyncio.CancelledError
+                    closing = True
+                    task.cancel()
+                    with suppress(asyncio.CancelledError, Exception):
+                        await task
+                    result = await finish(
+                        "cancelled",
+                        partial_text=partial or None,
+                        error_code="stopped",
+                    )
+                    terminal = True
+                    yield terminal_frame(accepted, result, seq)
+                    return
                 if reading in done:
                     break
                 if task in done:
@@ -148,7 +289,7 @@ async def stream_comparison(factory, accepted, execution, started, cancelled):
                     provider_request_id=event.provider_request_id,
                 )
                 terminal = True
-                yield terminal_frame(result)
+                yield terminal_frame(accepted, result, seq)
                 return
             elif event.type not in ("usage", "text_delta"):
                 result = await finish(
@@ -157,7 +298,7 @@ async def stream_comparison(factory, accepted, execution, started, cancelled):
                     error_code=event.error_code or "provider_error",
                 )
                 terminal = True
-                yield terminal_frame(result)
+                yield terminal_frame(accepted, result, seq)
                 return
     except asyncio.CancelledError:
         raise
@@ -173,7 +314,7 @@ async def stream_comparison(factory, accepted, execution, started, cancelled):
                 ),
             )
             terminal = True
-            yield terminal_frame(result)
+            yield terminal_frame(accepted, result, seq)
         except Exception:
             logger.error("Comparison finalization failed")
             yield frame("run.failed", error_code="storage_error")

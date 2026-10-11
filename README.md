@@ -268,13 +268,25 @@ S5-02 (#92) connects student single-panel comparisons to `POST /admin/comparison
 comparison runs and usage from classroom records. Current draft inputs and all
 completed history pairs are frozen without saving a scenario; validation and
 admission refusals make no provider calls or execution records. Replay returns
-stored JSON, and comparison calls never automatically retry. Only student,
-one-panel starts are accepted in this slice; multi-panel execution, stop/retry
-APIs, other roles and history management are later tickets. The existing shared
+stored JSON, and comparison calls never automatically retry. Only student
+starts are accepted; retry APIs, other roles and history management are later
+tickets. The existing shared
 `readSSE` transport renders the real student events.
+S5-03 (#93) adds 2–3 concurrent panels with atomic all-panel admission and one
+active comparison per administrator. Insufficient shared total/provider/admin
+capacity returns 429 with `Retry-After: 1`, without new records or provider calls.
+The single POST SSE multiplexes per-generation sequence numbers and a common
+turn/context identity. Each child owns its permit and opens independent database
+sessions. A failed or revoked child leaves its siblings running; disconnect
+interrupts only unfinished children and preserves committed results.
+`POST /admin/comparisons/{id}/panels/{panel_id}/stop` accepts `generation_id`;
+`POST /admin/comparisons/{id}/stop` accepts `generations` containing each remaining
+`panel_id` and `generation_id`. Both require the owner administrator and CSRF,
+reject stale generations, and preserve completed results.
 `npm run test:browser -- s5_student_live` rehearses unsaved/saved forms,
-login/CSRF, real SSE, safe output
-and GET/replay recovery with temporary migrated SQLite and mocked provider HTTP.
+login/CSRF, 1–3 panels, real SSE, independent/all stop, reload interruption,
+safe output and GET/replay recovery with temporary migrated SQLite and mocked
+provider HTTP.
 No production success fixtures or paid calls are used.
 
 The original GitHub commit remains an ancestor. The application baseline is the

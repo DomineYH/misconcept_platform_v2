@@ -1,4 +1,4 @@
-"""Bounded editor inputs for a student single-panel comparison."""
+"""Bounded editor inputs for a student comparison."""
 
 from typing import Annotated, Literal
 from uuid import UUID
@@ -55,13 +55,35 @@ class ComparisonPanel(ConfigValue):
     selection: ResolvedModelConfig = Field(alias="model_config")
 
 
+class ComparisonStopGeneration(ConfigValue):
+    generation_id: UUID = Field(strict=False)
+
+
+class ComparisonStopTarget(ComparisonStopGeneration):
+    panel_id: str = Field(
+        min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$"
+    )
+
+
+class ComparisonStop(ConfigValue):
+    generations: list[ComparisonStopTarget] = Field(min_length=1, max_length=3)
+
+    @model_validator(mode="after")
+    def distinct_panels(self):
+        if len({target.panel_id for target in self.generations}) != len(
+            self.generations
+        ):
+            raise ValueError("duplicate_panel")
+        return self
+
+
 class ComparisonRequest(ConfigValue):
     request_id: str
     target_role: Literal["student"]
     source_snapshot: ComparisonSource
     canonical_context: list[ComparisonMessage] = Field(max_length=199)
     current_message: str = Field(min_length=1, max_length=50000)
-    panels: list[ComparisonPanel] = Field(min_length=1, max_length=1)
+    panels: list[ComparisonPanel] = Field(min_length=1, max_length=3)
     parent_run_id: str | None = None
 
     @field_validator("request_id", "parent_run_id")
@@ -76,6 +98,8 @@ class ComparisonRequest(ConfigValue):
 
     @model_validator(mode="after")
     def complete_pairs(self):
+        if len({panel.panel_id for panel in self.panels}) != len(self.panels):
+            raise ValueError("duplicate_panel")
         if len(self.canonical_context) % 2 or any(
             item.role != ("teacher" if index % 2 == 0 else "student")
             for index, item in enumerate(self.canonical_context)

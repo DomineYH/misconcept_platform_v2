@@ -167,7 +167,7 @@ export function mountComparison(data, draft) {
     if (reset) reset.disabled = running;
     start.disabled = running || panels.length === 0;
     addPanel.disabled = running || panels.length >= 3;
-    stop.disabled = !run?.panels.some(p => active(p.status));
+    stop.disabled = !run?.panels.some(p => active(p.status)) || run.panels.some(p => active(p.status) && !p.run_id);
     refresh.disabled = !run || submitting;
     for (const panel of panels) panel.settings.disabled = running;
     for (const input of document.querySelectorAll('#scenario-form input, #scenario-form textarea, #scenario-form select, #scenario-form button')) {
@@ -241,8 +241,14 @@ export function mountComparison(data, draft) {
     errors.focus();
   }
   function applySnapshot(snapshot) {
-    run = snapshot;
-    for (const state of run.panels) state.lastSeq = state.seq ?? -1;
+    for (const state of snapshot.panels) {
+      const prior = run?.comparison_run_id === snapshot.comparison_run_id && run.panels.find(p => p.panel_id === state.panel_id && p.run_id === state.run_id);
+      state.lastSeq = prior?.lastSeq ?? state.seq ?? -1;
+      if (prior?.status === 'streaming' && state.status === 'running') state.status = 'streaming';
+      if (!state.text && prior?.text && (active(state.status) || state.status === 'cancelled')) state.text = prior.text;
+    }
+    if (run?.comparison_run_id === snapshot.comparison_run_id) Object.assign(run, snapshot);
+    else run = snapshot;
     sync();
   }
   function event(type, value) {
@@ -258,7 +264,7 @@ export function mountComparison(data, draft) {
       }
       if (value.model_config) state.model_config = value.model_config;
     }
-    if (value.run_id !== state.run_id || !active(state.status) || value.seq <= (state.lastSeq ?? -1)) return;
+    if (value.run_id !== state.run_id || (!active(state.status) && !(state.status === 'cancelled' && type === 'run.cancelled')) || value.seq <= (state.lastSeq ?? -1)) return;
     state.lastSeq = value.seq;
     if (type === 'run.accepted') Object.assign(state, {status:'running'});
     else if (type === 'output.delta' && run.target_role === 'student') { state.text += value.text || ''; state.status = 'streaming'; }

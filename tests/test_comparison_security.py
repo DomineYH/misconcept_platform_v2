@@ -30,6 +30,7 @@ __all__ = ["client", "comparison", "scenario_payload", "student"]
         "long_text",
         "unsupported_role",
         "many_panels",
+        "duplicate_panels",
     ],
 )
 async def test_invalid_comparison_is_zero_calls_and_zero_runs(
@@ -53,9 +54,12 @@ async def test_invalid_comparison_is_zero_calls_and_zero_runs(
     elif change == "unsupported_role":
         comparison["target_role"] = "analysis"
     elif change == "many_panels":
-        comparison["panels"].append(
-            {**comparison["panels"][0], "panel_id": "2"}
+        comparison["panels"].extend(
+            {**comparison["panels"][0], "panel_id": str(index)}
+            for index in (2, 3, 4)
         )
+    elif change == "duplicate_panels":
+        comparison["panels"].append(comparison["panels"][0])
     response = await client.post("/admin/comparisons", json=comparison)
     assert response.status_code == 422, response.text
     assert "PRIVATE ANALYSIS" not in response.text
@@ -207,3 +211,72 @@ async def test_comparison_live_preflight_refuses_without_writes(
         assert (
             await db.scalar(select(func.count()).select_from(ApiUsageLog)) == 0
         )
+
+
+@pytest.mark.parametrize("kind", ["panel", "all"])
+async def test_stop_requires_owner_admin_csrf_current_generation_and_live_record(
+    data, client, student, comparison, kind
+):
+    import httpx
+    from starlette_csrf import CSRFMiddleware
+
+    from src.config import config
+    from src.main import app
+
+    login(client, data.admin)
+    result = await client.post("/admin/comparisons", json=comparison)
+    accepted = frames(result)[0][1]
+    path = f"/admin/comparisons/{accepted['comparison_run_id']}"
+    url = f"{path}/panels/1/stop" if kind == "panel" else f"{path}/stop"
+    target = {"panel_id": "1", "generation_id": accepted["run_id"]}
+    body = (
+        {"generation_id": accepted["run_id"]}
+        if kind == "panel"
+        else {"generations": [target]}
+    )
+    client.cookies.clear()
+    assert (await client.post(url, json=body)).status_code == 401
+    login(client, data.owner)
+    assert (await client.post(url, json=body)).status_code == 403
+    data.other.role = "admin"
+    await data.db.commit()
+    login(client, data.other)
+    assert (await client.post(url, json=body)).status_code == 404
+    login(client, data.admin)
+    assert (
+        await client.post(url, json={**body, "owner_id": data.other.id})
+    ).status_code == 422
+    if kind == "panel":
+        assert (
+            await client.post(f"{path}/panels/missing/stop", json=body)
+        ).status_code == 404
+        assert (
+            await client.post(f"{path}/panels/invalid%20id/stop", json=body)
+        ).status_code == 422
+    else:
+        assert (
+            await client.post(url, json={"generations": [target, target]})
+        ).status_code == 422
+    protected = CSRFMiddleware(
+        app, secret=config.SESSION_SECRET, header_name="x-csrf-token"
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=protected), base_url="http://test"
+    ) as secured:
+        login(secured, data.admin)
+        await secured.get(path)
+        assert (await secured.post(url, json=body)).status_code == 403
+        secured.headers["x-csrf-token"] = secured.cookies["csrftoken"]
+        stopped = await secured.post(url, json=body)
+        assert stopped.status_code == 200
+        assert stopped.headers["Cache-Control"] == "no-store"
+        assert stopped.json()["panels"][0]["status"] == "completed"
+        assert stopped.json()["panels"][0]["text"] == "Student answer"
+    async with data.factory() as db:
+        from datetime import timedelta
+
+        record = await db.get(ComparisonRun, accepted["comparison_run_id"])
+        record.expires_at = record.created_at - timedelta(seconds=1)
+        await db.commit()
+    assert (await client.post(url, json=body)).status_code == 404
+    student.responses.create.assert_awaited_once()

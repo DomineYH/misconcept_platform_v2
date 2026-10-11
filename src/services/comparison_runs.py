@@ -104,7 +104,6 @@ async def reserve_comparison(factory, user, body):
             ]
             if errors:
                 input_error("required", errors[0]["path"])
-            panel = body.panels[0]
             history = [
                 dict(id=index + 1, **message.model_dump())
                 for index, message in enumerate(body.canonical_context)
@@ -114,90 +113,138 @@ async def reserve_comparison(factory, user, body):
                 body.current_message,
                 history,
             )
-            if (
-                capabilities(panel.selection.provider, panel.selection.model_id)
-                is not None
-            ):
+            prepared = []
+            for panel in body.panels:
+                if (
+                    capabilities(
+                        panel.selection.provider, panel.selection.model_id
+                    )
+                    is not None
+                ):
+                    try:
+                        validate_model_and_options(
+                            panel.selection.provider,
+                            panel.selection.model_id,
+                            panel.selection.options.model_dump(
+                                exclude_unset=True
+                            ),
+                        )
+                    except ValueError:
+                        input_error(
+                            "invalid_options", "model_config", panel.panel_id
+                        )
                 try:
-                    validate_model_and_options(
-                        panel.selection.provider,
-                        panel.selection.model_id,
-                        panel.selection.options.model_dump(exclude_unset=True),
+                    connection, model, options = await resolve_frozen_model(
+                        db, panel.selection, "student"
                     )
-                except ValueError:
-                    input_error(
-                        "invalid_options", "model_config", panel.panel_id
+                    call = TextRequest(
+                        connection.provider,
+                        model.model_id,
+                        "student",
+                        messages[0]["content"],
+                        messages[1:],
+                        options,
+                        body.request_id,
                     )
-            try:
-                connection, model, options = await resolve_frozen_model(
-                    db, panel.selection, "student"
-                )
-                call = TextRequest(
-                    connection.provider,
-                    model.model_id,
-                    "student",
-                    messages[0]["content"],
-                    messages[1:],
-                    options,
-                    body.request_id,
-                )
-                budget, reserve, version = input_budget(call)
-                applied = provider_parameters(call)
-                if connection.provider == "google":
-                    applied = applied["config"]
-                applied = {
-                    key: value
-                    for key, value in applied.items()
-                    if key
-                    in {
-                        "max_output_tokens",
-                        "max_tokens",
-                        "temperature",
-                        "reasoning",
-                        "thinking",
-                        "thinking_config",
-                        "output_config",
-                        "extra_body",
+                    budget, reserve, version = input_budget(call)
+                    applied = provider_parameters(call)
+                    if connection.provider == "google":
+                        applied = applied["config"]
+                    applied = {
+                        key: value
+                        for key, value in applied.items()
+                        if key
+                        in {
+                            "max_output_tokens",
+                            "max_tokens",
+                            "temperature",
+                            "reasoning",
+                            "thinking",
+                            "thinking_config",
+                            "output_config",
+                            "extra_body",
+                        }
                     }
-                }
-                estimate = estimate_input(call)
-                if estimate > budget:
-                    input_error("context_limit", "history", panel.panel_id)
-                call = replace(
-                    call,
-                    context_budget_json=dict(
-                        estimator="utf8-v1",
-                        estimated_input_tokens=estimate,
-                        input_budget_tokens=budget,
-                        reserved_output_tokens=reserve,
-                        selected_prior_pairs=len(history) // 2,
-                        kept_prior_pairs=len(history) // 2,
-                        dropped_prior_pairs=0,
-                        capability_definition_version=version,
-                    ),
+                    estimate = estimate_input(call)
+                    if estimate > budget:
+                        input_error("context_limit", "history", panel.panel_id)
+                    call = replace(
+                        call,
+                        context_budget_json=dict(
+                            estimator="utf8-v1",
+                            estimated_input_tokens=estimate,
+                            input_budget_tokens=budget,
+                            reserved_output_tokens=reserve,
+                            selected_prior_pairs=len(history) // 2,
+                            kept_prior_pairs=len(history) // 2,
+                            dropped_prior_pairs=0,
+                            capability_definition_version=version,
+                        ),
+                    )
+                except InvocationError as error:
+                    if error.code == "invalid_options":
+                        input_error(error.code, "model_config", panel.panel_id)
+                    raise HTTPException(
+                        503, detail={"code": "configuration_unavailable"}
+                    ) from None
+                prepared.append(
+                    (panel, connection, model, options, call, applied, version)
                 )
-            except InvocationError as error:
-                if error.code == "invalid_options":
-                    input_error(error.code, "model_config", panel.panel_id)
-                raise HTTPException(
-                    503, detail={"code": "configuration_unavailable"}
-                ) from None
             setting = await db.get(AppSetting, 1)
             if setting is None:
                 raise HTTPException(
                     503, detail={"code": "configuration_unavailable"}
                 )
+            executions, frozen_panels = [], []
             try:
-                permit = approve_call(
-                    factory,
+                for (
+                    panel,
                     connection,
-                    setting,
-                    owner_id=user.id,
-                    operation="comparison_student",
-                    role="student",
-                    admin=True,
-                )
-            except InvocationError as error:
+                    model,
+                    options,
+                    call,
+                    applied,
+                    version,
+                ) in prepared:
+                    permit = approve_call(
+                        factory,
+                        connection,
+                        setting,
+                        owner_id=user.id,
+                        operation="comparison_student",
+                        role="student",
+                        admin=True,
+                    )
+                    permit.model_options = options
+                    permit.model_config_id = model.id
+                    permit.config_version = model.config_version
+                    permit.model_id = model.model_id
+                    permit.capability_version = (
+                        model.capability_definition_version
+                    )
+                    permit.contract_version = ROLE_CONTRACT_VERSIONS["student"]
+                    executions.append(dict(request=call, permit=permit))
+                    frozen_panels.append(
+                        dict(
+                            panel_id=panel.panel_id,
+                            model_config={
+                                **panel.selection.model_dump(),
+                                "options": options,
+                            },
+                            applied_options=applied,
+                            config_version=model.config_version,
+                            connection_version=connection.connection_version,
+                            capability_version=version,
+                            contract_version=permit.contract_version,
+                            prompt_version=PROMPT_VERSION,
+                            estimator_version="utf8-v1",
+                        )
+                    )
+            except BaseException as error:
+                for execution in executions:
+                    execution["permit"].release()
+                if not isinstance(error, InvocationError):
+                    raise
                 raise HTTPException(
                     429 if error.code == "call_limit_reached" else 503,
                     detail={"code": error.code},
@@ -207,30 +254,10 @@ async def reserve_comparison(factory, user, body):
                         else None
                     ),
                 ) from None
-            permit.model_options = options
-            permit.model_config_id = model.id
-            permit.config_version = model.config_version
-            permit.model_id = model.model_id
-            permit.capability_version = model.capability_definition_version
-            permit.contract_version = ROLE_CONTRACT_VERSIONS["student"]
             try:
                 frozen_source = source.model_dump()
                 frozen_source["title"] = (
                     source.title.strip() or "제목 없는 초안"
-                )
-                frozen_panel = dict(
-                    panel_id=panel.panel_id,
-                    model_config={
-                        **panel.selection.model_dump(),
-                        "options": options,
-                    },
-                    applied_options=applied,
-                    config_version=model.config_version,
-                    connection_version=connection.connection_version,
-                    capability_version=version,
-                    contract_version=permit.contract_version,
-                    prompt_version=PROMPT_VERSION,
-                    estimator_version="utf8-v1",
                 )
                 created = utcnow()
                 comparison = ComparisonRun(
@@ -252,7 +279,7 @@ async def reserve_comparison(factory, user, body):
                             target_role="student",
                         )
                     ),
-                    panel_configs=[frozen_panel],
+                    panel_configs=frozen_panels,
                     request_id=body.request_id,
                     input_hash=input_hash,
                     parent_run_id=body.parent_run_id,
@@ -262,34 +289,37 @@ async def reserve_comparison(factory, user, body):
                 )
                 db.add(comparison)
                 await db.flush()
-                run = GenerationRun(
-                    id=str(uuid4()),
-                    owner_id=user.id,
-                    comparison_run_id=comparison.id,
-                    panel_id=panel.panel_id,
-                    turn_id=str(uuid4()),
-                    operation="student",
-                    request_id=body.request_id,
-                    input_hash=input_hash,
-                    config_hash=digest(frozen_panel),
-                    provider=connection.provider,
-                    model=model.model_id,
-                    status="running",
-                    started_at=created,
-                )
-                db.add(run)
-                await db.flush()
+                turn_id = str(uuid4())
+                for frozen_panel, execution in zip(frozen_panels, executions):
+                    run = GenerationRun(
+                        id=str(uuid4()),
+                        owner_id=user.id,
+                        comparison_run_id=comparison.id,
+                        panel_id=frozen_panel["panel_id"],
+                        turn_id=turn_id,
+                        operation="student",
+                        request_id=body.request_id,
+                        input_hash=input_hash,
+                        config_hash=digest(frozen_panel),
+                        provider=execution["request"].provider,
+                        model=execution["request"].model_id,
+                        status="running",
+                        started_at=created,
+                    )
+                    db.add(run)
+                    await db.flush()
                 accepted = await comparison_snapshot(db, comparison)
                 await db.commit()
             except BaseException as error:
-                permit.release()
+                for execution in executions:
+                    execution["permit"].release()
                 await db.invalidate()
                 if isinstance(error, Exception):
                     raise HTTPException(
                         503, detail={"code": "storage_error"}
                     ) from None
                 raise
-            return accepted, dict(request=call, permit=permit)
+            return accepted, executions
 
 
 async def finish_comparison(
@@ -335,9 +365,16 @@ async def finish_comparison(
                 if status == "completed"
                 else None
             )
-            comparison.status = "finished"
+        elif run.status == "cancelled" and partial_text is not None:
+            # Stop commits the terminal first; the child still owns buffered text.
+            run.partial_text, run.first_output_at = (
+                partial_text,
+                first_output_at,
+            )
         await db.flush()
         result = await comparison_snapshot(db, comparison)
+        if all(panel["status"] != "running" for panel in result["panels"]):
+            comparison.status = result["status"] = "finished"
         try:
             await db.commit()
         except BaseException:

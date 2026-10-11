@@ -95,6 +95,7 @@ async def test_035_preserves_records_indexes_and_foreign_keys(tmp_path):
                 "INSERT INTO generation_run(id,owner_id,comparison_run_id,panel_id,turn_id,operation,request_id,input_hash,config_hash,provider,model,status,started_at) VALUES('new',1,'compare','1','turn','student','req','hash','hash','openai','model','running','2026-01-01')"
             )
         for sql in (
+            "INSERT INTO comparison_run(id,admin_id,target_role,mode,source_snapshot,source_hash,canonical_context,context_hash,panel_configs,request_id,input_hash,created_at,expires_at,status) VALUES('busy',1,'student','same_context','{}','hash','[]','ctx','[]','other','hash','2026-01-01','2026-01-31','running')",
             "UPDATE generation_run SET session_id=1 WHERE id='new'",
             "UPDATE generation_run SET panel_id=NULL WHERE id='new'",
             "UPDATE generation_run SET comparison_run_id=NULL WHERE id='new'",

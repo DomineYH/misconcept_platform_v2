@@ -37,7 +37,9 @@ async def check():
         from src.db.migrations.migrate import run_all_migrations
         from src.main import app
         from src.models import (
+            ApiUsageLog,
             ComparisonRun,
+            GenerationRun,
             Message,
             ModelConfig,
             ProviderConnection,
@@ -102,42 +104,61 @@ async def check():
             )
             db.add(saved)
             await db.commit()
-        calls = []
+        calls, clients, streams = [], [], []
 
         class MockStream(httpx2.AsyncByteStream):
+            def __init__(self, budget):
+                self.budget, self.closed = budget, False
+
             async def __aiter__(self):
                 yield sse(
                     "response.output_text.delta",
-                    delta="Live partial",
+                    delta=(
+                        f"Panel {self.budget - 1799} partial"
+                        if self.budget >= 1800
+                        else "Live partial"
+                    ),
                     sequence_number=0,
                     item_id="msg",
                     output_index=0,
                     content_index=0,
                 )
+                if self.budget in (1801, 1802):
+                    await asyncio.Event().wait()
                 await asyncio.sleep(0.5)
                 yield sse(
                     "response.completed",
                     response=response_body(
-                        'Live final <img src=x onerror="window.s5xss=1">'
+                        "Fast final"
+                        if self.budget == 1800
+                        else 'Live final <img src=x onerror="window.s5xss=1">'
                     ),
                     sequence_number=1,
                 )
 
+            async def aclose(self):
+                self.closed = True
+
         async def upstream(request):
-            calls.append(json.loads(request.content))
+            body = json.loads(request.content)
+            calls.append(body)
+            stream = MockStream(body["max_output_tokens"])
+            streams.append(stream)
             return httpx2.Response(
                 200,
                 headers={"Content-Type": "text/event-stream"},
-                stream=MockStream(),
+                stream=stream,
             )
 
         def sdk(**kwargs):
-            return AsyncOpenAI(
+            client = AsyncOpenAI(
                 **kwargs,
                 http_client=httpx2.AsyncClient(
                     transport=httpx2.MockTransport(upstream)
                 ),
             )
+            clients.append(client)
+            return client
 
         openai_generation.AsyncOpenAI = sdk
         original_connect = socket.socket.connect
@@ -181,7 +202,7 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            assert len(calls) == 2
+            assert len(calls) == 10
             assert all(call["stream"] and "text" not in call for call in calls)
             async with AsyncSessionLocal() as db:
                 assert (
@@ -200,10 +221,36 @@ async def check():
                     await db.scalar(
                         select(func.count()).select_from(ComparisonRun)
                     )
-                    == 2
+                    == 5
+                )
+                records = (
+                    await db.scalars(
+                        select(ComparisonRun).order_by(ComparisonRun.created_at)
+                    )
+                ).all()
+                assert all(record.status == "finished" for record in records)
+                assert [
+                    run.status
+                    for run in (
+                        await db.scalars(
+                            select(GenerationRun)
+                            .where(
+                                GenerationRun.comparison_run_id
+                                == records[-1].id
+                            )
+                            .order_by(GenerationRun.panel_id)
+                        )
+                    ).all()
+                ] == ["completed", "interrupted", "interrupted"]
+                ledger = (await db.scalars(select(ApiUsageLog))).all()
+                assert len(ledger) == 10 and all(
+                    entry.status != "running" and entry.finished_at is not None
+                    for entry in ledger
                 )
                 assert (await db.get(Scenario, saved.id)).config_version == 1
             assert not active_calls
+            assert all(stream.closed for stream in streams)
+            assert all(client.is_closed() for client in clients)
             print("PASS: real student comparison HTTP/SSE/CSRF/SQLite/recovery")
         finally:
             server.should_exit = True

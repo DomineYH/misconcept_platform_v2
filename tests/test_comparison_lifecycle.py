@@ -162,13 +162,16 @@ async def test_comparison_restart_finishes_aggregate_without_generation(
     assert student.responses.create.await_count == 1
 
 
+@pytest.mark.parametrize("count", [1, 3])
 async def test_comparison_reservation_commit_failure_calls_no_provider(
-    data, client, student, comparison, monkeypatch
+    data, client, student, comparison, monkeypatch, count
 ):
     from sqlalchemy import event as sql_event
     from sqlalchemy.exc import SQLAlchemyError
+    from test_comparison_concurrency import add_panels
 
     login(client, data.admin)
+    add_panels(comparison, count)
 
     def reject(conn):
         raise SQLAlchemyError("PRIVATE_COMMIT_FAILURE")

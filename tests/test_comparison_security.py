@@ -52,7 +52,7 @@ async def test_invalid_comparison_is_zero_calls_and_zero_runs(
     elif change == "long_text":
         comparison["current_message"] = "x" * 50001
     elif change == "unsupported_role":
-        comparison["target_role"] = "analysis"
+        comparison["target_role"] = "unsupported"
     elif change == "many_panels":
         comparison["panels"].extend(
             {**comparison["panels"][0], "panel_id": str(index)}

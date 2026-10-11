@@ -34,52 +34,65 @@ async def comparison_snapshot(db, comparison):
     ).all()
     panels = []
     for config in comparison.panel_configs:
-        run = next(
-            item
-            for item in reversed(runs)
-            if item.panel_id == config["panel_id"]
-        )
-        usage = await db.scalar(
-            select(ApiUsageLog)
-            .where(ApiUsageLog.run_id == run.id)
-            .order_by(ApiUsageLog.id.desc())
-        )
-
-        def elapsed(value):
-            return (
-                round((value - run.started_at).total_seconds() * 1000)
-                if value is not None
-                else None
+        panel_runs = [
+            item for item in runs if item.panel_id == config["panel_id"]
+        ]
+        if not panel_runs:
+            raise HTTPException(503, detail={"code": "storage_error"})
+        attempts = []
+        for run in panel_runs:
+            usage = await db.scalar(
+                select(ApiUsageLog)
+                .where(ApiUsageLog.run_id == run.id)
+                .order_by(ApiUsageLog.id.desc())
             )
 
-        outcome = json.loads(run.outcome_json) if run.outcome_json else {}
-        panels.append(
-            dict(
-                **config,
-                run_id=run.id,
-                turn_id=run.turn_id,
-                status=run.status,
-                text=outcome.get("text", run.partial_text or ""),
-                result=outcome.get("result"),
-                error_code=run.error_code,
-                attempts=[],
-                timing=dict(
-                    started_at=run.started_at.isoformat(),
-                    finished_at=(
-                        run.finished_at.isoformat() if run.finished_at else None
+            def elapsed(value):
+                return (
+                    round((value - run.started_at).total_seconds() * 1000)
+                    if value is not None
+                    else None
+                )
+
+            outcome = json.loads(run.outcome_json) if run.outcome_json else {}
+            attempts.append(
+                dict(
+                    **config,
+                    run_id=run.id,
+                    turn_id=run.turn_id,
+                    status=run.status,
+                    text=outcome.get("text", run.partial_text or ""),
+                    error_code=run.error_code,
+                    attempts=[],
+                    timing=dict(
+                        started_at=run.started_at.isoformat(),
+                        finished_at=(
+                            run.finished_at.isoformat()
+                            if run.finished_at
+                            else None
+                        ),
+                        first_output_ms=elapsed(run.first_output_at),
+                        total_ms=elapsed(run.finished_at),
                     ),
-                    first_output_ms=elapsed(run.first_output_at),
-                    total_ms=elapsed(run.finished_at),
-                ),
-                usage=dict(
-                    input_tokens=usage.input_tokens if usage else None,
-                    output_tokens=usage.output_tokens if usage else None,
-                    cost=usage.estimated_cost_usd if usage else None,
-                ),
-                provider_model_id=outcome.get("provider_model_id"),
-                provider_request_id=outcome.get("provider_request_id"),
+                    usage=dict(
+                        input_tokens=usage.input_tokens if usage else None,
+                        output_tokens=usage.output_tokens if usage else None,
+                        cost=usage.estimated_cost_usd if usage else None,
+                    ),
+                    provider_model_id=outcome.get("provider_model_id"),
+                    provider_request_id=outcome.get("provider_request_id"),
+                )
             )
-        )
+            if comparison.target_role in ("mentor", "analysis"):
+                attempts[-1]["result"] = outcome.get("result")
+            if comparison.target_role == "analysis":
+                attempts[-1].update(
+                    outcome_status=run.status,
+                    coverage=outcome.get("result", {})
+                    .get("report", {})
+                    .get("coverage"),
+                )
+        panels.append({**attempts[-1], "attempts": attempts[:-1]})
     return dict(
         comparison_run_id=comparison.id,
         request_id=comparison.request_id,
@@ -92,7 +105,7 @@ async def comparison_snapshot(db, comparison):
         current_message=comparison.current_message,
         current_message_id=(
             len(comparison.canonical_context) + 1
-            if comparison.current_message is not None
+            if comparison.current_message
             else None
         ),
         context_hash=comparison.context_hash,

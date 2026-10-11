@@ -11,6 +11,7 @@ from starlette.responses import StreamingResponse
 
 from src.services.call_admission import recheck_call
 from src.services.call_execution import execute_call
+from src.services.comparison_analysis import analysis_comparison_result
 from src.services.comparison_runs import finish_comparison
 from src.services.generation_lifecycle import active_runs
 from src.services.invocation_types import InvocationError
@@ -32,13 +33,19 @@ class ComparisonStreamingResponse(StreamingResponse):
         self.children = []
         self.ready = asyncio.Event()
         self.queue = asyncio.Queue(maxsize=len(executions))
-        for panel, execution in zip(snapshot["panels"], executions):
+        for execution in executions:
+            panel = next(
+                panel
+                for panel in snapshot["panels"]
+                if panel["panel_id"] == execution["panel_id"]
+            )
             accepted = dict(
                 **snapshot,
                 run_id=panel["run_id"],
                 panel_id=panel["panel_id"],
                 turn_id=panel["turn_id"],
             )
+            accepted["request_id"] = execution["request"].request_id
             cancelled = active_runs[panel["run_id"]] = asyncio.Event()
             child = dict(accepted=accepted, execution=execution, seq=0)
             child["task"] = asyncio.create_task(self.forward(child, cancelled))
@@ -180,16 +187,22 @@ def accepted_fields(accepted):
 
 
 def terminal_frame(accepted, snapshot, seq):
-    state = next(
+    panel = next(
         panel
         for panel in snapshot["panels"]
         if panel["panel_id"] == accepted["panel_id"]
     )
+    state = next(
+        attempt
+        for attempt in [panel, *panel["attempts"]]
+        if attempt["run_id"] == accepted["run_id"]
+    )
+    state = {**state, "outcome_status": state["status"]}
     return sse_frame(
         accepted,
         (
             "output.completed"
-            if state["status"] == "completed"
+            if state["status"] in {"completed", "ok", "degraded"}
             else f"run.{state['status']}"
         ),
         seq,
@@ -277,6 +290,26 @@ async def stream_comparison(factory, accepted, execution, cancelled):
                     raise RuntimeError("upstream_ended")
                 yield ": ping\n\n"
             event = reading.result()
+            analysis_result = (
+                analysis_comparison_result(
+                    accepted, execution["request"], event
+                )
+                if execution["request"].role == "analysis"
+                else None
+            )
+            if analysis_result is not None:
+                await recheck_call(permit)
+                status, validated, error_code = analysis_result
+                result = await finish(
+                    status,
+                    result=validated,
+                    error_code=error_code,
+                    provider_model_id=event.provider_model_id,
+                    provider_request_id=event.provider_request_id,
+                )
+                terminal = True
+                yield terminal_frame(accepted, result, seq)
+                return
             if (
                 execution["request"].role == "student"
                 and event.type == "text_delta"
@@ -293,13 +326,13 @@ async def stream_comparison(factory, accepted, execution, cancelled):
                 result = await finish(
                     "completed",
                     content=event.text or partial,
-                    provider_model_id=event.provider_model_id,
-                    provider_request_id=event.provider_request_id,
                     mentor_result=(
                         event.structured
                         if execution["request"].role == "mentor"
                         else None
                     ),
+                    provider_model_id=event.provider_model_id,
+                    provider_request_id=event.provider_request_id,
                 )
                 terminal = True
                 yield terminal_frame(accepted, result, seq)

@@ -2,7 +2,7 @@ import {node, button} from './ai-render.js';
 
 export const active = status => ['waiting', 'running', 'streaming'].includes(status);
 export const statusLabels = {waiting:'대기', running:'처리 중', streaming:'스트리밍', completed:'완료', ok:'정상 분석', degraded:'부분 분석', failed:'실패', cancelled:'취소', interrupted:'중단'};
-export const statusLabel = (status, role) => role === 'student' && status === 'running' ? '스트리밍' : statusLabels[status];
+export const statusLabel = (status, role) => status === 'running' ? role === 'student' ? '스트리밍' : role === 'analysis' ? '진행 중' : statusLabels[status] : statusLabels[status];
 
 export function renderComparisonResult(root, panel, role, actions, locked) {
   const focused = root.contains(document.activeElement) ? document.activeElement.textContent : null;
@@ -32,6 +32,12 @@ export function renderComparisonResult(root, panel, role, actions, locked) {
     const previous = node('details');
     previous.append(node('summary', `이전 시도 ${index + 1} · ${statusLabel(attempt.status, role) || 'unknown'}`));
     if (role === 'student') previous.append(node('p', attempt.text || '', {class:'comparison-text'}));
+    if (role === 'analysis' && attempt.result?.report) {
+      const result = node('div', null, {'data-comparison':'true'});
+      previous.append(result);
+      window.showAnalysisResult(result, {accepted_report:attempt.result.report, latest_run:{status:attempt.status},
+        messages:attempt.result.messages || [], permissions:{}, actions:{}});
+    }
     previous.append(node('p', `전체 시간 ${attempt.timing?.total_ms ?? 'unknown'} ms · 비용 ${attempt.usage?.cost ?? 'unknown'}`));
     root.append(previous);
   });

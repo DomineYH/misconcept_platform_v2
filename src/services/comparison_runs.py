@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import select, text
 
+from src.api.schemas.comparison import ComparisonRequest
 from src.models import (
     AppSetting,
     ComparisonRun,
@@ -17,6 +18,12 @@ from src.models import (
     User,
 )
 from src.services.call_admission import approve_call, execution_lock
+from src.services.comparison_analysis import (
+    PROMPT_VERSION as ANALYSIS_PROMPT_VERSION,
+)
+from src.services.comparison_analysis import (
+    analysis_comparison_request,
+)
 from src.services.comparison_state import (
     comparison_snapshot,
     owned_comparison,
@@ -60,18 +67,81 @@ def input_error(code, field, panel_id=None):
     )
 
 
-async def reserve_comparison(factory, user, body):
+async def reserve_comparison(
+    factory, user, body, *, comparison_id=None, panel_id=None
+):
     async with execution_lock():
         async with factory() as db:
             await db.execute(text("BEGIN IMMEDIATE"))
             actor = await db.get(User, user.id)
             if actor is None or not actor.is_admin:
                 raise HTTPException(403, detail={"code": "admin_required"})
-            input_hash = digest(body.model_dump(by_alias=True))
-            existing = await db.scalar(
-                select(ComparisonRun).where(
-                    ComparisonRun.admin_id == user.id,
-                    ComparisonRun.request_id == body.request_id,
+            input_hash = digest(body.model_dump(by_alias=True, mode="json"))
+            comparison = previous = frozen = None
+            if comparison_id is not None:
+                comparison = await owned_comparison(db, comparison_id, user.id)
+                snapshot = await comparison_snapshot(db, comparison)
+                frozen = next(
+                    (
+                        panel
+                        for panel in snapshot["panels"]
+                        if panel["panel_id"] == panel_id
+                    ),
+                    None,
+                )
+                if frozen is None:
+                    raise HTTPException(404, detail={"code": "panel_not_found"})
+                replay = await db.scalar(
+                    select(GenerationRun).where(
+                        GenerationRun.comparison_run_id == comparison.id,
+                        GenerationRun.panel_id == panel_id,
+                        GenerationRun.request_id == str(body.request_id),
+                    )
+                )
+                if replay:
+                    if replay.input_hash != input_hash:
+                        conflict("request_conflict")
+                    return snapshot, None
+                if frozen["run_id"] != str(body.generation_id):
+                    conflict("stale_generation")
+                if comparison.status == "running" or any(
+                    panel["status"] == "running" for panel in snapshot["panels"]
+                ):
+                    conflict("comparison_busy", comparison_run_id=comparison.id)
+                if frozen["status"] not in (
+                    "failed",
+                    "cancelled",
+                    "interrupted",
+                    "degraded",
+                ):
+                    conflict("new_comparison_required")
+                previous = await db.get(GenerationRun, frozen["run_id"])
+                body = ComparisonRequest.model_validate(
+                    dict(
+                        request_id=str(body.request_id),
+                        target_role=comparison.target_role,
+                        source_snapshot=comparison.source_snapshot,
+                        canonical_context=[
+                            {"role": item["role"], "content": item["content"]}
+                            for item in comparison.canonical_context
+                        ],
+                        current_message=comparison.current_message,
+                        panels=[
+                            dict(
+                                panel_id=panel_id,
+                                model_config=frozen["model_config"],
+                            )
+                        ],
+                    )
+                )
+            existing = (
+                None
+                if comparison is not None
+                else await db.scalar(
+                    select(ComparisonRun).where(
+                        ComparisonRun.admin_id == user.id,
+                        ComparisonRun.request_id == body.request_id,
+                    )
                 )
             )
             if existing:
@@ -91,7 +161,7 @@ async def reserve_comparison(factory, user, body):
             role = body.target_role
             if role == "mentor" and source.config.mentor.mode == "off":
                 input_error("mentor_disabled", "config.mentor.mode")
-            if source.scenario_id is not None:
+            if comparison is None and source.scenario_id is not None:
                 scenario = await db.get(Scenario, source.scenario_id)
                 if scenario is None or scenario.deleted_at is not None:
                     raise HTTPException(
@@ -103,13 +173,15 @@ async def reserve_comparison(factory, user, body):
                 error
                 for error in publication_errors(source.config)
                 if error["path"].startswith(
-                    ("config.problem.", "config.student.")
+                    ("config.problem.", "config.student.", "config.analysis.")
+                    if role == "analysis"
+                    else ("config.problem.", "config.student.")
                     + (("config.mentor.",) if role == "mentor" else ())
                 )
                 and not error["path"].endswith("resolved_model_config")
             ]
             if errors:
-                input_error("required", errors[0]["path"])
+                input_error(errors[0]["code"], errors[0]["path"])
             history = [
                 dict(id=index + 1, **message.model_dump())
                 for index, message in enumerate(body.canonical_context)
@@ -150,18 +222,18 @@ async def reserve_comparison(factory, user, body):
                     connection, model, options = await resolve_frozen_model(
                         db, panel.selection, role
                     )
-                    call = (
-                        TextRequest(
+                    if role == "student":
+                        call = TextRequest(
                             connection.provider,
                             model.model_id,
-                            role,
+                            "student",
                             messages[0]["content"],
                             messages[1:],
                             options,
                             body.request_id,
                         )
-                        if role == "student"
-                        else build_mentor_input(
+                    elif role == "mentor":
+                        call = build_mentor_input(
                             source.config,
                             history,
                             source.config.mentor.mode,
@@ -169,7 +241,15 @@ async def reserve_comparison(factory, user, body):
                             options,
                             body.request_id,
                         )
-                    )
+                    else:
+                        call = analysis_comparison_request(
+                            source,
+                            history,
+                            body.current_message,
+                            panel,
+                            options,
+                            body.request_id,
+                        )
                     budget, reserve, version = input_budget(call)
                     applied = provider_parameters(call)
                     if connection.provider == "google":
@@ -197,24 +277,39 @@ async def reserve_comparison(factory, user, body):
                         }
                         if not applied["output_config"]:
                             del applied["output_config"]
-                    estimate = estimate_input(call)
+                    estimate = (
+                        call.context_budget_json["estimated_input_tokens"]
+                        if role == "analysis"
+                        else estimate_input(call)
+                    )
                     if estimate > budget:
                         input_error("context_limit", "history", panel.panel_id)
-                    call = replace(
-                        call,
-                        context_budget_json=dict(
-                            estimator="utf8-v1",
-                            estimated_input_tokens=estimate,
-                            input_budget_tokens=budget,
-                            reserved_output_tokens=reserve,
-                            selected_prior_pairs=prior_pairs,
-                            kept_prior_pairs=prior_pairs,
-                            dropped_prior_pairs=0,
-                            target_pair_included=role == "mentor",
-                            capability_definition_version=version,
-                        ),
-                    )
+                    if role != "analysis":
+                        call = replace(
+                            call,
+                            context_budget_json=dict(
+                                estimator="utf8-v1",
+                                estimated_input_tokens=estimate,
+                                input_budget_tokens=budget,
+                                reserved_output_tokens=reserve,
+                                selected_prior_pairs=prior_pairs,
+                                kept_prior_pairs=prior_pairs,
+                                dropped_prior_pairs=0,
+                                target_pair_included=role == "mentor",
+                                capability_definition_version=version,
+                            ),
+                        )
                 except InvocationError as error:
+                    if error.code in {"context_limit", "output_limit_missing"}:
+                        input_error(
+                            error.code,
+                            (
+                                "history"
+                                if error.code == "context_limit"
+                                else "model_config"
+                            ),
+                            panel.panel_id,
+                        )
                     if error.code == "invalid_options":
                         input_error(error.code, "model_config", panel.panel_id)
                     raise HTTPException(
@@ -256,7 +351,11 @@ async def reserve_comparison(factory, user, body):
                         model.capability_definition_version
                     )
                     permit.contract_version = ROLE_CONTRACT_VERSIONS[role]
-                    executions.append(dict(request=call, permit=permit))
+                    executions.append(
+                        dict(
+                            panel_id=panel.panel_id, request=call, permit=permit
+                        )
+                    )
                     frozen_panels.append(
                         dict(
                             panel_id=panel.panel_id,
@@ -270,13 +369,29 @@ async def reserve_comparison(factory, user, body):
                             capability_version=version,
                             contract_version=permit.contract_version,
                             prompt_version=(
-                                PROMPT_VERSION
-                                if role == "student"
-                                else MENTOR_PROMPT_VERSION
+                                ANALYSIS_PROMPT_VERSION
+                                if role == "analysis"
+                                else (
+                                    MENTOR_PROMPT_VERSION
+                                    if role == "mentor"
+                                    else PROMPT_VERSION
+                                )
                             ),
-                            estimator_version="utf8-v1",
+                            estimator_version=call.context_budget_json[
+                                "estimator"
+                            ],
                         )
                     )
+                    if frozen is not None and any(
+                        frozen[key] != frozen_panels[-1][key]
+                        for key in (
+                            "prompt_version",
+                            "contract_version",
+                            "capability_version",
+                            "estimator_version",
+                        )
+                    ):
+                        conflict("new_comparison_required")
             except BaseException as error:
                 for execution in executions:
                     execution["permit"].release()
@@ -297,38 +412,48 @@ async def reserve_comparison(factory, user, body):
                     source.title.strip() or "제목 없는 초안"
                 )
                 created = utcnow()
-                comparison = ComparisonRun(
-                    id=str(uuid4()),
-                    admin_id=user.id,
-                    scenario_id=source.scenario_id,
-                    source_version=source.source_version,
-                    source_snapshot=frozen_source,
-                    source_hash=digest(frozen_source),
-                    target_role=role,
-                    mode="same_context",
-                    canonical_context=history,
-                    current_message=body.current_message,
-                    context_hash=digest(
-                        dict(
-                            instruction=executions[0][
-                                "request"
-                            ].system_instruction,
-                            history=history,
-                            current_message=body.current_message,
-                            target_role=role,
-                        )
-                    ),
-                    panel_configs=frozen_panels,
-                    request_id=body.request_id,
-                    input_hash=input_hash,
-                    parent_run_id=body.parent_run_id,
-                    created_at=created,
-                    expires_at=created + timedelta(days=30),
-                    status="running",
-                )
-                db.add(comparison)
+                if comparison is None:
+                    comparison = ComparisonRun(
+                        id=str(uuid4()),
+                        admin_id=user.id,
+                        scenario_id=source.scenario_id,
+                        source_version=source.source_version,
+                        source_snapshot=frozen_source,
+                        source_hash=digest(frozen_source),
+                        target_role=role,
+                        mode="same_context",
+                        canonical_context=history,
+                        current_message=body.current_message,
+                        context_hash=digest(
+                            dict(
+                                instruction=(
+                                    call.messages
+                                    if role == "analysis"
+                                    else executions[0][
+                                        "request"
+                                    ].system_instruction
+                                ),
+                                history=history,
+                                current_message=body.current_message,
+                                target_role=role,
+                            )
+                        ),
+                        panel_configs=frozen_panels,
+                        request_id=body.request_id,
+                        input_hash=input_hash,
+                        parent_run_id=body.parent_run_id,
+                        created_at=created,
+                        expires_at=created + timedelta(days=30),
+                        status="running",
+                    )
+                    db.add(comparison)
+                else:
+                    comparison.status = "running"
+                    created = max(
+                        created, previous.started_at + timedelta(microseconds=1)
+                    )
                 await db.flush()
-                turn_id = str(uuid4())
+                turn_id = previous.turn_id if previous else str(uuid4())
                 for frozen_panel, execution in zip(frozen_panels, executions):
                     run = GenerationRun(
                         id=str(uuid4()),
@@ -372,6 +497,7 @@ async def finish_comparison(
     *,
     status,
     content=None,
+    result=None,
     partial_text=None,
     error_code=None,
     first_output_at=None,
@@ -398,7 +524,7 @@ async def finish_comparison(
             run.status, run.error_code = status, error_code
             run.first_output_at, run.finished_at = first_output_at, utcnow()
             run.partial_text = None if status == "completed" else partial_text
-            public_result = {}
+            public_result = dict(result=result) if result is not None else {}
             if status == "completed" and mentor_result is not None:
                 run.mentor_reason_summary = mentor_result["reason_summary"]
                 run.result_kind = (
@@ -420,7 +546,7 @@ async def finish_comparison(
                     ),
                     ensure_ascii=False,
                 )
-                if status == "completed"
+                if status in {"completed", "ok", "degraded"}
                 else None
             )
         elif run.status == "cancelled" and partial_text is not None:

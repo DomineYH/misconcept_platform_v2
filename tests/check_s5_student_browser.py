@@ -28,6 +28,7 @@ async def check():
         import httpx2
         import uvicorn
         from openai import AsyncOpenAI
+        from s4_analysis_fixtures import analysis_reply, prompt_inputs
         from sqlalchemy import func, select
         from starlette_csrf import CSRFMiddleware
         from test_student_probe import response_body, sse
@@ -61,6 +62,21 @@ async def check():
             name="Student",
             misconception="Larger denominator",
             behavior_instruction="Explain",
+        )
+        draft["config"]["analysis"].update(
+            context="Analysis context",
+            expected_understanding="Correct fractions",
+            instruction="Review the full dialogue",
+            classification_enabled=True,
+            rubric_name="Questions",
+            rubric=[
+                dict(
+                    id="A",
+                    name="Explore",
+                    criteria="Explore thinking",
+                    level="high",
+                )
+            ],
         )
         async with AsyncSessionLocal() as db:
             admin = User(
@@ -103,6 +119,13 @@ async def check():
                     ),
                 },
             )
+            model.verification_state = {
+                **model.verification_state,
+                "analysis": {
+                    **model.verification_state["student"],
+                    "role_contract_version": "s4-v2",
+                },
+            }
             db.add(model)
             saved = Scenario(
                 title="Saved comparison draft",
@@ -130,7 +153,12 @@ async def check():
                     output_index=0,
                     content_index=0,
                 )
-                if self.budget in (1801, 1802):
+                retried = (
+                    self.budget == 1801
+                    and sum(call["max_output_tokens"] == 1801 for call in calls)
+                    == 2
+                )
+                if self.budget in (1801, 1802) and not retried:
                     await asyncio.Event().wait()
                 await asyncio.sleep(0.5)
                 yield sse(
@@ -149,7 +177,10 @@ async def check():
         async def upstream(request):
             body = json.loads(request.content)
             calls.append(body)
-            if "text" in body:
+            if (
+                "text" in body
+                and body["text"]["format"]["name"] == "MentorOutput"
+            ):
                 budget = body["max_output_tokens"]
                 if budget == 1801:
                     await asyncio.Event().wait()
@@ -171,6 +202,28 @@ async def check():
                                 reason_summary="PRIVATE MENTOR REASON",
                             )
                         ),
+                    ),
+                )
+            if "text" in body:
+                reply = analysis_reply(prompt_inputs(body)["messages"])
+                reply["strengths"] = [
+                    dict(
+                        message_id=1,
+                        quote=reply["message_classifications"][0]["quote"],
+                        reason="Evidence",
+                    )
+                ]
+                if body["max_output_tokens"] == 8193:
+                    reply["message_classifications"][0][
+                        "quote"
+                    ] = "PRIVATE_UNVERIFIED_QUOTE"
+                await asyncio.sleep(0.5)
+                return httpx2.Response(
+                    200,
+                    json=response_body(
+                        "PRIVATE_UNVERIFIED_JSON"
+                        if body["max_output_tokens"] == 8194
+                        else json.dumps(reply)
                     ),
                 )
             stream = MockStream(body["max_output_tokens"])
@@ -233,7 +286,7 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            assert len(calls) == 10
+            assert len(calls) == 11
             assert all(call["stream"] and "text" not in call for call in calls)
             async with AsyncSessionLocal() as db:
                 assert (
@@ -274,7 +327,7 @@ async def check():
                     ).all()
                 ] == ["completed", "interrupted", "interrupted"]
                 ledger = (await db.scalars(select(ApiUsageLog))).all()
-                assert len(ledger) == 10 and all(
+                assert len(ledger) == 11 and all(
                     entry.status != "running" and entry.finished_at is not None
                     for entry in ledger
                 )
@@ -283,6 +336,48 @@ async def check():
             assert all(stream.closed for stream in streams)
             assert all(client.is_closed() for client in clients)
             print("PASS: real student comparison HTTP/SSE/CSRF/SQLite/recovery")
+            process = await asyncio.create_subprocess_exec(
+                "node",
+                "tests/check_s5_analysis_browser.mjs",
+                str(listener.getsockname()[1]),
+                str(saved.id),
+                cwd=ROOT,
+            )
+            try:
+                async with asyncio.timeout(90):
+                    assert await process.wait() == 0
+            finally:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+            assert len(calls) == 14
+            assert len([call for call in calls if "text" in call]) == 3
+            assert all(client.is_closed() for client in clients)
+            assert not active_calls
+            async with AsyncSessionLocal() as db:
+                from src.models import (
+                    QuestionAnalysis,
+                    SessionFeedbackReport,
+                    SessionSummary,
+                )
+
+                for model in (
+                    Session,
+                    Message,
+                    QuestionAnalysis,
+                    SessionFeedbackReport,
+                    SessionSummary,
+                ):
+                    assert (
+                        await db.scalar(select(func.count()).select_from(model))
+                        == 0
+                    )
+                assert (
+                    await db.scalar(
+                        select(func.count()).select_from(ComparisonRun)
+                    )
+                    == 6
+                )
             process = await asyncio.create_subprocess_exec(
                 "node",
                 "tests/check_s5_mentor_browser.mjs",
@@ -296,7 +391,7 @@ async def check():
                 if process.returncode is None:
                     process.kill()
                     await process.wait()
-            mentor_calls = calls[10:]
+            mentor_calls = calls[14:]
             assert len(mentor_calls) == 6
             assert all(
                 "stream" not in call

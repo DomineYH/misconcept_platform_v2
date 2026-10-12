@@ -18,6 +18,7 @@ from src.db.s2_verification import consistent_backup
 from src.db.s6_cutover import rehearse
 from src.main import app
 from src.models import ApiUsageLog, ComparisonRun, GenerationRun, User
+from src.models.user_group import UserGroup
 
 __all__ = ["current_source", "legacy_source"]
 pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
@@ -34,6 +35,7 @@ async def sign_in(client, username):
     assert response.status_code == 303, response.text
 
 
+@pytest.mark.parametrize("current_source", [35, "legacy"], indirect=True)
 async def test_authenticated_history_acl_csv_and_comparison_isolation_leave_candidate_immutable(
     current_source, tmp_path
 ):
@@ -118,6 +120,24 @@ async def test_authenticated_history_acl_csv_and_comparison_isolation_leave_cand
         )
         second_admin.set_password(PASSWORD)
         db.add(second_admin)
+        group_teacher = User(
+            username="group_teacher",
+            nickname="Group teacher",
+            role="teacher",
+            group_id=1,
+        )
+        group_teacher.set_password(PASSWORD)
+        unassigned_group = UserGroup(name="Unassigned group")
+        db.add(unassigned_group)
+        await db.flush()
+        unassigned_teacher = User(
+            username="unassigned_teacher",
+            nickname="Unassigned teacher",
+            role="teacher",
+            group_id=unassigned_group.id,
+        )
+        unassigned_teacher.set_password(PASSWORD)
+        db.add_all([group_teacher, unassigned_teacher])
         await db.commit()
 
     async def database():
@@ -193,6 +213,16 @@ async def test_authenticated_history_acl_csv_and_comparison_isolation_leave_cand
             assert admin_csv.status_code == 200
             assert admin_csv.text == "\ufeff" + original_csv[3]
             assert "COMPARISON_PRIVATE_SENTINEL" not in admin_csv.text
+            single_admin_csv = await client.get("/admin/sessions/1/download")
+            assert single_admin_csv.status_code == 200
+            assert single_admin_csv.text == "\ufeff" + original_csv[1]
+            statistics = await client.get("/admin/stats")
+            assert statistics.status_code == 200
+            assert statistics.json()["total_sessions"] == 1
+            assert statistics.json()["total_teachers"] == 1
+            usage = await client.get("/admin/api-usage")
+            assert usage.status_code == 200
+            assert "0.137345" in usage.text
             comparison = await client.get(f"/admin/comparisons/{COMPARISON_ID}")
             assert comparison.status_code == 200
             assert (
@@ -203,6 +233,13 @@ async def test_authenticated_history_acl_csv_and_comparison_isolation_leave_cand
             denied = await client.get(f"/admin/comparisons/{COMPARISON_ID}")
             assert denied.status_code == 404
             assert "COMPARISON_PRIVATE_SENTINEL" not in denied.text
+            await sign_in(client, "group_teacher")
+            assigned = await client.get("/scenarios/1")
+            assert assigned.status_code == 400
+            assert assigned.json()["detail"]["code"] == "scenario_not_published"
+            assert (await client.get("/sessions/1/analysis")).status_code == 403
+            await sign_in(client, "unassigned_teacher")
+            assert (await client.get("/scenarios/1")).status_code == 403
         assert await exports(engine) == original_csv
     finally:
         app.dependency_overrides.clear()

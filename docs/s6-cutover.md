@@ -1,12 +1,13 @@
-# S6 current-format candidate rehearsal (#102)
+# S6 candidate rehearsal (#102, #103)
 
 This prepares evidence on an explicitly isolated copy. It does not install a
 database, stop writers, approve educational quality, or authorize production.
 Technical success always leaves `release_blocked: true`.
 
-Use an empty SQLite source copy or an official 031–035 database. For 023–030,
-the separate legacy path must first complete S2 conversion and its validated
-031 receipt. Keep those original S2 artifacts unchanged. Arbitrary schemas,
+Use an empty SQLite source copy or an official 023–035 database. For 023–030,
+provide the captured effective settings and a separate S2 workspace as below.
+The legacy path completes S2 conversion and its validated 031 receipt before
+backing up that result into the separate S6 candidate. Arbitrary schemas,
 unknown/gapped migration history and unfinished work are refused.
 
 Stop every writer before obtaining the final source copy through SQLite's
@@ -26,7 +27,7 @@ uv run --frozen python -m src.db.s6_cutover \
   --workspace /private/maintenance/s6-rehearsal --apply
 ```
 
-Default dry-run creates a WAL-consistent `backup.db` and unchanged
+Current-format dry-run creates a WAL-consistent `backup.db` and unchanged
 `candidate.db`, checks the source schema, integrity, foreign keys and idle
 state, and records `dry-run.json`. Apply upgrades only the candidate through
 the official runner, runs migrations twice, checks fresh-install schema
@@ -52,6 +53,49 @@ mean interrupted work: retain that workspace for investigation and retry
 from the unchanged source in a **new empty workspace**. Do not delete or edit
 evidence to make a failed run succeed. Safe failures print a status code and
 leave a private failure report when the workspace has already been validated.
+
+For an official 023–030 copy, capture the actual effective deployment settings
+using the [S2 manifest procedure](s2-cutover.md). Missing settings are not
+inferred from current defaults. Settings must be a private 0600 file outside
+both workspaces; all three paths must be isolated, without symlinks or hardlinks.
+The two workspace directories must be disjoint, initially empty and private.
+
+```sh
+uv run --frozen python -m src.db.s6_cutover \
+  --source-copy /private/maintenance/legacy-copy.db \
+  --settings /private/maintenance/effective.json \
+  --legacy-workspace /private/maintenance/s2-evidence \
+  --workspace /private/maintenance/s6-latest
+
+uv run --frozen python -m src.db.s6_cutover \
+  --source-copy /private/maintenance/legacy-copy.db \
+  --settings /private/maintenance/effective.json \
+  --legacy-workspace /private/maintenance/s2-evidence \
+  --workspace /private/maintenance/s6-latest --apply
+```
+
+The two legacy arguments are required together and only apply to 023–030.
+Legacy dry-run checks the official source schema, creates the S2 backup and
+030 expansion/conversion plan, and refuses unfinished work. It does not
+produce a latest candidate until S2 is ready. Apply reuses S2's conversion,
+preservation/restore checks, receipt and guarded 031 migration. An existing
+completed S2 workspace is supported and revalidated through the S2 entry point.
+Its `rehearsal.db`, archive, manifest, receipt and report stay unchanged.
+S6 `backup.db` is the separate 031 backup; the original legacy backup and its
+restore remain in the S2 workspace. The S6 report binds the original revision
+and full source-state hash, effective settings hash, S2 receipt/report hashes
+and preservation evidence to the latest candidate and tool/code fingerprint.
+Repeating either completed entry point validates the same evidence. Changed
+settings, source, conversion plan, receipt, S2 result or S6 candidate are refused.
+Once S6 evidence is sealed, missing S2 artifacts are refused before invoking
+S2's interruption/resume flow; completed evidence is not silently recreated.
+
+Synthetic tests cover full 023/027/030 rehearsals and all official 023–030
+schema boundaries. Authenticated HTTP/CSV checks run on disposable copies of
+the latest legacy candidate and preserve the sealed evidence. A separate
+synthetic new-write/old-backup restore check demonstrates that restoring an
+old backup loses later writes; it is evidence of the recovery boundary, not
+an automatic rollback facility.
 
 Before actual installation, HG1–HG5, writer-stop evidence, credential restore,
 reader/ACL/CSV checks, health/login smoke and separate operational approval

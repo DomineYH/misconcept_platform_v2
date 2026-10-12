@@ -46,7 +46,13 @@ def private_file(path):
         raise ValueError("private_artifacts_required")
 
 
-def validate_paths(source, workspace):
+def validate_paths(
+    source,
+    workspace,
+    *,
+    artifacts=ARTIFACTS,
+    markers=("dry-run.json", "report.json"),
+):
     for path in (source, workspace):
         if any(
             part.is_symlink()
@@ -73,10 +79,8 @@ def validate_paths(source, workspace):
     files = list(workspace.iterdir())
     for path in files:
         private_file(path)
-    if any(path.name not in ARTIFACTS for path in files) or (
-        files
-        and not (workspace / "dry-run.json").is_file()
-        and not (workspace / "report.json").is_file()
+    if any(path.name not in artifacts for path in files) or (
+        files and not any((workspace / name).is_file() for name in markers)
     ):
         raise ValueError("isolated_workspace_required")
 
@@ -112,7 +116,7 @@ def restore(source, destination):
             raise ValueError("restore_mismatch")
 
 
-def source_revision(db):
+def source_revision(db, *, allow_legacy=False):
     tables = db.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
     ).fetchall()
@@ -143,7 +147,7 @@ def source_revision(db):
     if forward != expected[: len(forward)]:
         raise ValueError("unsupported_history")
     revision = int(forward[-1][:3])
-    if revision < 31:
+    if revision < 31 and not allow_legacy:
         raise ValueError("legacy_path_required")
     return revision
 

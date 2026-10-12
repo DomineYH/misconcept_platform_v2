@@ -1,4 +1,4 @@
-"""Prepare current-format S6 evidence on explicit isolated SQLite copies."""
+"""Prepare S6 evidence on explicit isolated SQLite copies."""
 
 import argparse
 import asyncio
@@ -58,6 +58,9 @@ ERROR_CODES = {
     "migration_not_idempotent",
     "interrupted_workspace",
     "incomplete_evidence",
+    "legacy_arguments_required",
+    "conversion_conflict",
+    "receipt_mismatch",
 }
 
 
@@ -80,6 +83,8 @@ def code_identity():
         Path(__file__),
         Path(__file__).with_name("s6_verification.py"),
         Path(__file__).with_name("s2_verification.py"),
+        Path(__file__).with_name("s2_cutover.py"),
+        Path(__file__).with_name("s6_legacy.py"),
         Path(__file__).with_name("convert_scenarios.py"),
         migrate.DIRECTORY / "migrate.py",
         migrate.DIRECTORY / "baseline.sql",
@@ -141,10 +146,20 @@ async def completed_report(workspace, base):
     )
 
 
-async def rehearse(source, workspace, apply=False):
+async def rehearse(
+    source, workspace, apply=False, *, settings=None, legacy_workspace=None
+):
     source, workspace = map(Path, (source, workspace))
     validate_paths(source, workspace)
     try:
+        if settings is not None or legacy_workspace is not None:
+            if settings is None or legacy_workspace is None:
+                raise ValueError("legacy_arguments_required")
+            from src.db.s6_legacy import rehearse_legacy
+
+            return await rehearse_legacy(
+                source, workspace, Path(settings), Path(legacy_workspace), apply
+            )
         return await _rehearse(source, workspace, apply)
     except (Exception, KeyboardInterrupt, asyncio.CancelledError) as error:
         try:
@@ -154,7 +169,7 @@ async def rehearse(source, workspace, apply=False):
         raise
 
 
-async def _rehearse(source, workspace, apply):
+async def _rehearse(source, workspace, apply, legacy=None):
     complete = (workspace / "report.json").exists()
     if (workspace / "applying.json").exists() and not complete:
         raise ValueError("interrupted_workspace")
@@ -191,6 +206,8 @@ async def _rehearse(source, workspace, apply):
         source_revision=revision,
         source_state_hash=canonical_hash(source_state),
     )
+    if legacy is not None:
+        base["legacy"] = legacy
     if complete:
         report = await completed_report(workspace, base)
         if json.loads((workspace / "report.json").read_text()) != report:
@@ -226,6 +243,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-copy", type=Path, required=True)
     parser.add_argument("--workspace", type=Path, required=True)
+    parser.add_argument("--settings", type=Path)
+    parser.add_argument("--legacy-workspace", type=Path)
     parser.add_argument(
         "--apply",
         action="store_true",
@@ -234,7 +253,13 @@ def main():
     args = parser.parse_args()
     try:
         report = asyncio.run(
-            rehearse(args.source_copy, args.workspace, args.apply)
+            rehearse(
+                args.source_copy,
+                args.workspace,
+                args.apply,
+                settings=args.settings,
+                legacy_workspace=args.legacy_workspace,
+            )
         )
     except (Exception, KeyboardInterrupt, asyncio.CancelledError) as error:
         print(json.dumps(failure(error)))

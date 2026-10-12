@@ -4,6 +4,10 @@ This prepares evidence on an explicitly isolated copy. It does not install a
 database, stop writers, approve educational quality, or authorize production.
 Technical success always leaves `release_blocked: true`.
 
+Run from a git checkout with git installed; the evidence requires the checked-out
+code revision. Offline credential restoration has a separate
+[version-by-version verification procedure](s6-credential-restore.md).
+
 Use an empty SQLite source copy or an official 023–035 database. For 023–030,
 provide the captured effective settings and a separate S2 workspace as below.
 The legacy path completes S2 conversion and its validated 031 receipt before

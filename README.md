@@ -418,3 +418,10 @@ analysis/comparison lists and user conversation modals are unchanged.
 SQLite, keyboard/mobile page navigation, out-of-range empty pages, rejected
 deletion and last-row deletion returning to the previous page. Synthetic
 fixtures and localhost checks never access the operating database or providers.
+
+S6-08 (#109): [approved synthetic provider smoke](docs/provider-smoke.md)
+uses a default zero-call plan and separate human approval for a USD 3 maximum
+reservation. Run `python -m src.cli.provider_smoke --help` for the operator CLI;
+SDK-mocked acceptance tests are in `tests/test_provider_smoke.py`. This tool
+requires an isolated, already verified synthetic DB and does not perform paid
+calls as part of implementation or replace educational quality approval.

@@ -45,6 +45,10 @@ def parameters(request):
         store=False,
         **options,
     )
+    if request.service_tier is not None:
+        if request.service_tier != "default":
+            raise InvocationError("configuration_unavailable")
+        values["service_tier"] = request.service_tier
     if isinstance(request, StructuredRequest):
         schema = strict_schema(request.output_schema)
         values["text"] = {

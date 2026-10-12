@@ -149,6 +149,7 @@ Browser setup (Node 24): `npm ci` and `npx playwright install --with-deps chromi
 Browser checks: `npm run test:browser` (optional filename filters: `npm run test:browser -- student_stream`).
 Live streaming check (localhost, no paid calls): `uv run --frozen python tests/check_student_live.py`.
 Synthetic latency records (warmup + five repetitions, no numeric CI gate): see [S6 measurement](docs/s6-measurement.md).
+Final S6 acceptance, AC-26/29/30 evidence, human release gates and retention/backup handoff: see [S6 operator runbook](docs/s6-acceptance.md).
 
 S2-02 draft authoring (#59): open `/admin/scenarios/new` as an administrator.
 The existing create/update URLs store typed v1 drafts, and `/admin/scenarios/{id}`

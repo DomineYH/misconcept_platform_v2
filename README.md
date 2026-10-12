@@ -405,3 +405,10 @@ Without pagination metadata the existing runtime lists remain unchanged.
 queries. This screen ticket adds no query, migration, page-size selector or new
 search/sort controls. Existing client-side filters continue to filter the
 rendered rows; CSV exports retain their existing scope.
+
+S6-08 (#109): [approved synthetic provider smoke](docs/provider-smoke.md)
+uses a default zero-call plan and separate human approval for a USD 3 maximum
+reservation. Run `python -m src.cli.provider_smoke --help` for the operator CLI;
+SDK-mocked acceptance tests are in `tests/test_provider_smoke.py`. This tool
+requires an isolated, already verified synthetic DB and does not perform paid
+calls as part of implementation or replace educational quality approval.

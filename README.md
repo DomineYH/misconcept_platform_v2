@@ -383,3 +383,24 @@ and existing SDK mocks. S2 baseline execution is isolated under `tests/s2_*`;
 product runtime uses only v2 analysis. Technical completion remains
 `release_blocked` until separate paid comparison, education approval and
 production authorization have real records.
+
+S6-04 administrator pagination screens (#105):
+`npm run test:browser -- s6_` renders the real user/scenario templates with
+isolated synthetic lists of 41 records (20/20/1). It covers first/middle/last and
+empty pages, keyboard links/focus, 390px layouts, denied/conflicting deletions,
+last-row deletion returning to the previous page, and existing user forms.
+Synthetic records and HTTP responses live only in `tests/browser_server.py`,
+`tests/s6_screen_fixtures.py` and browser interception; there is no product mock
+fallback. Existing scenario authoring/publication/dirty-input checks still apply.
+
+The template contract for #106 is `current_page` (positive), `total_count` and
+`total_pages` (at least 1), with `users`/`scenarios` containing at most 20 records
+in descending ID order. Page links use `/admin/users?page=N` and
+`/admin/scenarios?page=N`. An out-of-range empty page links back to the last
+valid page; deleting the only row on a later page follows its previous link.
+Without pagination metadata the existing runtime lists remain unchanged.
+**Actual bounded SQL queries, page validation and runtime metadata wiring are
+#106**, including the existing filter/ACL contracts and page-scoped related
+queries. This screen ticket adds no query, migration, page-size selector or new
+search/sort controls. Existing client-side filters continue to filter the
+rendered rows; CSV exports retain their existing scope.

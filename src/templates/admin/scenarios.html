@@ -48,8 +48,26 @@
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="empty-state"><h3>시나리오가 없습니다</h3><a href="/admin/scenarios/new" class="btn btn-primary">통합 초안 작성</a></div>{% endif %}
+    {% else %}<div class="empty-state"><h3>{% if current_page is defined and current_page > 1 %}이 페이지에 결과가 없습니다.{% else %}시나리오가 없습니다{% endif %}</h3><a href="/admin/scenarios/new" class="btn btn-primary">통합 초안 작성</a></div>{% endif %}
   </section>
+
+  {% if current_page is defined %}
+  <nav class="pagination" id="scenarios-pagination" aria-label="목록 페이지">
+    <span class="pagination-info" aria-current="page">현재 {{ current_page }} 페이지 · 20개씩 · 총 {{ total_count }}개</span>
+    <div class="pagination-buttons">
+      {% if current_page > 1 %}
+      <a href="/admin/scenarios?page={{ [current_page - 1, total_pages]|min }}" rel="prev" class="btn btn-sm btn-secondary">이전</a>
+      {% else %}
+      <button type="button" class="btn btn-sm btn-secondary" disabled>이전</button>
+      {% endif %}
+      {% if current_page < total_pages %}
+      <a href="/admin/scenarios?page={{ current_page + 1 }}" rel="next" class="btn btn-sm btn-secondary">다음</a>
+      {% else %}
+      <button type="button" class="btn btn-sm btn-secondary" disabled>다음</button>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
 </div>
 <script src="/static/js/admin-scenarios.js" defer></script>
 {% endblock %}

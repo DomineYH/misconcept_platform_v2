@@ -23,8 +23,12 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
         headers: {'Content-Type': 'application/json', 'x-csrf-token': token ? token[1] : ''},
         body: JSON.stringify({expected_version: Number(btn.dataset.version)})
       });
-      if (response.ok) window.location.reload();
-      else window.alert(response.status === 409 ? '다른 관리자가 변경했습니다. 새로고침 후 확인하세요.' : '삭제에 실패했습니다.');
+      if (response.ok) {
+        const previous = document.querySelector('#scenarios-pagination [rel="prev"]');
+        if (previous && document.querySelectorAll('.scenario-card').length === 1) {
+          window.location.assign(previous.href);
+        } else window.location.reload();
+      } else window.alert(response.status === 409 ? '다른 관리자가 변경했습니다. 새로고침 후 확인하세요.' : '삭제에 실패했습니다.');
     } catch {
       window.alert('삭제에 실패했습니다.');
     } finally {

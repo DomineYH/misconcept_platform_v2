@@ -12,6 +12,7 @@ import socket
 import sys
 import tempfile
 from pathlib import Path
+from time import monotonic_ns
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,9 @@ sys.path.insert(0, str(ROOT))
 
 
 async def check():
+    measuring = sys.argv[1:] == ["--measure"]
+    observations = []
+    saved_times, completion_events = [], []
     with tempfile.TemporaryDirectory(dir=ROOT / ".pytest_cache") as directory:
         os.environ.update(
             TESTING="true",
@@ -34,7 +38,8 @@ async def check():
         import uvicorn
         from itsdangerous import TimestampSigner
         from openai import AsyncOpenAI
-        from sqlalchemy import select
+        from sqlalchemy import event, select
+        from sqlalchemy.orm import Session as OrmSession
         from starlette_csrf import CSRFMiddleware
 
         from src.config import config
@@ -43,6 +48,7 @@ async def check():
         from src.main import app
         from src.models import (
             ApiUsageLog,
+            AppSetting,
             GenerationRun,
             ModelConfig,
             ProviderConnection,
@@ -55,6 +61,21 @@ async def check():
         from src.services import openai_generation
         from src.services.model_capabilities import DEFINITION_VERSION
         from src.services.provider_secrets import encrypt_key
+
+        def before_flush(db, *args):
+            if any(
+                isinstance(row, GenerationRun) and row.status == "completed"
+                for row in db.dirty
+            ):
+                db.info["s6_student_saved"] = True
+
+        def after_commit(db):
+            if db.info.pop("s6_student_saved", False):
+                saved_times.append(monotonic_ns())
+
+        if measuring:
+            event.listen(OrmSession, "before_flush", before_flush)
+            event.listen(OrmSession, "after_commit", after_commit)
 
         await run_all_migrations()
         async with AsyncSessionLocal() as db:
@@ -119,6 +140,7 @@ async def check():
                 SimpleNamespace(db=db, session=session, scenario=scenario),
                 connection,
                 model,
+                context_turn_limit=1 if measuring else 10,
             )
             from copy import deepcopy
 
@@ -158,12 +180,26 @@ async def check():
         release = asyncio.Event()
         if sys.argv[1:] in (["--browser"], ["--mentor-browser"]):
             release.set()
+        if measuring:
+            release.set()
         mentor_release = Path(directory) / "release-mentor"
         mentor_calls = []
         calls, owned_clients = [], []
 
         class Upstream(httpx2.AsyncByteStream):
+            def __init__(self, body):
+                self.body = body
+
             async def __aiter__(self):
+                observation = {"first_body": None, "end": None}
+                if measuring:
+                    from s6_observer import input_metadata
+
+                    observation.update(input_metadata(self.body))
+                observations.append(observation)
+                if measuring:
+                    await asyncio.sleep(0.01)
+                observation["first_body"] = monotonic_ns()
                 yield b"event: response.output_text.delta\ndata: " + json.dumps(
                     {
                         "type": "response.output_text.delta",
@@ -176,6 +212,9 @@ async def check():
                     }
                 ).encode() + b"\n\n"
                 await release.wait()
+                if measuring:
+                    await asyncio.sleep(0.05)
+                observation["end"] = monotonic_ns()
                 yield b"event: response.completed\ndata: " + json.dumps(
                     {
                         "type": "response.completed",
@@ -266,7 +305,7 @@ async def check():
             return httpx2.Response(
                 200,
                 headers={"Content-Type": "text/event-stream"},
-                stream=Upstream(),
+                stream=Upstream(body),
             )
 
         def client_factory(**kwargs):
@@ -291,13 +330,26 @@ async def check():
             return original_connect(sock, address)
 
         socket.socket.connect = localhost_only
+
+        async def measured_app(scope, receive, send):
+            async def observed_send(message):
+                if message[
+                    "type"
+                ] == "http.response.body" and b"event: output.completed" in message.get(
+                    "body", b""
+                ):
+                    completion_events.append(monotonic_ns())
+                await send(message)
+
+            await app(scope, receive, observed_send)
+
         listener = socket.socket()
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
         server = uvicorn.Server(
             uvicorn.Config(
                 CSRFMiddleware(
-                    app,
+                    measured_app if measuring else app,
                     secret=config.SESSION_SECRET,
                     exempt_urls=[re.compile(r"/health"), re.compile(r"/login")],
                     cookie_name="csrftoken",
@@ -313,6 +365,136 @@ async def check():
             async with asyncio.timeout(30):
                 while not server.started:
                     await asyncio.sleep(0.01)
+            if measuring:
+                from s6_measurement import write_sample
+                from s6_observer import Observation, milliseconds
+
+                process = await asyncio.create_subprocess_exec(
+                    "node",
+                    "tests/check_s6_measurement_browser.mjs",
+                    str(port),
+                    cwd=ROOT,
+                    stdout=asyncio.subprocess.PIPE,
+                )
+                visible = None
+                try:
+                    async with asyncio.timeout(120):
+                        async for line in process.stdout:
+                            received = monotonic_ns()
+                            value = json.loads(line)
+                            if value["kind"] == "visible":
+                                visible = received
+                                continue
+                            assert (
+                                value["kind"] == "sample"
+                                and visible is not None
+                            )
+                            index = value["repeat"]
+                            async with AsyncSessionLocal() as db:
+                                ledger = (
+                                    await db.scalars(
+                                        select(ApiUsageLog).order_by(
+                                            ApiUsageLog.id
+                                        )
+                                    )
+                                ).all()
+                                limits = (
+                                    await db.get(AppSetting, 1)
+                                ).limits_json
+                                assert len(ledger) == index + 1
+                                assert all(
+                                    entry.role == "student"
+                                    and entry.status == "completed"
+                                    for entry in ledger
+                                )
+                                recorder = Observation(
+                                    "student_browser",
+                                    index,
+                                    {
+                                        "content": "Synthetic measurement question"
+                                    },
+                                    limits=limits,
+                                )
+                                row = recorder.record(
+                                    "completed",
+                                    None,
+                                    None,
+                                    ledger=[ledger[-1]],
+                                    calls=[],
+                                )
+                            row["raw_ns"] = {
+                                "provider": observations[index],
+                                "visible_callback_received": visible,
+                            }
+                            assert (
+                                len(saved_times)
+                                == len(completion_events)
+                                == index + 1
+                            )
+                            assert (
+                                saved_times[index]
+                                <= completion_events[index]
+                                <= received
+                            )
+                            row["raw_ns"].update(
+                                saved=saved_times[index],
+                                completion_event=completion_events[index],
+                                completion_display_callback_received=received,
+                            )
+                            row["raw_browser_ms"] = value["raw_browser_ms"]
+                            row["browser_version"] = value["browser"]
+                            row["clocks"]["browser"] = "performance.now"
+                            row["durations_ms"].update(
+                                first_visible_body=value[
+                                    "first_visible_body_ms"
+                                ],
+                                completion_display=value[
+                                    "completion_display_ms"
+                                ],
+                                mock_body_to_visible_upper_bound=milliseconds(
+                                    observations[index]["first_body"], visible
+                                ),
+                                save_to_completion_event=milliseconds(
+                                    saved_times[index], completion_events[index]
+                                ),
+                                save_to_display_upper_bound=milliseconds(
+                                    saved_times[index], received
+                                ),
+                                provider_body_to_end=milliseconds(
+                                    observations[index]["first_body"],
+                                    observations[index]["end"],
+                                ),
+                            )
+                            row["conditions"]["mock_completion_delay_ms"] = 50
+                            row["conditions"]["context_turn_limit"] = 1
+                            row["conditions"]["model_options"] = {
+                                key: calls[index][key]
+                                for key in (
+                                    "model",
+                                    "max_output_tokens",
+                                    "reasoning",
+                                )
+                            }
+                            row["unknown_reason"] = (
+                                "Request to save unknown across browser/server clocks; mock body to visible and save to display are upper bounds including Playwright binding, Node stdout and IPC scheduling"
+                            )
+                            write_sample(row)
+                            visible = None
+                        assert await process.wait() == 0
+                finally:
+                    if process.returncode is None:
+                        process.kill()
+                        await process.wait()
+                assert len(calls) == len(observations) == 6
+                assert all(sdk.is_closed() for sdk in owned_clients)
+                assert (
+                    len({value["input_sha256"] for value in observations[1:]})
+                    == 1
+                )
+                print(
+                    "PASS: six browser measurements; warmup plus five repeats"
+                )
+                return
             if sys.argv[1:] == ["--mentor-browser"]:
                 process = await asyncio.create_subprocess_exec(
                     "node",
@@ -550,6 +732,9 @@ async def check():
             await task
             listener.close()
             socket.socket.connect = original_connect
+            if measuring:
+                event.remove(OrmSession, "before_flush", before_flush)
+                event.remove(OrmSession, "after_commit", after_commit)
 
 
 if __name__ == "__main__":

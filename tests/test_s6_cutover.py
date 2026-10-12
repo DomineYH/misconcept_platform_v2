@@ -8,7 +8,7 @@ import pytest
 from test_s2_cutover import source as legacy_source
 
 from src.db.s2_cutover import rehearse as rehearse_s2
-from src.db.s2_verification import database_state, readonly
+from src.db.s2_verification import consistent_backup, database_state, readonly
 from src.db.s6_verification import upgrade
 
 __all__ = ["legacy_source"]
@@ -16,6 +16,28 @@ __all__ = ["legacy_source"]
 
 @pytest.fixture
 async def current_source(legacy_source, tmp_path, request):
+    revision = getattr(request, "param", 35)
+    if revision == "legacy":
+        from src.db.s6_cutover import rehearse
+
+        settings = tmp_path / "effective-settings.json"
+        settings.write_bytes(
+            Path("tests/fixtures/s2_legacy_effective.json").read_bytes()
+        )
+        settings.chmod(0o600)
+        workspace = tmp_path / "legacy-latest"
+        legacy_copy = tmp_path / "legacy-input.db"
+        consistent_backup(legacy_source, legacy_copy)
+        await rehearse(
+            legacy_copy,
+            workspace,
+            apply=True,
+            settings=settings,
+            legacy_workspace=tmp_path / "legacy-s2",
+        )
+        source = tmp_path / "legacy-current.db"
+        consistent_backup(workspace / "candidate.db", source)
+        return source
     workspace = tmp_path / "s2"
     await rehearse_s2(
         legacy_source,
@@ -24,7 +46,7 @@ async def current_source(legacy_source, tmp_path, request):
         apply=True,
     )
     source = workspace / "rehearsal.db"
-    await upgrade(source, getattr(request, "param", 35))
+    await upgrade(source, revision)
     return source
 
 

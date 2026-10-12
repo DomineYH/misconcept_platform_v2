@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-// Production templates at the isolated HTTP seam; no runtime pagination backend.
+// Production templates at the isolated HTTP seam; runtime covered by the live check.
 export default async function checkAdminPagination(page) {
   const base = new URL(page.url()).origin;
   for (const kind of ['users', 'scenarios']) {
@@ -50,6 +50,7 @@ export default async function checkAdminPagination(page) {
       total = 0;
       await page.goto(listUrl);
       assert(await rows.count() === 0, `${kind}: empty list`);
+      assert(await page.getByText(kind === 'users' ? '사용자가 없습니다.' : '시나리오가 없습니다', {exact:true}).isVisible(), `${kind}: page-1 empty explanation`);
       assert(await nav.getByRole('button', {name:'이전', exact:true}).isDisabled());
       assert(await nav.getByRole('button', {name:'다음', exact:true}).isDisabled());
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${kind}: ${width}px no page overflow`);

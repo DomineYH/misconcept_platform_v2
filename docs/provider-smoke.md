@@ -12,6 +12,8 @@ production filename. `TESTING=true` is required before Python starts: this
 existing configuration switch disables `.env` loading, but does not mock SDKs.
 Supply the synthetic DB encryption key/version through the process environment;
 provider API-key environment variables are never used by the invocation path.
+The CLI refuses SDK endpoint overrides (`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`,
+`GOOGLE_GEMINI_BASE_URL`, `GOOGLE_VERTEX_BASE_URL`) before DB access or calls.
 Do not give this process access to production keys or DBs. Model verification's
 paid preparation requires separate approval; this command does not perform it.
 

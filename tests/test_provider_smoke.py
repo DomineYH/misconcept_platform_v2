@@ -753,3 +753,37 @@ async def test_invalid_mentor_contract_stops_remaining_analysis(
     ]
     assert result["plan"]["reserved_usd"] == "0.306144"
     assert "PRIVATE-INVALID-MENTOR" not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "OPENAI_BASE_URL",
+        "ANTHROPIC_BASE_URL",
+        "GOOGLE_GEMINI_BASE_URL",
+        "GOOGLE_VERTEX_BASE_URL",
+    ],
+)
+async def test_ambient_endpoint_override_is_refused_without_calls(
+    smoke_db, tmp_path, monkeypatch, variable
+):
+    from src.cli.provider_smoke import run
+
+    async def forbidden(request, payload):
+        pytest.fail(
+            "an unapproved endpoint must not receive even a mocked call"
+        )
+
+    calls = transport(monkeypatch, forbidden)
+    plan = await run(smoke_db, [selection()], owner_id=1)
+    monkeypatch.setenv(variable, "https://unapproved.invalid")
+    with pytest.raises(ValueError, match="native_environment_required"):
+        await run(
+            smoke_db,
+            [selection()],
+            owner_id=1,
+            execute=True,
+            approval=approve(plan),
+            output=tmp_path / "endpoint.json",
+        )
+    assert calls == []

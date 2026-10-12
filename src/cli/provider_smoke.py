@@ -21,6 +21,16 @@ async def run(
         raise ValueError("approval_required")
     if os.environ.get("TESTING", "").lower() != "true":
         raise ValueError("isolated_environment_required")
+    if any(
+        name in os.environ
+        for name in (
+            "OPENAI_BASE_URL",
+            "ANTHROPIC_BASE_URL",
+            "GOOGLE_GEMINI_BASE_URL",
+            "GOOGLE_VERTEX_BASE_URL",
+        )
+    ):
+        raise ValueError("native_environment_required")
     from sqlalchemy import URL
     from sqlalchemy.engine import make_url
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -110,6 +120,7 @@ def main():
             "approval_mismatch",
             "output_required",
             "isolated_environment_required",
+            "native_environment_required",
             "isolated_database_required",
             "classroom_database_forbidden",
             "configuration_unavailable",

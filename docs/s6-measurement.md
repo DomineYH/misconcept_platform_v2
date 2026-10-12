@@ -32,6 +32,25 @@ ledger와 SDK 경계에서 확인한다. 짧은 사후 분석도 한 호출과 z
 운영 기본 limits를 수정하지 않는다. 원시 SDK 시작 시각의 panel_id와 시작 편차는
 동일 Python monotonic clock에서 관측한다. 모든 요청은 단일 worker다.
 
+#108은 같은 runner에 느린 멘토 독립성과 장애 표본을 추가한다.
+`slow_mentor_student`는 학생 두 턴, `slow_mentor_final`은 첫 턴을 대상으로 대기한
+멘토 한 호출이다. 임시 DB에 total=24/openai=24/admin=3을 명시하고 멘토를 barrier로
+붙잡은 동안 다음 학생 턴의 저장·조회·다음 입력을 확인한다. 이는 별도 두 턴 실험이며
+20개 교사의 성공 실적은 위 capacity workload에서만 확인한다. 대기 barrier에는
+고정 지연 숫자가 없으며 해제 시각과 최종 검증 시간을 server clock으로 기록한다.
+
+`panel_provider`/`panel_429`는 기존 3패널 장애 검증을 재사용하며 각 반복에 실패 1개와
+정상 완료 2개를 기록한다. 같은 비교 요청 replay가 추가 호출·원장을 만들지 않는다.
+`student_storage_failure`/`student_disconnect`는 기존 commit 실패/출력 중 끊김 검증과
+zero-call replay를 실행한다. 끊긴 실행의 실제 상태 `interrupted`는 원장·조건에 남기고
+요약에서는 `cancelled`로 분류한다. 이 재사용 검사의 request 시간에는 조회/assertion
+시간이 포함되며 SDK 시간은 unknown이다. 패널별 시간 대신 전체 검사 시간의 상한을
+기록한다. `analysis_invalid_evidence`는 정상 분석 뒤 원문에 없는 인용으로 명시적
+재분석을 시도하며 이전 정상 결과와 원장이 보존되고 replay가 호출을 늘리지 않는지
+검사한다. 잘못된 근거의 검증 실패는 failed 분포에 넣고 실제 분석 상태는 조건에 남긴다.
+정상 분석 준비 호출은 장애 시도의 분모에 넣지 않는다. 모든 새 workload도 warmup 1회와
+측정 5회를 실행하며 coverage 누락은 runner 실패다. 제품 코드·운영 limits 변경은 없다.
+
 `raw_ns`는 Python monotonic clock, `raw_browser_ms`는 browser `performance.now`,
 ledger 날짜는 UTC wall clock이다. 서로 다른 clock을 차감하지 않는다. ledger의
 시각은 원시 증거로만 제공한다. 브라우저 전송→첫 화면 본문과 완료 표시 시간은

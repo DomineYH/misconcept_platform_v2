@@ -3,6 +3,20 @@
 from s6_measurement import summarize
 
 
+def test_load_and_fault_workloads_are_required_for_complete_report():
+    from s6_measurement import expected_samples
+
+    expected = expected_samples()
+    assert expected["slow_mentor_student"] == 12
+    assert expected["slow_mentor_final"] == 6
+    assert expected["panel_provider"] == 18
+    assert expected["panel_429"] == 18
+    assert expected["student_storage_failure"] == 6
+    assert expected["student_disconnect"] == 6
+    assert expected["analysis_invalid_evidence"] == 6
+    assert expected["capacity_24_classroom_first"] == 138
+
+
 def test_nearest_rank_and_all_outcome_denominators():
     rows = [
         {"status": "completed", "durations_ms": {"visible": value}}

@@ -60,6 +60,41 @@ def write_sample(sample):
             stream.write(json.dumps(sample, ensure_ascii=False) + "\n")
 
 
+def expected_samples():
+    expected = {
+        name: 6
+        for name in (
+            "student",
+            "student_browser",
+            "mentor_final",
+            "analysis_final",
+            "admin_read",
+            "admin_save",
+            "comparison_failed",
+            "comparison_cancelled",
+        )
+    }
+    expected.update(
+        {
+            f"capacity_{capacity}_{order}": 6 * 23
+            for capacity in ("default", "24")
+            for order in ("classroom_first", "comparison_first")
+        }
+    )
+    expected.update(
+        {
+            "slow_mentor_student": 12,
+            "slow_mentor_final": 6,
+            "panel_provider": 18,
+            "panel_429": 18,
+            "student_storage_failure": 6,
+            "student_disconnect": 6,
+            "analysis_invalid_evidence": 6,
+        }
+    )
+    return expected
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -81,6 +116,8 @@ def main():
                 "pytest",
                 "-q",
                 "tests/test_s6_workloads.py",
+                "tests/test_s6_fault_workloads.py",
+                "tests/test_s6_analysis_preservation.py",
                 "tests/test_s3_load.py",
                 "tests/test_student_failures.py",
                 "tests/test_comparison_streaming.py",
@@ -105,26 +142,7 @@ def main():
             else []
         )
         measured = [row for row in rows if row["repeat"] != 0]
-        expected = {
-            name: 6
-            for name in (
-                "student",
-                "student_browser",
-                "mentor_final",
-                "analysis_final",
-                "admin_read",
-                "admin_save",
-                "comparison_failed",
-                "comparison_cancelled",
-            )
-        }
-        expected.update(
-            {
-                f"capacity_{capacity}_{order}": 6 * 23
-                for capacity in ("default", "24")
-                for order in ("classroom_first", "comparison_first")
-            }
-        )
+        expected = expected_samples()
         observed = Counter(row["workload"] for row in rows)
         coverage = {
             name: dict(

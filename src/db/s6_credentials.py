@@ -33,11 +33,15 @@ def verify_credentials(restored_db):
                 raise ValueError("consistent_restored_copy_required")
     with readonly(restored_db) as db:
         ensure_integrity(db)
-        rows = db.execute(
-            "SELECT provider,id,credential_revision,encrypted_key,nonce,"
-            "encryption_key_version FROM provider_connection "
-            "WHERE encrypted_key IS NOT NULL ORDER BY id"
-        ).fetchall()
+        rows = []
+        if db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='provider_connection'"
+        ).fetchone():
+            rows = db.execute(
+                "SELECT provider,id,credential_revision,encrypted_key,nonce,"
+                "encryption_key_version FROM provider_connection "
+                "WHERE encrypted_key IS NOT NULL ORDER BY id"
+            ).fetchall()
         versions = {}
         for (
             provider,

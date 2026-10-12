@@ -43,6 +43,8 @@ guaranteed. The report records `database_integrity` independently of
 - `incomplete`: another version remains unverified. Exit 2, even if the selected
   version passed. A version mismatch never counts as success.
 - `not_applicable`: the database contains no credentials. Exit 0 without a key.
+  This includes an empty source restore and official pre-025 backups without a
+  provider credential table. Their preservation/schema evidence is still required.
 
 Missing/unsafe input, invalid database, unsafe output or changed existing evidence
 returns exit 2 with a generic safe error, without raw exception text. Use separate

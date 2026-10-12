@@ -8,7 +8,17 @@ export default async function checkHistory(page, base) {
     await Promise.all([page.waitForURL(url => url.pathname !== '/login'), page.locator('button[type=submit]').click()]);
   };
   await login('draft_admin');
-  const sessions = (await (await page.request.get(base + '/admin/sessions')).json()).sessions;
+  const sessions = [];
+  for (let pageNumber = 1; ; pageNumber++) {
+    const listing = await (await page.request.get(`${base}/admin/sessions?page=${pageNumber}`)).json();
+    assert.equal(listing.page, pageNumber);
+    assert.equal(listing.page_size, 20);
+    sessions.push(...listing.sessions);
+    if (!listing.has_next) {
+      assert.equal(sessions.length, listing.total);
+      break;
+    }
+  }
   const legacy = sessions.find(session => session.snapshot_provenance.snapshot_origin === 'legacy_reconstructed');
   const native = sessions.find(session => session.snapshot_provenance.snapshot_origin === 'native');
   assert(legacy && native);

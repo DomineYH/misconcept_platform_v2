@@ -148,6 +148,7 @@ Lint and format: `uv run --frozen ruff check .` and `uv run --frozen black --che
 Browser setup (Node 24): `npm ci` and `npx playwright install --with-deps chromium`.
 Browser checks: `npm run test:browser` (optional filename filters: `npm run test:browser -- student_stream`).
 Live streaming check (localhost, no paid calls): `uv run --frozen python tests/check_student_live.py`.
+Synthetic latency records (warmup + five repetitions, no numeric CI gate): see [S6 measurement](docs/s6-measurement.md).
 
 S2-02 draft authoring (#59): open `/admin/scenarios/new` as an administrator.
 The existing create/update URLs store typed v1 drafts, and `/admin/scenarios/{id}`

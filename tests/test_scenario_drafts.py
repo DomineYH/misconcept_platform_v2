@@ -276,6 +276,15 @@ async def test_draft_never_starts_new_lesson(data, api, draft, entry):
     assert "unsafe()" not in listing.text
     login(api, data.admin)
     history = await api.get("/admin/sessions")
+    assert {
+        key: history.json()[key]
+        for key in ("page", "page_size", "total", "has_next")
+    } == {
+        "page": 1,
+        "page_size": 20,
+        "total": 1,
+        "has_next": False,
+    }
     assert [row["id"] for row in history.json()["sessions"]] == [
         data.session.id
     ]

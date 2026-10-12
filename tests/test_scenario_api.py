@@ -275,6 +275,15 @@ async def test_legacy_history_is_preserved_without_reconstructing_lesson(
     assert "Historical answer" in updates.text
     login(client, data.admin)
     history = await client.get("/admin/sessions")
+    assert {
+        key: history.json()[key]
+        for key in ("page", "page_size", "total", "has_next")
+    } == {
+        "page": 1,
+        "page_size": 20,
+        "total": 1,
+        "has_next": False,
+    }
     assert history.status_code == 200
     assert [row["id"] for row in history.json()["sessions"]] == [
         data.session.id

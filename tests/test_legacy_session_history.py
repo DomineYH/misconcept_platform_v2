@@ -323,6 +323,11 @@ async def test_mixed_history_and_csv_preserve_originals_and_freeze_display(
     ):
         response = await api.get(path)
         assert response.status_code == 200, response.text
+        if path == "/admin/sessions":
+            assert response.json()["page"] == 1
+            assert response.json()["page_size"] == 20
+            assert response.json()["total"] == 2
+            assert response.json()["has_next"] is False
         display_text = (
             response.text.split("<!-- Analysis Table -->")[-1]
             if path == "/admin/analysis-page"

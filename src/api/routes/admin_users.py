@@ -7,12 +7,14 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
 )
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
 from src.api.schemas import (
@@ -101,12 +103,20 @@ async def register_bulk_users_endpoint(
 @router.get("/admin/users", response_class=HTMLResponse)
 async def list_users(
     request: Request,
+    page: int = Query(1, ge=1),
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """GET /admin/users - User management page."""
 
-    result = await db.execute(select(User).order_by(User.id.desc()))
+    total_count = await db.scalar(select(func.count(User.id))) or 0
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.group))
+        .order_by(User.id.desc())
+        .limit(20)
+        .offset(min((page - 1) * 20, total_count))
+    )
     users = result.scalars().all()
 
     groups_result = await db.execute(select(UserGroup).order_by(UserGroup.name))
@@ -118,6 +128,9 @@ async def list_users(
             "request": request,
             "user": user,
             "users": users,
+            "current_page": page,
+            "total_count": total_count,
+            "total_pages": max(1, (total_count + 19) // 20),
             "groups": groups,
         },
     )

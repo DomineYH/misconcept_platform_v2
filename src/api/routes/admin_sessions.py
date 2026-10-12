@@ -2,12 +2,13 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     Request,
     status,
 )
@@ -155,14 +156,16 @@ async def sessions_page(
 
 @router.get("/admin/sessions", response_class=JSONResponse)
 async def list_sessions_api(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     scenario_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
-) -> Dict[str, List[Dict[str, Any]]]:
-    """List all sessions with optional filtering (API)."""
+) -> Dict[str, Any]:
+    """List one page of sessions with optional filtering (API)."""
     scenario_id_val = safe_int(scenario_id)
     teacher_id_val = safe_int(teacher_id)
 
@@ -173,7 +176,7 @@ async def list_sessions_api(
             joinedload(Session.teacher),
         )
         .where(Session.deleted_at.is_(None))
-        .order_by(desc(Session.started_at))
+        .order_by(desc(Session.started_at), desc(Session.id))
     )
 
     if scenario_id_val:
@@ -202,10 +205,22 @@ async def list_sessions_api(
         if dt:
             query = query.where(Session.started_at <= dt)
 
-    result = await db.execute(query)
+    total = (
+        await db.scalar(
+            select(func.count()).select_from(query.order_by(None).subquery())
+        )
+        or 0
+    )
+    result = await db.execute(
+        query.limit(page_size).offset(min((page - 1) * page_size, total))
+    )
     sessions = result.scalars().all()
 
     return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "has_next": page * page_size < total,
         "sessions": [
             {
                 "id": s.id,
@@ -220,5 +235,5 @@ async def list_sessions_api(
                 "status": ("ended" if s.ended_at else "active"),
             }
             for s in sessions
-        ]
+        ],
     }

@@ -19,13 +19,29 @@ from src.api.dependencies import templates  # noqa: E402
 from tests.s2_screen_fixtures import editor_fixture  # noqa: E402
 from tests.s4_screen_fixtures import analysis_fixture  # noqa: E402
 from tests.s5_terminal_fixtures import terminal_fixtures  # noqa: E402
+from tests.s6_screen_fixtures import list_fixture  # noqa: E402
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path)
         query = parse_qs(path.query)
-        if path.path == "/fixtures/s5/terminal":
+        if path.path in {"/fixtures/s6/users", "/fixtures/s6/scenarios"}:
+            kind = path.path.rsplit("/", 1)[1]
+            body = (
+                templates.get_template(f"admin/{kind}.html")
+                .render(
+                    **list_fixture(
+                        kind,
+                        int(query.get("page", ["1"])[0]),
+                        int(query.get("total", ["41"])[0]),
+                        [int(value) for value in query.get("deleted", [])],
+                    )
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/s5/terminal":
             body = json.dumps(terminal_fixtures()).encode()
             mime = "application/json"
         elif path.path == "/fixtures/s4/result":

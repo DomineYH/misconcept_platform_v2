@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
+    Query,
     Request,
     status,
 )
@@ -44,25 +45,35 @@ router = APIRouter(tags=["Admin Scenarios"], route_class=ScenarioRoute)
 @router.get("/admin/scenarios", response_class=HTMLResponse)
 async def list_all_scenarios(
     request: Request,
+    page: int = Query(1, ge=1),
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """GET /admin/scenarios - List all scenarios (T077)."""
 
+    total_count = (
+        await db.scalar(
+            select(func.count(Scenario.id)).where(Scenario.deleted_at.is_(None))
+        )
+        or 0
+    )
     query = (
         select(Scenario)
         .where(Scenario.deleted_at.is_(None))
         .order_by(Scenario.id.desc())
+        .limit(20)
+        .offset(min((page - 1) * 20, total_count))
     )
     result = await db.execute(query)
     scenarios = result.scalars().all()
+    scenario_ids = [scenario.id for scenario in scenarios]
 
     session_counts = dict(
         (
             await db.execute(
-                select(Session.scenario_id, func.count(Session.id)).group_by(
-                    Session.scenario_id
-                )
+                select(Session.scenario_id, func.count(Session.id))
+                .where(Session.scenario_id.in_(scenario_ids))
+                .group_by(Session.scenario_id)
             )
         ).all()
     )
@@ -72,7 +83,9 @@ async def list_all_scenarios(
     groups = groups_result.scalars().all()
 
     # Load scenario-group assignments
-    sg_result = await db.execute(select(ScenarioGroup))
+    sg_result = await db.execute(
+        select(ScenarioGroup).where(ScenarioGroup.scenario_id.in_(scenario_ids))
+    )
     all_sg = sg_result.scalars().all()
     scenario_group_map = {}
     for sg in all_sg:
@@ -84,6 +97,9 @@ async def list_all_scenarios(
             "request": request,
             "user": user,
             "scenarios": scenarios,
+            "current_page": page,
+            "total_count": total_count,
+            "total_pages": max(1, (total_count + 19) // 20),
             "session_counts": session_counts,
             "groups": groups,
             "scenario_group_map": scenario_group_map,

@@ -195,6 +195,7 @@ async def test_unavailable_student_configuration_has_no_fallback_or_attempt(
     from src.config import config
     from src.models import ApiUsageLog, AppSetting
 
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "SYNTHETIC-ENV-FALLBACK-KEY")
     setting = await data.db.get(AppSetting, 1)
     setting.student_model_config_id = student.model.id
     if mode == "different_model":

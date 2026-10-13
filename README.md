@@ -148,6 +148,8 @@ Lint and format: `uv run --frozen ruff check .` and `uv run --frozen black --che
 Browser setup (Node 24): `npm ci` and `npx playwright install --with-deps chromium`.
 Browser checks: `npm run test:browser` (optional filename filters: `npm run test:browser -- student_stream`).
 Live streaming check (localhost, no paid calls): `uv run --frozen python tests/check_student_live.py`.
+Synthetic latency records (warmup + five repetitions, no numeric CI gate): see [S6 measurement](docs/s6-measurement.md).
+Final S6 acceptance, AC-26/29/30 evidence, human release gates and retention/backup handoff: see [S6 operator runbook](docs/s6-acceptance.md).
 
 S2-02 draft authoring (#59): open `/admin/scenarios/new` as an administrator.
 The existing create/update URLs store typed v1 drafts, and `/admin/scenarios/{id}`
@@ -413,3 +415,44 @@ Targeted offline checks:
 and `npm run test:browser -- conversation` cover authenticated lifecycle/SSE,
 common model authoring, and the real saved-scenario browser workflow against
 temporary SQLite and mocked SDK HTTP. No paid generation or operating DB is used.
+
+S6-04 administrator pagination screens (#105):
+`npm run test:browser -- s6_` renders the real user/scenario templates with
+isolated synthetic lists of 41 records (20/20/1). It covers first/middle/last and
+empty pages, keyboard links/focus, 390px layouts, denied/conflicting deletions,
+last-row deletion returning to the previous page, and existing user forms.
+Synthetic records and HTTP responses live only in `tests/browser_server.py`,
+`tests/s6_screen_fixtures.py` and browser interception; there is no product mock
+fallback. Existing scenario authoring/publication/dirty-input checks still apply.
+
+S6-05 runtime pagination (#106): `/admin/users` and `/admin/scenarios`
+validate `page>=1` and load 20 records per page with SQL LIMIT/OFFSET in
+descending ID order. Templates receive `current_page`, `total_count` and
+`total_pages` (at least 1). An out-of-range positive page is empty and its
+previous link returns to the last valid page; deleting the only row on a later
+page follows the previous link. Scenario session counts (including deleted
+sessions, as before) and group assignments are loaded for page IDs only.
+Group selectors and client-side filters retain their existing scope.
+
+`GET /admin/sessions` now returns the **first page, not the entire list**, by
+default: `page=1`, `page_size=20`. The `sessions` array keeps its existing row
+fields; the response adds `page`, `page_size`, filtered `total`, and `has_next`.
+`page>=1` and `1<=page_size<=100` are required (422 on violations); a positive
+page beyond the result returns an empty array. Existing scenario, teacher and
+date filters still apply. Ordering is `started_at DESC, id DESC`, including
+equal timestamps. JSON consumers needing all rows must request subsequent
+pages while `has_next` is true, or use `/admin/sessions/export` for the existing
+full research CSV. CSV exports remain unpaginated; sessions HTML (10 per page),
+analysis/comparison lists and user conversation modals are unchanged.
+
+`npm run test:browser -- s6_` also exercises real login, CSRF, migrated temporary
+SQLite, keyboard/mobile page navigation, out-of-range empty pages, rejected
+deletion and last-row deletion returning to the previous page. Synthetic
+fixtures and localhost checks never access the operating database or providers.
+
+S6-08 (#109): [approved synthetic provider smoke](docs/provider-smoke.md)
+uses a default zero-call plan and separate human approval for a USD 3 maximum
+reservation. Run `python -m src.cli.provider_smoke --help` for the operator CLI;
+SDK-mocked acceptance tests are in `tests/test_provider_smoke.py`. This tool
+requires an isolated, already verified synthetic DB and does not perform paid
+calls as part of implementation or replace educational quality approval.

@@ -78,12 +78,30 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" style="text-align:center;padding:2rem;">사용자가 없습니다.</td>
+          <td colspan="7" style="text-align:center;padding:2rem;">{% if current_page is defined and current_page > 1 %}이 페이지에 결과가 없습니다.{% else %}사용자가 없습니다.{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  {% if current_page is defined %}
+  <nav class="pagination" id="users-pagination" aria-label="목록 페이지">
+    <span class="pagination-info" aria-current="page">현재 {{ current_page }} 페이지 · 20개씩 · 총 {{ total_count }}개</span>
+    <div class="pagination-buttons">
+      {% if current_page > 1 %}
+      <a href="/admin/users?page={{ [current_page - 1, total_pages]|min }}" rel="prev" class="btn btn-sm btn-secondary">이전</a>
+      {% else %}
+      <button type="button" class="btn btn-sm btn-secondary" disabled>이전</button>
+      {% endif %}
+      {% if current_page < total_pages %}
+      <a href="/admin/users?page={{ current_page + 1 }}" rel="next" class="btn btn-sm btn-secondary">다음</a>
+      {% else %}
+      <button type="button" class="btn btn-sm btn-secondary" disabled>다음</button>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
 </div>
 
 <!-- BULK UPLOAD MODAL -->
@@ -424,7 +442,10 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
       });
       if (res.ok) {
         alert('사용자가 삭제되었습니다!');
-        window.location.reload();
+        const previous = document.querySelector('#users-pagination [rel="prev"]');
+        if (previous && document.querySelectorAll('#users-table tbody tr[data-user-id]').length === 1) {
+          window.location.assign(previous.href);
+        } else window.location.reload();
       } else {
         const err = await res.json();
         alert('오류: ' + err.detail);

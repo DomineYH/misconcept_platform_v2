@@ -20,8 +20,8 @@ def test_shared_limits_record_official_source_and_check_date(
 ):
     definition = capabilities(provider, model)
     assert definition["limit_sources"][field].startswith("https://")
-    assert definition["limits_checked_at"] == "2026-10-11"
-    assert definition["definition_version"].endswith("-v3")
+    assert definition["limits_checked_at"] == "2026-10-13"
+    assert definition["definition_version"].endswith("-v4")
     assert capabilities(provider, model + "-unknown") is None
 
 

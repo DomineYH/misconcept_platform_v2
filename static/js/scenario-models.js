@@ -1,4 +1,4 @@
-import {node, field, providers, roles} from './ai-render.js';
+import {node, field, providers, roles, optionNotes} from './ai-render.js';
 
 const states = {unverified:'미검증', verifying:'검증 중', succeeded:'성공', failed:'실패', stale:'재검증 필요'};
 
@@ -105,6 +105,7 @@ export function mountScenarioModel(data, role, label, {select, options, status},
       options.append(node('pre', JSON.stringify(selection.options, null, 2)));
       return;
     }
+    optionNotes(options, model.capabilities, selection.options);
     for (const definition of model.capabilities.fields) {
       const value = definition.name.split('.').reduce((obj, key) => obj?.[key], selection.options);
       const numeric = ['integer', 'number'].includes(definition.type);

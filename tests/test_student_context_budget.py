@@ -53,6 +53,7 @@ async def test_required_input_rejection_creates_no_turn_run_or_attempt(
     definition = capabilities("openai", "gpt-5-mini")
     if capacity is None:
         definition.pop("combined_context_tokens")
+        definition.pop("input_token_limit")
     else:
         definition["combined_context_tokens"] = capacity
     monkeypatch.setattr(context_budget, "capabilities", lambda *_: definition)

@@ -136,8 +136,14 @@ async def test_first_non_ok_chunk_stops_calls_and_preserves_only_validated_range
     data, api, monkeypatch, stop_at, error
 ):
     from src.models import Message
+    from src.services import analysis_plan
+    from src.services.model_capabilities import capabilities
 
     await long_session(data, monkeypatch)
+    # Keep the worst-case merge feasible so this test reaches the chunk failure.
+    definition = capabilities("openai", "gpt-5-mini")
+    definition["input_token_limit"] = 400000
+    monkeypatch.setattr(analysis_plan, "capabilities", lambda *_: definition)
     for i in range(10, 12):
         data.db.add(
             Message(
@@ -275,6 +281,7 @@ async def test_eight_confirmed_chunks_make_nine_calls_with_classification_on_or_
     definition = capabilities("openai", "gpt-5-mini")
     # A synthetic ceiling makes the eight-chunk boundary reachable in mocks.
     definition["combined_context_tokens"] = 1000000
+    definition["input_token_limit"] = 1000000
     monkeypatch.setattr(analysis_plan, "capabilities", lambda *_: definition)
 
     async def upstream(request, body):

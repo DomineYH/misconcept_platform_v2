@@ -14,7 +14,8 @@ export default async function checkAIModels(page) {
   for (const width of [1280, 390]) {
     await page.setViewportSize({width, height:900});
     await page.goto(`${base}/admin/ai`);
-    await page.locator('[data-provider=openai]').getByRole('button', {name:'gpt-5-mini', exact:true}).click();
+    await page.locator('[data-provider=openai]').getByLabel('OpenAI 모델 ID 선택', {exact:true}).selectOption('gpt-5-mini');
+    await page.locator('[data-provider=openai]').getByRole('button', {name:'선택 모델 등록', exact:true}).click();
     assert.equal(await page.getByLabel('모델 ID', {exact:true}).inputValue(), 'gpt-5-mini');
     await page.getByLabel('표시명', {exact:true}).fill('목록에서 등록');
     await page.getByRole('button', {name:'모델 등록', exact:true}).click();

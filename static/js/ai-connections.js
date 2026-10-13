@@ -1,4 +1,4 @@
-import {render, node, button, field, providers, roles} from './ai-render.js';
+import {render, node, button, field, providers, roles, optionNotes} from './ai-render.js';
 
 const status = document.getElementById('ai-status');
 const error = document.getElementById('ai-error');
@@ -67,7 +67,14 @@ async function submit(path, body, message = '작업을 완료했습니다.') {
 function closeEditor() {
   editor.replaceChildren();
   editor.hidden = true;
-  (returnFocus?.isConnected ? returnFocus : document.getElementById('ai-refresh')).focus();
+  let target = returnFocus;
+  if (target && !target.isConnected) {
+    const card = target.closest('[data-model], [data-provider]');
+    const replacement = [...document.querySelectorAll('[data-model], [data-provider]')].find(el => card && el.dataset.model === card.dataset.model && el.dataset.provider === card.dataset.provider);
+    target = [...(replacement?.querySelectorAll('button') || [])].find(el => el.textContent === returnFocus.textContent);
+    if (target?.disabled) target = replacement?.querySelector('select');
+  }
+  (target || document.getElementById('ai-refresh')).focus();
 }
 
 function form(title, onSubmit) {
@@ -119,14 +126,16 @@ const actions = {
   model(m) {
     if (busy) return;
     const f = form(`${m.model_id} 모델 설정`, f => {
-      const options = {};
+      const options = structuredClone(m.default_options);
       for (const definition of m.capabilities?.fields || []) {
         const value = f.elements[definition.name].value;
-        if (value === '') continue;
         const path = definition.name.split('.');
         let target = options;
         for (const part of path.slice(0, -1)) target = target[part] ||= {};
-        target[path.at(-1)] = ['integer', 'number'].includes(definition.type) ? Number(value) : value;
+        if (value === '') {
+          delete target[path.at(-1)];
+          if (path.length > 1 && Object.keys(target).length === 0) delete options[path[0]];
+        } else target[path.at(-1)] = ['integer', 'number'].includes(definition.type) ? Number(value) : value;
       }
       submit(`models/${m.id}/update`, {expected_version:m.config_version,
         display_name:f.elements.display_name.value, enabled:f.elements.enabled.value === 'true',
@@ -137,6 +146,8 @@ const actions = {
     enabled.disabled = !m.enabled && (!m.capabilities || m.capabilities.metadata_conflict || !Object.values(m.verification_state).some(v => v.status === 'succeeded'));
     f.append(node('p', '모델 ID는 등록 후 변경할 수 없습니다. 모델 비활성화는 신규 호출만 막습니다. 지원 옵션 변경은 서버에서 조합과 범위를 검증합니다.'));
     if (!m.capabilities) f.append(node('p', '기능 정의 필요: 옵션 편집과 역할 시험을 사용할 수 없습니다.'));
+    if (m.capabilities) optionNotes(f, m.capabilities, m.default_options);
+    else f.append(node('pre', JSON.stringify(m.default_options, null, 2)));
     for (const definition of m.capabilities?.fields || []) {
       const value = definition.name.split('.').reduce((obj, key) => obj?.[key], m.default_options);
       const attrs = {type:['integer','number'].includes(definition.type) ? 'number' : 'text'};

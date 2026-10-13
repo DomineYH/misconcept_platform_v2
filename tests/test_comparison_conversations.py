@@ -776,6 +776,16 @@ async def test_saved_version_and_all_panel_budget_preflight_leave_no_action(
 async def test_one_panel_full_input_refusal_preserves_parent_without_truncation(
     data, client, student, saved
 ):
+    from src.services.model_capabilities import capabilities
+
+    # A combined-limit model lets the larger output reserve block only panel b.
+    student.model.model_id = "gpt-5.2"
+    student.model.capabilities_json = capabilities("openai", "gpt-5.2")
+    for role in ROLE_CONTRACT_VERSIONS:
+        selection = saved["config"][role]["resolved_model_config"]
+        if selection:
+            selection["model_id"] = "gpt-5.2"
+    await data.db.commit()
     login(client, data.admin)
     saved["config"]["problem"]["public_text"] = "p" * 50000
     for field, character in [

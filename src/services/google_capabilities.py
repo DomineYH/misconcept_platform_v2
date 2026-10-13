@@ -1,11 +1,18 @@
-"""Exact Gemini definition, checked against official sources on 2026-10-10."""
+"""Exact Gemini definition, checked against official sources on 2026-10-13."""
 
 from copy import deepcopy
 
+LEVELS = {
+    "gemini-3.8-flash": (["low", "medium", "high"], "medium"),
+    "gemini-3.6-flash": (["minimal", "low", "medium", "high"], "medium"),
+    "gemini-3.5-flash-lite": (["minimal", "low", "medium", "high"], "minimal"),
+    "gemini-3.1-flash-lite": (["minimal", "low", "medium", "high"], "minimal"),
+    "gemini-3.1-pro-preview": (["low", "medium", "high"], "high"),
+}
 DEFINITION = dict(
-    definition_version="google-2026-10-11-v3",
-    checked_at="2026-10-10",
-    limits_checked_at="2026-10-11",
+    definition_version="google-2026-10-13-v4",
+    checked_at="2026-10-13",
+    limits_checked_at="2026-10-13",
     limit_sources={
         k: "https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash"
         for k in ("input_token_limit", "max_output_tokens")
@@ -29,6 +36,11 @@ DEFINITION = dict(
     thinking_levels=[],
     thinking_budget_min=0,
     thinking_budget_max=24576,
+    default_thinking_budget=-1,
+    preview=False,
+    option_notes=[
+        "지정하지 않음은 동적 thinking입니다. -1 자동, 0 끄기, 1–24576 숫자 budget을 구분합니다. level은 지원하지 않습니다."
+    ],
     fields=[
         dict(
             name="max_output_tokens",
@@ -44,13 +56,51 @@ DEFINITION = dict(
             type="integer",
             min=-1,
             max=24576,
+            default=-1,
         ),
     ],
 )
 
 
 def capabilities(model_id):
-    return deepcopy(DEFINITION) if model_id == "gemini-2.5-flash" else None
+    if model_id == "gemini-2.5-flash":
+        return deepcopy(DEFINITION)
+    if model_id not in LEVELS:
+        return None
+    levels, default = LEVELS[model_id]
+    definition = deepcopy(DEFINITION)
+    source = f"https://ai.google.dev/gemini-api/docs/models/{model_id}"
+    definition["sources"][0] = source
+    definition["limit_sources"] = {
+        key: source for key in definition["limit_sources"]
+    }
+    for key in (
+        "thinking_budget_min",
+        "thinking_budget_max",
+        "default_thinking_budget",
+    ):
+        del definition[key]
+    definition.update(
+        thinking_levels=list(levels),
+        default_thinking_level=default,
+        preview=model_id == "gemini-3.1-pro-preview",
+    )
+    definition["fields"][-1] = dict(
+        name="thinking.level",
+        label="사고 수준",
+        type="string",
+        choices=list(levels),
+        default=default,
+    )
+    definition["option_notes"] = [
+        "지정하지 않음은 제공자 기본 level을 사용합니다. level과 budget은 함께 지정할 수 없습니다. 이 앱의 Gemini 3 옵션 편집은 level을 사용합니다. 기존 budget 저장 값은 보존하며 명시적 수정이 필요합니다.",
+        (
+            "minimal은 사고의 완전한 비활성화를 보장하지 않습니다."
+            if "minimal" in levels
+            else "minimal은 지원하지 않습니다."
+        ),
+    ]
+    return definition
 
 
 def validate_model_and_options(model_id, options):
@@ -86,11 +136,15 @@ def validate_model_and_options(model_id, options):
                 raise ValueError("invalid_options")
         elif "budget" in value:
             budget = value["budget"]
-            if type(budget) is not int or (
-                budget != -1
-                and not definition["thinking_budget_min"]
-                <= budget
-                <= definition["thinking_budget_max"]
+            if (
+                "thinking_budget_max" not in definition
+                or type(budget) is not int
+                or (
+                    budget != -1
+                    and not definition["thinking_budget_min"]
+                    <= budget
+                    <= definition["thinking_budget_max"]
+                )
             ):
                 raise ValueError("invalid_options")
         else:

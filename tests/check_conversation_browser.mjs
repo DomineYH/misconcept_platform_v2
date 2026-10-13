@@ -11,7 +11,9 @@ try {
   await page.locator('#username').fill('comparison_admin');
   await page.locator('#password').fill('comparison-password');
   await page.getByRole('button', {name:'로그인',exact:true}).click();
-  await page.goto(`${base}/admin/scenarios?compare=1`);
+  await page.goto(`${base}/admin/scenarios`);
+  await page.locator('.page-header-admin').getByRole('link', {name:'전체 모델 비교',exact:true}).click();
+  assert.equal(page.url(), `${base}/admin/scenarios?compare=1`);
   await page.getByRole('link', {name:'모델 비교',exact:true}).last().click();
   await page.getByLabel('비교 모델 수', {exact:true}).selectOption('2');
   for (const panel of ['1','2']) {

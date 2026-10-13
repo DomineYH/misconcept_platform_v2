@@ -4,7 +4,8 @@
 <div class="container scenarios-admin">
   <header class="page-header-admin">
     <div class="header-content"><h1>{{ '비교할 저장 시나리오 선택' if request is defined and request.query_params.get('compare') else '시나리오 관리' }}</h1><p class="subtitle">통합 설정 작성, 게시 및 관리</p></div>
-    <a href="/admin/model-comparison" class="btn btn-secondary">전체 모델 비교</a>
+    <a href="/admin/scenarios?compare=1" class="btn btn-secondary">전체 모델 비교</a>
+    <a href="/admin/model-comparison" class="btn btn-secondary">비교 이력</a>
     <a href="/admin/scenarios/new" class="btn btn-primary">통합 초안 작성</a>
   </header>
   <section class="filter-bar" aria-label="시나리오 검색">

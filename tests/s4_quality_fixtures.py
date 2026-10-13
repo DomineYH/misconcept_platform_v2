@@ -8,6 +8,15 @@ from src.services.lesson_snapshots import LessonSnapshot, canonical_hash
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
+def install_corpus_planner_limits(monkeypatch):
+    from src.services import analysis_plan
+
+    definition = analysis_plan.capabilities("openai", "gpt-5-mini")
+    # The fixed offline corpus rehearses its original 400k synthetic ceiling.
+    definition["input_token_limit"] = 400000
+    monkeypatch.setattr(analysis_plan, "capabilities", lambda *_: definition)
+
+
 def load_corpus(path=FIXTURES / "s4_quality_corpus.json"):
     corpus = json.loads(path.read_text(encoding="utf-8"))
     if (

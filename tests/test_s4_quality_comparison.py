@@ -12,7 +12,11 @@ import httpx2
 import pytest
 from analysis_fixtures import install_analysis_snapshot
 from s2_analysis_baseline import run_llm_pipeline as s2_pipeline
-from s4_quality_fixtures import load_corpus, mock_comparison_record
+from s4_quality_fixtures import (
+    install_corpus_planner_limits,
+    load_corpus,
+    mock_comparison_record,
+)
 from test_analysis_invocations import analysis_transport
 from test_analysis_invocations import api as analysis_api
 from test_provider_connections import api as provider_api
@@ -125,6 +129,7 @@ async def test_mock_comparison_records_same_frozen_inputs_without_approval(
 
     corpus = load_corpus()
     sample = next(s for s in corpus["samples"] if s["id"] == sample_id)
+    install_corpus_planner_limits(monkeypatch)
     await install_analysis_snapshot(data, monkeypatch)
     data.session.config_snapshot_json = copy.deepcopy(sample["snapshot"])
     data.session.config_hash = sample["config_hash"]

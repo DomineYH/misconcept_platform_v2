@@ -69,14 +69,20 @@ async def reserve_comparison(
             return accepted, executions
 
 
-async def admit_comparison(db, user, body, comparison_id, panel_id):
+async def admit_comparison(
+    db, user, body, comparison_id, panel_id, *, conversation_id=None
+):
     actor = await db.get(User, user.id)
     if actor is None or not actor.is_admin:
         raise HTTPException(403, detail={"code": "admin_required"})
-    input_hash = digest(body.model_dump(by_alias=True, mode="json"))
+    input_hash = digest(
+        body.model_dump(by_alias=True, mode="json", exclude={"mentor_trigger"})
+    )
     comparison = previous = frozen = None
     if comparison_id is not None:
         comparison = await owned_comparison(db, comparison_id, user.id)
+        if comparison.conversation_id != conversation_id:
+            conflict("use_conversation")
         snapshot = await comparison_snapshot(db, comparison)
         frozen = find_panel(snapshot, panel_id)
         replay = await db.scalar(
@@ -112,6 +118,7 @@ async def admit_comparison(db, user, body, comparison_id, panel_id):
                     for item in comparison.canonical_context
                 ],
                 current_message=comparison.current_message,
+                mentor_trigger=previous.mentor_trigger,
                 panels=[
                     dict(
                         panel_id=panel_id,
@@ -131,6 +138,8 @@ async def admit_comparison(db, user, body, comparison_id, panel_id):
         )
     )
     if existing:
+        if existing.conversation_id != conversation_id:
+            conflict("request_conflict")
         await owned_comparison(db, existing.id, user.id)
         if existing.input_hash != input_hash:
             conflict("request_conflict")
@@ -152,7 +161,11 @@ async def admit_comparison(db, user, body, comparison_id, panel_id):
         and source.config.mentor.mode == "off"
     ):
         raise_input_error("mentor_disabled", "config.mentor.mode")
-    if comparison is None and source.scenario_id is not None:
+    if (
+        comparison is None
+        and conversation_id is None
+        and source.scenario_id is not None
+    ):
         scenario = await db.get(Scenario, source.scenario_id)
         if scenario is None or scenario.deleted_at is not None:
             raise HTTPException(404, detail={"code": "scenario_not_found"})
@@ -234,20 +247,34 @@ async def allocate_panels(factory, db, user, body, prepared, frozen):
 
 
 async def persist_comparison(
-    db, user, admission, history, executions, frozen_panels
+    db,
+    user,
+    admission,
+    history,
+    executions,
+    frozen_panels,
+    *,
+    conversation=None,
+    commit=True,
 ):
     body, input_hash = admission.body, admission.input_hash
     comparison, previous = admission.comparison, admission.previous
     source, role = body.source_snapshot, body.target_role
     try:
         frozen_source = source.model_dump()
-        frozen_source["title"] = draft_title(source.title)
+        if conversation is None:
+            frozen_source["title"] = draft_title(source.title)
         created = utcnow()
         if comparison is None:
             comparison = ComparisonRun(
                 id=str(uuid4()),
                 admin_id=user.id,
-                scenario_id=source.scenario_id,
+                conversation_id=conversation.id if conversation else None,
+                scenario_id=(
+                    conversation.scenario_id
+                    if conversation
+                    else source.scenario_id
+                ),
                 source_version=source.source_version,
                 source_snapshot=frozen_source,
                 source_hash=digest(frozen_source),
@@ -271,7 +298,11 @@ async def persist_comparison(
                 input_hash=input_hash,
                 parent_run_id=body.parent_run_id,
                 created_at=created,
-                expires_at=created + timedelta(days=30),
+                expires_at=(
+                    conversation.expires_at
+                    if conversation
+                    else created + timedelta(days=30)
+                ),
                 status="running",
             )
             db.add(comparison)
@@ -291,7 +322,7 @@ async def persist_comparison(
                 turn_id=turn_id,
                 operation=role,
                 mentor_trigger=(
-                    source.config.mentor.mode
+                    (body.mentor_trigger or source.config.mentor.mode)
                     if COMPARISON_ROLES[role].target_pair
                     else None
                 ),
@@ -306,7 +337,8 @@ async def persist_comparison(
             db.add(run)
             await db.flush()
         accepted = await comparison_snapshot(db, comparison)
-        await db.commit()
+        if commit:
+            await db.commit()
     except BaseException as error:
         for execution in executions:
             execution["permit"].release()
@@ -382,6 +414,22 @@ async def _finish_comparison(
                 or comparison.expires_at <= utcnow()
             ):
                 status, error_code = "interrupted", "configuration_unavailable"
+            if comparison.conversation_id is not None:
+                from src.services.comparison_conversations import (
+                    owned_conversation,
+                    validate_setup,
+                )
+
+                try:
+                    parent = await owned_conversation(
+                        db, comparison.conversation_id, comparison.admin_id
+                    )
+                    await validate_setup(db, parent, run.panel_id)
+                except HTTPException:
+                    status, error_code = (
+                        "interrupted",
+                        "configuration_unavailable",
+                    )
             run.status, run.error_code = status, error_code
             run.first_output_at, run.finished_at = first_output_at, utcnow()
             run.partial_text = None if status == "completed" else partial_text

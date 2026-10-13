@@ -75,7 +75,7 @@ def mentor_request(body, history, panel, options):
     return build_mentor_input(
         source.config,
         history,
-        source.config.mentor.mode,
+        body.mentor_trigger or source.config.mentor.mode,
         panel.selection,
         options,
         body.request_id,

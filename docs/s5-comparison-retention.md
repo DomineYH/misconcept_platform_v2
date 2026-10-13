@@ -1,17 +1,21 @@
 # Comparison retention operations
 
 Comparison input, snapshots and results expire at UTC creation + 30 days.
-Reading, copying, retries and child comparisons do not extend a record's expiry.
+Reading, copying and retries do not extend a record's expiry. A saved-scenario
+conversation and every linked role round share the parent's creation + 30 days.
 Expired records disappear from owner-only access immediately; live calls have
 an absolute deadline bounded by the remaining retention time. Account deletion
 requests cancellation; startup orphan recovery interrupts abandoned calls.
 
 Only terminal expired or ownerless comparisons are cleanup candidates. The
 command skips running comparisons, generations and usage attempts. Each write
-transaction deletes at most 100 comparisons and first detaches their usage run
+transaction deletes at most 100 history items (legacy runs or whole conversations)
+and first detaches every linked attempt's usage run
 references in the same transaction. Generation records and comparison contents
 are deleted; actual nullable usage/cost, provider, model, status and the
 `comparison` scope remain. Unknown measurements are never replaced with zero.
+Linked rounds are never independent cleanup candidates; any running child,
+usage attempt or live cancellation signal keeps the whole aggregate.
 A failed batch rolls back completely; prior committed batches remain deleted.
 
 From the application directory, with the deployed locked environment:
@@ -21,7 +25,7 @@ uv run --frozen python -m src.cli.cleanup_comparisons --database dialogue_sim.db
 uv run --frozen python -m src.cli.cleanup_comparisons --database dialogue_sim.db --execute
 ```
 
-The database must already exist and be migrated through 035. The command never
+The database must already exist and be migrated through 036. The command never
 creates or migrates it. Dry-run opens it read-only. Exit 0 means the requested
 mode completed, 1 means database/batch failure, and 2 means invalid arguments.
 Logs contain mode, target/deleted/failed/skipped-running counts and UTC completion

@@ -22,7 +22,7 @@ export default async function checkUnsavedComparisonSnapshot(page) {
   assert.equal(snapshot.source_version,null);
   assert.equal(snapshot.title,'', 'placeholder is display-only');
   assert.equal(snapshot.config.problem.public_text,'저장하지 않은 문제 <script>window.s5xss=1</script>');
-  assert.equal(snapshot.config.analysis.resolved_model_config,null,'student comparison needs no analysis model');
+  assert.equal(snapshot.config.analysis.resolved_model_config.model_config_id, snapshot.config.student.resolved_model_config.model_config_id, 'new authoring uses one common identity; legacy student comparison ignores analysis settings');
   assert.equal(request.headers()['x-csrf-token'],'comparison-csrf');
   assert.deepEqual(fixture.unexpected,[]);
   assert.equal(await page.evaluate(() => window.s5xss),undefined);

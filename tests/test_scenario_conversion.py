@@ -553,7 +553,7 @@ async def test_every_legacy_identity_and_historical_record_survives_conversion(
 
 
 async def test_utf8_oversize_target_stays_archived_and_can_be_saved_as_minimal_draft(
-    data, api, legacy, effective
+    data, api, legacy, effective, publishable
 ):
     from sqlalchemy import text
 
@@ -592,6 +592,11 @@ async def test_utf8_oversize_target_stays_archived_and_can_be_saved_as_minimal_d
         )
     }
     body.update(expected_version=saved["config_version"], action="save_draft")
+    for role in ("student", "analysis", "mentor"):
+        if role != "mentor" or body["config"]["mentor"]["mode"] != "off":
+            body["config"][role]["resolved_model_config"] = publishable[
+                "config"
+            ]["student"]["resolved_model_config"]
     assert (await post(api, path + "/update", body)).status_code == 200
     assert (
         json.loads(archive["scenarios"][0]["framework"]["labels_json"])[19][

@@ -29,6 +29,9 @@ class ComparisonRun(Base):
     scenario_id: Mapped[int | None] = mapped_column(
         ForeignKey("scenario.id", ondelete="SET NULL")
     )
+    conversation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("comparison_conversation.id", ondelete="CASCADE"), index=True
+    )
     source_version: Mapped[int | None] = mapped_column(Integer)
     source_snapshot: Mapped[dict] = mapped_column(JSON)
     source_hash: Mapped[str] = mapped_column(String(64))

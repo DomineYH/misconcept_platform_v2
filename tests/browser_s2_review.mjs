@@ -23,7 +23,7 @@ export default async function checkLegacyScenarioReview(page) {
   assert.equal(request.expected_version, 1);
   assert.equal(request.acknowledge_review, true);
   await page.getByRole('button', {name:'모델 사용 가능 상태를 확인하세요.', exact:true}).click();
-  assert(await page.getByLabel('학생봇 제공자 / 모델').evaluate(el => el === document.activeElement));
+  assert(await page.getByLabel('시나리오 공통 모델').evaluate(el => el === document.activeElement));
   assert(!(await page.locator('#public-preview').innerText()).includes('INTERNAL_STUDENT_SENTINEL'));
   return {pageErrors:[]};
 }

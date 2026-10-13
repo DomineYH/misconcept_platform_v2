@@ -17,3 +17,8 @@
   .comparison-grid { display: block; }
   .comparison-grid [data-mobile-hidden="true"] { display: none; }
 }
+
+.conversation-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; }
+.conversation-panels > * { min-width: 0; overflow-wrap: anywhere; }
+.conversation-panels pre, #conversation-dialogue .comparison-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+#conversation-question { width: 100%; box-sizing: border-box; }

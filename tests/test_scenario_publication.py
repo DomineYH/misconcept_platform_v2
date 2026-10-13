@@ -235,8 +235,8 @@ async def test_current_model_authorization_and_saved_options_gate_publication(
     ]
     assert (await api.get(path)).json() == before
     publishable["action"] = "save_draft"
-    assert (await post(api, path + "/update", publishable)).status_code == 200
-    assert (await api.get(path)).json()["config"] == publishable["config"]
+    assert (await post(api, path + "/update", publishable)).status_code == 422
+    assert (await api.get(path)).json() == before
 
 
 async def test_disabled_mentor_does_not_require_current_role_authorization(
@@ -477,12 +477,13 @@ async def test_missing_conversion_model_is_resolved_by_a_valid_replacement(
     data, api, publishable
 ):
     selected = publishable["config"]["student"]["resolved_model_config"]
-    publishable["config"]["student"]["resolved_model_config"] = None
     publishable["action"] = "save_draft"
     created = await post(api, "/admin/scenarios", publishable)
+    publishable["config"]["student"]["resolved_model_config"] = None
     path = f"/admin/scenarios/{created.json()['id']}"
     async with data.factory() as db:
         scenario = await db.get(Scenario, created.json()["id"])
+        scenario.config_json = copy.deepcopy(publishable["config"])
         scenario.review_required = True
         scenario.review_reasons = [
             dict(

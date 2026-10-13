@@ -93,6 +93,11 @@ async def start_comparison(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
+    if (
+        body.source_snapshot.source_kind != "unsaved_draft"
+        or body.mentor_trigger is not None
+    ):
+        raise HTTPException(422, detail={"code": "invalid_source"})
     factory = await comparison_factory(db)
     snapshot, execution = await reserve_comparison(factory, user, body)
     if execution is None:

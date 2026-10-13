@@ -23,7 +23,6 @@ try {
   await page.getByLabel('학생봇 이름',{exact:true}).fill('Student');
   await page.getByLabel('목표 오개념',{exact:true}).fill('Larger denominator');
   await page.getByLabel('학생봇 행동 지시',{exact:true}).fill('Explain');
-  const studentSelection = await page.locator('[id="student.resolved_model_config"]').inputValue();
   await page.locator('[data-step="3"]').click();
   await page.getByLabel('멘토 사용 모드').selectOption('manual');
   await page.getByLabel('멘토 이름',{exact:true}).fill('Mentor');
@@ -85,7 +84,7 @@ try {
   assert(!(await page.locator('#scenario-comparison').innerText()).includes('PRIVATE MENTOR REASON'));
   await p1.getByRole('button',{name:'이 모델 적용',exact:true}).click();
   assert.equal(await page.getByLabel('멘토 최대 출력 토큰',{exact:true}).inputValue(),'1800');
-  assert.equal(await page.locator('[id="student.resolved_model_config"]').inputValue(),studentSelection);
+  assert.equal(await page.locator('[id="student.resolved_model_config"]').inputValue(),'1');
   assert.equal(requests.length,3);
   assert.deepEqual(errors,[]);
 } finally { await browser.close(); }

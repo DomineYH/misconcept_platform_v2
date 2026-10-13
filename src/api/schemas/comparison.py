@@ -27,7 +27,7 @@ class ComparisonSource(ConfigValue):
     expected_version: StrictInt | None = Field(default=None, ge=1)
     scenario_id: StrictInt | None = Field(default=None, ge=1)
     source_version: StrictInt | None = Field(default=None, ge=1)
-    source_kind: Literal["unsaved_draft"]
+    source_kind: Literal["unsaved_draft", "saved_scenario"]
 
     @model_validator(mode="after")
     def source_identity(self):
@@ -89,6 +89,7 @@ class ComparisonRequest(ConfigValue):
     current_message: str | None = Field(default=None, max_length=50000)
     panels: list[ComparisonPanel] = Field(min_length=1, max_length=3)
     parent_run_id: str | None = None
+    mentor_trigger: Literal["manual", "auto"] | None = None
 
     @field_validator("request_id", "parent_run_id")
     @classmethod

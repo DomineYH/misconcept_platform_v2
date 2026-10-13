@@ -5,7 +5,6 @@ export default async function checkComparisonRolesAndHistory(page) {
   page.setDefaultTimeout(3000);
   const fixture = await comparisonFixture(page, ['ok','degraded','failed']);
   await openComparison(page);
-  const mentorBefore = await page.locator('[id="mentor.resolved_model_config"]').inputValue();
   await page.getByLabel('제목',{exact:true}).fill('내 수정 제목');
   await page.getByRole('button',{name:'완료 쌍 추가',exact:true}).click();
   await page.getByLabel('이력 1 교사').fill('이유가 무엇인가요?');
@@ -25,9 +24,9 @@ export default async function checkComparisonRolesAndHistory(page) {
   await page.getByRole('article',{name:'패널 3',exact:true}).getByRole('button',{name:'이 모델 적용',exact:true}).click();
   await page.getByText('대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.', {exact:true}).waitFor();
   assert.equal(await page.getByLabel('사후 분석 제공자 / 모델').inputValue(),'3');
-  assert.equal(await page.locator('[id="mentor.resolved_model_config"]').inputValue(),mentorBefore);
+  assert.equal(await page.locator('[id="mentor.resolved_model_config"]').inputValue(),'3');
   assert.equal(await page.locator('#title').inputValue(),'내 수정 제목');
-  assert(await page.getByLabel('사후 분석 제공자 / 모델').evaluate(el => document.activeElement === el));
+  assert(await page.getByLabel('시나리오 공통 모델').evaluate(el => document.activeElement === el));
   assert.match(await page.locator('#scenario-comparison').innerText(), /별도 저장 또는 게시/);
   await page.getByRole('button',{name:'비교 이력',exact:true}).click();
   await page.getByRole('button',{name:'과거 비교 상세',exact:true}).click();

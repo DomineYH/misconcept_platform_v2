@@ -5,13 +5,17 @@ export default async function checkSavedOptions(page) {
   const base = new URL(page.url()).origin;
   const data = state();
   const model = data.models[0];
-  model.default_options = {max_output_tokens:2048,reasoning:{effort:'removed'},unknown:{keep:0}};
+  model.default_options = {max_output_tokens:2048,reasoning:{effort:'removed',obsolete:0},unknown:{keep:0}};
   model.capabilities.fields.push({name:'reasoning.effort',label:'추론 수준',type:'string',choices:['minimal','low','medium','high'],default:'medium'});
   const writes = [];
   await page.route('**/admin/ai/state', route => route.fulfill({json:data}));
   await page.route('**/admin/ai/models/1/update', route => {
     writes.push(route.request().postDataJSON());
-    return route.fulfill({status:422,json:{detail:{code:'invalid_options'}}});
+    const body = writes.at(-1);
+    if (body.default_options.unknown || 'obsolete' in (body.default_options.reasoning || {})) return route.fulfill({status:422,json:{detail:{code:'invalid_options'}}});
+    model.default_options = body.default_options;
+    model.config_version++;
+    return route.fulfill({json:{status:'saved'}});
   });
   await page.goto(`${base}/admin/ai`);
   await page.locator('[data-model="1"]').getByRole('button',{name:'표시명·활성·옵션 수정'}).click();
@@ -21,7 +25,7 @@ export default async function checkSavedOptions(page) {
   await page.getByLabel('최대 출력 토큰',{exact:true}).fill('3072');
   await page.getByRole('button',{name:'모델 설정 저장',exact:true}).click();
   await page.getByRole('alert').waitFor();
-  assert.deepEqual(writes[0].default_options,{max_output_tokens:3072,reasoning:{effort:'removed'},unknown:{keep:0}});
+  assert.deepEqual(writes[0].default_options,{max_output_tokens:3072,reasoning:{effort:'removed',obsolete:0},unknown:{keep:0}});
   await page.keyboard.press('Escape');
   await page.locator('[data-model="1"]').getByRole('button',{name:'표시명·활성·옵션 수정'}).click();
   assert.equal(await effort.inputValue(),'removed','invalid save retains stored value');
@@ -30,5 +34,19 @@ export default async function checkSavedOptions(page) {
   await page.getByRole('alert').waitFor();
   assert.equal(writes.at(-1).default_options.reasoning.effort,'minimal');
   assert.deepEqual(writes.at(-1).default_options.unknown,{keep:0});
+  await page.getByRole('button',{name:'정의에 없는 저장 옵션 제거',exact:true}).click();
+  assert.equal(await effort.inputValue(),'minimal','removal retains supported field values');
+  await page.keyboard.press('Escape');
+  await page.locator('[data-model="1"]').getByRole('button',{name:'표시명·활성·옵션 수정'}).click();
+  assert.equal(await effort.inputValue(),'removed','closing without saving preserves the stored options');
+  await effort.selectOption('minimal');
+  await page.getByRole('button',{name:'정의에 없는 저장 옵션 제거',exact:true}).click();
+  await page.getByRole('button',{name:'모델 설정 저장',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'완료'}).waitFor();
+  assert.deepEqual(writes.at(-1).default_options,{max_output_tokens:2048,reasoning:{effort:'minimal'}});
+  await page.keyboard.press('Escape');
+  await page.locator('[data-model="1"]').getByRole('button',{name:'표시명·활성·옵션 수정'}).click();
+  assert.equal(await effort.inputValue(),'minimal');
+  assert.equal(await page.getByRole('button',{name:'정의에 없는 저장 옵션 제거',exact:true}).count(),0);
   return {pageErrors:[]};
 }

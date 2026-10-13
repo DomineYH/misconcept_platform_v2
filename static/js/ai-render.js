@@ -44,7 +44,7 @@ export function field(form, name, label, value = '', attrs = {}, choices = null)
   return input;
 }
 
-export function optionNotes(container, capabilities, saved = {}) {
+export function optionNotes(container, capabilities, saved = {}, onRemove) {
   if (capabilities.definition_version) container.append(node('p', `기능 정의: ${capabilities.definition_version} · 공식 확인 ${capabilities.checked_at}`));
   for (const definition of capabilities.fields || []) {
     if (definition.default != null) container.append(node('p', `${definition.label} 기본값: ${definition.default}`));
@@ -59,7 +59,25 @@ export function optionNotes(container, capabilities, saved = {}) {
       if (path.length === 2 && Object.keys(target).length === 0) delete unknown[path[0]];
     }
   }
-  if (Object.keys(unknown).length) container.append(node('p', '기능 정의에 없는 저장 옵션입니다. 다른 필드 수정으로 삭제하지 않으며, 유효한 옵션으로 명시적으로 수정해야 합니다.'), node('pre', JSON.stringify(unknown, null, 2)));
+  if (Object.keys(unknown).length) {
+    const notice = node('div');
+    notice.append(node('p', '기능 정의에 없는 저장 옵션입니다. 다른 필드 수정으로 삭제하지 않으며, 제거를 선택한 뒤 저장해야 삭제됩니다.'), node('pre', JSON.stringify(unknown, null, 2)));
+    notice.append(button('정의에 없는 저장 옵션 제거', () => {
+      const retained = {};
+      for (const definition of capabilities.fields || []) {
+        const path = definition.name.split('.');
+        const value = path.reduce((obj, key) => obj?.[key], saved);
+        if (value === undefined) continue;
+        let target = retained;
+        for (const part of path.slice(0, -1)) target = target[part] ||= {};
+        target[path.at(-1)] = value;
+      }
+      onRemove(retained);
+      notice.remove();
+      container.querySelector('input:not(:disabled),select:not(:disabled)')?.focus();
+    }));
+    container.append(notice);
+  }
 }
 
 export function render(state, actions) {

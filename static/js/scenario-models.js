@@ -34,7 +34,7 @@ export function mountScenarioModels(data, onChange) {
     common.value = mixed ? '' : selections.student.model_config_id;
     note.textContent = mixed ? '기존 역할별 모델을 보존했습니다. 공통 모델을 명시적으로 선택해야 저장할 수 있습니다.' : '모든 활성 역할에 같은 모델을 사용합니다. 옵션은 역할별로 보존합니다.';
     for (const role of active) {
-      for (const input of document.getElementById(`${role}-model-options`).querySelectorAll('input,select')) input.disabled = mixed;
+      for (const input of document.getElementById(`${role}-model-options`).querySelectorAll('input,select,button')) input.disabled = mixed;
     }
   }
   for (const [role, label] of Object.entries(roles)) {
@@ -105,7 +105,10 @@ export function mountScenarioModel(data, role, label, {select, options, status},
       options.append(node('pre', JSON.stringify(selection.options, null, 2)));
       return;
     }
-    optionNotes(options, model.capabilities, selection.options);
+    optionNotes(options, model.capabilities, selection.options, value => {
+      selection.options = value;
+      onChange(current);
+    });
     for (const definition of model.capabilities.fields) {
       const value = definition.name.split('.').reduce((obj, key) => obj?.[key], selection.options);
       const numeric = ['integer', 'number'].includes(definition.type);

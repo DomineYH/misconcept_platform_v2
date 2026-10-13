@@ -7,7 +7,7 @@ export default async function checkSavedScenarioOptions(page) {
     let html = await response.text();
     const pattern = /(<script id="scenario-editor-data" type="application\/json">)([\s\S]*?)(<\/script>)/;
     const data = JSON.parse(html.match(pattern)[2]);
-    Object.assign(data.config.student.resolved_model_config.options,{reasoning:{effort:'removed'},unknown:{keep:0}});
+    Object.assign(data.config.student.resolved_model_config.options,{reasoning:{effort:'removed',obsolete:0},unknown:{keep:0}});
     html = html.replace(pattern,`$1${JSON.stringify(data)}$3`);
     await route.fulfill({response,body:html});
   });
@@ -23,7 +23,7 @@ export default async function checkSavedScenarioOptions(page) {
   await page.getByLabel('학생봇 최대 출력 토큰').fill('901');
   await page.getByRole('button',{name:'초안으로 저장',exact:true}).click();
   await page.locator('#editor-conflict').waitFor();
-  assert.deepEqual(writes[0].config.student.resolved_model_config.options,{max_output_tokens:901,reasoning:{effort:'removed'},unknown:{keep:0}});
+  assert.deepEqual(writes[0].config.student.resolved_model_config.options,{max_output_tokens:901,reasoning:{effort:'removed',obsolete:0},unknown:{keep:0}});
   assert.equal(await effort.inputValue(),'removed','failed save preserves original enum');
   await page.getByRole('button',{name:'모델 비교 열기',exact:true}).click();
   const panelEffort = page.getByLabel('패널 1 추론 수준',{exact:true});
@@ -33,8 +33,17 @@ export default async function checkSavedScenarioOptions(page) {
   await page.getByLabel('비교 대상').selectOption('student');
   assert.equal(await panelEffort.inputValue(),'removed','role switching preserves enum');
   assert.equal(await page.getByLabel('패널 1 최대 출력 토큰').inputValue(),'902');
+  await page.locator('#scenario-comparison').getByRole('button',{name:'정의에 없는 저장 옵션 제거',exact:true}).first().click();
+  assert.equal(await panelEffort.inputValue(),'removed','removal does not replace the saved enum');
+  assert.equal(await page.getByLabel('패널 1 최대 출력 토큰').inputValue(),'902','removal retains panel edits');
+  assert.equal(await page.locator('#scenario-comparison').getByRole('button',{name:'정의에 없는 저장 옵션 제거',exact:true}).count(),0,'unknown fields are removed from the comparison panel');
   assert.equal(await page.getByLabel('학생봇 최대 출력 토큰').inputValue(),'901','comparison does not rewrite scenario');
   await page.getByRole('button',{name:'비교 닫기',exact:true}).click();
   assert.equal(await effort.inputValue(),'removed');
+  await page.locator('#student-model-options').getByRole('button',{name:'정의에 없는 저장 옵션 제거',exact:true}).click();
+  await effort.selectOption('minimal');
+  await page.getByRole('button',{name:'초안으로 저장',exact:true}).click();
+  await page.locator('#editor-conflict').waitFor();
+  assert.deepEqual(writes.at(-1).config.student.resolved_model_config.options,{max_output_tokens:901,reasoning:{effort:'minimal'}});
   return {pageErrors:[]};
 }

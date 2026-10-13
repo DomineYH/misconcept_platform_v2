@@ -125,8 +125,9 @@ const actions = {
   },
   model(m) {
     if (busy) return;
+    let savedOptions = structuredClone(m.default_options);
     const f = form(`${m.model_id} 모델 설정`, f => {
-      const options = structuredClone(m.default_options);
+      const options = structuredClone(savedOptions);
       for (const definition of m.capabilities?.fields || []) {
         const value = f.elements[definition.name].value;
         const path = definition.name.split('.');
@@ -146,7 +147,7 @@ const actions = {
     enabled.disabled = !m.enabled && (!m.capabilities || m.capabilities.metadata_conflict || !Object.values(m.verification_state).some(v => v.status === 'succeeded'));
     f.append(node('p', '모델 ID는 등록 후 변경할 수 없습니다. 모델 비활성화는 신규 호출만 막습니다. 지원 옵션 변경은 서버에서 조합과 범위를 검증합니다.'));
     if (!m.capabilities) f.append(node('p', '기능 정의 필요: 옵션 편집과 역할 시험을 사용할 수 없습니다.'));
-    if (m.capabilities) optionNotes(f, m.capabilities, m.default_options);
+    if (m.capabilities) optionNotes(f, m.capabilities, savedOptions, options => { savedOptions = options; });
     else f.append(node('pre', JSON.stringify(m.default_options, null, 2)));
     for (const definition of m.capabilities?.fields || []) {
       const value = definition.name.split('.').reduce((obj, key) => obj?.[key], m.default_options);

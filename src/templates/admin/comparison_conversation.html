@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+{% block title %}시나리오 모델 비교 - 관리자{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/css/scenario-editor.css">
+<link rel="stylesheet" href="/static/css/scenario-comparison.css">
+<div class="container scenario-editor">
+  <h1>시나리오 모델 비교</h1>
+  <p><a href="/admin/scenarios?compare=1" class="btn btn-secondary">저장된 시나리오 선택</a></p>
+  <p>모든 패널이 같은 질문과 채택된 대화를 사용합니다. 결과는 생성 후 30일 동안 보존합니다.</p>
+  <p id="conversation-status" role="status" aria-live="polite"></p>
+  <div id="conversation-setup"></div>
+  <section id="conversation-dialogue" aria-label="기준 대화"></section>
+  <section id="conversation-actions" aria-label="비교 대화 조작" hidden>
+    <label for="conversation-question">공통 교사 질문</label>
+    <textarea id="conversation-question" maxlength="50000" rows="3"></textarea>
+    <div id="conversation-controls"></div>
+  </section>
+  <section id="conversation-rounds" aria-label="모델별 결과"></section>
+  <section id="conversation-history" aria-label="전체 비교 이력"></section>
+  <details><summary>이전 역할별 비교 이력</summary><div id="legacy-comparison-history"></div></details>
+</div>
+<script id="comparison-conversation-data" type="application/json">{{ comparison|tojson }}</script>
+<script src="/static/js/analysis-result.js"></script>
+<script type="module" src="/static/js/comparison-conversation.js"></script>
+{% endblock %}

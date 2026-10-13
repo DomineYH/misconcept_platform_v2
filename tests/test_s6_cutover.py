@@ -16,7 +16,7 @@ __all__ = ["legacy_source"]
 
 @pytest.fixture
 async def current_source(legacy_source, tmp_path, request):
-    revision = getattr(request, "param", 35)
+    revision = getattr(request, "param", 36)
     if revision == "legacy":
         from src.db.s6_cutover import rehearse
 
@@ -80,7 +80,7 @@ async def test_empty_apply_migrates_twice_and_restores_both_versions(tmp_path):
     await rehearse(source, workspace)
     report = await rehearse(source, workspace, apply=True)
     assert report["status"] == "ready"
-    assert report["candidate_revision"] == 35
+    assert report["candidate_revision"] == 36
     assert report["checks"] == {
         "integrity": True,
         "foreign_keys": True,
@@ -95,12 +95,44 @@ async def test_empty_apply_migrates_twice_and_restores_both_versions(tmp_path):
         with sqlite3.connect(workspace / name) as db:
             assert db.execute(
                 "SELECT filename FROM _migrations ORDER BY id DESC LIMIT 1"
-            ).fetchone() == ("035_comparison_run.sql",)
+            ).fetchone() == ("036_comparison_conversation.sql",)
     assert await rehearse(source, workspace, apply=True) == report
 
 
 @pytest.mark.parametrize("data", ["baseline"], indirect=True)
-@pytest.mark.parametrize("current_source", range(31, 36), indirect=True)
+@pytest.mark.parametrize("current_source", [35], indirect=True)
+async def test_s6_upgrades_populated_comparison_to_conversation_schema(
+    current_source, tmp_path
+):
+    from src.db.s6_cutover import rehearse
+
+    with sqlite3.connect(current_source) as db:
+        db.execute(
+            "INSERT INTO comparison_run(id,admin_id,target_role,mode,source_snapshot,source_hash,canonical_context,context_hash,panel_configs,request_id,input_hash,created_at,expires_at,status) VALUES('legacy',3,'student','same_context','{}','hash','[]','context','[]','request','input','2026-01-01','2026-01-31','finished')"
+        )
+    with readonly(current_source) as db:
+        original = database_state(db)
+    workspace = tmp_path / "s6"
+    report = await rehearse(current_source, workspace, apply=True)
+    assert report["source_revision"] == 35
+    assert report["candidate_revision"] == 36
+    assert (
+        report["preserved"]["comparison_run"]
+        == original["tables"]["comparison_run"]
+    )
+    with readonly(workspace / "candidate.db") as db:
+        assert db.execute(
+            "SELECT id,conversation_id FROM comparison_run"
+        ).fetchall() == [("legacy", None)]
+        assert (
+            db.execute("SELECT * FROM comparison_conversation").fetchall() == []
+        )
+    with readonly(current_source) as db:
+        assert database_state(db) == original
+
+
+@pytest.mark.parametrize("data", ["baseline"], indirect=True)
+@pytest.mark.parametrize("current_source", range(31, 37), indirect=True)
 async def test_official_current_revisions_preserve_all_original_values(
     current_source, tmp_path
 ):

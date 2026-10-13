@@ -177,6 +177,11 @@ def sse_frame(accepted, kind, seq, **data):
         run_id=accepted["run_id"],
         turn_id=accepted["turn_id"],
         seq=seq,
+        **{
+            key: accepted[key]
+            for key in ("conversation_id", "version", "receipt")
+            if key in accepted
+        },
         **data,
     )
     return f"event: {kind}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -255,6 +260,8 @@ async def stream_comparison(factory, accepted, execution, cancelled):
         )
 
     async def produce():
+        if accepted.get("conversation_id"):
+            await recheck_comparison(permit, accepted)
         permit.task = asyncio.current_task()
         async with aclosing(
             execute_call(
@@ -315,7 +322,7 @@ async def stream_comparison(factory, accepted, execution, cancelled):
                 else None
             )
             if analysis_result is not None:
-                await recheck_call(permit)
+                await recheck_comparison(permit, accepted)
                 status, validated, error_code = analysis_result
                 result = await finish(
                     status,
@@ -339,7 +346,7 @@ async def stream_comparison(factory, accepted, execution, cancelled):
                     )
                 yield frame("output.delta", text=event.text)
             elif event.type == "completed":
-                await recheck_call(permit)
+                await recheck_comparison(permit, accepted)
                 result = await finish(
                     "completed",
                     content=event.text or partial,
@@ -410,3 +417,23 @@ async def stream_comparison(factory, accepted, execution, cancelled):
                             "Comparison interruption could not be saved"
                         )
             permit.release()
+
+
+async def recheck_comparison(permit, accepted):
+    await recheck_call(permit)
+    if accepted.get("conversation_id"):
+        from fastapi import HTTPException
+
+        from src.services.comparison_conversations import (
+            owned_conversation,
+            validate_setup,
+        )
+
+        try:
+            async with permit.factory() as db:
+                parent = await owned_conversation(
+                    db, accepted["conversation_id"], permit.owner_id
+                )
+                await validate_setup(db, parent, accepted["panel_id"])
+        except HTTPException:
+            raise InvocationError("configuration_unavailable") from None

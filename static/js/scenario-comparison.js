@@ -241,8 +241,8 @@ export function mountComparison(data, draft) {
       const select = document.getElementById(`${selection.target_role}.resolved_model_config`);
       select.dispatchEvent(new CustomEvent('model:apply', {detail:selection.model_config}));
       document.querySelector(`[data-step="${{student:2,mentor:3,analysis:4}[selection.target_role]}"]`).click();
-      select.focus();
-      if (selection.target_role === 'mentor' && document.activeElement !== select) document.getElementById('mentor.mode').focus();
+      document.getElementById('common-model').focus();
+      if (selection.target_role === 'mentor' && document.activeElement !== document.getElementById('common-model')) document.getElementById('mentor.mode').focus();
       notice.textContent = '대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.';
     } catch {
       notice.textContent = '현재 역할 검증·연결·옵션을 확인한 뒤 적용하세요.';

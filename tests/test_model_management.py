@@ -64,7 +64,7 @@ async def test_register_known_unknown_models_and_safe_initial_settings(
         and known["capabilities"]["streaming"]
         and known["capabilities"]["structured"]
     )
-    assert known["capabilities"]["checked_at"] == "2026-10-10"
+    assert known["capabilities"]["checked_at"] == "2026-10-13"
     assert known["capabilities"]["sources"]
     assert unknown["capabilities"] is None and unknown["default_options"] == {}
     assert (
@@ -434,3 +434,149 @@ async def test_defaults_require_matching_role_and_preserve_unavailable_reference
         model_config_id=1, available=False
     )
     assert any("Student" in item for item in state["providers"][0]["impact"])
+
+
+async def test_new_sol_native_options_save_and_invalid_save_preserves_config(
+    data, api
+):
+    assert (
+        await write(
+            api,
+            "models",
+            provider="openai",
+            model_id="gpt-6.1-sol",
+            display_name="Sol",
+        )
+    ).status_code == 200
+    model = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert model["capabilities"] is not None
+    assert model["capabilities"]["reasoning_efforts"] == [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    ]
+    body = dict(
+        expected_version=1,
+        display_name="Sol",
+        enabled=False,
+        default_options={"reasoning": {"effort": "max"}},
+    )
+    assert (
+        await write(api, f"models/{model['id']}/update", **body)
+    ).status_code == 200
+    saved = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert saved["default_options"] == {"reasoning": {"effort": "max"}}
+    for options in [
+        {"reasoning": {"effort": "none"}},
+        {"reasoning": {"effort": "minimal"}},
+        {"temperature": 0},
+        {"unknown": True},
+    ]:
+        assert (
+            await write(
+                api,
+                f"models/{model['id']}/update",
+                **{**body, "expected_version": 2, "default_options": options},
+            )
+        ).status_code == 422
+        assert (await api.get("/admin/ai/state")).json()["models"][0] == saved
+
+
+async def test_claude55_native_thinking_combinations_preserve_failed_saves(
+    data, api
+):
+    assert (
+        await write(
+            api,
+            "models",
+            provider="anthropic",
+            model_id="claude-sonnet-5-5",
+            display_name="Sonnet",
+        )
+    ).status_code == 200
+    model = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert model["capabilities"] is not None
+    assert model["capabilities"]["thinking_types"] == [
+        "adaptive",
+        "between_tools",
+    ]
+    body = dict(
+        expected_version=1,
+        display_name="Sonnet",
+        enabled=False,
+        default_options={
+            "thinking": {"type": "between_tools"},
+            "output_config": {"effort": "high"},
+        },
+    )
+    assert (
+        await write(api, f"models/{model['id']}/update", **body)
+    ).status_code == 200
+    saved = (await api.get("/admin/ai/state")).json()["models"][0]
+    for options in [
+        {"thinking": {"type": "disabled"}},
+        {"thinking": {"type": "enabled", "budget_tokens": 1024}},
+        {
+            "thinking": {"type": "between_tools"},
+            "output_config": {"effort": "xhigh"},
+        },
+        {"temperature": 0},
+    ]:
+        assert (
+            await write(
+                api,
+                f"models/{model['id']}/update",
+                **{**body, "expected_version": 2, "default_options": options},
+            )
+        ).status_code == 422
+        assert (await api.get("/admin/ai/state")).json()["models"][0] == saved
+
+
+async def test_flash38_native_level_and_omission_are_distinct(data, api):
+    assert (
+        await write(
+            api,
+            "models",
+            provider="google",
+            model_id="models/gemini-3.8-flash",
+            display_name="Flash",
+        )
+    ).status_code == 200
+    model = (await api.get("/admin/ai/state")).json()["models"][0]
+    assert model["capabilities"] is not None
+    assert model["capabilities"]["thinking_levels"] == ["low", "medium", "high"]
+    body = dict(
+        expected_version=1,
+        display_name="Flash",
+        enabled=False,
+        default_options={"thinking": {"level": "low"}},
+    )
+    assert (
+        await write(api, f"models/{model['id']}/update", **body)
+    ).status_code == 200
+    saved = (await api.get("/admin/ai/state")).json()["models"][0]
+    for options in [
+        {"thinking": {"level": "minimal"}},
+        {"thinking": {"budget": 0}},
+        {"thinking": {"budget": -1, "level": "low"}},
+    ]:
+        assert (
+            await write(
+                api,
+                f"models/{model['id']}/update",
+                **{**body, "expected_version": 2, "default_options": options},
+            )
+        ).status_code == 422
+        assert (await api.get("/admin/ai/state")).json()["models"][0] == saved
+    assert (
+        await write(
+            api,
+            f"models/{model['id']}/update",
+            **{**body, "expected_version": 2, "default_options": {}},
+        )
+    ).status_code == 200
+    assert (await api.get("/admin/ai/state")).json()["models"][0][
+        "default_options"
+    ] == {}

@@ -116,8 +116,8 @@ async def test_dry_run_has_fixed_synthetic_plan_and_no_database_writes(
         owner_id=1,
     )
     assert report["mode"] == "dry-run"
-    assert report["plan"]["reserved_usd"] == "0.102048"
-    assert report["plan"]["calls"][0]["input_tokens_upper"] == 400000
+    assert report["plan"]["reserved_usd"] == "0.070048"
+    assert report["plan"]["calls"][0]["input_tokens_upper"] == 272000
     assert (
         report["plan"]["retry_count"]
         == report["plan"]["probe_count"]
@@ -251,7 +251,7 @@ async def test_approved_execution_records_safe_sample_and_consumes_approval(
     assert len(calls) == 1
     sample = result["samples"][0]
     assert sample["ledger"][0]["estimated_cost_usd"] == 0.0000125
-    assert sample["reserved_usd"] == "0.102048"
+    assert sample["reserved_usd"] == "0.070048"
     assert summarize(result["samples"])["counts"]["completed"] == 1
     assert json.loads(output.read_text()) == result
     assert "SYNTHETIC-SECRET" not in output.read_text()
@@ -312,7 +312,7 @@ async def test_first_uncertain_or_failed_call_stops_without_refund(
         output=tmp_path / "failure.json",
     )
     assert result["status"] == "failed"
-    assert result["plan"]["reserved_usd"] == "0.204096"
+    assert result["plan"]["reserved_usd"] == "0.140096"
     assert len(result["samples"]) == len(calls) == 1
     assert result["samples"][0]["status"] == (
         "cancelled" if failure == "cancel" else "failed"
@@ -412,7 +412,7 @@ async def test_incomplete_or_mismatched_approval_has_zero_calls(
     elif change == "date":
         approval["approved_at"] = "2026-01-01"
     elif change == "budget":
-        approval["max_usd"] = "0.102047"
+        approval["max_usd"] = "0.070047"
     elif change == "missing":
         del approval["max_usd"]
     else:
@@ -468,13 +468,13 @@ async def test_three_dollar_boundary_and_multi_provider_aggregate(
     exact = [
         dict(model_config_id=2, role=role, options={"max_output_tokens": 50000})
         for role in ("student", "mentor")
-    ] + [selection("analysis", 50000)]
+    ] + [selection("analysis", 66000)]
     assert (await run(smoke_db, exact, owner_id=1))["plan"][
         "reserved_usd"
     ] == "3.0"
     with pytest.raises(InvocationError, match="budget_exceeded"):
         await run(
-            smoke_db, exact[:2] + [selection("analysis", 50001)], owner_id=1
+            smoke_db, exact[:2] + [selection("analysis", 66001)], owner_id=1
         )
     assert calls == []
 
@@ -524,7 +524,7 @@ async def test_each_selected_role_runs_once_with_existing_output_contracts(
     async def handler(request, payload):
         before = json.loads(output.read_text())
         assert before["reservation_ledger_id"]
-        assert before["plan"]["reserved_usd"] == "0.306144"
+        assert before["plan"]["reserved_usd"] == "0.210144"
         schema = payload.get("text", {}).get("format", {}).get("name")
         if schema == "MentorOutput":
             content = json.dumps(
@@ -548,7 +548,7 @@ async def test_each_selected_role_runs_once_with_existing_output_contracts(
         selections,
         owner_id=1,
         execute=True,
-        approval=approve(plan, "0.306144"),
+        approval=approve(plan, "0.210144"),
         output=output,
     )
     assert result["status"] == "completed"
@@ -625,7 +625,7 @@ async def test_multiple_providers_share_one_reservation_and_report(
         ),
     ]
     plan = await run(smoke_db, selections, owner_id=1)
-    assert plan["plan"]["reserved_usd"] == "0.4191808"
+    assert plan["plan"]["reserved_usd"] == "0.3871808"
     result = await run(
         smoke_db,
         selections,
@@ -751,7 +751,7 @@ async def test_invalid_mentor_contract_stops_remaining_analysis(
         "completed",
         "failed",
     ]
-    assert result["plan"]["reserved_usd"] == "0.306144"
+    assert result["plan"]["reserved_usd"] == "0.210144"
     assert "PRIVATE-INVALID-MENTOR" not in json.dumps(result)
 
 

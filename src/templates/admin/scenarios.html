@@ -3,8 +3,9 @@
 {% block content %}
 <div class="container scenarios-admin">
   <header class="page-header-admin">
-    <div class="header-content"><h1>시나리오 관리</h1><p class="subtitle">통합 설정 작성, 게시 및 관리</p></div>
-    <a href="/admin/scenarios/new?compare=1" class="btn btn-secondary">새 초안 비교</a>
+    <div class="header-content"><h1>{{ '비교할 저장 시나리오 선택' if request is defined and request.query_params.get('compare') else '시나리오 관리' }}</h1><p class="subtitle">통합 설정 작성, 게시 및 관리</p></div>
+    <a href="/admin/scenarios?compare=1" class="btn btn-secondary">전체 모델 비교</a>
+    <a href="/admin/model-comparison" class="btn btn-secondary">비교 이력</a>
     <a href="/admin/scenarios/new" class="btn btn-primary">통합 초안 작성</a>
   </header>
   <section class="filter-bar" aria-label="시나리오 검색">
@@ -40,7 +41,7 @@
         <div class="card-actions">
           <a href="/admin/sessions-page?scenario_id={{ scenario.id }}" class="btn btn-sm btn-outline">대화목록</a>
           {% if scenario.config_json %}
-          <a href="/admin/scenarios/{{ scenario.id }}/edit?compare=1" class="btn btn-sm btn-outline">모델 비교</a>
+          <a href="/admin/model-comparison?scenario_id={{ scenario.id }}" class="btn btn-sm btn-outline">모델 비교</a>
           <a href="/admin/scenarios/{{ scenario.id }}/edit" class="btn btn-sm btn-secondary">수정</a>
           <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="{{ scenario.id }}" data-title="{{ scenario.title }}" data-session-count="{{ session_counts.get(scenario.id, 0) }}" data-version="{{ scenario.config_version }}">삭제</button>
           {% endif %}

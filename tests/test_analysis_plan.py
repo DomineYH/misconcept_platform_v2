@@ -116,6 +116,13 @@ def test_exact_input_budget_fits_and_overflow_is_never_truncated(monkeypatch):
             4096,
         ),
         ("openai", "gpt-5-mini", dict(max_output_tokens=8192), 4096),
+        ("anthropic", "claude-opus-5-5", dict(max_output_tokens=8192), 4096),
+        (
+            "anthropic",
+            "claude-sonnet-5-5",
+            dict(max_output_tokens=8192, thinking=dict(type="between_tools")),
+            0,
+        ),
         (
             "anthropic",
             "claude-sonnet-4-6",
@@ -178,7 +185,11 @@ def test_native_thinking_reservation_and_frozen_options(
     assert plan["input_budget_tokens"] == (
         1048576
         if provider == "google"
-        else 1000000 - 8192 if provider == "anthropic" else 400000 - 8192
+        else (
+            1000000 - 8192
+            if provider == "anthropic"
+            else 272000 if model == "gpt-5-mini" else 400000 - 8192
+        )
     )
 
 

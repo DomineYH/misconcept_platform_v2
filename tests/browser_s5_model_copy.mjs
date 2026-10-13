@@ -28,7 +28,7 @@ export default async function checkRoleModelCopy(page) {
     await page.getByText('대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.', {exact:true}).waitFor();
     assert.equal(validated, 1, 'model copy checks live registration and frozen options');
     const select = page.locator(`[id="${role}.resolved_model_config"]`);
-    assert(await select.evaluate(el => document.activeElement === el));
+    assert(await page.getByLabel('시나리오 공통 모델').evaluate(el => document.activeElement === el));
     assert.equal(await page.locator(`[id="ai-${role}.resolved_model_config-max_output_tokens"]`).inputValue(), '777');
     let submitted;
     await page.route('**/admin/scenarios/1/update', route => {
@@ -42,7 +42,8 @@ export default async function checkRoleModelCopy(page) {
     assert.equal(submitted.title, '보존할 미저장 제목');
     assert.deepEqual(submitted.config[role].resolved_model_config, fixture.current().panels[1].model_config);
     for (const other of ['student','mentor','analysis'].filter(value => value !== role)) {
-      assert.deepEqual(submitted.config[other], before.config[other], 'other roles are preserved');
+      assert.equal(submitted.config[other].resolved_model_config.model_config_id, submitted.config[role].resolved_model_config.model_config_id, 'all active roles share the copied identity');
+      for (const [key,value] of Object.entries(before.config[other])) if (key !== 'resolved_model_config') assert.deepEqual(submitted.config[other][key], value);
     }
     for (const key of ['problem','runtime']) assert.deepEqual(submitted.config[key], before.config[key]);
     assert.deepEqual(submitted.groups, before.groups);

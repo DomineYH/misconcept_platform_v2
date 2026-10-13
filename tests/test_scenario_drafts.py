@@ -24,6 +24,34 @@ def draft():
     return json.loads(Path("tests/fixtures/s2_draft.json").read_text())
 
 
+@pytest.fixture(autouse=True)
+async def eligible_draft_model(request, data, api, monkeypatch):
+    from lesson_fixtures import install_connection
+
+    from src.services.model_verification import ROLE_CONTRACT_VERSIONS
+
+    connection, model = await install_connection(data, monkeypatch)
+    evidence = model.verification_state["student"]
+    model.verification_state = {
+        role: {**evidence, "role_contract_version": contract}
+        for role, contract in ROLE_CONTRACT_VERSIONS.items()
+    }
+    await data.db.commit()
+    if "draft" in request.fixturenames:
+        draft = request.getfixturevalue("draft")
+        for role in ("student", "analysis"):
+            draft["config"][role]["resolved_model_config"] = dict(
+                model_config_id=model.id,
+                provider_connection_id=connection.id,
+                provider=connection.provider,
+                model_id=model.model_id,
+                options={
+                    "max_output_tokens": 1500,
+                    "reasoning": {"effort": "medium"},
+                },
+            )
+
+
 @pytest.fixture
 async def api(data, monkeypatch):
     monkeypatch.setattr(migrate, "engine", data.engine)
@@ -84,6 +112,9 @@ async def test_template_free_draft_round_trip_and_hidden_values(
     draft["expected_version"] = 1
     draft["title"] = "재편집"
     draft["config"]["mentor"]["mode"] = "manual"
+    draft["config"]["mentor"]["resolved_model_config"] = copy.deepcopy(
+        draft["config"]["student"]["resolved_model_config"]
+    )
     draft["config"]["analysis"]["classification_enabled"] = True
     updated = await post(api, path + "/update", draft)
     assert updated.status_code == 200, updated.text
@@ -198,7 +229,7 @@ async def selected_model(api):
         "/admin/ai/models",
         {
             "provider": "openai",
-            "model_id": "gpt-5-mini",
+            "model_id": "gpt-5.2",
             "display_name": "Unavailable student",
         },
     )
@@ -211,9 +242,13 @@ async def selected_model(api):
             re.S,
         ).group(1)
     )
-    model = bootstrap["model_choices"][0]
+    model = next(
+        model
+        for model in bootstrap["model_choices"]
+        if model["display_name"] == "Unavailable student"
+    )
     assert model["enabled"] is False
-    assert model["connection_available"] is False
+    assert model["connection_available"] is True
     return dict(
         model_config_id=model["id"],
         provider_connection_id=model["provider_connection_id"],
@@ -415,12 +450,20 @@ async def test_submitted_model_identity_cannot_bypass_registration(
 
 
 async def test_unavailable_model_and_saved_options_survive_default_changes(
-    api, draft, selected_model
+    data, api, draft, selected_model
 ):
-    draft["config"]["student"]["resolved_model_config"] = selected_model
     created = await post(api, "/admin/scenarios", draft)
     assert created.status_code == 201
     path = f"/admin/scenarios/{created.json()['id']}"
+    from src.models import Scenario
+
+    async with data.factory() as db:
+        scenario = await db.get(Scenario, created.json()["id"])
+        historical = copy.deepcopy(draft["config"])
+        historical["student"]["resolved_model_config"] = selected_model
+        scenario.config_json = historical
+        await db.commit()
+    draft["config"] = historical
     changed = await post(
         api,
         f"/admin/ai/models/{selected_model['model_config_id']}/update",
@@ -440,7 +483,7 @@ async def test_unavailable_model_and_saved_options_survive_default_changes(
         reopened["config"]["student"]["resolved_model_config"] == selected_model
     )
     draft["expected_version"] = 1
-    assert (await post(api, path + "/update", draft)).status_code == 200
+    assert (await post(api, path + "/update", draft)).status_code == 422
     assert (await api.get(path)).json()["config"]["student"][
         "resolved_model_config"
     ] == selected_model
@@ -521,7 +564,7 @@ async def test_omitted_activation_preserves_saved_inactive_draft(api, draft):
         ),
     ],
 )
-async def test_provider_option_shapes_round_trip_without_draft_capability_gate(
+async def test_inactive_mentor_options_remain_structurally_valid_without_live_gate(
     api, draft, provider, model_id, options
 ):
     registered = await post(
@@ -542,7 +585,11 @@ async def test_provider_option_shapes_round_trip_without_draft_capability_gate(
             re.S,
         ).group(1)
     )
-    model = bootstrap["model_choices"][0]
+    model = next(
+        model
+        for model in bootstrap["model_choices"]
+        if model["provider"] == provider and model["model_id"] == model_id
+    )
     selected = dict(
         model_config_id=model["id"],
         provider_connection_id=model["provider_connection_id"],

@@ -334,7 +334,7 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
                 else (
                     1048576
                     if provider == "google"
-                    else (1000000 if provider == "anthropic" else 400000) - 1024
+                    else (1000000 - 1024 if provider == "anthropic" else 272000)
                 )
             ),
             reserved_output_tokens=1024,

@@ -14,7 +14,9 @@ from src.services.generation_lifecycle import active_runs
 
 async def list_comparisons(db, owner_id, cursor=None):
     query = select(ComparisonRun).where(
-        ComparisonRun.admin_id == owner_id, ComparisonRun.expires_at > utcnow()
+        ComparisonRun.admin_id == owner_id,
+        ComparisonRun.expires_at > utcnow(),
+        ComparisonRun.conversation_id.is_(None),
     )
     if cursor is not None:
         try:
@@ -81,6 +83,12 @@ async def list_comparisons(db, owner_id, cursor=None):
 
 def running_content():
     return or_(
+        select(GenerationRun.id)
+        .where(
+            GenerationRun.comparison_run_id == ComparisonRun.id,
+            GenerationRun.id.in_(list(active_runs)),
+        )
+        .exists(),
         ComparisonRun.status == "running",
         select(GenerationRun.id)
         .where(
@@ -114,7 +122,9 @@ async def delete_contents(db, comparison_ids):
 
 async def delete_comparison(db, comparison_id, owner_id):
     await db.execute(text("BEGIN IMMEDIATE"))
-    await owned_comparison(db, comparison_id, owner_id)
+    comparison = await owned_comparison(db, comparison_id, owner_id)
+    if comparison.conversation_id is not None:
+        raise HTTPException(409, detail={"code": "use_conversation"})
     running = await db.scalar(
         select(ComparisonRun.id).where(
             ComparisonRun.id == comparison_id, running_content()

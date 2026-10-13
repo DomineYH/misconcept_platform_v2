@@ -115,20 +115,20 @@ async def completed_report(workspace, base):
     candidate, backup = workspace / "candidate.db", workspace / "backup.db"
     with readonly(candidate) as db, readonly(backup) as original:
         ensure_integrity(db)
-        if source_revision(db) != 35:
+        if source_revision(db) != 36:
             raise ValueError("completed_copy_changed")
         idle(db)
         verify_snapshots(db)
         evidence = preserved(db, original)
         state = database_state(db)
-    if state["schema"] != await official_schema(workspace, 35):
+    if state["schema"] != await official_schema(workspace, 36):
         raise ValueError("schema_mismatch")
     restore(backup, workspace / "restore-source.db")
     restore(candidate, workspace / "restore-candidate.db")
     return dict(
         **base,
         status="ready",
-        candidate_revision=35,
+        candidate_revision=36,
         database=state["tables"],
         schema_hash=canonical_hash(state["schema"]),
         preserved=evidence,

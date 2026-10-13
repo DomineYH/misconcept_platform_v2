@@ -35,6 +35,7 @@ from src.services.call_admission import (
     cancel_connection,
     execution_lock,
 )
+from src.services.model_capabilities import capabilities
 from src.services.model_configuration import (
     configuration_state,
     connection_impact,
@@ -111,6 +112,19 @@ def public_connection(provider, connection):
             error = connection.error_code
         except ProviderSecretUnavailableError:
             status, error = "decryption_failed", "configuration_unavailable"
+    models = []
+    for item in connection.catalog_models_json if connection else []:
+        definition = capabilities(provider, item["model_id"])
+        models.append(
+            {
+                **item,
+                **(
+                    {"preview": definition["preview"]}
+                    if definition and "preview" in definition
+                    else {}
+                ),
+            }
+        )
     return dict(
         provider=provider,
         connection_version=connection.connection_version if connection else 0,
@@ -140,7 +154,7 @@ def public_connection(provider, connection):
                 )
             ),
             "fetched_at": connection.catalog_fetched_at if connection else None,
-            "models": connection.catalog_models_json if connection else [],
+            "models": models,
         },
     )
 

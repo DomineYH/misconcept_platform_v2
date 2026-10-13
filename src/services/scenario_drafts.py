@@ -78,6 +78,31 @@ async def save_scenario(db, data, user_id, scenario_id=None):
     scenario = None
     if scenario_id is not None:
         scenario = await native_scenario(db, scenario_id, data.expected_version)
+    active = ["student", "analysis"]
+    if data.config.mentor.mode != "off":
+        active.append("mentor")
+    common = data.config.student.resolved_model_config
+    for role in active:
+        selection = getattr(data.config, role).resolved_model_config
+        if (
+            selection is None
+            or common is None
+            or (
+                selection.model_config_id,
+                selection.provider_connection_id,
+                selection.provider,
+                selection.model_id,
+            )
+            != (
+                common.model_config_id,
+                common.provider_connection_id,
+                common.provider,
+                common.model_id,
+            )
+        ):
+            raise field_error(
+                f"config.{role}.resolved_model_config", "common_model_required"
+            )
     errors = publication_errors(data.config)
     if len(set(data.groups)) != len(data.groups) or set(data.groups) != set(
         (
@@ -118,10 +143,8 @@ async def save_scenario(db, data, user_id, scenario_id=None):
             role,
             selection.options.model_dump(exclude_unset=True),
         ):
-            errors.extend(
-                field_error(
-                    f"config.{role}.resolved_model_config", "model_unavailable"
-                ).detail
+            raise field_error(
+                f"config.{role}.resolved_model_config", "model_unavailable"
             )
     reasons = (
         review_reasons(

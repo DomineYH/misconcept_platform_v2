@@ -84,7 +84,7 @@ async def test_035_preserves_records_indexes_and_foreign_keys(tmp_path):
                     )
                 ).scalar() == sql
             upgraded = await schema(db)
-        await migrate.run_all_migrations(db_engine=fresh)
+        await migrate.run_all_migrations(through=35, db_engine=fresh)
         async with fresh.connect() as db:
             assert await schema(db) == upgraded
         async with upgrade.begin() as db:

@@ -386,6 +386,36 @@ product runtime uses only v2 analysis. Technical completion remains
 `release_blocked` until separate paid comparison, education approval and
 production authorization have real records.
 
+Saved-scenario whole-model comparison: open **관리자 → 모델 비교**, choose a
+saved native draft or published scenario, then choose 1–3 panels and role options.
+`/admin/model-comparison` uses `/admin/comparison-conversations`; starting freezes
+setup without calling a provider. Each question sends the same complete canonical
+history to all panels. Explicitly adopt one completed student response after all
+panels finish. Shared mentor help uses that adopted pair; automatic checks follow
+that scenario's start/interval and each panel's rolling intervention cap. A lost
+automatic check chain appears as **대기 중 자동 검사** after refresh. Loading only
+reads saved state; interruption/degraded results require explicit panel retry.
+**비교 종료 및 분석** analyzes the same final canonical dialogue in every panel.
+One owner-only history item retains every round, competing response, policy skip
+and attempt until its fixed creation + 30-day expiry. Usage/cost remain after
+content deletion. Existing single-role APIs and their separate history remain
+available for legacy comparisons; linked children must use the parent actions.
+
+New native scenario saves, including drafts, require one common registered model
+for student, analysis and enabled mentor. Each active role must be currently
+verified with an enabled decryptable connection. Role options remain separate.
+Historical mixed selections are preserved literally and require explicit common
+selection before editing can be saved. **이 모델 적용** opens the source editor
+with frozen panel options; an explicit ordinary save/publication is still needed,
+with its current expected version. Past lessons and comparison setup never change.
+Migration 036 adds only the conversation parent and nullable child association.
+
+Targeted offline checks:
+`uv run --frozen python -m pytest -q tests/test_comparison_conversations.py tests/test_comparison_conversation_migration.py`
+and `npm run test:browser -- conversation` cover authenticated lifecycle/SSE,
+common model authoring, and the real saved-scenario browser workflow against
+temporary SQLite and mocked SDK HTTP. No paid generation or operating DB is used.
+
 S6-04 administrator pagination screens (#105):
 `npm run test:browser -- s6_` renders the real user/scenario templates with
 isolated synthetic lists of 41 records (20/20/1). It covers first/middle/last and

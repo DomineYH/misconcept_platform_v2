@@ -46,7 +46,7 @@ export default async function checkAIBoundaries(page) {
   await page.getByRole('button', {name:'닫기', exact:true}).click();
   await page.locator('[data-provider=openai]').getByRole('button', {name:'비생성 확인·목록 갱신', exact:true}).click();
   await page.getByRole('status').filter({hasText:'실패'}).waitFor();
-  assert(await page.locator('[data-provider=openai]').getByRole('button', {name:'gpt-5-mini', exact:true}).isVisible(), 'failed refresh preserves last successful catalog');
+  assert.equal(await page.getByLabel('OpenAI 모델 ID 선택',{exact:true}).locator('option[value="gpt-5-mini"]').count(), 1, 'failed refresh preserves last successful catalog');
   assert.equal(writes.length, 2, 'no implicit provider calls');
 
   data = state();

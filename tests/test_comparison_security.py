@@ -18,6 +18,28 @@ from src.models import ApiUsageLog, ComparisonRun, GenerationRun
 __all__ = ["client", "comparison", "scenario_payload", "student"]
 
 
+@pytest.mark.parametrize("field", ["saved_scenario", "mentor_trigger"])
+async def test_standalone_rejects_parent_fields_without_calls_or_records(
+    data, client, student, comparison, field
+):
+    login(client, data.admin)
+    if field == "saved_scenario":
+        comparison["source_snapshot"].update(
+            source_kind="saved_scenario",
+            scenario_id=data.scenario.id,
+            source_version=data.scenario.config_version,
+        )
+    else:
+        comparison["mentor_trigger"] = "manual"
+    response = await client.post("/admin/comparisons", json=comparison)
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["code"] == "invalid_source"
+    student.responses.create.assert_not_awaited()
+    async with data.factory() as db:
+        for model in (ComparisonRun, GenerationRun, ApiUsageLog):
+            assert await db.scalar(select(func.count()).select_from(model)) == 0
+
+
 @pytest.mark.parametrize(
     "change",
     [

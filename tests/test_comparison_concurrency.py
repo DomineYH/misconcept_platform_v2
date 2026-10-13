@@ -196,6 +196,14 @@ async def test_last_panel_preflight_failure_blocks_every_panel(
     elif failure == "missing_model":
         last["model_config_id"] = 99999
     else:
+        from src.services.model_capabilities import capabilities
+
+        # A combined-limit model isolates the last panel's larger output reserve.
+        student.model.model_id = "gpt-5.2"
+        student.model.capabilities_json = capabilities("openai", "gpt-5.2")
+        for panel in comparison["panels"]:
+            panel["model_config"]["model_id"] = "gpt-5.2"
+        await data.db.commit()
         for message in comparison["canonical_context"]:
             message["content"] = "길" * 45000
         comparison["current_message"] = "x" * 5000

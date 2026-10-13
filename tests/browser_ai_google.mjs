@@ -50,7 +50,7 @@ export default async function checkGoogle(page) {
   await page.goto(`${base}/admin/ai`);
   const card = page.locator('[data-provider="google"]');
   await card.getByRole('button', {name:'비생성 확인·목록 갱신', exact:true}).click();
-  await card.getByText('gemini-2.5-flash', {exact:true}).waitFor();
+  await card.getByLabel('Gemini 모델 ID 선택',{exact:true}).locator('option[value="gemini-2.5-flash"]').waitFor({state:'attached'});
   const row = page.locator('[data-model="1"]');
   await row.getByRole('button', {name:'표시명·활성·옵션 수정', exact:true}).click();
   await page.getByLabel('다양성', {exact:true}).fill('0');

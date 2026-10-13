@@ -5,10 +5,12 @@ export default async function checkComparisonEntryAndLayout(page) {
   const base = new URL(page.url()).origin;
   await page.goto(`${base}/fixtures/s5/menu`);
   await page.getByRole('link',{name:'모델 비교 동일 맥락으로 모델·옵션 시험'}).click();
-  await page.getByRole('link',{name:'모델 비교',exact:true}).click();
-  await page.getByRole('region',{name:'동일 맥락 모델 비교',exact:true}).waitFor();
-  await page.goto(`${base}/admin/scenarios?compare=1`);
-  await page.getByRole('link',{name:'새 초안 비교',exact:true}).click();
+  assert.equal(await page.getByRole('link',{name:'모델 비교',exact:true}).getAttribute('href'), '/admin/model-comparison?scenario_id=1');
+  const header = page.locator('.page-header-admin');
+  assert.equal(await header.getByRole('link',{name:'전체 모델 비교',exact:true}).getAttribute('href'), '/admin/scenarios?compare=1');
+  assert.equal(await header.getByRole('link',{name:'비교 이력',exact:true}).getAttribute('href'), '/admin/model-comparison');
+  await page.goto(`${base}/fixtures/s2/editor?new=1`);
+  await page.getByRole('button',{name:'모델 비교 열기',exact:true}).click();
   await page.getByRole('region',{name:'동일 맥락 모델 비교',exact:true}).waitFor();
   assert.match(await page.locator('#scenario-comparison').innerText(), /새 작성 · 원본 없음/);
   for (const width of [1280,1000,390]) {

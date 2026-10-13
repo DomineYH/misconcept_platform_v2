@@ -38,7 +38,7 @@ class Effort(ConfigValue):
 
 
 class AnthropicThinking(ConfigValue):
-    type: Literal["disabled", "adaptive"]
+    type: Literal["disabled", "adaptive", "between_tools"]
 
 
 class AnthropicThinkingBudget(ConfigValue):

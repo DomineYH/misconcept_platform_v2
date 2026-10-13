@@ -35,7 +35,7 @@ async def sign_in(client, username):
     assert response.status_code == 303, response.text
 
 
-@pytest.mark.parametrize("current_source", [35, "legacy"], indirect=True)
+@pytest.mark.parametrize("current_source", [36, "legacy"], indirect=True)
 async def test_authenticated_history_acl_csv_and_comparison_isolation_leave_candidate_immutable(
     current_source, tmp_path
 ):

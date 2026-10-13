@@ -24,7 +24,8 @@ try {
   await page.getByLabel('공개 문제 상황', {exact:true}).fill(fixture.config.problem.public_text);
   await page.locator('[data-step="2"]').click();
   await page.getByLabel('내부 학생 프로필 (선택)', {exact:true}).fill(fixture.config.student.internal_profile);
-  await page.getByLabel('학생봇 제공자 / 모델', {exact:true}).selectOption('1');
+  await page.getByLabel('시나리오 공통 모델', {exact:true}).selectOption('2');
+  await page.getByLabel('학생봇 최대 출력 토큰', {exact:true}).fill('900');
   await page.locator('[data-step="3"]').click();
   await page.getByLabel('멘토 행동 지시', {exact:true}).fill(fixture.config.mentor.behavior_instruction);
   await page.locator('[id="mentor.mode"]').selectOption('off');

@@ -127,7 +127,7 @@ function showErrors(errors) {
   const counts = [0, 0, 0, 0, 0];
   for (const error of errors) {
     const path = error.path.replace(/^config\./, '');
-    const input = document.getElementById(path) || [...document.querySelectorAll('[data-field]')].find(el => el.dataset.field === path);
+    const input = (path.endsWith('resolved_model_config') ? document.getElementById('common-model') : document.getElementById(path)) || [...document.querySelectorAll('[data-field]')].find(el => el.dataset.field === path);
     const panel = input?.closest('[data-panel]');
     const message = typeof error.message === 'string' ? error.message : '입력값을 확인하세요.';
     if (panel) counts[Number(panel.dataset.panel)]++;
@@ -228,5 +228,9 @@ if (data.review_required) {
   document.getElementById('acknowledge-review').addEventListener('change', () => { markDirty(); reviewState(); });
 }
 reviewState();
+if (data.model_handoff) {
+  document.getElementById('common-model').dispatchEvent(new CustomEvent('model:apply', {detail:data.model_handoff}));
+  status.textContent = '비교 모델과 역할별 옵션을 적용했습니다. 별도 저장 또는 게시가 필요합니다.';
+}
 
 mountComparison(data, () => payload('compare'));

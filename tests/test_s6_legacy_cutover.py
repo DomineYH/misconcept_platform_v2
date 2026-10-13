@@ -66,7 +66,7 @@ async def test_legacy_rehearsal_seals_s2_then_upgrades_separate_candidate(
     report = await rehearse(
         source, latest, apply=True, settings=settings, legacy_workspace=legacy
     )
-    assert report["status"] == "ready" and report["candidate_revision"] == 35
+    assert report["status"] == "ready" and report["candidate_revision"] == 36
     assert report["legacy"]["source_revision"] in (23, 27, 30)
     assert report["legacy"]["preserved"]["api_usage_log"]["count"] == 1
     assert report["preserved"]["message"]["count"] == 1
@@ -357,7 +357,7 @@ async def test_legacy_cli_entry_reports_ready_without_a_subprocess(
     report = json.loads(output.out)
     assert report["status"] == "ready" and report["release_blocked"] is True
     assert report["legacy"]["source_revision"] == 23
-    assert report["candidate_revision"] == 35
+    assert report["candidate_revision"] == 36
     assert "Original {text}" not in output.out + output.err
 
 

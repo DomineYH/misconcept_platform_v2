@@ -85,7 +85,7 @@ def validate_paths(
         raise ValueError("isolated_workspace_required")
 
 
-async def upgrade(path, through=35):
+async def upgrade(path, through=36):
     engine = create_async_engine(
         URL.create("sqlite+aiosqlite", database=str(path))
     )

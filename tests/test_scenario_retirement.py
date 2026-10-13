@@ -3,10 +3,11 @@
 import pytest
 from test_scenario_drafts import api as draft_api
 from test_scenario_drafts import draft as draft_fixture
-from test_scenario_drafts import post
+from test_scenario_drafts import eligible_draft_model, post
 
 api = draft_api
 draft = draft_fixture
+__all__ = ["eligible_draft_model"]
 
 pytestmark = pytest.mark.parametrize("data", ["baseline"], indirect=True)
 
@@ -124,7 +125,7 @@ async def test_connection_impact_lists_roles_states_and_disabled_mentor(
         connection = await db.get(ProviderConnection, 1)
         model = ModelConfig(
             provider_connection_id=connection.id,
-            model_id="gpt-5-mini",
+            model_id="gpt-5.2",
             display_name="Draft model",
         )
         db.add(model)
@@ -133,7 +134,7 @@ async def test_connection_impact_lists_roles_states_and_disabled_mentor(
             model_config_id=model.id,
             provider_connection_id=connection.id,
             provider="openai",
-            model_id="gpt-5-mini",
+            model_id="gpt-5.2",
             options={
                 "max_output_tokens": 900,
                 "reasoning": {"effort": "medium"},

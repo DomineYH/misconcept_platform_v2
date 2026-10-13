@@ -88,7 +88,7 @@ def thinking_reserve(provider, options, definition, cap):
         return 0 if effort == "none" else math.ceil(cap / 2)
     thinking = options.get("thinking", {})
     if provider == "anthropic":
-        mode = thinking.get("type", "disabled")
+        mode = thinking.get("type", definition["default_thinking_type"])
         return (
             thinking["budget_tokens"]
             if mode == "enabled"

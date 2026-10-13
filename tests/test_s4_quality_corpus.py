@@ -4,7 +4,12 @@ import copy
 import json
 
 import pytest
-from s4_quality_fixtures import FIXTURES, load_corpus, mock_comparison_record
+from s4_quality_fixtures import (
+    FIXTURES,
+    install_corpus_planner_limits,
+    load_corpus,
+    mock_comparison_record,
+)
 
 from src.services.analysis_plan import build_plan
 from src.services.lesson_snapshots import LessonSnapshot, canonical_hash
@@ -104,7 +109,20 @@ def test_mock_comparison_rejects_model_or_option_substitution(field, value):
         mock_comparison_record(corpus, sample["id"], baseline, candidate)
 
 
-def test_long_corpus_has_real_bounded_chunk_plans_without_padding():
+def test_current_mini_limit_blocks_oversized_legacy_corpus_plan():
+    sample = next(
+        s for s in load_corpus()["samples"] if s["id"] == "math-long-01"
+    )
+    plan = build_plan(
+        LessonSnapshot.model_validate(sample["snapshot"]), sample["transcript"]
+    )
+    assert plan["input_budget_tokens"] == 272000
+    assert plan["mode"] == "blocked"
+    assert plan["blocked_code"] == "merge_too_large"
+
+
+def test_long_corpus_has_real_bounded_chunk_plans_without_padding(monkeypatch):
+    install_corpus_planner_limits(monkeypatch)
     corpus = load_corpus()
     for sample in corpus["samples"]:
         if sample["length"] != "long":

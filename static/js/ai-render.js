@@ -35,10 +35,49 @@ export function field(form, name, label, value = '', attrs = {}, choices = null)
   const id = `ai-${name}`;
   const input = node(choices ? 'select' : 'input', null, {id, name, ...attrs});
   if (choices) for (const [key, text] of choices) input.append(node('option', text, {value:key}));
+  if (choices && value != null && !choices.some(([key]) => String(key) === String(value))) {
+    input.append(node('option', `${value} · 지원하지 않는 저장 값`, {value}));
+  }
   input.value = value ?? '';
   group.append(node('label', label, {for:id}), input);
   form.append(group);
   return input;
+}
+
+export function optionNotes(container, capabilities, saved = {}, onRemove) {
+  if (capabilities.definition_version) container.append(node('p', `기능 정의: ${capabilities.definition_version} · 공식 확인 ${capabilities.checked_at}`));
+  for (const definition of capabilities.fields || []) {
+    if (definition.default != null) container.append(node('p', `${definition.label} 기본값: ${definition.default}`));
+  }
+  for (const note of capabilities.option_notes || []) container.append(node('p', note));
+  const unknown = structuredClone(saved);
+  for (const definition of capabilities.fields || []) {
+    const path = definition.name.split('.');
+    const target = path.slice(0, -1).reduce((obj, key) => obj?.[key], unknown);
+    if (target) {
+      delete target[path.at(-1)];
+      if (path.length === 2 && Object.keys(target).length === 0) delete unknown[path[0]];
+    }
+  }
+  if (Object.keys(unknown).length) {
+    const notice = node('div');
+    notice.append(node('p', '기능 정의에 없는 저장 옵션입니다. 다른 필드 수정으로 삭제하지 않으며, 제거를 선택한 뒤 저장해야 삭제됩니다.'), node('pre', JSON.stringify(unknown, null, 2)));
+    notice.append(button('정의에 없는 저장 옵션 제거', () => {
+      const retained = {};
+      for (const definition of capabilities.fields || []) {
+        const path = definition.name.split('.');
+        const value = path.reduce((obj, key) => obj?.[key], saved);
+        if (value === undefined) continue;
+        let target = retained;
+        for (const part of path.slice(0, -1)) target = target[part] ||= {};
+        target[path.at(-1)] = value;
+      }
+      onRemove(retained);
+      notice.remove();
+      container.querySelector('input:not(:disabled),select:not(:disabled)')?.focus();
+    }));
+    container.append(notice);
+  }
 }
 
 export function render(state, actions) {
@@ -62,13 +101,12 @@ export function render(state, actions) {
       button('비생성 확인·목록 갱신', () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available || p.catalog.available === false));
     card.append(row, node('p', p.catalog.available === false ? '모델 목록은 아직 제공되지 않습니다.' : `모델 목록: ${p.catalog.stale ? '오래된 목록' : '최근 목록'} · 마지막 갱신 ${p.catalog.fetched_at || '없음'}`));
     if (p.catalog.stale) card.append(node('p', '참고 목록입니다. 접근 가능 여부나 역할 검증 성공을 보장하지 않습니다.'));
-    const list = node('ul');
-    for (const model of p.catalog.models) {
-      const li = node('li');
-      li.append(button(model.model_id, () => actions.register(p, model.model_id), state.models_available === false));
-      list.append(li);
-    }
-    card.append(list, button('모델 ID 직접 입력', () => actions.register(p, ''), state.models_available === false));
+    const choices = [['', '모델 선택 필요'], ...p.catalog.models.map(model => [model.model_id,
+      `${model.model_id} · ${model.lifecycle || '수명주기 미확인'} · ${model.preview === true ? 'Preview' : model.preview === false ? '안정' : '릴리스 상태 미확인'}`])];
+    const select = field(card, `${p.provider}-catalog-model`, `${providers[p.provider]} 모델 ID 선택`, '', {}, choices);
+    const register = button('선택 모델 등록', () => actions.register(p, select.value), true);
+    select.addEventListener('change', () => { register.disabled = !select.value || state.models_available === false; });
+    card.append(register, button('모델 ID 직접 입력', () => actions.register(p, ''), state.models_available === false));
     cards.append(card);
   }
   connections.append(cards);
@@ -81,7 +119,7 @@ export function render(state, actions) {
     const p = state.providers.find(p => p.provider === m.provider);
     const card = node('article', null, {'data-model':m.id});
     card.append(node('h3', `${m.display_name} · ${providers[m.provider]} / ${m.model_id}`),
-      node('p', `${m.enabled ? '활성' : '비활성'} · ${m.capabilities ? '기능 정의 있음' : '기능 정의 필요'}`),
+      node('p', `${m.capabilities?.preview ? 'Preview · ' : ''}${m.enabled ? '활성' : '비활성'} · ${m.capabilities ? '기능 정의 있음' : '기능 정의 필요'}`),
       button('표시명·활성·옵션 수정', () => actions.model(m)));
     if (m.capabilities?.metadata_conflict) card.append(node('p', '기능 정의·제공자 목록 불일치: 역할 시험과 실행을 사용할 수 없습니다.'));
     for (const [role, label] of Object.entries(roles)) {
@@ -89,6 +127,7 @@ export function render(state, actions) {
       const row = node('div', null, {class:'ai-actions'});
       row.append(node('p', `${label}: ${states[verification.status] || '미검증'}${verification.verified_at ? ` · ${verification.verified_at}` : ''}`));
       if (verification.error_code) row.append(node('p', roleErrors[verification.error_code] || '역할 응답 형식 시험에 실패했습니다. 설정을 확인한 후 다시 시험하세요.'));
+      if (m.capabilities && !m.probe_budgets?.[role]) row.append(node('p', `${label} 시험 출력 상한 또는 저장 옵션 제약과 충돌합니다. 저장 옵션을 명시적으로 수정하세요.`));
       row.append(button(`${label} 시험`, () => actions.probe(m, role), state.probes_available === false || (state.probe_roles && !state.probe_roles.includes(role)) || !m.probe_budgets?.[role] || !m.capabilities || m.capabilities.metadata_conflict || !state.master_key_available || !p.enabled || p.status !== 'ready' || verification.status === 'verifying'));
       if (verification.status === 'verifying') row.append(button(`${label} 진행 조회`, () => actions.poll(verification.probe_request_id)), button(`${label} 시험 취소`, () => actions.cancel(verification.probe_request_id)));
       card.append(row);

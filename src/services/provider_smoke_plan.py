@@ -54,8 +54,8 @@ def reservation(provider, model, options):
     if definition is None or "max_output_tokens" not in options:
         raise InvocationError("unknown_bound")
     output = options["max_output_tokens"]
-    input_limit = definition.get(
-        "input_token_limit", definition.get("combined_context_tokens")
+    input_limit = definition.get("input_token_limit") or definition.get(
+        "combined_context_tokens"
     )
     if not input_limit or not definition.get("limit_sources"):
         raise InvocationError("unknown_bound")

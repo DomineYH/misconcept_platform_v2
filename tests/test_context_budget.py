@@ -21,7 +21,7 @@ def test_exact_capacity_has_official_provenance(
 ):
     definition = capabilities(provider, model)
     assert definition[field] == capacity
-    assert definition["checked_at"] == "2026-10-10"
+    assert definition["checked_at"] == "2026-10-13"
     assert definition["sources"]
     if provider == "google":
         assert "combined_context_tokens" not in definition
@@ -55,7 +55,7 @@ def test_utf8_estimate_counts_literal_korean_emoji_and_braces():
             128000,
             272000,
         ),
-        ("openai", "gpt-5-mini", {"max_output_tokens": 1500}, 1500, 398500),
+        ("openai", "gpt-5-mini", {"max_output_tokens": 1500}, 1500, 272000),
         ("anthropic", "claude-sonnet-4-6", {}, 1024, 998976),
         (
             "anthropic",
@@ -188,6 +188,7 @@ def test_min_known_capacity_and_unavailable_budget(
 
     definition = capabilities("openai", "gpt-5-mini")
     definition.pop("combined_context_tokens")
+    definition.pop("input_token_limit")
     definition.update(limits)
     monkeypatch.setattr(context_budget, "capabilities", lambda *_: definition)
     request = TextRequest(

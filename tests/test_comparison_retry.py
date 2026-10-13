@@ -88,7 +88,13 @@ async def test_retry_only_failed_latest_panel_preserves_conditions_and_attempts(
         assert after[key] == before[key]
     assert student.responses.create.await_count == 3
     calls = student.responses.create.call_args_list
-    assert calls[1].kwargs == calls[2].kwargs
+    original = next(
+        call
+        for call in calls[:2]
+        if call.kwargs["max_output_tokens"]
+        == old["model_config"]["options"]["max_output_tokens"]
+    )
+    assert original.kwargs == calls[2].kwargs
     assert (
         await client.post(f"{path}/panels/2/retry", json=body)
     ).json() == after

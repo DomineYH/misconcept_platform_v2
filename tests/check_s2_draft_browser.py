@@ -285,6 +285,7 @@ async def check():
             "033_context_budget.sql",
             "034_analysis_run.sql",
             "035_comparison_run.sql",
+            "036_comparison_conversation.sql",
         ):
             await run_migration(DIRECTORY / migration)
 

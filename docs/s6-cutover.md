@@ -8,7 +8,7 @@ Run from a git checkout with git installed; the evidence requires the checked-ou
 code revision. Offline credential restoration has a separate
 [version-by-version verification procedure](s6-credential-restore.md).
 
-Use an empty SQLite source copy or an official 023–035 database. For 023–030,
+Use an empty SQLite source copy or an official 023–036 database. For 023–030,
 provide the captured effective settings and a separate S2 workspace as below.
 The legacy path completes S2 conversion and its validated 031 receipt before
 backing up that result into the separate S6 candidate. Arbitrary schemas,
@@ -34,7 +34,7 @@ uv run --frozen python -m src.db.s6_cutover \
 Current-format dry-run creates a WAL-consistent `backup.db` and unchanged
 `candidate.db`, checks the source schema, integrity, foreign keys and idle
 state, and records `dry-run.json`. Apply upgrades only the candidate through
-the official runner, runs migrations twice, checks fresh-install schema
+036 with the official runner, runs migrations twice, checks fresh-install schema
 equivalence, and compares every original column/ID/value/hash. Added nullable
 columns remain NULL; migration history may only append official entries.
 Existing config, native/legacy snapshots, results and costs are preserved.

@@ -1,4 +1,4 @@
-"""Exact provider definitions, checked against official sources on 2026-10-10."""
+"""Exact provider definitions, checked against official sources on 2026-10-13."""
 
 import unicodedata
 from copy import deepcopy
@@ -11,17 +11,77 @@ PROVIDER_CAPABILITIES = {
     "google": google_capabilities,
 }
 
-DEFINITION_VERSION = "openai-2026-10-11-v3"
+DEFINITION_VERSION = "openai-2026-10-13-v4"
 MODEL_PAGES = "https://developers.openai.com/api/docs/models/"
-PARAMETER_SOURCE = (
-    "https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.4"
-)
+PARAMETER_SOURCE = "https://developers.openai.com/api/docs/guides/latest-model"
 MINI_REASONING_SOURCE = (
     "https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5"
 )
 DEFINITIONS = {
-    "gpt-5-mini": (["minimal", "low", "medium", "high"], "medium", False),
-    "gpt-5.2": (["none", "low", "medium", "high", "xhigh"], "none", True),
+    "gpt-5-mini": (
+        ["minimal", "low", "medium", "high"],
+        "medium",
+        False,
+        400000,
+        272000,
+    ),
+    "gpt-5.2": (
+        ["none", "low", "medium", "high", "xhigh"],
+        "none",
+        True,
+        400000,
+        None,
+    ),
+    "gpt-5.5": (
+        ["none", "low", "medium", "high", "xhigh"],
+        "medium",
+        True,
+        1050000,
+        None,
+    ),
+    "gpt-5.6-sol": (
+        ["none", "low", "medium", "high", "xhigh", "max"],
+        "medium",
+        True,
+        1050000,
+        922000,
+    ),
+    "gpt-5.6-terra": (
+        ["none", "low", "medium", "high", "xhigh", "max"],
+        "medium",
+        True,
+        1050000,
+        922000,
+    ),
+    "gpt-6-sol": (
+        ["none", "low", "medium", "high", "xhigh", "max"],
+        "medium",
+        True,
+        1050000,
+        922000,
+    ),
+    "gpt-6-luna": (
+        ["none", "low", "medium", "high", "xhigh", "max"],
+        "medium",
+        True,
+        1050000,
+        922000,
+    ),
+    "gpt-6.1-sol": (
+        ["low", "medium", "high", "xhigh", "max"],
+        "medium",
+        False,
+        1050000,
+        922000,
+    ),
+    # shortcut: Astra omission default is unverified, fill after official confirmation.
+    "gpt-6-astra": (
+        ["low", "medium", "high", "xhigh", "max"],
+        None,
+        False,
+        1050000,
+        922000,
+    ),
 }
 SNAPSHOTS = {
     "gpt-5-mini-2025-08-07": "gpt-5-mini",
@@ -71,7 +131,7 @@ def capabilities(provider, model_id):
     name = SNAPSHOTS.get(model_id, model_id)
     if provider != "openai" or name not in DEFINITIONS:
         return None
-    efforts, default, sampling = DEFINITIONS[name]
+    efforts, default, sampling, context, input_limit = DEFINITIONS[name]
     fields = [
         dict(
             name="max_output_tokens",
@@ -85,6 +145,7 @@ def capabilities(provider, model_id):
             label="추론 수준",
             type="string",
             choices=efforts,
+            default=default,
         ),
     ]
     if sampling:
@@ -96,22 +157,48 @@ def capabilities(provider, model_id):
     return deepcopy(
         dict(
             definition_version=DEFINITION_VERSION,
-            checked_at="2026-10-10",
-            limits_checked_at="2026-10-11",
+            checked_at="2026-10-13",
+            limits_checked_at="2026-10-13",
             limit_sources={
                 k: MODEL_PAGES + name
-                for k in ("combined_context_tokens", "max_output_tokens")
+                for k in (
+                    "input_token_limit",
+                    "combined_context_tokens",
+                    "max_output_tokens",
+                )
             },
             sources=(
-                [MODEL_PAGES + name, PARAMETER_SOURCE, MINI_REASONING_SOURCE]
+                [
+                    MODEL_PAGES + name,
+                    PARAMETER_SOURCE,
+                    MINI_REASONING_SOURCE,
+                    "https://developers.openai.com/api/docs/guides/reasoning",
+                ]
                 if name == "gpt-5-mini"
-                else [MODEL_PAGES + name, PARAMETER_SOURCE]
+                else [
+                    MODEL_PAGES + name,
+                    PARAMETER_SOURCE,
+                    "https://developers.openai.com/api/docs/guides/reasoning",
+                ]
             ),
             text=True,
             streaming=True,
             structured=True,
             max_output_tokens=128000,
-            combined_context_tokens=400000,
+            combined_context_tokens=context,
+            input_token_limit=input_limit,
+            option_notes=[
+                (
+                    "지정하지 않음은 제공자 기본값을 사용합니다."
+                    if default is not None
+                    else "공식 기본 추론 수준은 확인 필요입니다. 지정하지 않음은 값을 보내지 않으며, 다른 모델의 기본값으로 대체하지 않습니다."
+                ),
+                (
+                    "temperature는 추론 수준 none일 때만 지원합니다."
+                    if sampling
+                    else "temperature는 지원하지 않습니다."
+                ),
+            ],
             reasoning_efforts=efforts,
             default_reasoning_effort=default,
             temperature=sampling,

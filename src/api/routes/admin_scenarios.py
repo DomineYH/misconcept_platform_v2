@@ -197,37 +197,33 @@ async def get_scenario_draft(
 async def edit_scenario_draft(
     request: Request,
     scenario_id: int,
+    conversation: UUID | None = None,
+    panel: str | None = None,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return await render_editor(
-        request,
-        user,
-        db,
-        await draft_view(db, await native_scenario(db, scenario_id)),
-    )
+    editor = await draft_view(db, await native_scenario(db, scenario_id))
+    if conversation is not None:
+        from fastapi import HTTPException
+
+        from src.services.comparison_conversations import (
+            conversation_model,
+            owned_conversation,
+        )
+
+        parent = await owned_conversation(db, str(conversation), user.id)
+        handoff = await conversation_model(db, parent, panel)
+        if handoff["scenario_id"] != scenario_id:
+            raise HTTPException(404, detail={"code": "scenario_not_found"})
+        editor["model_handoff"] = handoff
+    response = await render_editor(request, user, db, editor)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 async def render_editor(request, user, db, editor):
-    from src.models.provider_connection import ProviderConnection
-    from src.services.model_configuration import configuration_state
-    from src.services.model_verification import connection_ready
-
-    connections = {
-        c.provider: c
-        for c in (await db.scalars(select(ProviderConnection))).all()
-    }
-    state = await configuration_state(db, connections)
-    editor["model_choices"] = [
-        dict(
-            model,
-            provider_connection_id=connections[model["provider"]].id,
-            connection_available=connection_ready(
-                connections[model["provider"]]
-            ),
-        )
-        for model in state["models"]
-    ]
+    state, choices = await editor_models(db)
+    editor["model_choices"] = choices
     editor["role_defaults"] = (
         state["settings"]["defaults"] if state["settings"] else {}
     )
@@ -260,3 +256,26 @@ async def delete_scenario(
     return await delete_draft(
         db, scenario_id, data.expected_version, user.id, logger
     )
+
+
+async def editor_models(db):
+    from src.models.provider_connection import ProviderConnection
+    from src.services.model_configuration import configuration_state
+    from src.services.model_verification import connection_ready
+
+    connections = {
+        c.provider: c
+        for c in (await db.scalars(select(ProviderConnection))).all()
+    }
+    state = await configuration_state(db, connections)
+    choices = [
+        dict(
+            model,
+            provider_connection_id=connections[model["provider"]].id,
+            connection_available=connection_ready(
+                connections[model["provider"]]
+            ),
+        )
+        for model in state["models"]
+    ]
+    return state, choices

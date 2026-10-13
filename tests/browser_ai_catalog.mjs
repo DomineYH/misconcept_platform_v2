@@ -42,7 +42,8 @@ export default async function checkAICatalog(page) {
   await page.getByRole('button',{name:'작성 기본값·호출 설정 수정'}).waitFor();
   assert.equal(writes.length,0,'screen read never calls providers');
   await page.locator('[data-provider=openai]').getByRole('button',{name:'비생성 확인·목록 갱신'}).click();
-  await page.locator('[data-provider=openai]').getByRole('button',{name:'gpt-5.2',exact:true}).click();
+  await page.getByLabel('OpenAI 모델 ID 선택',{exact:true}).selectOption('gpt-5.2');
+  await page.locator('[data-provider=openai]').getByRole('button',{name:'선택 모델 등록',exact:true}).click();
   await page.getByRole('button',{name:'모델 등록',exact:true}).click();
   await page.locator('[data-model="1"]').getByRole('button',{name:'학생봇 시험',exact:true}).waitFor();
   assert(await page.locator('[data-model="1"]').getByRole('button',{name:'학생봇 시험',exact:true}).isDisabled(),'A3 cannot generate probes');

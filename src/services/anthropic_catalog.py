@@ -27,6 +27,7 @@ class ThinkingTypes(BaseModel):
     adaptive: Support | None = None
     disabled: Support | None = None
     enabled: Support | None = None
+    between_tools: Support | None = None
 
 
 class Thinking(Support):
@@ -37,6 +38,7 @@ class Effort(Support):
     low: Support | None = None
     medium: Support | None = None
     high: Support | None = None
+    xhigh: Support | None = None
     max: Support | None = None
 
 

@@ -15,7 +15,7 @@
 {% macro model_field(role, label) %}
 <fieldset data-model-role="{{ role }}">
   <legend>{{ label }} 모델 설정 · 내부 실행용</legend>
-  <label for="{{ role }}.resolved_model_config">{{ label }} 제공자 / 모델</label>
+  <label for="{{ role }}.resolved_model_config" hidden>{{ label }} 제공자 / 모델</label>
   <select id="{{ role }}.resolved_model_config" aria-describedby="{{ role }}-model-status {{ role }}.resolved_model_config-error"></select>
   <p id="{{ role }}-model-status" role="status"></p>
   <p id="{{ role }}.resolved_model_config-error" class="scenario-error" hidden></p>
@@ -53,8 +53,13 @@
     <p id="review-publication-status" role="status"></p>
   </section>
   {% endif %}
+  {% if editor.id %}<p><a class="btn btn-primary" href="/admin/model-comparison?scenario_id={{ editor.id }}">저장된 시나리오 전체 비교</a></p>{% endif %}
+  <p>아래는 이전 역할별 단독 비교입니다. 전체 비교는 저장된 시나리오에서 시작하세요.</p>
   <button type="button" id="open-comparison" class="btn btn-secondary" aria-expanded="false" aria-controls="scenario-comparison">모델 비교 열기</button>
   <section id="scenario-comparison" aria-label="동일 맥락 모델 비교" hidden></section>
+        <label for="common-model">시나리오 공통 모델</label>
+        <select id="common-model" aria-describedby="common-model-status"></select>
+        <p id="common-model-status" role="status"></p>
   <div class="scenario-layout">
     <nav class="scenario-steps" aria-label="작성 단계">
       {% for label in ['기본 정보', '문제 상황', '학생봇', '멘토', '사후 분석'] %}

@@ -55,7 +55,7 @@ try {
   await panel.getByRole('button', {name:'이 모델 적용',exact:true}).click();
   await page.getByText('대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.', {exact:true}).waitFor();
   assert.equal(await page.getByLabel('학생봇 최대 출력 토큰').inputValue(), '1701');
-  assert(await page.getByLabel('학생봇 제공자 / 모델').evaluate(el => document.activeElement === el));
+  assert(await page.getByLabel('시나리오 공통 모델').evaluate(el => document.activeElement === el));
   assert.deepEqual(await readScenario(), original, 'adoption and application never save');
   await page.getByRole('button', {name:'초안으로 저장',exact:true}).click();
   await page.getByText('초안을 저장했습니다.', {exact:true}).waitFor();
@@ -64,7 +64,8 @@ try {
   assert.equal(saved.config_version, original.config_version + 1);
   assert.deepEqual(saved.config.student.resolved_model_config, child.panels[0].model_config);
   assert.deepEqual(saved.config.mentor, original.config.mentor);
-  assert.deepEqual(saved.config.analysis, original.config.analysis);
+  assert.equal(saved.config.analysis.resolved_model_config.model_config_id, saved.config.student.resolved_model_config.model_config_id);
+  for (const [key,value] of Object.entries(original.config.analysis)) if (key !== 'resolved_model_config') assert.deepEqual(saved.config.analysis[key], value);
   const competing = await page.context().newPage();
   await competing.goto(originalPath);
   await competing.getByLabel('제목', {exact:true}).fill('Concurrent winner');

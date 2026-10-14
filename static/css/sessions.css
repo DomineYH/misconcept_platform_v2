@@ -1,9 +1,11 @@
 /* Sessions page filter bar styles */
 .filters {
-  flex-wrap: nowrap !important;
+  flex-wrap: wrap;
 }
 .filters .filter-form {
-  flex: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -11,6 +13,8 @@
 }
 .filters .filter-form select {
   width: auto;
+  max-width: 100%;
+  min-height: 44px;
   min-width: 0;
   padding: 0.4rem 0.75rem;
   font-size: 0.85rem;
@@ -18,15 +22,18 @@
 }
 .date-range-box {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
-  border: 1px solid var(--color-border, #ccc);
+  border: 1px solid var(--color-border-medium);
   border-radius: 4px;
   padding: 0 0.25rem;
-  background: var(--color-bg, #fff);
+  background: var(--color-bg-surface);
 }
 .date-range-box input[type="date"] {
   border: none;
-  outline: none;
+  min-width: 0;
+  min-height: 44px;
   background: transparent;
   padding: 0.3rem 0.25rem;
   font-size: 0.85rem;

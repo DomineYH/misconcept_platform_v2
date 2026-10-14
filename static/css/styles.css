@@ -246,6 +246,9 @@ body > header nav h1 {
 }
 
 .nav-username {
+  display: inline-block;
+  max-width: 16rem;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-primary);
@@ -1555,6 +1558,8 @@ main:has(.split-layout) {
    Data Tables - Clean Grid
    ======================================== */
 .table-container {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   background: var(--color-white);
   border-radius: var(--radius-md);
@@ -1699,14 +1704,15 @@ main:has(.split-layout) {
   border-radius: var(--radius-xl);
   max-width: 600px;
   width: 100%;
-  max-height: 90vh;
+  max-height: min(90dvh, calc(100dvh - 32px));
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   animation: modalSlideIn 0.25s ease-out;
 }
 
 .modal-lg {
-  max-width: 700px;
+  max-width: 900px;
 }
 
 .modal-xl {
@@ -1725,6 +1731,8 @@ main:has(.split-layout) {
 }
 
 .modal-header {
+  flex-shrink: 0;
+  gap: var(--spacing-md);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1745,6 +1753,8 @@ main:has(.split-layout) {
   font-size: 1.5rem;
   color: var(--color-gray-500);
   cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   line-height: 1;
   transition: color 0.2s;
@@ -1752,6 +1762,31 @@ main:has(.split-layout) {
 
 .close-modal-btn:hover {
   color: var(--color-black);
+}
+
+.modal-close {
+  min-width: 44px;
+  min-height: 44px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xl);
+}
+
+.modal-error,
+#about-load-error {
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-danger-text);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+#about-load-error:not([hidden]) {
+  display: block;
+  max-width: 16rem;
 }
 
 /* Form wrapper - enables flex layout for proper scrolling */
@@ -1771,6 +1806,8 @@ main:has(.split-layout) {
 }
 
 .modal-footer {
+  flex-shrink: 0;
+  flex-wrap: wrap;
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
@@ -1839,11 +1876,11 @@ main:has(.split-layout) {
 
 .slide-panel {
   position: fixed;
-  top: 0;
+  top: max(16px, 5dvh);
   right: -480px;
   width: 450px;
-  max-width: 100%;
-  height: 100vh;
+  max-width: calc(100% - 32px);
+  height: min(90dvh, calc(100dvh - 32px));
   background: var(--color-white);
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
   z-index: 1001;
@@ -1854,7 +1891,7 @@ main:has(.split-layout) {
 }
 
 .slide-panel.active {
-  right: 0;
+  right: 16px;
 }
 
 .panel-form {
@@ -1883,6 +1920,8 @@ main:has(.split-layout) {
 }
 
 .close-panel-btn {
+  min-width: 44px;
+  min-height: 44px;
   background: none;
   border: none;
   font-size: 1.5rem;
@@ -1903,6 +1942,7 @@ main:has(.split-layout) {
 }
 
 .panel-footer {
+  flex-wrap: wrap;
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;

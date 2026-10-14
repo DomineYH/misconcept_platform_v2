@@ -56,7 +56,7 @@
   <div class="modal-container">
     <div class="modal-header">
       <h2>새 그룹 생성</h2>
-      <button type="button" class="close-modal-btn" data-modal="create-modal">&times;</button>
+      <button type="button" class="close-modal-btn" aria-label="닫기" data-modal="create-modal">&times;</button>
     </div>
     <form id="create-form" class="modal-form">
       <div class="modal-body">
@@ -82,7 +82,7 @@
   <div class="modal-container">
     <div class="modal-header">
       <h2>그룹 수정</h2>
-      <button type="button" class="close-modal-btn" data-modal="edit-modal">&times;</button>
+      <button type="button" class="close-modal-btn" aria-label="닫기" data-modal="edit-modal">&times;</button>
     </div>
     <form id="edit-form" class="modal-form">
       <input type="hidden" id="edit-group-id" />
@@ -115,19 +115,19 @@ const groupsData = {
   {% for item in groups_data %}
   "{{ item.group.id }}": {
     id: {{ item.group.id }},
-    name: "{{ item.group.name|e }}",
-    description: "{{ (item.group.description or '')|e }}"
+    name: {{ item.group.name|tojson }},
+    description: {{ (item.group.description or '')|tojson }}
   }{% if not loop.last %},{% endif %}
   {% endfor %}
 };
 
 function openModal(id) {
   document.getElementById(id).classList.add('active');
-  document.body.style.overflow = 'hidden';
+  modalLifecycle.open(document.getElementById(id), () => closeModal(id));
 }
 function closeModal(id) {
   document.getElementById(id).classList.remove('active');
-  document.body.style.overflow = '';
+  modalLifecycle.close(document.getElementById(id));
 }
 
 document.getElementById('open-create-modal').addEventListener('click', () => openModal('create-modal'));
@@ -175,9 +175,9 @@ document.getElementById('create-form').addEventListener('submit', async e => {
       window.location.reload();
     } else {
       const err = await res.json();
-      alert('오류: ' + err.detail);
+      modalLifecycle.error(e.target, err.detail);
     }
-  } catch (err) { alert('그룹 생성에 실패했습니다'); }
+  } catch (err) { modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.'); }
 });
 
 // Edit submit
@@ -200,9 +200,9 @@ document.getElementById('edit-form').addEventListener('submit', async e => {
       window.location.reload();
     } else {
       const err = await res.json();
-      alert('오류: ' + err.detail);
+      modalLifecycle.error(e.target, err.detail);
     }
-  } catch (err) { alert('그룹 업데이트에 실패했습니다'); }
+  } catch (err) { modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.'); }
 });
 
 // Delete

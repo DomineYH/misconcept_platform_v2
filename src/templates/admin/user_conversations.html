@@ -9,7 +9,7 @@
     <p class="subtitle">사용자별 대화 내역 다운로드</p>
   </header>
 
-  <div class="table-container user-list-container">
+  <div class="table-container user-list-container" role="region" tabindex="0" aria-label="사용자 대화 목록">
     <table class="data-table">
       <thead>
         <tr>
@@ -72,7 +72,7 @@
   <div class="modal-container modal-lg">
     <div class="modal-header">
       <h2>개별 세션 다운로드</h2>
-      <button class="close-modal-btn"
+      <button class="close-modal-btn" aria-label="닫기"
               onclick="closeModal('sessionModal')">
         &times;
       </button>
@@ -90,7 +90,7 @@
 </div>
 
 <script>
-let currentUserId = null;
+let sessionListRequest = 0;
 
 function escapeHtml(text) {
   var div = document.createElement('div');
@@ -99,20 +99,25 @@ function escapeHtml(text) {
 }
 
 function showSessionList(userId) {
-  currentUserId = userId;
+  const requestId = ++sessionListRequest;
   const content = document.getElementById(
     'sessionListContent'
   );
   content.innerHTML = '<p>로딩 중...</p>';
   document.getElementById('sessionModal')
     .classList.add('active');
+  modalLifecycle.open(document.getElementById('sessionModal'), () => closeModal('sessionModal'));
 
   fetch(
     '/admin/user-conversations/' +
     userId + '/sessions'
   )
-  .then(function(r) { return r.json(); })
+  .then(function(r) {
+    if (!r.ok) throw new Error('조회 실패');
+    return r.json();
+  })
   .then(function(sessions) {
+    if (requestId !== sessionListRequest) return;
     if (!sessions.length) {
       content.innerHTML =
         '<p>완료된 세션이 없습니다.</p>';
@@ -138,22 +143,25 @@ function showSessionList(userId) {
       html += '</td></tr>';
     });
     html += '</tbody></table>';
-    content.innerHTML = html;
+    content.innerHTML = '<div class="table-container" role="region" tabindex="0" aria-label="개별 세션 목록">' + html + '</div>';
   })
   .catch(function() {
-    content.innerHTML =
-      '<p>세션 목록을 불러올 수 없습니다.</p>';
+    if (requestId !== sessionListRequest) return;
+    content.replaceChildren();
+    modalLifecycle.error(document.getElementById('sessionModal'), '세션 목록을 불러올 수 없습니다.');
   });
 }
 
 function closeModal(modalId) {
   document.getElementById(modalId)
     .classList.remove('active');
+  ++sessionListRequest;
+  modalLifecycle.close(document.getElementById(modalId));
 }
 
 document.addEventListener('click', function(e) {
   if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('active');
+    closeModal(e.target.id);
   }
 });
 </script>

@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/css/styles.css">
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/analysis-toggle.js"></script>
+  <script src="/static/js/modal-lifecycle.js"></script>
   <script src="/static/js/analysis-result.js" defer></script>
   <script>
     // Auto-inject CSRF token into all HTMX requests
@@ -44,6 +45,7 @@
         <li>
           <button type="button" class="btn-nav-about"
                   id="open-about-modal">about</button>
+          <span id="about-load-error" role="alert" tabindex="-1" hidden></span>
         </li>
         {% if user and user.role == 'admin' %}
         <li><a href="/admin"{% if current_path.startswith('/admin') %} aria-current="page"{% endif %}>관리자</a></li>
@@ -165,10 +167,17 @@
 
     // About modal
     var aboutLoaded = false;
+    var aboutRequest = 0;
     function openAboutModal() {
+      var requestId = ++aboutRequest;
       var overlay = document.getElementById('about-modal-overlay');
+      document.getElementById('about-load-error').hidden = true;
       overlay.classList.add('active');
-      document.body.style.overflow = 'hidden';
+      if (!aboutLoaded) {
+        document.getElementById('about-modal-container').innerHTML =
+          '<div class="modal-header"><h2>About</h2><button type="button" class="modal-close" aria-label="닫기" onclick="closeAboutModal()">×</button></div><div class="modal-body" role="status">소개를 불러오는 중...</div>';
+      }
+      modalLifecycle.open(overlay, closeAboutModal);
       if (!aboutLoaded) {
         fetch('/about/content')
           .then(function(r) {
@@ -176,19 +185,29 @@
             return r.text();
           })
           .then(function(html) {
+            if (requestId !== aboutRequest) return;
             document.getElementById('about-modal-container')
               .innerHTML = html;
             aboutLoaded = true;
+            if (overlay.classList.contains('active')) {
+              document.querySelector('#about-modal-container .modal-close').focus();
+            }
           })
           .catch(function() {
+            if (requestId !== aboutRequest) return;
             closeAboutModal();
+            var notice = document.getElementById('about-load-error');
+            notice.textContent = '소개를 불러올 수 없습니다. About을 다시 눌러 주세요.';
+            notice.hidden = false;
+            notice.focus();
           });
       }
     }
     function closeAboutModal() {
+      ++aboutRequest;
       var overlay = document.getElementById('about-modal-overlay');
       overlay.classList.remove('active');
-      document.body.style.overflow = '';
+      modalLifecycle.close(overlay);
     }
     document.getElementById('open-about-modal')
       .addEventListener('click', openAboutModal);

@@ -41,6 +41,8 @@ export function mountMentorStream(ui) {
     const slot = document.createElement('div');
     slot.className = 'message message-mentor mentor-slot';
     slot.dataset.turnId = turnId;
+    slot.setAttribute('role', 'group');
+    slot.setAttribute('aria-label', `${ui.mentorName || '멘토'} · 대상 턴 ${row.dataset.turnIndex || turnId}`);
     const wrapper = document.createElement('div');
     wrapper.className = 'message-content-wrapper';
     const sender = document.createElement('div');
@@ -63,10 +65,14 @@ export function mountMentorStream(ui) {
     check.className = 'btn-secondary';
     check.textContent = '상태 다시 확인';
     check.hidden = true;
-    wrapper.append(sender, bubble, status, retry, check);
+    const note = document.createElement('p');
+    note.className = 'message-meta';
+    note.textContent = '자동 검사 완료 · 코칭 없음';
+    note.hidden = true;
+    wrapper.append(sender, bubble, status, note, retry, check);
     slot.append(wrapper);
     row.after(slot);
-    const turn = {slot, status, bubble, retry, check, trigger, ...restored};
+    const turn = {slot, status, bubble, note, retry, check, trigger, ...restored};
     turns.set(turnId, turn);
     retry.addEventListener('click', () => {
       if (!turn.running && !ui.isLocked()) void send(turnId, turn);
@@ -93,6 +99,7 @@ export function mountMentorStream(ui) {
     if (data.status === 'completed') {
       turn.result = data;
       finish(turn, 'completed', data.result_kind === 'no_intervention' ? '멘토 미개입' : '멘토 코칭 완료');
+      turn.note.hidden = data.result_kind !== 'no_intervention';
       if (data.message) {
         container.querySelectorAll('[data-message-id]').forEach(other => {
           if (other !== turn.slot && other.dataset.messageId === String(data.message.id)) other.remove();
@@ -174,6 +181,7 @@ export function mountMentorStream(ui) {
     turn.running = true;
     turn.state = turn.slot.dataset.status = 'running';
     turn.retry.hidden = turn.check.hidden = true;
+    turn.note.hidden = true;
     turn.status.textContent = '멘토 처리 중';
     turn.controller = new AbortController();
     persist();

@@ -1,8 +1,11 @@
 {% extends "layout.html" %}
 {% block title %}{{ scenario_title }} - 과거 기록{% endblock %}
 {% block content %}
-<div class="container">
+<div class="container session-history">
   <h1>{{ scenario_title }} · 대화 기록</h1>
+  {% if snapshot_provenance and snapshot_provenance.snapshot_origin == 'native' %}
+  <p class="history-provenance">수업 시작 시 확정한 설정 · 원래 대화 기록</p>
+  {% endif %}
   {% include "partials/snapshot_provenance.html" %}
   <p>시작: {{ session.started_at }} · 종료: {{ session.ended_at or '종료 기록 없음' }}</p>
   <a href="/sessions/{{ session.id }}/export.csv" class="btn btn-primary">CSV 다운로드</a>

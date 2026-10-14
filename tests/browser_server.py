@@ -125,6 +125,38 @@ class Handler(BaseHTTPRequestHandler):
                 )
             ).encode()
             mime = "application/json"
+        elif path.path == "/fixtures/uiux122/history":
+            reconstructed = "reconstructed" in query
+            body = (
+                templates.get_template("session_history.html")
+                .render(
+                    user=SimpleNamespace(nickname="Teacher", role="teacher"),
+                    scenario_title="긴 과거 대화 제목 " * 12,
+                    session=SimpleNamespace(
+                        id=1,
+                        started_at="2026-10-01 09:00",
+                        ended_at="2026-10-01 10:00",
+                    ),
+                    snapshot_provenance=dict(
+                        snapshot_origin=(
+                            "legacy_reconstructed"
+                            if reconstructed
+                            else "native"
+                        ),
+                        snapshot_created_at=(
+                            "2026-10-02 10:00"
+                            if reconstructed
+                            else "2026-10-01 09:00"
+                        ),
+                        unknown_field_names=(
+                            ["당시 모델", "내부 설정"] if reconstructed else []
+                        ),
+                    ),
+                    analysis_result_url=f"/fixtures/s4/result?state={'legacy' if reconstructed else 'ok'}",
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
         elif path.path == "/fixtures/s4/history":
             body = (
                 templates.get_template("admin/sessions.html")
@@ -308,6 +340,26 @@ class Handler(BaseHTTPRequestHandler):
                 "/admin/scenarios": "admin/scenarios.html",
             }[path.path]
             messages = []
+            if "uiux122_long" in query:
+                scenario.student_profile = (
+                    "공개 학생 소개를 읽으며 수업 맥락을 확인합니다. " * 80
+                )
+                scenario.problem_situation = (
+                    "전체가 같은 분수를 여러 단락의 설명과 그림으로 비교합니다.\n"
+                    * 80
+                )
+                messages = [
+                    SimpleNamespace(
+                        id=index,
+                        role="teacher" if index % 2 else "student",
+                        content="긴 한글 대화에서 근거를 확인하며 질문하고 답합니다. "
+                        * 8,
+                        created_at=None,
+                        turn_id=f"turn-{(index + 1) // 2}",
+                        turn_index=(index + 1) // 2,
+                    )
+                    for index in range(1, 61)
+                ]
             if "mentor_history" in query:
                 messages = [
                     SimpleNamespace(

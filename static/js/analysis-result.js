@@ -43,12 +43,13 @@
         if (!response.ok) throw new Error();
         const result = await projection(response);
         if (signal.aborted || !root.isConnected) return;
+        const announce = statusError || data.latest_run?.status !== result.latest_run?.status;
         const changed = statusError || JSON.stringify(data) !== JSON.stringify(result);
         statusError = false;
         data = result;
         if (changed) {
           render();
-          announcement.textContent = `최신 실행: ${statuses[data.latest_run?.status] || '상태 확인 불가'}`;
+          if (announce) announcement.textContent = `최신 실행: ${statuses[data.latest_run?.status] || '상태 확인 불가'}`;
         }
         schedulePolling();
       } catch {
@@ -154,20 +155,27 @@
     }
     function render() {
       const focusedMessage = root.contains(document.activeElement) ? document.activeElement.dataset.messageId : null;
+      const focusedTranscript = root.querySelector('summary') === document.activeElement;
+      const focusedButton = root.contains(document.activeElement) && document.activeElement.tagName === 'BUTTON' ? document.activeElement.textContent : null;
       const transcriptOpen = root.querySelector('details')?.open;
-      root.replaceChildren();
-      announcement = node(root, 'p', '', 'analysis-result-notice');
+      for (const child of Array.from(root.children)) if (child !== announcement) child.remove();
+      announcement ||= node(root, 'p', '', 'analysis-result-notice');
       announcement.setAttribute('role', 'status');
       announcement.setAttribute('aria-live', 'polite');
       announcement.tabIndex = -1;
       const report = data.accepted_report;
       const run = data.latest_run;
       if (run) {
-        node(root, 'h2', `최신 실행: ${statuses[run.status] || '상태 확인 불가'}`);
-        if (run.superseded) node(root, 'p', '이 요청의 보고서는 이후 분석으로 대체되었습니다. 최신 결과는 세션 분석 화면에서 확인하세요.');
-        if (run.preserved && report) node(root, 'p', `${report.status === 'legacy' ? '과거 분석을' : report.status === 'degraded' ? '이전 부분 분석을' : '이전 정상 결과를'} 보존했습니다. 최신 실행의 결과와 구별해 확인하세요.`);
-        if (run.status === 'failed') node(root, 'p', '분석을 완료하지 못했습니다. 다시 시도할 수 있습니다.');
-        if (run.status === 'no_dialogue' || run.outcome?.outcome === 'no_dialogue') node(root, 'p', '분석 가능 범위: 0개 메시지 · 호출 없이 안내합니다.');
+        const latest = node(root, 'section', null, 'analysis-latest-run');
+        latest.dataset.status = run.status;
+        node(latest, 'h2', `최신 실행: ${statuses[run.status] || '상태 확인 불가'}`);
+        if (run.started_at) node(latest, 'p', `실행 시작: ${run.started_at}`);
+        if (run.finished_at) node(latest, 'p', `실행 종료: ${run.finished_at}`);
+        if (run.superseded) node(latest, 'p', '이 요청의 보고서는 이후 분석으로 대체되었습니다. 최신 결과는 세션 분석 화면에서 확인하세요.');
+        if (run.preserved && report) node(latest, 'p', `${report.status === 'legacy' ? '과거 분석을' : report.status === 'degraded' ? '이전 부분 분석을' : '이전 정상 결과를'} 보존했습니다. 최신 실행의 결과와 구별해 확인하세요.`);
+        if (run.status === 'running' && report) node(latest, 'p', '새 분석이 진행 중입니다. 아래 채택된 보고서는 새 정상 결과가 검증될 때까지 유지됩니다.');
+        if (run.status === 'failed') node(latest, 'p', data.permissions.can_retry ? '분석을 완료하지 못했습니다. 다시 시도할 수 있습니다.' : '분석을 완료하지 못했습니다. 기존 결과와 허용된 행동을 확인하세요.');
+        if (run.status === 'no_dialogue' || run.outcome?.outcome === 'no_dialogue') node(latest, 'p', '분석 가능 범위: 0개 메시지 · 호출 없이 안내합니다.');
       }
       if (data.permissions.read_only) node(root, 'p', '과거 자료 · 읽기 전용 · 재분석할 수 없습니다.');
       if (!data.permissions.read_only) {
@@ -217,7 +225,8 @@
         else if (data.permissions.can_analyze) button(controls, '분석 실행', () => analyze());
       }
       if (report) {
-        const section = node(root, 'section', null, 'analysis-section');
+        const section = node(root, 'section', null, 'analysis-section analysis-accepted-report');
+        section.dataset.status = report.status;
         node(section, 'h2', `${root.dataset.comparison ? '검증된 비교 분석' : '채택된 보고서'}: ${statuses[report.status] || '상태 확인 불가'}`);
         node(section, 'p', `생성 시각: ${report.created_at || '알 수 없음'}`);
         for (const text of report.brief_feedback) node(section, 'p', text, 'analysis-brief-feedback');
@@ -271,7 +280,7 @@
         ]) {
           node(section, 'h3', label);
           for (const item of report[field]) {
-            const card = node(section, 'article', null, 'strong-card');
+            const card = node(section, 'article', null, field === 'improvements' ? 'improve-card' : 'strong-card');
             evidence(card, item);
             for (const key of fields) node(card, 'p', key === 'alternative_question' ? `대안 질문: ${item[key]}` : item[key]);
           }
@@ -298,6 +307,8 @@
           if (question?.reasoning?.improved_sentence) node(row, 'p', `개선한 문장: ${question.reasoning.improved_sentence}`);
         }
       }
+      if (focusedButton) Array.from(root.querySelectorAll('button')).find(el => el.textContent === focusedButton)?.focus({preventScroll: true});
+      if (focusedTranscript) transcript.querySelector('summary').focus({preventScroll: true});
       if (focusedMessage) document.getElementById(`${prefix}-message-${focusedMessage}`)?.focus({preventScroll: true});
     }
     if (initialData) {

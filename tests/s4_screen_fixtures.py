@@ -276,7 +276,10 @@ def analysis_fixture(state="ok", admin=False):
         data["permissions"]["can_retry"] = True
     if state == "running":
         data["latest_run"] = dict(
-            status="running", preserved=False, run_id="run-1"
+            status="running",
+            preserved=False,
+            run_id="run-1",
+            started_at="2026-10-02T11:00:00",
         )
         data["permissions"].update(
             can_analyze=False, can_retry=False, can_regenerate=False

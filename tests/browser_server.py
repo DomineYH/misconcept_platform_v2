@@ -64,7 +64,9 @@ class Handler(BaseHTTPRequestHandler):
                                     name='긴 그룹 "따옴표" 이름\n' * 5,
                                     description="합성 그룹 설명",
                                 ),
-                                member_count=0,
+                                member_count=int(
+                                    query.get("members", ["0"])[0]
+                                ),
                                 scenario_count=2,
                             )
                         ]
@@ -87,7 +89,7 @@ class Handler(BaseHTTPRequestHandler):
 
             body = (
                 templates.get_template("about_fragment.html")
-                .render(contributors=contributors())
+                .render(contributors=[] if "empty" in query else contributors())
                 .encode()
             )
             mime = "text/html; charset=utf-8"
@@ -537,6 +539,13 @@ class Handler(BaseHTTPRequestHandler):
             fixture = json.loads(
                 Path("tests/fixtures/api_usage.json").read_text()
             )
+            if "empty" in query:
+                fixture.update(
+                    logs=[],
+                    total_cost=0,
+                    unpriced_generation_attempts=0,
+                    model_list_calls=0,
+                )
             body = (
                 templates.get_template("admin/api_usage.html")
                 .render(

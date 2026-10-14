@@ -47,10 +47,13 @@ export default async function checkUncertainSave(page) {
     assert(await page.locator('#editor-errors').evaluate(el => el === document.activeElement));
     assert.equal(await page.locator('[data-errors="2"]').innerText(),'1');
     assert.equal(await page.locator('[data-errors="4"]').innerText(),'1');
-    await page.getByRole('button',{name:'공통 모델을 확인하세요.',exact:true}).click();
+    await page.getByRole('button',{name:'공통 모델을 확인하세요.',exact:true}).focus();
+    await page.keyboard.press('Enter');
     assert(await page.locator('#common-model').evaluate(el => el === document.activeElement));
-    await page.getByRole('button',{name:'숨긴 분류 기준을 확인하세요.',exact:true}).click();
+    await page.getByRole('button',{name:'숨긴 분류 기준을 확인하세요.',exact:true}).focus();
+    await page.keyboard.press('Enter');
     assert(await page.getByLabel('발화 분류 사용').evaluate(el => el === document.activeElement), 'hidden field error focuses its controlling setting');
+    assert(await page.getByLabel('발화 분류 사용').evaluate(el => parseFloat(getComputedStyle(el).outlineWidth) >= 2), 'keyboard error target has a visible focus outline');
     assert(!(await page.getByLabel('발화 분류 사용').isChecked()), 'error navigation does not enable classification');
     await capture('validation',theme,width);
     response = {status:409,json:{detail:{current_version:9}}};

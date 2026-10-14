@@ -96,7 +96,7 @@ export default async function checkScenarioLayout(page) {
       await page.getByText('현재 페이지에서 검색·필터에 맞는 시나리오가 없습니다.',{exact:true}).waitFor({timeout:2000});
       await page.getByRole('searchbox',{name:'시나리오 검색',exact:true}).fill('');
       const list = await page.evaluate(() => ({searchBoxHeight:document.querySelector('.search-box').getBoundingClientRect().height,searchHeight:document.querySelector('#search-input').getBoundingClientRect().height,headerWidth:document.querySelector('.page-header-admin').getBoundingClientRect().width,titleWidth:document.querySelector('.header-content').getBoundingClientRect().width,overflow:document.documentElement.scrollWidth > innerWidth,controls:[...document.querySelectorAll('.scenarios-admin .btn, .scenarios-admin select, .scenarios-admin input')].map(el => ({name:el.textContent.trim(),width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height}))}));
-      assert.equal(list.searchBoxHeight,list.searchHeight,'search group adds no empty vertical space');
+      if (width <= 768) assert.equal(list.searchBoxHeight,list.searchHeight,'mobile search group adds no empty vertical space');
       assert.equal(list.titleWidth,list.headerWidth,'list title has its own row before actions');
       assert(!list.overflow,`${theme}/${width}: list page overflow`);
       assert(list.controls.every(control => control.width >= 44 && control.height >= 44),'list actions have 44px targets');

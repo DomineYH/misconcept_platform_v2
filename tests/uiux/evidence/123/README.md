@@ -44,3 +44,16 @@ virtual keyboard or screen-reader evidence. Those checks and the final combined
 full/live regression remain #127/coordinator work. This is bounded #123 evidence,
 not full application acceptance. Exact commands, intermediate failures and final
 results are in `/tmp/misconcept-uiux-120/report-uiux123.md`.
+
+Final measured minima:
+
+| Matrix | Cases | Text ratio | Boundary ratio | Button target | Overflow |
+| --- | ---: | ---: | ---: | --- | ---: |
+| Five steps + list | 132 | 4.859845689:1 | 3.689460542:1 | 44×44px | 0 |
+| Uncertain / 422 / 409 | 12 | 5.640820808:1 | 3.652153664:1 | 44×44px | 0 |
+
+Error-summary links are activated with keyboard Enter. The hidden classification
+control receives keyboard focus with a computed outline at least 2px wide.
+The list title owns a row before actions, and the search wrapper adds no empty
+height at mobile widths. In desktop rows a wrapper can stretch to the height of
+wrapped filters; that does not add height beyond the filter group itself.

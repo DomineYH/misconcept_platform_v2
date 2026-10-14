@@ -3636,6 +3636,58 @@ body > header nav h1 { flex: 1; min-width: 0; margin-right: 1rem; }
   body > header nav h1 { font-size: 1.25rem; }
 }
 
+/* AI connections, role verification and nonmodal editor */
+#ai-page section { margin: var(--spacing-lg) 0; }
+#ai-page article, #ai-editor {
+  min-width: 0;
+  padding: var(--spacing-md);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xl);
+}
+#ai-page article { margin-bottom: var(--spacing-md); }
+#ai-page p, #ai-page h2, #ai-page h3, #ai-page pre { overflow-wrap: anywhere; }
+#ai-page pre { white-space: pre-wrap; }
+#ai-page .ai-grid, #ai-page .ai-role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--spacing-lg);
+}
+#ai-page .ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-md) 0;
+}
+#ai-page .ai-role {
+  min-width: 0;
+  padding: var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+#ai-page .ai-role button { margin: var(--spacing-xs) 0; }
+#ai-page .ai-help { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+#ai-page .ai-verification { font-weight: 600; }
+#ai-page .ai-verification-succeeded { color: var(--color-success-text); }
+#ai-page .ai-verification-failed { color: var(--color-danger-text); }
+#ai-page .ai-verification-stale { color: var(--color-warning-text); }
+#ai-page fieldset { padding: var(--spacing-md); margin-bottom: var(--spacing-md); min-width: 0; }
+#ai-page button, #ai-page input, #ai-page select { max-width: 100%; }
+#ai-page button { white-space: normal; overflow-wrap: anywhere; }
+#ai-editor { max-width: 600px; }
+#ai-editor form > button { margin: var(--spacing-xs); }
+#ai-error {
+  padding: var(--spacing-md);
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-text);
+  border-radius: var(--radius-md);
+}
+#ai-page [hidden] { display: none; }
+@media (max-width: 768px) {
+  #ai-page .ai-grid, #ai-page .ai-role-grid { grid-template-columns: 1fr; }
+}
+
 .login-card .alert-danger {
   padding: var(--spacing-md);
   margin-bottom: var(--spacing-md);

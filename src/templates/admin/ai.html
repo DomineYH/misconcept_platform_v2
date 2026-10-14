@@ -12,14 +12,5 @@
   <div id="ai-content"></div>
   <section id="ai-editor" aria-label="선택한 작업" hidden></section>
 </div>
-<style>
-  #ai-page section { margin: 1.5rem 0; }
-  #ai-page article { border: 1px solid var(--color-border-light); padding: 1rem; min-width: 0; }
-  #ai-page p, #ai-page h3 { overflow-wrap: anywhere; }
-  #ai-page .ai-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; }
-  #ai-page .ai-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
-  #ai-page fieldset { padding: 1rem; margin-bottom: 1rem; min-width: 0; }
-  #ai-page [hidden] { display: none; }
-</style>
 <script type="module" src="/static/js/ai-connections.js"></script>
 {% endblock %}

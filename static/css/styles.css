@@ -342,7 +342,7 @@ a.btn-primary {
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   background-color: var(--color-primary);
   color: var(--color-on-primary);
 }
@@ -743,7 +743,7 @@ textarea {
 }
 
 .card-title {
-  font-size: 1.1rem;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   color: var(--color-black);
   margin: 0 0 0.75rem;
@@ -818,7 +818,7 @@ textarea {
 }
 
 .chat-header h1 {
-  font-size: 1.1rem;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   color: var(--color-black);
   margin: 0;
@@ -1704,7 +1704,7 @@ textarea#teacher-input {
 
 .modal-header h2 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   color: var(--color-black);
 }
@@ -1847,7 +1847,7 @@ textarea#teacher-input {
 
 .panel-header h2 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   color: var(--color-black);
 }
@@ -1931,7 +1931,7 @@ textarea#teacher-input {
 }
 
 .page-header h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-3xl);
   font-weight: 600;
   color: var(--color-black);
   margin-bottom: 0.5rem;
@@ -1953,7 +1953,7 @@ textarea#teacher-input {
 }
 
 .page-header-admin h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-3xl);
   font-weight: 600;
   color: var(--color-black);
   margin: 0;
@@ -2078,7 +2078,7 @@ textarea#teacher-input {
 }
 
 .section-title {
-  font-size: 1.1rem;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   color: var(--color-black);
   margin-bottom: 1rem;
@@ -2206,7 +2206,7 @@ textarea#teacher-input {
 }
 
 .analysis-header h1 {
-  font-size: 1.75rem;
+  font-size: var(--font-size-3xl);
   font-weight: 600;
   color: var(--color-black);
   margin-bottom: 0.5rem;
@@ -2451,14 +2451,11 @@ textarea#teacher-input {
 }
 
 /* Chart Colors */
-.bg-pressing { background-color: var(--color-bg-secondary);   color: var(--color-text-primary);
-}
-.bg-linking { background-color: var(--color-bg-secondary);   color: var(--color-text-primary);
-}
-.bg-directing { background-color: var(--color-bg-secondary);   color: var(--color-text-primary);
-}
-.bg-recall { background-color: var(--color-bg-secondary); color: var(--color-text-primary); }
-.bg-default { background-color: var(--color-bg-secondary); color: var(--color-text-primary); }
+.bg-pressing { background-color: var(--color-text-primary); color: var(--color-bg-surface); }
+.bg-linking { background-color: var(--color-text-secondary); color: var(--color-bg-surface); }
+.bg-directing { background-color: var(--color-text-secondary); color: var(--color-bg-surface); }
+.bg-recall { background-color: var(--color-text-secondary); color: var(--color-bg-surface); }
+.bg-default { background-color: var(--color-text-secondary); color: var(--color-bg-surface); }
 
 .chart-total {
   margin-top: 1.5rem;
@@ -3470,10 +3467,8 @@ textarea#teacher-input {
   color: var(--color-text-primary);
 }
 
-.tag--good { background: var(--color-success-bg);   color: var(--color-success-text);
-}
-.tag--bad { background: var(--color-danger-bg);   color: var(--color-danger-text);
-}
+.tag--good { background: var(--color-success-bg); color: var(--color-success-text); }
+.tag--bad { background: var(--color-danger-bg); color: var(--color-danger-text); }
 
 .coach-msg--high {
   border-color: var(--color-success-text);
@@ -3568,7 +3563,7 @@ body > header nav h1 { flex: 1; min-width: 0; margin-right: 1rem; }
 .nav-menu li a { display: inline-flex; align-items: center; min-height: 44px; }
 .nav-menu a[aria-current="page"] { color: var(--color-primary); text-decoration: underline; }
 .nav-menu a[aria-current="page"]::after { width: 100%; background: var(--color-primary); }
-:focus-visible { box-shadow: 0 0 0 2px var(--color-bg-surface); }
+:focus-visible { box-shadow: 0 0 0 2px var(--color-bg-surface); transition: none; }
 @media (max-width: 768px) {
   .action-buttons-grid { grid-template-columns: 1fr; }
   body > header nav h1 { font-size: 1.25rem; }

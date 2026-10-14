@@ -51,7 +51,10 @@ class Handler(BaseHTTPRequestHandler):
                         else None
                     ),
                     request=SimpleNamespace(
-                        url=SimpleNamespace(path=path.path)
+                        url=SimpleNamespace(path=path.path),
+                        query_params={
+                            key: values[0] for key, values in query.items()
+                        },
                     ),
                 )
                 .encode()
@@ -358,7 +361,10 @@ class Handler(BaseHTTPRequestHandler):
                         ]
                     ),
                     request=SimpleNamespace(
-                        url=SimpleNamespace(path=path.path)
+                        url=SimpleNamespace(path=path.path),
+                        query_params={
+                            key: values[0] for key, values in query.items()
+                        },
                     ),
                     session_id=1,
                     student_name="Student",

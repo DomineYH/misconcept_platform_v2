@@ -29,7 +29,8 @@ async def test_login_error_and_logout_keep_authentication_and_csrf(
     assert "사용자 ID 또는 비밀번호가 올바르지 않습니다." in response.text
     assert "wrong-password" not in response.text
 
-    login(client, data.owner)
+    data.owner.set_password("uiux-test-password")
+    await data.db.commit()
     secured = CSRFMiddleware(
         app,
         secret="test-csrf-secret",
@@ -39,9 +40,18 @@ async def test_login_error_and_logout_keep_authentication_and_csrf(
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=secured),
         base_url="http://test",
-        cookies=client.cookies,
     ) as browser:
         await browser.get("/login")
+        authenticated = await browser.post(
+            "/login",
+            data={
+                "username": data.owner.username,
+                "password": "uiux-test-password",
+            },
+            headers={"x-csrf-token": browser.cookies["csrftoken"]},
+        )
+        assert authenticated.status_code == 303
+        assert authenticated.headers["location"] == "/scenarios"
         assert (await browser.post("/logout")).status_code == 403
         response = await browser.post(
             "/logout", headers={"x-csrf-token": browser.cookies["csrftoken"]}

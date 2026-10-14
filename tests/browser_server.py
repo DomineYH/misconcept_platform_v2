@@ -16,6 +16,15 @@ os.environ.update(
     OPENAI_API_KEY="test",
 )
 from src.api.dependencies import templates  # noqa: E402
+from tests.responsive_prototype.fixtures import (  # noqa: E402
+    PROBLEM,
+    PROFILE,
+    RESPONSE,
+    TITLE,
+    conversation_fixture,
+    enrich_editor,
+    inject,
+)
 from tests.s2_screen_fixtures import editor_fixture  # noqa: E402
 from tests.s4_screen_fixtures import analysis_fixture  # noqa: E402
 from tests.s5_terminal_fixtures import terminal_fixtures  # noqa: E402
@@ -26,7 +35,37 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path)
         query = parse_qs(path.query)
-        if path.path in {"/fixtures/s6/users", "/fixtures/s6/scenarios"}:
+        prototype = query.get("variant", [""])[0] in {
+            "A",
+            "B",
+            "C",
+        } and path.path in {
+            "/chat",
+            "/fixtures/s2/editor",
+            "/fixtures/responsive/conversation",
+        }
+        if path.path == "/fixtures/responsive/conversation" and prototype:
+            body = (
+                templates.get_template("admin/comparison_conversation.html")
+                .render(
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    comparison=conversation_fixture(
+                        max(1, min(3, int(query.get("panels", ["3"])[0])))
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path.startswith("/fixtures/responsive/"):
+            target = (
+                Path("tests/responsive_prototype") / path.path.rsplit("/", 1)[1]
+            )
+            if target.name not in {"guard.js", "prototype.js", "prototype.css"}:
+                self.send_error(404)
+                return
+            body = target.read_bytes()
+            mime = "text/css" if target.suffix == ".css" else "text/javascript"
+        elif path.path in {"/fixtures/s6/users", "/fixtures/s6/scenarios"}:
             kind = path.path.rsplit("/", 1)[1]
             body = (
                 templates.get_template(f"admin/{kind}.html")
@@ -119,6 +158,8 @@ class Handler(BaseHTTPRequestHandler):
                 published="published" in query,
                 legacy=query.get("legacy", [""])[0],
             )
+            if prototype:
+                enrich_editor(editor)
             if "ready" in query:
                 editor["model_choices"] = editor["model_choices"][
                     : int(query["ready"][0])
@@ -223,13 +264,42 @@ class Handler(BaseHTTPRequestHandler):
                 config_json={"problem": {"public_text": "Problem"}},
                 review_required=False,
             )
+            if prototype:
+                scenario.title = TITLE
+                scenario.student_name = "민수"
+                scenario.student_profile = PROFILE
+                scenario.problem_situation = PROBLEM
             template = {
                 "/chat": "chat.html",
                 "/scenarios": "scenarios.html",
                 "/admin/scenarios-page": "admin/scenarios.html",
                 "/admin/scenarios": "admin/scenarios.html",
             }[path.path]
-            messages = []
+            messages = (
+                [
+                    SimpleNamespace(
+                        id=i,
+                        role=role,
+                        content=content,
+                        created_at=None,
+                        turn_id="1",
+                    )
+                    for i, (role, content) in enumerate(
+                        [
+                            ("teacher", PROBLEM),
+                            ("student", RESPONSE),
+                            (
+                                "tutor",
+                                "멘토: 같은 전체인지 확인하는 질문으로 학생의 생각을 살펴보세요.\n\n"
+                                * 4,
+                            ),
+                        ],
+                        1,
+                    )
+                ]
+                if prototype
+                else []
+            )
             if "mentor_history" in query:
                 messages = [
                     SimpleNamespace(
@@ -276,7 +346,7 @@ class Handler(BaseHTTPRequestHandler):
                     scenario=scenario,
                     scenarios=[scenario],
                     session_id=1,
-                    student_name="Student",
+                    student_name="민수" if prototype else "Student",
                     user=SimpleNamespace(
                         nickname="Tester",
                         role=(
@@ -383,6 +453,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(204)
             self.end_headers()
             return
+        if prototype:
+            body = inject(body)
         self.send_response(200)
         self.send_header("Content-Type", mime)
         self.end_headers()

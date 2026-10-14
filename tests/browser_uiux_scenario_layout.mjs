@@ -1,17 +1,10 @@
+import {colorMath} from './uiux_color_math.mjs';
 import assert from 'node:assert/strict';
 import {mkdir, writeFile} from 'node:fs/promises';
 
 // Measure rendered colors after ancestor backgrounds are composed, not token literals.
-export function measure() {
-  const rgba = value => value.match(/[\d.]+/g)?.map(Number) || [0, 0, 0, 0];
-  const over = (fg, bg) => fg.slice(0, 3).map((v, i) => v * (fg[3] ?? 1) + bg[i] * (1 - (fg[3] ?? 1)));
-  const background = el => {
-    if (!el) return [255, 255, 255];
-    return over(rgba(getComputedStyle(el).backgroundColor), background(el.parentElement));
-  };
-  const luminance = rgb => rgb.map(v => {v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;})
-    .reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
-  const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + .05) / (Math.min(luminance(a), luminance(b)) + .05);
+export function measure(colorMath) {
+  const {rgba, over, background, contrast} = colorMath();
   const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
   const text = [], targets = [], borders = [];
   for (const el of document.querySelectorAll('body *')) {
@@ -72,7 +65,7 @@ export default async function checkScenarioLayout(page) {
       await page.locator('#validation-summary').scrollIntoViewIfNeeded();
       assert(await page.locator('#validation-summary').evaluate(el => { const rect = el.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight; }), 'long preview ends in document scroll');
       await settle(page);
-      const editorColors = await page.evaluate(measure);
+      const editorColors = await page.evaluate(`(${measure})(${colorMath})`);
       assert(editorColors.text.every(item => item.ratio >= item.minimum),'editor text contrast');
       assert(editorColors.borders.every(item => item.inside >= 3 && item.outside >= 3),'editor input boundary contrast');
       measurements.push({screen:'editor',theme,width,...layout,...editorColors});
@@ -81,7 +74,7 @@ export default async function checkScenarioLayout(page) {
       for (const step of ['1. 기본 정보','3. 학생봇','4. 멘토','5. 사후 분석']) {
         await page.getByRole('button',{name:step,exact:true}).click();
         await settle(page);
-        const measured = await page.evaluate(measure);
+        const measured = await page.evaluate(`(${measure})(${colorMath})`);
         assert(!measured.overflow,`${step} fits`);
         assert(measured.targets.every(item => item.width >= 44 && item.height >= 44),`${step} targets`);
         assert(measured.text.every(item => item.ratio >= item.minimum),`${step} text contrast: ${JSON.stringify(measured.text.filter(item => item.ratio < item.minimum))}`);
@@ -101,7 +94,7 @@ export default async function checkScenarioLayout(page) {
       assert(!list.overflow,`${theme}/${width}: list page overflow`);
       assert(list.controls.every(control => control.width >= 44 && control.height >= 44),'list actions have 44px targets');
       await settle(page);
-      const listColors = await page.evaluate(measure);
+      const listColors = await page.evaluate(`(${measure})(${colorMath})`);
       assert(listColors.text.every(item => item.ratio >= item.minimum),'list text contrast');
       assert(listColors.borders.every(item => item.inside >= 3 && item.outside >= 3),'list input boundary contrast');
       measurements.push({screen:'list',theme,width,...list,...listColors});

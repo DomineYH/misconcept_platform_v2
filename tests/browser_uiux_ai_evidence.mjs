@@ -1,18 +1,11 @@
+import {colorMath} from './uiux_color_math.mjs';
 import assert from 'node:assert/strict';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {state} from './browser_ai_connections.mjs';
 
 // Measure rendered colors after ancestor backgrounds are composed, not token literals.
-function measure() {
-  const rgba = value => value.match(/[\d.]+/g)?.map(Number) || [0, 0, 0, 0];
-  const over = (fg, bg) => fg.slice(0, 3).map((v, i) => v * (fg[3] ?? 1) + bg[i] * (1 - (fg[3] ?? 1)));
-  const background = el => {
-    if (!el) return [255, 255, 255];
-    return over(rgba(getComputedStyle(el).backgroundColor), background(el.parentElement));
-  };
-  const luminance = rgb => rgb.map(v => {v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;})
-    .reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
-  const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + .05) / (Math.min(luminance(a), luminance(b)) + .05);
+function measure(colorMath) {
+  const {rgba, over, background, contrast} = colorMath();
   const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
   const text = [], targets = [], borders = [];
   for (const el of document.querySelectorAll('body *')) {
@@ -87,7 +80,7 @@ export default async function check(page) {
         await page.evaluate(async () => {
           await Promise.all(document.getAnimations().filter(a => a.effect.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {})));
         });
-        const measured = await page.evaluate(measure);
+        const measured = await page.evaluate(`(${measure})(${colorMath})`);
         const focus = await page.evaluate(() => {
           const el = document.activeElement, style = getComputedStyle(el);
           return {name:el.id, outline:style.outline, shadow:style.boxShadow};

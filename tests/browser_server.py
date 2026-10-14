@@ -28,16 +28,24 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(path.query)
         if path.path in {"/fixtures/s6/users", "/fixtures/s6/scenarios"}:
             kind = path.path.rsplit("/", 1)[1]
+            fixture = list_fixture(
+                kind,
+                int(query.get("page", ["1"])[0]),
+                int(query.get("total", ["41"])[0]),
+                [int(value) for value in query.get("deleted", [])],
+            )
+            if kind == "scenarios" and "uiux123" in query:
+                rows = fixture["scenarios"]
+                if rows:
+                    rows[0].title = "긴한글시나리오제목" * 20
+                    rows[0].status = "published"
+                    rows[0].is_active = 0
+                    rows[0].review_required = True
+                if len(rows) > 1:
+                    rows[1].config_json = None
             body = (
                 templates.get_template(f"admin/{kind}.html")
-                .render(
-                    **list_fixture(
-                        kind,
-                        int(query.get("page", ["1"])[0]),
-                        int(query.get("total", ["41"])[0]),
-                        [int(value) for value in query.get("deleted", [])],
-                    )
-                )
+                .render(**fixture)
                 .encode()
             )
             mime = "text/html; charset=utf-8"
@@ -193,6 +201,8 @@ class Handler(BaseHTTPRequestHandler):
                 published="published" in query,
                 legacy=query.get("legacy", [""])[0],
             )
+            if "uiux123" in query:
+                editor["model_choices"][0]["display_name"] = "긴모델표시명" * 30
             if "ready" in query:
                 editor["model_choices"] = editor["model_choices"][
                     : int(query["ready"][0])

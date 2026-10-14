@@ -2,12 +2,15 @@ const searchInput = document.getElementById('search-input');
 const filterPublication = document.getElementById('filter-publication');
 const filterStatus = document.getElementById('filter-status');
 function filterScenarios() {
+  let visible = 0;
   document.querySelectorAll('.scenario-card').forEach(card => {
     const matches = card.dataset.title.toLowerCase().includes(searchInput.value.toLowerCase())
       && (!filterPublication.value || card.dataset.publication === filterPublication.value)
       && (!filterStatus.value || card.classList.contains('inactive') === (filterStatus.value === 'inactive'));
     card.style.display = matches ? '' : 'none';
+    if (matches) visible++;
   });
+  document.getElementById('scenario-filter-empty').hidden = visible > 0 || document.querySelectorAll('.scenario-card').length === 0;
 }
 searchInput.addEventListener('input', filterScenarios);
 filterPublication.addEventListener('change', filterScenarios);

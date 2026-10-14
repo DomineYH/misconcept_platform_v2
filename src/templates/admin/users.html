@@ -42,6 +42,8 @@
     </div>
   </section>
 
+  <p id="user-filter-empty" role="status" hidden>현재 페이지에서 검색·필터에 맞는 사용자가 없습니다.</p>
+
   <!-- Users Table -->
   <div class="table-container" role="region" tabindex="0" aria-label="사용자 목록">
     <table class="data-table" id="users-table">
@@ -471,6 +473,7 @@ function filterUsers() {
   const search = searchInput.value.toLowerCase();
   const role = filterRole.value;
   const groupId = filterGroup.value;
+  let visible = 0;
   document.querySelectorAll('#users-table tbody tr[data-user-id]').forEach(row => {
     const username = row.dataset.username.toLowerCase();
     const rowRole = row.dataset.role;
@@ -480,7 +483,9 @@ function filterUsers() {
     if (role && rowRole !== role) show = false;
     if (groupId && rowGroup !== groupId) show = false;
     row.style.display = show ? '' : 'none';
+    if (show) visible++;
   });
+  document.getElementById('user-filter-empty').hidden = visible > 0 || document.querySelectorAll('#users-table tbody tr[data-user-id]').length === 0;
 }
 searchInput.addEventListener('input', filterUsers);
 filterRole.addEventListener('change', filterUsers);

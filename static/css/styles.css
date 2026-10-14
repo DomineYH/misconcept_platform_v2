@@ -1239,7 +1239,7 @@ textarea#teacher-input {
   transition: all 0.2s ease;
 }
 
-.mobile-tab:hover {
+.mobile-tab:hover:not(:disabled) {
   background-color: var(--color-gray-100);
 }
 
@@ -2979,7 +2979,7 @@ main:has(.split-layout) {
   bottom: -1px;
 }
 
-.info-tab:hover {
+.info-tab:hover:not(:disabled) {
   color: var(--color-text-primary);
   background-color: var(--color-gray-50);
 }

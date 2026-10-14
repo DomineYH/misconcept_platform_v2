@@ -22,6 +22,9 @@ export default async function check(page) {
       await page.keyboard.press('Tab');
       assert(await dialog.evaluate(el => el.contains(document.activeElement)),`${root}: focus is trapped through last action`);
     }
+    await dialog.evaluate(async el => {
+      await Promise.all(el.getAnimations({subtree:true}).filter(a => a.effect.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {})));
+    });
     const bounds = await dialog.evaluate(el => {
       const box = (el.querySelector('.modal-container') || el).getBoundingClientRect();
       const footer = el.querySelector('.modal-footer, .panel-footer').getBoundingClientRect();

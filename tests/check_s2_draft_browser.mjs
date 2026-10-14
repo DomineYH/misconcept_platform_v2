@@ -94,7 +94,7 @@ try {
   }, {path, stored});
   assert.equal(remote, 200);
   await page.getByRole('button', {name:'초안으로 저장', exact:true}).click();
-  await page.getByText('다른 관리자가 변경했습니다. 내 입력을 보존했습니다. 최신 버전: 3', {exact:true}).waitFor();
+  await page.getByText('다른 관리자가 변경했습니다. 현재 화면의 입력은 유지됩니다. 최신 버전: 3', {exact:true}).waitFor();
   assert.equal(await page.getByLabel('제목', {exact:true}).inputValue(), '내 입력');
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', {name:'최신 내용 다시 불러오기', exact:true}).click();

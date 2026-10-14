@@ -803,7 +803,7 @@ textarea {
 .scenarios-admin .card-actions { flex-wrap: wrap; }
 .scenarios-admin .card-description { display: block; overflow: visible; overflow-wrap: anywhere; }
 .scenarios-admin .filter-group { flex-wrap: wrap; min-width: 0; }
-.scenarios-admin .search-box { min-width: 0; flex-basis: 200px; }
+.scenarios-admin .search-box { min-width: 0; }
 .scenarios-admin .btn, .scenarios-admin input, .scenarios-admin select { min-height: 44px; }
 .scenarios-admin .btn { min-width: 44px; }
 .scenarios-admin [hidden] { display: none; }

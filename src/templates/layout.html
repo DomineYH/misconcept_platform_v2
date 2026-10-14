@@ -27,25 +27,26 @@
 </head>
 <body>
   <a href="#main-content" class="skip-link">본문으로 건너뛰기</a>
+  {% set current_path = request.url.path if request is defined else '' %}
   <header>
-    <nav>
+    <nav aria-label="주 탐색">
       <h1>오개념 교정 대화 시뮬레이터</h1>
-      <button class="hamburger" aria-label="메뉴" aria-expanded="false">
+      <button class="hamburger" aria-label="메뉴" aria-expanded="false" aria-controls="nav-menu">
         <span></span>
         <span></span>
         <span></span>
       </button>
-      <ul class="nav-menu">
+      <ul class="nav-menu" id="nav-menu">
         {% if user %}
         <li><span class="nav-username">{{ user.nickname }}</span></li>
-        <li><a href="/scenarios">시나리오</a></li>
+        <li><a href="/scenarios"{% if current_path.startswith('/scenarios') %} aria-current="page"{% endif %}>시나리오</a></li>
         {% endif %}
         <li>
           <button type="button" class="btn-nav-about"
                   id="open-about-modal">about</button>
         </li>
         {% if user and user.role == 'admin' %}
-        <li><a href="/admin">관리자</a></li>
+        <li><a href="/admin"{% if current_path.startswith('/admin') %} aria-current="page"{% endif %}>관리자</a></li>
         {% endif %}
         {% if user %}
         <li>

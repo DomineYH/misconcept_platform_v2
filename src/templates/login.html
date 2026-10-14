@@ -9,14 +9,14 @@
     <p class="subtitle">교사 연수 플랫폼</p>
 
     {% if error %}
-    <div class="alert alert-danger">
+    <div class="alert alert-danger" id="login-error" role="alert" tabindex="-1" autofocus>
       {{ error }}
     </div>
     {% endif %}
 
     <form method="POST" action="/login" class="login-form">
       <div class="form-group">
-        <label for="username">사용자 ID</label>
+        <label for="username">사용자 ID <span class="required">(필수)</span></label>
         <input
           type="text"
           id="username"
@@ -27,13 +27,14 @@
           maxlength="50"
           pattern="[a-zA-Z0-9_]+"
           title="영문, 숫자, 언더스코어만 사용 가능"
+          aria-describedby="username-help{% if error %} login-error{% endif %}"
           autocomplete="username"
         />
-        <small>3-50자, 영문/숫자/언더스코어만 사용</small>
+        <small id="username-help">3-50자, 영문/숫자/언더스코어만 사용</small>
       </div>
 
       <div class="form-group">
-        <label for="password">비밀번호</label>
+        <label for="password">비밀번호 <span class="required">(필수)</span></label>
         <input
           type="password"
           id="password"
@@ -42,6 +43,7 @@
           required
           minlength="8"
           maxlength="128"
+          {% if error %}aria-describedby="login-error"{% endif %}
           autocomplete="current-password"
         />
       </div>

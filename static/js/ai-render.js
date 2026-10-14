@@ -85,7 +85,7 @@ export function render(state, actions) {
   root.replaceChildren();
   if (!state.master_key_available) root.append(node('p', '마스터 키 설정 필요: 인프라의 원래 마스터 키와 버전을 복원하세요. 키 저장과 AI 호출은 사용할 수 없습니다.'));
   const connections = node('section', null, {'aria-label':'제공자 연결'});
-  connections.append(node('h2', '제공자 연결'));
+  connections.append(node('h2', '1. 제공자 연결'), node('p', '비생성 확인과 모델 목록 갱신은 역할 검증·교육 품질 승인과 별개입니다.'));
   const cards = node('div', null, {class:'ai-grid'});
   for (const p of state.providers) {
     const card = node('article', null, {'data-provider':p.provider});
@@ -99,7 +99,7 @@ export function render(state, actions) {
       button(p.enabled ? '비활성화' : '재활성화', () => actions.connection(p, 'enabled'), !p.key_registered || (!p.enabled && (!state.master_key_available || p.status === 'decryption_failed'))),
       button('키 삭제', () => actions.connection(p, 'delete'), !p.key_registered),
       button('비생성 확인·목록 갱신', () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available || p.catalog.available === false));
-    card.append(row, node('p', p.catalog.available === false ? '모델 목록은 아직 제공되지 않습니다.' : `모델 목록: ${p.catalog.stale ? '오래된 목록' : '최근 목록'} · 마지막 갱신 ${p.catalog.fetched_at || '없음'}`));
+    card.append(row, node('p', p.catalog.available === false ? '모델 목록은 아직 제공되지 않습니다.' : !p.catalog.fetched_at && !p.catalog.stale ? '모델 목록: 조회 기록 없음' : `모델 목록: ${p.catalog.stale ? '오래된 목록' : '최근 목록'} · 마지막 갱신 ${p.catalog.fetched_at || '없음'}`));
     if (p.catalog.stale) card.append(node('p', '참고 목록입니다. 접근 가능 여부나 역할 검증 성공을 보장하지 않습니다.'));
     const choices = [['', '모델 선택 필요'], ...p.catalog.models.map(model => [model.model_id,
       `${model.model_id} · ${model.lifecycle || '수명주기 미확인'} · ${model.preview === true ? 'Preview' : model.preview === false ? '안정' : '릴리스 상태 미확인'}`])];
@@ -112,31 +112,53 @@ export function render(state, actions) {
   connections.append(cards);
   root.append(connections);
   const models = node('section', null, {'aria-label':'모델 설정'});
-  models.append(node('h2', '모델 설정'));
+  models.append(node('h2', '2. 모델 설정·역할 검증'), node('p', '각 역할의 응답 형식 검증을 따로 확인하세요. 시험 성공은 교육적 품질 보증이 아닙니다.'));
+  if (!state.models.length && state.models_available !== false) models.append(node('p', '등록한 모델이 없습니다. 제공자 연결에서 목록을 선택하거나 모델 ID를 직접 입력해 등록하세요.'));
   if (state.models_available === false) models.append(node('p', '모델 등록·역할 시험은 아직 제공되지 않습니다.'));
   if (state.probes_available === false) models.append(node('p', '역할 시험은 아직 제공되지 않습니다.'));
   for (const m of state.models) {
     const p = state.providers.find(p => p.provider === m.provider);
-    const card = node('article', null, {'data-model':m.id});
-    card.append(node('h3', `${m.display_name} · ${providers[m.provider]} / ${m.model_id}`),
+    const card = node('article', null, {'data-model':m.id, 'aria-labelledby':`ai-model-${m.id}`});
+    card.append(node('h3', `${m.display_name} · ${providers[m.provider]} / ${m.model_id}`, {id:`ai-model-${m.id}`}),
       node('p', `${m.capabilities?.preview ? 'Preview · ' : ''}${m.enabled ? '활성' : '비활성'} · ${m.capabilities ? '기능 정의 있음' : '기능 정의 필요'}`),
       button('표시명·활성·옵션 수정', () => actions.model(m)));
     if (m.capabilities?.metadata_conflict) card.append(node('p', '기능 정의·제공자 목록 불일치: 역할 시험과 실행을 사용할 수 없습니다.'));
+    const roleGrid = node('div', null, {class:'ai-role-grid'});
     for (const [role, label] of Object.entries(roles)) {
       const verification = m.verification_state[role];
-      const row = node('div', null, {class:'ai-actions'});
-      row.append(node('p', `${label}: ${states[verification.status] || '미검증'}${verification.verified_at ? ` · ${verification.verified_at}` : ''}`));
+      const row = node('div', null, {class:'ai-role', role:'group', 'aria-label':`${m.display_name} · ${label} 역할 검증`});
+      const heading = node('p', `${label}: `);
+      heading.append(node('span', states[verification.status] || '미검증', {class:`ai-verification ai-verification-${verification.status}`}));
+      row.append(heading);
+      if (verification.verified_at) row.append(node('p', `최근 역할 검증: ${verification.verified_at}`));
       if (verification.error_code) row.append(node('p', roleErrors[verification.error_code] || '역할 응답 형식 시험에 실패했습니다. 설정을 확인한 후 다시 시험하세요.'));
       if (m.capabilities && !m.probe_budgets?.[role]) row.append(node('p', `${label} 시험 출력 상한 또는 저장 옵션 제약과 충돌합니다. 저장 옵션을 명시적으로 수정하세요.`));
-      row.append(button(`${label} 시험`, () => actions.probe(m, role), state.probes_available === false || (state.probe_roles && !state.probe_roles.includes(role)) || !m.probe_budgets?.[role] || !m.capabilities || m.capabilities.metadata_conflict || !state.master_key_available || !p.enabled || p.status !== 'ready' || verification.status === 'verifying'));
+      const reason = state.probes_available === false || (state.probe_roles && !state.probe_roles.includes(role)) ? '이 역할 시험은 아직 제공되지 않습니다.'
+        : !m.capabilities ? '기능 정의가 없어 역할 시험을 사용할 수 없습니다.'
+        : m.capabilities.metadata_conflict ? '기능 정의·제공자 목록 불일치를 해결한 후 시험하세요.'
+        : !state.master_key_available ? '마스터 키를 복원한 후 시험하세요.'
+        : p.status === 'decryption_failed' ? '연결 키 복호화 실패를 해결한 후 시험하세요.'
+        : !p.key_registered ? '제공자 키를 등록한 후 시험하세요.'
+        : !p.enabled ? '제공자 연결을 재활성화한 후 시험하세요.'
+        : p.status !== 'ready' ? '제공자 연결 설정을 확인한 후 시험하세요.'
+        : !m.probe_budgets?.[role] ? '시험 출력 상한·저장 옵션을 수정한 후 시험하세요.'
+        : verification.status === 'verifying' ? '진행 중인 시험을 조회하거나 취소할 수 있습니다.' : '';
+      const trial = button(`${label} 시험`, () => actions.probe(m, role), !!reason);
+      if (reason) {
+        const id = `ai-probe-reason-${m.id}-${role}`;
+        row.append(node('p', reason, {id, class:'ai-help'}));
+        trial.setAttribute('aria-describedby', id);
+      }
+      row.append(trial);
       if (verification.status === 'verifying') row.append(button(`${label} 진행 조회`, () => actions.poll(verification.probe_request_id)), button(`${label} 시험 취소`, () => actions.cancel(verification.probe_request_id)));
-      card.append(row);
+      roleGrid.append(row);
     }
+    card.append(roleGrid);
     models.append(card);
   }
   root.append(models);
   const settings = node('section', null, {'aria-label':'작성 기본값·호출 설정'});
-  settings.append(node('h2', '작성 기본값·호출 설정'), node('p', '작성 기본값은 새 시나리오 작성에만 사용합니다. 기존 시나리오와 세션은 변경하지 않습니다.'));
+  settings.append(node('h2', '3. 작성 기본값·호출 설정'), node('p', '작성 기본값은 새 시나리오 작성에만 사용합니다. 기존 시나리오와 세션은 변경하지 않습니다. 사용 불가 기본값을 다른 모델로 자동 대체하지 않습니다.'));
   if (!state.settings) {
     settings.append(node('p', '작성 기본값·호출 설정은 아직 제공되지 않습니다.'));
     root.append(settings);

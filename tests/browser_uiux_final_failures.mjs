@@ -33,5 +33,18 @@ export default async function check(page) {
     assert.equal(calls,2,'only explicit deletions are submitted');
     await page.unroute(`**/admin/${kind}/*/delete`);
   }
+  let blockedWrites = 0;
+  await page.route('**/admin/groups/*/delete', route => {
+    blockedWrites++;
+    return route.fulfill({status:403,json:{detail:'blocked'}});
+  });
+  await page.goto(base+'/fixtures/uiux/admin/groups?members=1');
+  await page.locator('.delete-btn').click();
+  const memberNotice = page.locator('[data-group-id]').getByRole('alert');
+  await memberNotice.waitFor();
+  assert.match(await memberNotice.innerText(), /1명의 멤버가 있어 삭제할 수 없습니다/);
+  assert.match(await memberNotice.innerText(), /먼저 멤버를 다른 그룹으로 이동하세요/);
+  assert(await memberNotice.evaluate(el => el === document.activeElement));
+  assert.equal(blockedWrites,0,'member guard explains refusal without submitting a deletion');
   return {pageErrors:[]};
 }

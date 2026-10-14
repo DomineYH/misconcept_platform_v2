@@ -64,7 +64,9 @@ class Handler(BaseHTTPRequestHandler):
                                     name='긴 그룹 "따옴표" 이름\n' * 5,
                                     description="합성 그룹 설명",
                                 ),
-                                member_count=0,
+                                member_count=int(
+                                    query.get("members", ["0"])[0]
+                                ),
                                 scenario_count=2,
                             )
                         ]

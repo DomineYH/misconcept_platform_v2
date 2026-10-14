@@ -217,8 +217,9 @@ btnDownloadSelected.addEventListener('click', function () {
         URL.revokeObjectURL(url);
       });
     })
-    .catch(function (err) {
-      alert('다운로드 실패: ' + err.message);
+    .catch(function () {
+      modalLifecycle.error(document.querySelector('.table-container'),
+        '선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.');
     })
     .finally(function () {
       btnDownloadSelected.textContent = originalText;

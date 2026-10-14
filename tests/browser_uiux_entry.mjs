@@ -11,7 +11,10 @@ export default async function check(page) {
       const card = await page.locator('.login-card').boundingBox();
       assert(card.width <= 480 && card.width >= Math.min(480, width - 32), 'login uses available width up to 480px');
       await page.locator('.skip-link').focus();
-      await page.keyboard.press('Enter');
+      await Promise.all([
+        page.waitForURL(`${base}/login?error=1#main-content`),
+        page.keyboard.press('Enter')
+      ]);
       assert.equal(new URL(page.url()).hash, '#main-content', 'keyboard skip link reaches main content');
       await page.getByRole('button', {name: '로그인', exact: true}).click();
       assert.equal(await page.locator('#username').evaluate(el => el === document.activeElement), true, 'required ID receives focus');

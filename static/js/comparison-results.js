@@ -1,4 +1,4 @@
-import {node, button} from './ai-render.js';
+import {node, button, roles} from './ai-render.js';
 
 export const completedStatuses = ['completed','ok','degraded'];
 export const active = status => ['waiting', 'running', 'streaming'].includes(status);
@@ -24,8 +24,9 @@ export function failureMessage(panel) {
 export function renderComparisonResult(root, panel, role, actions, locked) {
   const focused = root.contains(document.activeElement) ? document.activeElement.textContent : null;
   root.replaceChildren();
-  root.append(node('p', statusLabel(panel.status, role) || '상태 unknown', {role:'status'}));
-  if (['failed','cancelled','interrupted','degraded'].includes(panel.status)) root.append(node('p', failureMessage(panel), {class:'scenario-error'}));
+  root.append(node('h3', `패널 ${panel.panel_id} · ${roles[role]} · ${panel.model_config?.display_name || panel.model_config?.model_id || '모델 unknown'}`, {class:'comparison-role', 'data-role':role}),
+    node('p', statusLabel(panel.status, role) || '상태 unknown', {class:'comparison-state', 'data-status':panel.status}));
+  if (['failed','cancelled','interrupted','degraded'].includes(panel.status)) root.append(node('p', failureMessage(panel), {class:panel.status === 'failed' ? 'comparison-failure' : ''}));
   if (role === 'student') root.append(node('p', panel.text || '', {class:'comparison-text'}));
   if (role === 'student' && panel.status !== 'completed') root.append(node('p', '잠정 응답 · 미완료 · 채택 불가'));
   if (role === 'mentor' && panel.status === 'completed') {
@@ -50,7 +51,10 @@ export function renderComparisonResult(root, panel, role, actions, locked) {
     const previous = node('details');
     previous.append(node('summary', `이전 시도 ${index + 1} · ${statusLabel(attempt.status, role) || 'unknown'}`));
     if (['failed','cancelled','interrupted','degraded'].includes(attempt.status)) previous.append(node('p', failureMessage(attempt)));
-    if (role === 'student') previous.append(node('p', attempt.text || '', {class:'comparison-text'}));
+    if (role === 'student') {
+      previous.append(node('p', attempt.text || '', {class:'comparison-text'}));
+      if (attempt.status !== 'completed') previous.append(node('p', '잠정 응답 · 미완료 · 채택 불가'));
+    }
     if (role === 'mentor' && attempt.status === 'completed') {
       previous.append(node('p', attempt.result?.should_intervene === false ? '멘토 미개입' : '멘토 코칭'));
       if (attempt.result?.should_intervene !== false) previous.append(node('p', attempt.result?.coaching || '', {class:'comparison-text'}));

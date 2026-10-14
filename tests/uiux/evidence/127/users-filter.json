@@ -1,0 +1,14 @@
+{
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "filters": [
+    "search",
+    "role",
+    "group"
+  ],
+  "populatedRows": 20,
+  "noServerSearch": true,
+  "serverEmptyDistinct": true
+}

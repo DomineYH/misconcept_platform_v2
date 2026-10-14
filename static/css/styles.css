@@ -1,79 +1,85 @@
 /* ========================================
-   MUSINSA-INSPIRED DESIGN SYSTEM
-   Clean, Minimal, Monochrome Aesthetic
+   Shared visual language — #116
    ======================================== */
 
 /* ========================================
-   CSS Variables - Musinsa Color Palette
+   Semantic colors
    ======================================== */
 :root {
-  /* Primary Colors - Monochrome */
-  --color-black: #000000;
-  --color-white: #FFFFFF;
-  --color-gray-50: #FAFAFA;
-  --color-gray-100: #F5F5F5;
-  --color-gray-200: #EEEEEE;
-  --color-gray-300: #E0E0E0;
-  --color-gray-400: #BDBDBD;
-  --color-gray-500: #9E9E9E;
-  --color-gray-600: #757575;
-  --color-gray-700: #616161;
-  --color-gray-800: #424242;
-  --color-gray-900: #212121;
+  /* Primary Colors */
+  --color-black: var(--color-text-primary);
+  --color-white: var(--color-bg-surface);
+  --color-gray-50: var(--color-bg-secondary);
+  --color-gray-100: var(--color-bg-secondary);
+  --color-gray-200: var(--color-bg-secondary);
+  --color-gray-300: var(--color-border-medium);
+  --color-gray-400: var(--color-border-medium);
+  --color-gray-500: var(--color-text-secondary);
+  --color-gray-600: var(--color-text-secondary);
+  --color-gray-700: var(--color-text-secondary);
+  --color-gray-800: var(--color-text-primary);
+  --color-gray-900: var(--color-text-primary);
 
   /* Semantic Colors */
-  --color-primary: #000000;
-  --color-primary-hover: #333333;
+  --color-primary: #3B3FD8;
+  --color-primary-hover: #3033B5;
   --color-secondary: #FFFFFF;
-  --color-accent: #000000;
+  --color-accent: #3B3FD8;
 
   /* Text Colors */
-  --color-text-primary: #000000;
-  --color-text-secondary: #666666;
-  --color-text-tertiary: #999999;
-  --color-text-muted: #BDBDBD;
+  --color-text-primary: #16182D;
+  --color-text-secondary: #5B5F78;
+  --color-text-tertiary: #5B5F78;
+  --color-text-muted: #5B5F78;
 
   /* Background Colors */
-  --color-bg-body: #FFFFFF;
+  --color-bg-body: #FBFAF7;
   --color-bg-surface: #FFFFFF;
-  --color-bg-secondary: #FAFAFA;
-  --color-bg-tertiary: #F5F5F5;
+  --color-bg-secondary: #F4F3EF;
+  --color-bg-tertiary: #F4F3EF;
 
   /* Border Colors */
-  --color-border-light: #EEEEEE;
-  --color-border-medium: #E0E0E0;
-  --color-border-dark: #BDBDBD;
+  --color-border-light: #E6E3DC;
+  --color-border-medium: #777A90;
+  --color-border-dark: #777A90;
 
   /* Role Colors - Subtle */
-  --color-student: #333333;
-  --color-teacher: #000000;
-  --color-tutor: #666666;
-  --color-tutor-bg: #F5F5F5;
-  --color-tutor-border: #E0E0E0;
-  --color-tutor-text: #333333;
+  --color-student: #3B3FD8;
+  --color-teacher: #16182D;
+  --color-tutor: var(--color-mentor-text);
+  --color-tutor-bg: var(--color-mentor-bg);
+  --color-tutor-border: var(--color-mentor-border);
+  --color-tutor-text: var(--color-mentor-text);
 
   /* Role Colors - Message Bubbles (Student/Mentor) */
-  --color-student-bg: #FFFFFF;
-  --color-student-border: #EEEEEE;
-  --color-student-text: #000000;
-  --color-mentor-bg: #E3F2FD;
-  --color-mentor-border: #1565C0;
-  --color-mentor-text: #0D47A1;
+  --color-student-bg: #ECEDFD;
+  --color-student-border: #3B3FD8;
+  --color-student-text: #3B3FD8;
+  --color-mentor-bg: #FDEEE5;
+  --color-mentor-border: #A84617;
+  --color-mentor-text: #A84617;
 
   /* Status Colors - Muted */
-  --color-success: #2E7D32;
-  --color-success-text: #1B5E20;
-  --color-success-bg: #E8F5E9;
-  --color-success-border: #C8E6C9;
-  --color-warning: #F57C00;
-  --color-warning-text: #E65100;
-  --color-warning-bg: #FFF3E0;
-  --color-warning-border: #FFE0B2;
-  --color-danger: #C62828;
+  --color-success: #08766D;
+  --color-success-text: #08766D;
+  --color-success-bg: #E2F5F2;
+  --color-success-border: #08766D;
+  --color-warning: #805300;
+  --color-warning-text: #805300;
+  --color-warning-bg: #FFF3D6;
+  --color-warning-border: #805300;
+  --color-danger: #B71C1C;
   --color-danger-text: #B71C1C;
   --color-danger-bg: #FFEBEE;
   --color-info-text: #1565C0;
   --color-info-bg: #E3F2FD;
+
+  --color-on-primary: #FFFFFF;
+  --color-error: var(--color-danger-text);
+  --color-border: var(--color-border-medium);
+  --color-bg: var(--color-bg-body);
+  --color-bg-card: var(--color-bg-surface);
+  --color-text: var(--color-text-primary);
 
   /* Spacing */
   --spacing-xs: 0.25rem;
@@ -96,9 +102,9 @@
   /* Border Radius - Minimal */
   --radius-none: 0;
   --radius-sm: 2px;
-  --radius-md: 4px;
+  --radius-md: 10px;
   --radius-lg: 6px;
-  --radius-xl: 8px;
+  --radius-xl: 16px;
   --radius-round: 50%;
   --radius-pill: 999px;
 
@@ -133,15 +139,15 @@ html {
 body {
   font-family: var(--font-family);
   font-size: var(--font-size-base);
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--color-text-primary);
   background-color: var(--color-bg-body);
-  letter-spacing: -0.01em;
+  letter-spacing: normal;
 }
 
 /* Focus Styles */
 :focus-visible {
-  outline: 2px solid var(--color-black);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
@@ -150,7 +156,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--color-black);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
@@ -159,8 +165,8 @@ textarea:focus-visible {
   position: absolute;
   top: -40px;
   left: 0;
-  background: var(--color-black);
-  color: var(--color-white);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   padding: 8px 16px;
   z-index: 100;
   transition: top 0.3s;
@@ -173,38 +179,38 @@ textarea:focus-visible {
 }
 
 /* ========================================
-   Header & Navigation - Musinsa Style
+   Header & Navigation
    ======================================== */
-header {
+body > header {
   background-color: var(--color-white);
   border-bottom: 1px solid var(--color-border-light);
-  padding: 0 2rem;
+  padding: 0 1rem;
   height: 60px;
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
-header nav {
+body > header nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
   height: 100%;
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
-header nav h1 {
+body > header nav h1 {
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-black);
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
 }
 
 .nav-menu {
   list-style: none;
   display: flex;
-  gap: 2rem;
+  gap: 1rem;
   align-items: center;
   margin: 0;
   padding: 0;
@@ -213,7 +219,7 @@ header nav h1 {
 .nav-menu li a {
   color: var(--color-text-primary);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   padding: 0.5rem 0;
   position: relative;
@@ -240,7 +246,10 @@ header nav h1 {
 }
 
 .nav-username {
-  font-size: 0.9rem;
+  display: inline-block;
+  max-width: 16rem;
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-primary);
 }
@@ -248,31 +257,31 @@ header nav h1 {
 .btn-nav-about {
   background: none;
   color: var(--color-text-primary);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border-medium);
   padding: 0.4rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
   border-radius: var(--radius-md);
 }
 
-.btn-nav-about:hover {
+.btn-nav-about:hover:not(:disabled) {
   background-color: var(--color-bg-surface);
   border-color: var(--color-text-secondary);
 }
 
 .btn-logout {
-  background-color: var(--color-black);
-  color: var(--color-white);
-  border: 1px solid var(--color-black);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border: 1px solid var(--color-primary);
   padding: 0.4rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
 }
 
-.btn-logout:hover {
-  background-color: var(--color-gray-800);
-  border-color: var(--color-gray-800);
+.btn-logout:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
 }
 
 /* Hamburger Menu */
@@ -299,8 +308,8 @@ header nav h1 {
 main {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
-  background-color: var(--color-white);
+  padding: 2rem 1rem;
+  background-color: var(--color-bg-body);
   min-height: calc(100vh - 140px);
 }
 
@@ -311,35 +320,39 @@ footer {
   text-align: center;
   padding: 2rem;
   color: var(--color-text-tertiary);
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   border-top: 1px solid var(--color-border-light);
 }
 
 /* ========================================
-   Buttons - Musinsa Style (Rectangular)
+   Buttons
    ======================================== */
 button,
-.btn {
+.btn,
+a.btn-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0.75rem 1.5rem;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.5;
+  min-height: 44px;
+  min-width: 44px;
+  overflow-wrap: anywhere;
   text-decoration: none;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-fast);
-  background-color: var(--color-black);
-  color: var(--color-white);
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
-button:hover,
-.btn:hover {
-  background-color: var(--color-gray-800);
+button:hover:not(:disabled),
+.btn:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
 }
 
 button:active,
@@ -348,61 +361,69 @@ button:active,
 }
 
 button:disabled,
-.btn:disabled {
-  background-color: var(--color-gray-300);
-  color: var(--color-gray-500);
+.btn:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
   cursor: not-allowed;
   transform: none;
+  border-color: var(--color-border-medium);
+  opacity: 1;
 }
 
 /* Button Variants */
 .btn-primary {
-  background-color: var(--color-black);
-  color: var(--color-white);
-  border: 1px solid var(--color-black);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border: 1px solid var(--color-primary);
 }
 
-.btn-primary:hover {
-  background-color: var(--color-gray-800);
-  border-color: var(--color-gray-800);
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
 }
 
 .btn-primary:disabled {
-  background-color: var(--color-gray-300);
-  border-color: var(--color-gray-300);
-  color: var(--color-gray-500);
+  background-color: var(--color-bg-secondary);
+  border-color: var(--color-border-medium);
+  color: var(--color-text-secondary);
+  opacity: 1;
 }
 
 .btn-secondary {
-  background-color: var(--color-white);
-  color: var(--color-black);
-  border: 1px solid var(--color-black);
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background-color: var(--color-gray-50);
 }
 
 .btn-info {
-  background-color: var(--color-gray-700);
-  color: var(--color-white);
-  border: 1px solid var(--color-gray-700);
+  background-color: var(--color-info-bg);
+  color: var(--color-info-text);
+  border: 1px solid var(--color-info-text);
 }
 
-.btn-info:hover {
-  background-color: var(--color-gray-600);
-  border-color: var(--color-gray-600);
+.btn-info:hover:not(:disabled) {
+  background-color: var(--color-info-bg);
+  color: var(--color-info-text);
+  border: 1px solid var(--color-info-text);
 }
 
 .btn-success {
-  background-color: var(--color-gray-800);
-  color: var(--color-white);
-  border: 1px solid var(--color-gray-800);
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success-text);
 }
 
-.btn-success:hover {
-  background-color: var(--color-gray-700);
-  border-color: var(--color-gray-700);
+.btn-success:hover:not(:disabled) {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success-text);
 }
 
 .btn-group {
@@ -411,12 +432,12 @@ button:disabled,
 }
 
 .btn-group .btn {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 .btn-sm {
   padding: 0.5rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
 }
 
 .btn-lg {
@@ -426,12 +447,12 @@ button:disabled,
 
 /* Icon Button */
 .btn-icon-primary {
-  background-color: var(--color-black);
-  color: var(--color-white);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
   border: none;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -440,49 +461,54 @@ button:disabled,
   padding: 0;
 }
 
-.btn-icon-primary:hover {
-  background-color: var(--color-gray-800);
+.btn-icon-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
 }
 
 .btn-icon-primary:disabled {
-  background-color: var(--color-gray-300);
+  background-color: var(--color-bg-secondary);
   cursor: not-allowed;
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-medium);
+  opacity: 1;
 }
 
 /* Danger & Warning Buttons */
 .btn-danger {
-  background-color: var(--color-danger);
-  color: var(--color-white);
-  border: 1px solid var(--color-danger);
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-text);
 }
 
-.btn-danger:hover {
-  background-color: var(--color-danger-text);
-  border-color: var(--color-danger-text);
+.btn-danger:hover:not(:disabled) {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-text);
 }
 
 .btn-warning {
-  background-color: var(--color-warning);
-  color: var(--color-white);
-  border: 1px solid var(--color-warning);
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid var(--color-warning-text);
 }
 
-.btn-warning:hover {
-  background-color: var(--color-warning-text);
-  border-color: var(--color-warning-text);
+.btn-warning:hover:not(:disabled) {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid var(--color-warning-text);
 }
 
 .btn-link {
   background: none;
   border: none;
-  color: var(--color-black);
-  font-size: 0.85rem;
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
 }
 
-.btn-link:hover {
+.btn-link:hover:not(:disabled) {
   color: var(--color-gray-600);
 }
 
@@ -497,7 +523,7 @@ form {
 }
 
 label {
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-primary);
   margin-bottom: 0.5rem;
@@ -512,18 +538,20 @@ select {
   width: 100%;
   padding: 0.875rem 1rem;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
   border: 1px solid var(--color-border-medium);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background-color: var(--color-white);
   color: var(--color-text-primary);
   transition: border-color var(--transition-fast);
+  line-height: 1.65;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-  outline: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
   border-color: var(--color-black);
 }
 
@@ -546,7 +574,7 @@ textarea {
   margin-bottom: 0.5rem;
   font-weight: 600;
   color: var(--color-text-primary);
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .form-group .required {
@@ -595,25 +623,25 @@ textarea {
 }
 
 /* ========================================
-   Scenario Cards Grid - Musinsa Style
+   Scenario Cards Grid
    ======================================== */
 .scenarios-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 3rem 2rem;
+  padding: 0;
 }
 
 .scenarios-container .page-header {
-  text-align: center;
-  margin-bottom: 3rem;
+  text-align: left;
+  margin-bottom: var(--spacing-lg);
 }
 
 .scenarios-container .page-header h1 {
   font-size: 2rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-black);
   margin-bottom: 0.75rem;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
 }
 
 .scenarios-container .page-header p {
@@ -624,20 +652,21 @@ textarea {
 
 .scenarios-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--spacing-lg);
 }
 
 .scenario-card {
   background: var(--color-white);
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: 1.75rem;
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
-  min-height: 220px;
+  min-height: auto;
   transition: all var(--transition-normal);
   position: relative;
+  min-width: 0;
 }
 
 .scenario-card:hover {
@@ -646,22 +675,22 @@ textarea {
 }
 
 .scenario-card .scenario-title {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 600;
   color: var(--color-black);
   margin: 0 0 1rem 0;
-  line-height: 1.4;
+  line-height: 1.3;
 }
 
 .scenario-card .scenario-description {
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  font-size: var(--font-size-sm);
+  line-height: 1.65;
   flex-grow: 1;
   margin-bottom: 1.5rem;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
+  overflow: visible;
+  display: block;
+  -webkit-line-clamp: unset;
   -webkit-box-orient: vertical;
 }
 
@@ -674,12 +703,12 @@ textarea {
 
 /* Inactive Card */
 .scenario-card.inactive {
-  opacity: 0.5;
+  opacity: 1;
   background: var(--color-gray-50);
 }
 
 .scenario-card.inactive:hover {
-  opacity: 0.7;
+  opacity: 1;
 }
 
 /* Status Badge */
@@ -717,8 +746,8 @@ textarea {
 }
 
 .card-title {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
   color: var(--color-black);
   margin: 0 0 0.75rem;
   line-height: 1.3;
@@ -752,7 +781,7 @@ textarea {
 }
 
 .card-description {
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.5;
   margin: 0;
@@ -769,6 +798,18 @@ textarea {
   padding-top: 1rem;
   border-top: 1px solid var(--color-border-light);
 }
+
+.scenarios-admin .page-header-admin { flex-wrap: wrap; gap: var(--spacing-md); }
+.scenarios-admin .page-header-admin .header-content { flex-basis: 100%; min-width: 0; }
+.scenarios-admin .card-status { position: static; margin-bottom: var(--spacing-sm); }
+.scenarios-admin .card-body { padding-right: 0; }
+.scenarios-admin .card-actions { flex-wrap: wrap; }
+.scenarios-admin .card-description { display: block; overflow: visible; overflow-wrap: anywhere; }
+.scenarios-admin .filter-group { flex-wrap: wrap; min-width: 0; }
+.scenarios-admin .search-box { min-width: 0; }
+.scenarios-admin .btn, .scenarios-admin input, .scenarios-admin select { min-height: 44px; }
+.scenarios-admin .btn { min-width: 44px; }
+.scenarios-admin [hidden] { display: none; }
 
 /* ========================================
    Chat Interface - Clean Monochrome
@@ -792,14 +833,14 @@ textarea {
 }
 
 .chat-header h1 {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
   color: var(--color-black);
   margin: 0;
 }
 
 .student-info {
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   margin-top: 0.25rem;
 }
@@ -859,15 +900,15 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   margin-right: 0.75rem;
   flex-shrink: 0;
 }
 
 .avatar.student {
-  background-color: var(--color-gray-800);
-  color: var(--color-white);
+  background-color: var(--color-student-bg);
+  color: var(--color-student-text);
   min-width: 36px;
   width: auto;
   padding: 0 0.375rem;
@@ -876,13 +917,13 @@ textarea {
 }
 
 .avatar.teacher {
-  background-color: var(--color-black);
-  color: var(--color-white);
+  background-color: var(--color-bg-body);
+  color: var(--color-teacher);
 }
 
 .avatar.tutor {
-  background-color: var(--color-gray-400);
-  color: var(--color-white);
+  background-color: var(--color-mentor-bg);
+  color: var(--color-mentor-text);
   min-width: 36px;
   width: auto;
   padding: 0 0.375rem;
@@ -891,8 +932,8 @@ textarea {
 }
 
 .avatar.mentor {
-  background-color: #6b7280;
-  color: #ffffff;
+  background-color: var(--color-mentor-bg);
+  color: var(--color-mentor-text);
 }
 
 /* Message Content */
@@ -904,8 +945,8 @@ textarea {
 .message-bubble {
   padding: 0.875rem 1.125rem;
   border-radius: var(--radius-md);
-  font-size: 0.95rem;
-  line-height: 1.6;
+  font-size: var(--font-size-base);
+  line-height: 1.65;
   position: relative;
   word-wrap: break-word;
 }
@@ -949,7 +990,7 @@ textarea {
 
 .message-student .message-bubble {
   background-color: var(--color-student-bg);
-  color: var(--color-student-text);
+  color: var(--color-text-primary);
   border: 1px solid var(--color-student-border);
 }
 
@@ -965,9 +1006,9 @@ textarea {
 }
 
 .message-teacher .message-bubble {
-  background-color: var(--color-black);
-  color: var(--color-white);
-  border: none;
+  background-color: var(--color-bg-body);
+  color: var(--color-teacher);
+  border: 1px solid var(--color-border-medium);
 }
 
 .message-teacher .message-meta {
@@ -987,7 +1028,7 @@ textarea {
   background-color: var(--color-tutor-bg);
   color: var(--color-tutor-text);
   border: 1px solid var(--color-tutor-border);
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
 }
 
 /* Mentor (Greeting) - Left aligned, blue accent (tokenized) */
@@ -1006,6 +1047,7 @@ textarea {
 }
 
 .messages-container[data-mentor-stream] {
+  scroll-behavior: auto;
   overflow-anchor: none;
 }
 
@@ -1023,7 +1065,7 @@ textarea {
   align-items: center;
   gap: 0.5rem;
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .typing-dots {
@@ -1063,6 +1105,15 @@ textarea {
 }
 
 /* Input Area */
+.lesson-controls {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.lesson-controls p { margin: 0 0 0.5rem; }
+
 .teacher-form {
   background-color: var(--color-white);
   padding: 1rem 1.5rem;
@@ -1100,16 +1151,18 @@ textarea#teacher-input {
   resize: none;
   padding: 0.125rem 0.5rem;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   line-height: 1.3;
-  max-height: 28px;
-  outline: none;
+  min-width: 0;
+  max-height: 120px;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
   color: var(--color-text-primary);
 }
 
 /* Loading Indicator */
 #loading-indicator {
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   margin-top: 0.75rem;
   display: flex;
@@ -1166,6 +1219,7 @@ textarea#teacher-input {
    Split Layout - Chat Page
    ======================================== */
 .mobile-tabs {
+  height: 44px;
   display: none;
   background-color: var(--color-white);
   border-bottom: 1px solid var(--color-border-light);
@@ -1173,19 +1227,19 @@ textarea#teacher-input {
 
 .mobile-tab {
   flex: 1;
-  padding: 0.875rem 1rem;
+  padding: 0 1rem;
   text-align: center;
   cursor: pointer;
   background: var(--color-gray-50);
   border: none;
   border-bottom: 2px solid transparent;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-secondary);
   transition: all 0.2s ease;
 }
 
-.mobile-tab:hover {
+.mobile-tab:hover:not(:disabled) {
   background-color: var(--color-gray-100);
 }
 
@@ -1196,15 +1250,22 @@ textarea#teacher-input {
   font-weight: 600;
 }
 
+main:has(.split-layout) {
+  max-width: none;
+  padding: 0;
+  min-height: 0;
+}
+
 .split-layout {
   display: flex;
-  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
   overflow: hidden;
   background-color: var(--color-gray-50);
 }
 
 .scenario-panel {
-  flex: 0 0 45%;
+  min-width: 0;
+  flex: 0 0 35%;
   padding: 2rem;
   overflow-y: auto;
   background-color: var(--color-white);
@@ -1214,7 +1275,9 @@ textarea#teacher-input {
 }
 
 .chat-panel {
-  flex: 1 1 55%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 65%;
   display: flex;
   flex-direction: column;
   background-color: var(--color-gray-50);
@@ -1222,6 +1285,8 @@ textarea#teacher-input {
 }
 
 .scenario-header {
+  flex-wrap: wrap;
+  padding-top: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -1232,8 +1297,10 @@ textarea#teacher-input {
 }
 
 .scenario-header h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 600;
   margin: 0;
   color: var(--color-black);
   line-height: 1.3;
@@ -1241,6 +1308,8 @@ textarea#teacher-input {
 }
 
 .scenario-header .header-actions {
+  max-width: 100%;
+  flex-wrap: wrap;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -1248,9 +1317,9 @@ textarea#teacher-input {
 }
 
 .scenario-header .btn-secondary {
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   padding: 0.5rem 0.75rem;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 /* Info Sections */
@@ -1281,7 +1350,7 @@ textarea#teacher-input {
   white-space: pre-wrap;
   line-height: 1.7;
   color: var(--color-text-primary);
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
 }
 
 /* Framework Info */
@@ -1308,7 +1377,7 @@ textarea#teacher-input {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-primary);
 }
 
@@ -1324,6 +1393,7 @@ textarea#teacher-input {
 
 /* Chat Panel adjustments */
 .chat-panel .chat-wrapper {
+  min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1331,12 +1401,14 @@ textarea#teacher-input {
 }
 
 .chat-panel .messages-container {
+  min-height: 0;
   flex: 1;
   overflow-y: auto;
   padding: 1rem;
 }
 
 .chat-panel .teacher-form {
+  flex-shrink: 0;
   border-top: 1px solid var(--color-border-light);
 }
 
@@ -1345,7 +1417,7 @@ textarea#teacher-input {
   background-color: var(--color-warning-bg);
   color: var(--color-warning-text);
   text-align: center;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   border-bottom: 1px solid var(--color-warning-border);
 }
 
@@ -1359,10 +1431,10 @@ textarea#teacher-input {
 .panel-toggle {
   position: absolute;
   top: 0;
-  right: 0.75rem;
+  right: 2px;
   z-index: 2;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1380,7 +1452,8 @@ textarea#teacher-input {
 .panel-toggle:focus-visible {
   background: var(--color-gray-100);
   color: var(--color-black);
-  outline: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .panel-toggle:focus-visible {
@@ -1418,38 +1491,39 @@ textarea#teacher-input {
 }
 
 /* ========================================
-   Login Page - Musinsa Style
+   Login Page
    ======================================== */
 .login-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 140px);
-  padding: 2rem;
-  background-color: var(--color-white);
+  min-height: auto;
+  padding: 0;
+  background-color: var(--color-bg-body);
 }
 
 .login-card {
   background: var(--color-white);
-  padding: 3rem;
+  padding: var(--spacing-lg);
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   width: 100%;
   max-width: 480px;
   text-align: center;
 }
 
 .login-card h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  font-weight: 600;
   color: var(--color-black);
   margin-bottom: 0.5rem;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
+  line-height: 1.3;
 }
 
 .subtitle {
   color: var(--color-text-secondary);
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   margin-bottom: 2rem;
 }
 
@@ -1482,7 +1556,7 @@ textarea#teacher-input {
 }
 
 .info-box p {
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   margin: 0;
   line-height: 1.5;
@@ -1496,6 +1570,8 @@ textarea#teacher-input {
    Data Tables - Clean Grid
    ======================================== */
 .table-container {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   background: var(--color-white);
   border-radius: var(--radius-md);
@@ -1534,7 +1610,7 @@ textarea#teacher-input {
 
 .data-table td {
   color: var(--color-text-primary);
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   vertical-align: middle;
 }
 
@@ -1577,38 +1653,38 @@ textarea#teacher-input {
 }
 
 .label-pressing {
-  background-color: var(--color-gray-800);
-  color: var(--color-white);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
 .label-linking {
-  background-color: var(--color-gray-600);
-  color: var(--color-white);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
 .label-directing {
-  background-color: var(--color-gray-400);
-  color: var(--color-black);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
 .label-recall {
-  background-color: var(--color-gray-200);
-  color: var(--color-black);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
 .label-default {
-  background-color: var(--color-gray-100);
-  color: var(--color-gray-700);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
 /* Grade badges (우수/개선) */
 .grade-excellent {
-  background-color: #dcfce7;
-  color: #166534;
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 .grade-improve {
-  background-color: #fff7ed;
-  color: #9a3412;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 /* ========================================
@@ -1637,17 +1713,18 @@ textarea#teacher-input {
 
 .modal-container {
   background: var(--color-white);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   max-width: 600px;
   width: 100%;
-  max-height: 90vh;
+  max-height: min(90dvh, calc(100dvh - 32px));
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   animation: modalSlideIn 0.25s ease-out;
 }
 
 .modal-lg {
-  max-width: 700px;
+  max-width: 900px;
 }
 
 .modal-xl {
@@ -1666,6 +1743,8 @@ textarea#teacher-input {
 }
 
 .modal-header {
+  flex-shrink: 0;
+  gap: var(--spacing-md);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1675,8 +1754,8 @@ textarea#teacher-input {
 
 .modal-header h2 {
   margin: 0;
-  font-size: 1.2rem;
-  font-weight: 700;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
   color: var(--color-black);
 }
 
@@ -1686,6 +1765,8 @@ textarea#teacher-input {
   font-size: 1.5rem;
   color: var(--color-gray-500);
   cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   line-height: 1;
   transition: color 0.2s;
@@ -1693,6 +1774,31 @@ textarea#teacher-input {
 
 .close-modal-btn:hover {
   color: var(--color-black);
+}
+
+.modal-close {
+  min-width: 44px;
+  min-height: 44px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xl);
+}
+
+.modal-error,
+#about-load-error {
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-danger-text);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+#about-load-error:not([hidden]) {
+  display: block;
+  max-width: 16rem;
 }
 
 /* Form wrapper - enables flex layout for proper scrolling */
@@ -1712,6 +1818,8 @@ textarea#teacher-input {
 }
 
 .modal-footer {
+  flex-shrink: 0;
+  flex-wrap: wrap;
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
@@ -1722,10 +1830,10 @@ textarea#teacher-input {
 
 .btn-modal {
   padding: 0.5rem 1rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   text-decoration: none;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   transition: background-color 0.2s;
   display: inline-block;
 }
@@ -1735,26 +1843,29 @@ textarea#teacher-input {
   color: var(--color-text-primary);
 }
 
-.btn-modal-secondary:hover {
+.btn-modal-secondary:hover:not(:disabled) {
   background-color: var(--color-gray-300);
 }
 
 .btn-modal-primary {
-  background-color: var(--color-black);
-  color: var(--color-white);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
-.btn-modal-primary:hover {
-  background-color: var(--color-gray-800);
+.btn-modal-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
 }
 
 .btn-modal-success {
-  background-color: var(--color-success);
-  color: var(--color-white);
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success-text);
 }
 
-.btn-modal-success:hover {
-  background-color: var(--color-success-text);
+.btn-modal-success:hover:not(:disabled) {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success-text);
 }
 
 /* ========================================
@@ -1777,11 +1888,11 @@ textarea#teacher-input {
 
 .slide-panel {
   position: fixed;
-  top: 0;
+  top: max(16px, 5dvh);
   right: -480px;
   width: 450px;
-  max-width: 100%;
-  height: 100vh;
+  max-width: calc(100% - 32px);
+  height: min(90dvh, calc(100dvh - 32px));
   background: var(--color-white);
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
   z-index: 1001;
@@ -1792,7 +1903,7 @@ textarea#teacher-input {
 }
 
 .slide-panel.active {
-  right: 0;
+  right: 16px;
 }
 
 .panel-form {
@@ -1815,12 +1926,14 @@ textarea#teacher-input {
 
 .panel-header h2 {
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
   color: var(--color-black);
 }
 
 .close-panel-btn {
+  min-width: 44px;
+  min-height: 44px;
   background: none;
   border: none;
   font-size: 1.5rem;
@@ -1841,6 +1954,7 @@ textarea#teacher-input {
 }
 
 .panel-footer {
+  flex-wrap: wrap;
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
@@ -1864,7 +1978,7 @@ textarea#teacher-input {
   cursor: pointer;
   font-weight: 600;
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .advanced-settings summary:hover {
@@ -1880,7 +1994,7 @@ textarea#teacher-input {
 }
 
 .settings-description {
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   margin-bottom: 1rem;
 }
@@ -1899,8 +2013,8 @@ textarea#teacher-input {
 }
 
 .page-header h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: var(--font-size-3xl);
+  font-weight: 600;
   color: var(--color-black);
   margin-bottom: 0.5rem;
 }
@@ -1921,8 +2035,8 @@ textarea#teacher-input {
 }
 
 .page-header-admin h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: var(--font-size-3xl);
+  font-weight: 600;
   color: var(--color-black);
   margin: 0;
 }
@@ -1930,7 +2044,7 @@ textarea#teacher-input {
 .page-header-admin .subtitle {
   color: var(--color-text-secondary);
   margin: 0.25rem 0 0;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .page-header-admin .header-content {
@@ -1943,7 +2057,7 @@ textarea#teacher-input {
   border: 1px solid var(--color-border-medium);
 }
 
-.btn-outline:hover {
+.btn-outline:hover:not(:disabled) {
   background: var(--color-gray-50);
   border-color: var(--color-black);
 }
@@ -1970,8 +2084,8 @@ textarea#teacher-input {
 .filter-form select {
   padding: 0.6rem 1rem;
   border: 1px solid var(--color-border-medium);
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
   background-color: var(--color-white);
   min-width: 250px;
   cursor: pointer;
@@ -1979,7 +2093,8 @@ textarea#teacher-input {
 
 .filter-form select:focus {
   border-color: var(--color-black);
-  outline: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .filter-bar {
@@ -2000,15 +2115,15 @@ textarea#teacher-input {
   gap: 1rem;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
-  background-color: var(--color-primary-light, #e3f2fd);
-  border: 1px solid var(--color-primary, #2196f3);
+  background-color: var(--color-info-bg);
+  border: 1px solid var(--color-info-text);
   border-radius: var(--radius-md);
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text);
 }
 
 .active-filter-banner strong {
-  color: var(--color-primary-dark, #1565c0);
+  color: var(--color-info-text);
 }
 
 .search-box {
@@ -2020,12 +2135,13 @@ textarea#teacher-input {
   width: 100%;
   padding: 0.6rem 1rem;
   border: 1px solid var(--color-border-medium);
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
 }
 
 .search-input:focus {
-  outline: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
   border-color: var(--color-black);
 }
 
@@ -2037,15 +2153,15 @@ textarea#teacher-input {
 .filter-select {
   padding: 0.6rem 1rem;
   border: 1px solid var(--color-border-medium);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--color-white);
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   cursor: pointer;
 }
 
 .section-title {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
   color: var(--color-black);
   margin-bottom: 1rem;
   display: flex;
@@ -2085,7 +2201,7 @@ textarea#teacher-input {
 
 .stat-value {
   font-size: 2rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-black);
   margin: 0;
 }
@@ -2097,7 +2213,7 @@ textarea#teacher-input {
 
 .quick-actions h2 {
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: 1rem;
   color: var(--color-black);
 }
@@ -2115,8 +2231,8 @@ textarea#teacher-input {
 
 .action-buttons-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--spacing-lg);
 }
 
 .action-card {
@@ -2125,7 +2241,7 @@ textarea#teacher-input {
   padding: 1.5rem;
   background: var(--color-white);
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   text-decoration: none;
   transition: all 0.2s ease;
 }
@@ -2148,7 +2264,7 @@ textarea#teacher-input {
 }
 
 .action-desc {
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -2172,8 +2288,8 @@ textarea#teacher-input {
 }
 
 .analysis-header h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: var(--font-size-3xl);
+  font-weight: 600;
   color: var(--color-black);
   margin-bottom: 0.5rem;
 }
@@ -2188,7 +2304,7 @@ textarea#teacher-input {
 
 .analysis-section h3 {
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-black);
   margin-bottom: 1rem;
 }
@@ -2203,14 +2319,14 @@ textarea#teacher-input {
 
 .analysis-feedback h2 {
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-black);
   margin-bottom: 0.5rem;
 }
 
 .analysis-feedback p {
   color: var(--color-text-primary);
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 /* Question Cards */
@@ -2244,7 +2360,7 @@ textarea#teacher-input {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   margin-bottom: 0.75rem;
 }
@@ -2272,7 +2388,7 @@ textarea#teacher-input {
   cursor: pointer;
   color: var(--color-black);
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .analysis-details summary:hover {
@@ -2294,7 +2410,7 @@ textarea#teacher-input {
   padding: 0.75rem;
   border-radius: var(--radius-sm);
   border-left: 3px solid var(--color-gray-400);
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .analysis-box strong {
@@ -2393,7 +2509,7 @@ textarea#teacher-input {
   align-items: center;
   justify-content: flex-end;
   padding-right: 0.5rem;
-  color: var(--color-white);
+  color: var(--color-text-primary);
   font-size: 0.7rem;
   font-weight: 600;
   transition: width 0.5s ease-out;
@@ -2416,12 +2532,12 @@ textarea#teacher-input {
   margin-left: 0.25rem;
 }
 
-/* Chart Colors - Monochrome */
-.bg-pressing { background-color: var(--color-gray-900); }
-.bg-linking { background-color: var(--color-gray-700); }
-.bg-directing { background-color: var(--color-gray-500); }
-.bg-recall { background-color: var(--color-gray-300); color: var(--color-black); }
-.bg-default { background-color: var(--color-gray-200); color: var(--color-black); }
+/* Chart Colors */
+.bg-pressing { background-color: var(--color-text-primary); color: var(--color-bg-surface); }
+.bg-linking { background-color: var(--color-text-secondary); color: var(--color-bg-surface); }
+.bg-directing { background-color: var(--color-text-secondary); color: var(--color-bg-surface); }
+.bg-recall { background-color: var(--color-text-secondary); color: var(--color-bg-surface); }
+.bg-default { background-color: var(--color-text-secondary); color: var(--color-bg-surface); }
 
 .chart-total {
   margin-top: 1.5rem;
@@ -2437,13 +2553,13 @@ textarea#teacher-input {
 }
 
 .chart-total-label {
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
 .chart-total-value {
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-black);
 }
 
@@ -2480,7 +2596,7 @@ textarea#teacher-input {
 .analysis-brief-feedback {
   background-color: var(--color-info-bg);
   color: var(--color-info-text);
-  border-left: 3px solid var(--color-mentor-border);
+  border-left: 3px solid var(--color-info-text);
   padding: var(--spacing-lg);
   border-radius: var(--radius-lg);
   line-height: 1.7;
@@ -2598,7 +2714,7 @@ textarea#teacher-input {
 
 .statistics-section h2 {
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: 1.5rem;
   color: var(--color-black);
 }
@@ -2612,13 +2728,13 @@ textarea#teacher-input {
 .chart-card {
   background: var(--color-white);
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   padding: 1.5rem;
 }
 
 .chart-card h3 {
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
   margin: 0 0 1rem 0;
   color: var(--color-black);
 }
@@ -2647,14 +2763,14 @@ textarea#teacher-input {
 }
 
 .stat-label {
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   font-weight: 500;
 }
 
 .stat-number {
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-black);
 }
 
@@ -2701,7 +2817,7 @@ textarea#teacher-input {
 }
 
 .pagination-info {
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -2712,7 +2828,7 @@ textarea#teacher-input {
 }
 
 .pagination-buttons .btn {
-  min-width: 2.5rem;
+  min-width: 44px;
   padding: 0.4rem 0.6rem;
 }
 
@@ -2774,7 +2890,7 @@ textarea#teacher-input {
   padding: 0;
   font-size: 1.25rem;
   line-height: 1;
-  opacity: 0.6;
+  opacity: 1;
   transition: opacity 0.2s;
 }
 
@@ -2822,7 +2938,7 @@ textarea#teacher-input {
 .empty-state p {
   margin-bottom: 1rem;
   font-size: var(--font-size-base);
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .empty-state .btn,
@@ -2848,13 +2964,14 @@ textarea#teacher-input {
 }
 
 .info-tab {
+  min-width: 0;
   flex: 1;
   padding: 0.75rem 1rem;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-secondary);
   transition: all 0.2s ease;
@@ -2862,7 +2979,7 @@ textarea#teacher-input {
   bottom: -1px;
 }
 
-.info-tab:hover {
+.info-tab:hover:not(:disabled) {
   color: var(--color-text-primary);
   background-color: var(--color-gray-50);
 }
@@ -2888,13 +3005,13 @@ textarea#teacher-input {
 
 .text-muted {
   color: var(--color-text-secondary);
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   margin: 0.25rem 0;
 }
 
 .text-muted-small {
   color: var(--color-text-tertiary);
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   margin: 0.25rem 0;
 }
 
@@ -2981,7 +3098,7 @@ textarea#teacher-input {
 
   .split-layout {
     flex-direction: column;
-    height: calc(100vh - 104px);
+    height: calc(100dvh - 104px);
   }
 
   .scenario-panel,
@@ -3030,13 +3147,10 @@ textarea#teacher-input {
   }
 
   /* Scenarios */
-  .scenarios-container {
-    padding: 1.5rem;
-  }
 
   .scenarios-grid {
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: var(--spacing-lg);
   }
 
   .scenario-card {
@@ -3077,13 +3191,10 @@ textarea#teacher-input {
 
   .info-tab {
     padding: 0.6rem 0.5rem;
-    font-size: 0.85rem;
+    font-size: var(--font-size-sm);
   }
 
   /* Login */
-  .login-card {
-    padding: 2rem;
-  }
 
   /* Grid */
   .action-buttons-grid {
@@ -3103,21 +3214,10 @@ textarea#teacher-input {
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {
-  .scenario-panel {
-    flex: 0 0 40%;
-  }
-
-  .chat-panel {
-    flex: 1 1 60%;
-  }
-
   .scenario-header h1 {
     font-size: 1.25rem;
   }
 
-  .scenarios-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 640px) {
@@ -3152,9 +3252,6 @@ textarea#teacher-input {
     padding: 1.5rem;
   }
 
-  .login-container {
-    padding: 1rem;
-  }
 }
 
 /* ========================================
@@ -3162,59 +3259,61 @@ textarea#teacher-input {
    ======================================== */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-black: #FFFFFF;
-    --color-white: #0A0A0A;
-    --color-gray-50: #121212;
-    --color-gray-100: #1A1A1A;
-    --color-gray-200: #2A2A2A;
-    --color-gray-300: #3A3A3A;
-    --color-gray-400: #4A4A4A;
-    --color-gray-500: #6A6A6A;
-    --color-gray-600: #8A8A8A;
-    --color-gray-700: #AAAAAA;
-    --color-gray-800: #CACACA;
-    --color-gray-900: #EAEAEA;
+    --color-black: var(--color-text-primary);
+    --color-white: var(--color-bg-surface);
+    --color-gray-50: var(--color-bg-secondary);
+    --color-gray-100: var(--color-bg-secondary);
+    --color-gray-200: var(--color-bg-secondary);
+    --color-gray-300: var(--color-border-medium);
+    --color-gray-400: var(--color-border-medium);
+    --color-gray-500: var(--color-text-secondary);
+    --color-gray-600: var(--color-text-secondary);
+    --color-gray-700: var(--color-text-secondary);
+    --color-gray-800: var(--color-text-primary);
+    --color-gray-900: var(--color-text-primary);
 
-    --color-primary: #FFFFFF;
-    --color-primary-hover: #CCCCCC;
+    --color-on-primary: #101124;
+    --color-accent: #8B8FF7;
+    --color-primary: #8B8FF7;
+    --color-primary-hover: #A5A8FF;
 
-    --color-text-primary: #FFFFFF;
-    --color-text-secondary: #AAAAAA;
-    --color-text-tertiary: #777777;
-    --color-text-muted: #555555;
+    --color-text-primary: #ECEEF8;
+    --color-text-secondary: #A3A7C2;
+    --color-text-tertiary: #A3A7C2;
+    --color-text-muted: #A3A7C2;
 
-    --color-bg-body: #0A0A0A;
-    --color-bg-surface: #0A0A0A;
-    --color-bg-secondary: #121212;
-    --color-bg-tertiary: #1A1A1A;
+    --color-bg-body: #0E0F1C;
+    --color-bg-surface: #161829;
+    --color-bg-secondary: #202238;
+    --color-bg-tertiary: #202238;
 
-    --color-border-light: #2A2A2A;
-    --color-border-medium: #3A3A3A;
-    --color-border-dark: #4A4A4A;
+    --color-border-light: #2A2D45;
+    --color-border-medium: #777A90;
+    --color-border-dark: #777A90;
 
-    --color-student: #CCCCCC;
-    --color-teacher: #FFFFFF;
-    --color-tutor: #888888;
-    --color-tutor-bg: #1A1A1A;
-    --color-tutor-border: #3A3A3A;
-    --color-tutor-text: #CCCCCC;
+    --color-student: #8B8FF7;
+    --color-teacher: #ECEEF8;
+    --color-tutor: var(--color-mentor-text);
+    --color-tutor-bg: var(--color-mentor-bg);
+    --color-tutor-border: var(--color-mentor-border);
+    --color-tutor-text: var(--color-mentor-text);
 
-    --color-student-bg: #121212;
-    --color-student-border: #2A2A2A;
-    --color-student-text: #FFFFFF;
-    --color-mentor-bg: #1A2A3D;
-    --color-mentor-border: #64B5F6;
-    --color-mentor-text: #BBDEFB;
+    --color-student-bg: #23264A;
+    --color-student-border: #8B8FF7;
+    --color-student-text: #8B8FF7;
+    --color-mentor-bg: #3A2519;
+    --color-mentor-border: #F29A6A;
+    --color-mentor-text: #F29A6A;
 
-    --color-success: #4CAF50;
-    --color-success-text: #81C784;
-    --color-success-bg: #1B3D1E;
-    --color-success-border: #2E5A31;
-    --color-warning: #FF9800;
+    --color-success: #4FD1C1;
+    --color-success-text: #4FD1C1;
+    --color-success-bg: #11312F;
+    --color-success-border: #4FD1C1;
+    --color-warning: #FFB74D;
     --color-warning-text: #FFB74D;
     --color-warning-bg: #3D2A0A;
-    --color-warning-border: #5A3D0F;
-    --color-danger: #F44336;
+    --color-warning-border: #FFB74D;
+    --color-danger: #EF9A9A;
     --color-danger-text: #EF9A9A;
     --color-danger-bg: #3D1A1A;
     --color-info-text: #64B5F6;
@@ -3230,7 +3329,7 @@ textarea#teacher-input {
     color-scheme: dark;
   }
 
-  header {
+  body > header {
     background-color: var(--color-bg-surface);
     border-bottom-color: var(--color-border-light);
   }
@@ -3271,20 +3370,7 @@ textarea#teacher-input {
     color: var(--color-text-tertiary);
   }
 
-  .btn-secondary {
-    background-color: var(--color-bg-secondary);
-    border-color: var(--color-border-medium);
-    color: var(--color-text-primary);
-  }
 
-  .btn-secondary:hover {
-    background-color: var(--color-bg-tertiary);
-  }
-
-  .message-teacher .message-bubble {
-    background-color: var(--color-white);
-    color: var(--color-bg-body);
-  }
 
   .modal-overlay {
     background-color: rgba(0, 0, 0, 0.8);
@@ -3340,7 +3426,7 @@ textarea#teacher-input {
 
 #end-session-btn[aria-busy="true"] {
   pointer-events: none;
-  opacity: 0.85;
+  opacity: 1;
 }
 
 #end-session-btn[aria-busy="true"]::before {
@@ -3391,8 +3477,52 @@ textarea#teacher-input {
   padding: 12px 0;
 }
 
+.session-history > h1 { margin-bottom: 1rem; }
+
+.session-history .history-provenance,
+.session-history #snapshot-provenance {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--color-border-light);
+  border-radius: 16px;
+  background: var(--color-bg-surface);
+}
+
+.session-history > .btn { margin-bottom: 0.75rem; }
+
+#analysis-modal-container {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
 [data-analysis-result] {
     overflow-wrap: anywhere;
+}
+
+[data-analysis-result] .analysis-latest-run,
+[data-analysis-result] .analysis-accepted-report {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: 16px;
+}
+
+[data-analysis-result] .analysis-latest-run h2,
+[data-analysis-result] .analysis-accepted-report h2 { margin-top: 0; }
+
+[data-analysis-result] .analysis-latest-run[data-status="running"] {
+  background: var(--color-info-bg);
+  border-left: 3px solid var(--color-info-text);
+}
+
+[data-analysis-result] .analysis-latest-run[data-status="failed"] {
+  background: var(--color-danger-bg);
+  border-left: 3px solid var(--color-danger-text);
+}
+
+[data-analysis-result] .analysis-accepted-report[data-status="degraded"] {
+  border-left: 3px solid var(--color-warning-text);
 }
 
 [data-analysis-result] .analysis-actions {
@@ -3453,25 +3583,25 @@ textarea#teacher-input {
   font-size: 0.78em;
   padding: 2px 8px;
   border-radius: 999px;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
-.tag--good { background: #16a34a; }
-.tag--bad  { background: #dc2626; }
+.tag--good { background: var(--color-success-bg); color: var(--color-success-text); }
+.tag--bad { background: var(--color-danger-bg); color: var(--color-danger-text); }
 
 .coach-msg--high {
-  border-color: #16a34a;
-  background: #f0fdf4;
+  border-color: var(--color-success-text);
+  background: var(--color-success-bg);
 }
 
 .coach-msg--low {
-  border-color: #dc2626;
-  background: #fef2f2;
+  border-color: var(--color-danger-text);
+  background: var(--color-danger-bg);
 }
 
 .coach-msg--none {
-  border-color: #9ca3af;
-  background: #f9fafb;
+  border-color: var(--color-border-medium);
+  background: var(--color-bg-secondary);
 }
 
 .strong-card-list,
@@ -3486,17 +3616,18 @@ textarea#teacher-input {
   padding: 12px 14px;
   border-left: 4px solid;
   border-radius: 4px;
-  background: var(--color-bg-card, #fff);
+  background: var(--color-danger-bg);
+  border-left-color: var(--color-danger-text);
 }
 
 .strong-card {
-  border-left-color: #16a34a;
-  background: #f0fdf4;
+  border-left-color: var(--color-success-text);
+  background: var(--color-success-bg);
 }
 
 .improve-card {
-  border-left-color: #dc2626;
-  background: #fef2f2;
+  border-left-color: var(--color-danger-text);
+  background: var(--color-danger-bg);
 }
 
 .strong-card__q,
@@ -3526,7 +3657,7 @@ textarea#teacher-input {
 .improve-card__rewrite {
   margin: 6px 0 0;
   padding-top: 6px;
-  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  border-top: 1px dashed var(--color-border-medium);
 }
 
 .improve-card__rewrite--missing {
@@ -3538,4 +3669,83 @@ textarea#teacher-input {
   color: var(--color-text-tertiary, #6b7280);
   padding: 16px;
   text-align: center;
+}
+
+/* Shared text, focus and navigation contracts. Dedicated screen layouts remain local. */
+h1, h2, h3, h4, button, a, .scenario-title { overflow-wrap: anywhere; }
+h1, h2, h3, h4 { line-height: 1.3; }
+small { font-size: var(--font-size-sm); line-height: 1.5; color: var(--color-text-secondary); }
+a { color: var(--color-primary); text-underline-offset: 3px; }
+body > header nav h1 { flex: 1; min-width: 0; margin-right: 1rem; }
+.hamburger { flex-shrink: 0; }
+.nav-menu { flex-shrink: 0; }
+.nav-menu li a { display: inline-flex; align-items: center; min-height: 44px; }
+.nav-menu a[aria-current="page"] { color: var(--color-primary); text-decoration: underline; }
+.nav-menu a[aria-current="page"]::after { width: 100%; background: var(--color-primary); }
+:focus-visible { box-shadow: 0 0 0 2px var(--color-bg-surface); transition: none; }
+@media (max-width: 768px) {
+  .action-buttons-grid { grid-template-columns: 1fr; }
+  body > header nav h1 { font-size: 1.25rem; }
+}
+
+/* AI connections, role verification and nonmodal editor */
+#ai-page section { margin: var(--spacing-lg) 0; }
+#ai-page article, #ai-editor {
+  min-width: 0;
+  padding: var(--spacing-md);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xl);
+}
+#ai-page article { margin-bottom: var(--spacing-md); }
+#ai-page p, #ai-page h2, #ai-page h3, #ai-page pre { overflow-wrap: anywhere; }
+#ai-page pre { white-space: pre-wrap; }
+#ai-page .ai-grid, #ai-page .ai-role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--spacing-lg);
+}
+#ai-page .ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-md) 0;
+}
+#ai-page .ai-role {
+  min-width: 0;
+  padding: var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+#ai-page .ai-role button { margin: var(--spacing-xs) 0; }
+#ai-page .ai-help { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+#ai-page .ai-verification { font-weight: 600; }
+#ai-page .ai-verification-succeeded { color: var(--color-success-text); }
+#ai-page .ai-verification-failed { color: var(--color-danger-text); }
+#ai-page .ai-verification-stale { color: var(--color-warning-text); }
+#ai-page fieldset { padding: var(--spacing-md); margin-bottom: var(--spacing-md); min-width: 0; }
+#ai-page button, #ai-page input, #ai-page select { max-width: 100%; }
+#ai-page button { white-space: normal; overflow-wrap: anywhere; }
+#ai-editor { max-width: 600px; }
+#ai-editor form > button { margin: var(--spacing-xs); }
+#ai-error {
+  padding: var(--spacing-md);
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-text);
+  border-radius: var(--radius-md);
+}
+#ai-page [hidden] { display: none; }
+@media (max-width: 768px) {
+  #ai-page .ai-grid, #ai-page .ai-role-grid { grid-template-columns: 1fr; }
+}
+
+.login-card .alert-danger {
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  text-align: left;
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-text);
+  border-radius: var(--radius-md);
 }

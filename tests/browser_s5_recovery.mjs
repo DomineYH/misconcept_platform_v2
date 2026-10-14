@@ -30,7 +30,7 @@ export default async function checkRecovery(page) {
   assert.equal(fixture.requests.length, 2);
   await page.route('**/admin/comparisons/comparison-1', route => route.fulfill({status:404,json:{detail:{code:'comparison_not_found'}}}));
   await page.getByRole('button',{name:'상태 새로고침',exact:true}).click();
-  await page.getByText('비교가 만료되었거나 삭제되었습니다. 보존기간은 생성 후 30일입니다.',{exact:true}).waitFor();
+  await page.getByText('비교를 찾거나 열 수 없습니다. 보존기간은 생성 후 30일입니다.',{exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'패널 재시도',exact:true}).count(),0);
   assert(await page.getByRole('button',{name:'비교 실행',exact:true}).isEnabled());
   assert.deepEqual(fixture.unexpected, []);

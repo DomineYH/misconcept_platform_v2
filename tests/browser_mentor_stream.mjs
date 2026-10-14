@@ -1,3 +1,5 @@
+import {mkdir} from 'node:fs/promises';
+
 // Real Jinja/chat UI, with student and mentor SSE intercepted at fetch.
 export default async function checkMentorStream(page) {
   const base = page.url().split('/').slice(0, 3).join('/');
@@ -73,6 +75,8 @@ export default async function checkMentorStream(page) {
   await slot('turn-1').waitFor({timeout:3000});
   assert((await slot('turn-1').innerText()).includes('멘토 처리 중'), 'mentor has a pending slot next to the completed turn');
   assert(await input.isEnabled(), 'student completion unlocks input before mentor completion');
+  assert(await page.locator('#mentor-help-status').getAttribute('role') === null, 'help summary does not repeat the target-turn live announcement');
+  assert(/멘토.*대상 턴/.test(await slot('turn-1').getAttribute('aria-label')), 'coaching has an accessible target');
   assert(await page.locator('#end-session-btn').isEnabled(), 'mentor does not block session end');
   await page.evaluate(() => emitMentor('turn-1', 'run.accepted'));
   await send('멘토를 기다리지 않는 다음 질문');
@@ -109,6 +113,23 @@ export default async function checkMentorStream(page) {
   await slot('turn-2').getByText('멘토 미개입', {exact:true}).waitFor();
   assert(await slot('turn-2').getByRole('button').count() === 0, 'normal no-intervention cannot regenerate');
   assert(!(await slot('turn-2').innerText()).includes('delta'), 'mentor only renders final body');
+  assert(await slot('turn-2').getByText('자동 검사 완료 · 코칭 없음', {exact:true}).isVisible(), 'no-intervention is a normal completed check');
+  assert(await input.inputValue() === '작성 중인 다음 초안', 'late coaching preserves the whole draft');
+  const evidence = new URL('./uiux/evidence/122/', import.meta.url);
+  const messagesStyle = await page.locator('#messages-container').getAttribute('style');
+  await page.locator('#messages-container').evaluate(el => { el.style.height = ''; el.style.flex = ''; });
+  await mkdir(evidence, {recursive:true});
+  for (const theme of ['light','dark']) {
+    await page.emulateMedia({colorScheme:theme});
+    for (const width of [390,1440]) {
+      await page.setViewportSize({width,height:900});
+      await page.locator('#messages-container').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      await page.screenshot({path:new URL(`mentor-completed-${theme}-${width}.png`,evidence).pathname});
+    }
+  }
+  await page.emulateMedia({colorScheme:'light'});
+  await page.setViewportSize({width:1280,height:900});
+  await page.locator('#messages-container').evaluate((el, style) => el.setAttribute('style', style || ''), messagesStyle);
 
   await send('실패할 멘토 요청');
   await slot('turn-3').waitFor();

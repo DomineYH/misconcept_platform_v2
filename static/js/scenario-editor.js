@@ -127,16 +127,21 @@ function showErrors(errors) {
   const counts = [0, 0, 0, 0, 0];
   for (const error of errors) {
     const path = error.path.replace(/^config\./, '');
-    const input = (path.endsWith('resolved_model_config') ? document.getElementById('common-model') : document.getElementById(path)) || [...document.querySelectorAll('[data-field]')].find(el => el.dataset.field === path);
+    const input = document.getElementById(path) || [...document.querySelectorAll('[data-field]')].find(el => el.dataset.field === path) || (path === 'analysis.rubric' ? document.getElementById('add-rubric') : null);
     const panel = input?.closest('[data-panel]');
     const message = typeof error.message === 'string' ? error.message : '입력값을 확인하세요.';
     if (panel) counts[Number(panel.dataset.panel)]++;
     if (input) input.setAttribute('aria-invalid', 'true');
+    if (path.endsWith('resolved_model_config')) document.getElementById('common-model').setAttribute('aria-invalid', 'true');
     const inline = document.getElementById(`${path}-error`);
     if (inline) { inline.textContent = message; inline.hidden = false; }
     const link = button(message, () => {
       if (panel) showStep(Number(panel.dataset.panel));
-      (input || summary).focus();
+      let target = input || summary;
+      if (path.endsWith('resolved_model_config') || input?.disabled) target = document.getElementById('common-model');
+      else if (input?.closest('#rubric-settings[hidden]')) target = document.getElementById('analysis.classification_enabled');
+      else if (input?.closest('#mentor-settings[hidden], #mentor-auto-settings[hidden]')) target = document.getElementById('mentor.mode');
+      target.focus();
     });
     const item = node('li');
     item.append(link);
@@ -145,6 +150,7 @@ function showErrors(errors) {
   document.querySelectorAll('[data-errors]').forEach(badge => {
     const count = counts[Number(badge.dataset.errors)];
     badge.textContent = count;
+    badge.setAttribute('aria-label', `보완 항목 ${count}개`);
     badge.hidden = count === 0;
   });
   document.getElementById('validation-summary').textContent = `보완 항목 ${errors.length}개`;
@@ -156,6 +162,8 @@ async function save(action) {
   if (busy) return;
   if (action === 'save_draft' && data.status === 'published' && !window.confirm('초안으로 전환하면 교사의 새 세션 시작이 중단됩니다. 초안으로 저장하시겠습니까?')) return;
   busy = true;
+  publicationStatus();
+  delete status.dataset.state;
   publish.disabled = true;
   document.getElementById('save-draft').disabled = true;
   document.getElementById('editor-conflict').hidden = true;
@@ -171,7 +179,7 @@ async function save(action) {
     } else if (response.status === 409) {
       const result = await response.json();
       const conflict = document.getElementById('editor-conflict');
-      document.getElementById('editor-conflict-message').textContent = `다른 관리자가 변경했습니다. 내 입력을 보존했습니다. 최신 버전: ${result.detail.current_version}`;
+      document.getElementById('editor-conflict-message').textContent = `다른 관리자가 변경했습니다. 현재 화면의 입력은 유지됩니다. 최신 버전: ${result.detail.current_version}`;
       conflict.hidden = false;
       conflict.focus();
     } else if (response.ok) {
@@ -190,13 +198,15 @@ async function save(action) {
         if (data.review_required) showErrors(data.review_reasons);
       }
       publicationStatus();
+      status.dataset.state = 'success';
       status.textContent = action === 'save_draft' ? '초안을 저장했습니다.' : '게시했습니다.';
     } else {
       const messages = {401:'로그인이 필요합니다.', 403:'권한 또는 보안 토큰을 확인하세요.', 404:'시나리오를 찾을 수 없습니다.'};
       status.textContent = messages[response.status] || '저장하지 못했습니다. 입력을 보존했습니다.';
     }
   } catch {
-    status.textContent = '저장하지 못했습니다. 입력을 보존했습니다.';
+    status.dataset.state = 'uncertain';
+    status.textContent = '저장 결과를 확인할 수 없습니다. 현재 화면의 입력은 유지됩니다.';
   } finally {
     busy = false;
     reviewState();

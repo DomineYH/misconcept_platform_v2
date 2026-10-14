@@ -18,7 +18,7 @@
   </header>
 
   <!-- Contributors Table -->
-  <div class="table-container">
+  <div class="table-container" role="region" tabindex="0" aria-label="소개 목록">
     <table class="data-table" id="contributors-table">
       <thead>
         <tr>
@@ -80,17 +80,17 @@
 </div>
 
 <!-- Create Modal -->
-<div id="create-modal" class="modal" role="dialog"
-     aria-modal="true" aria-labelledby="create-modal-title"
-     style="display:none;">
+<div id="create-modal" class="modal-overlay" role="dialog"
+     aria-modal="true" aria-labelledby="create-modal-title">
   <div class="modal-backdrop" id="create-modal-backdrop"></div>
-  <div class="modal-content">
+  <div class="modal-container">
     <div class="modal-header">
       <h2 id="create-modal-title">새 등록자 추가</h2>
       <button type="button" class="modal-close"
               aria-label="닫기" id="close-create-modal">×</button>
     </div>
     <form id="create-form" class="modal-form">
+      <div class="modal-body">
       <div class="form-group">
         <label for="create-name">
           이름 <span class="required">*</span>
@@ -131,7 +131,8 @@
                name="sort_order" value="0" min="0"
                class="form-input" />
       </div>
-      <div class="form-actions">
+      </div>
+      <div class="modal-footer">
         <button type="button" class="btn btn-secondary"
                 id="cancel-create">취소</button>
         <button type="submit" class="btn btn-primary">저장</button>
@@ -141,11 +142,10 @@
 </div>
 
 <!-- Edit Modal -->
-<div id="edit-modal" class="modal" role="dialog"
-     aria-modal="true" aria-labelledby="edit-modal-title"
-     style="display:none;">
+<div id="edit-modal" class="modal-overlay" role="dialog"
+     aria-modal="true" aria-labelledby="edit-modal-title">
   <div class="modal-backdrop" id="edit-modal-backdrop"></div>
-  <div class="modal-content">
+  <div class="modal-container">
     <div class="modal-header">
       <h2 id="edit-modal-title">등록자 수정</h2>
       <button type="button" class="modal-close"
@@ -153,6 +153,7 @@
     </div>
     <form id="edit-form" class="modal-form">
       <input type="hidden" id="edit-id" />
+      <div class="modal-body">
       <div class="form-group">
         <label for="edit-name">
           이름 <span class="required">*</span>
@@ -191,7 +192,8 @@
         <input type="number" id="edit-sort-order"
                name="sort_order" min="0" class="form-input" />
       </div>
-      <div class="form-actions">
+      </div>
+      <div class="modal-footer">
         <button type="button" class="btn btn-secondary"
                 id="cancel-edit">취소</button>
         <button type="submit" class="btn btn-primary">저장</button>
@@ -201,11 +203,10 @@
 </div>
 
 <!-- Delete Confirm Modal -->
-<div id="delete-modal" class="modal" role="dialog"
-     aria-modal="true" aria-labelledby="delete-modal-title"
-     style="display:none;">
+<div id="delete-modal" class="modal-overlay" role="dialog"
+     aria-modal="true" aria-labelledby="delete-modal-title">
   <div class="modal-backdrop" id="delete-modal-backdrop"></div>
-  <div class="modal-content modal-sm">
+  <div class="modal-container modal-sm">
     <div class="modal-header">
       <h2 id="delete-modal-title">삭제 확인</h2>
       <button type="button" class="modal-close"
@@ -214,7 +215,7 @@
     <div class="modal-body">
       <p id="delete-confirm-msg"></p>
     </div>
-    <div class="form-actions">
+    <div class="modal-footer">
       <button type="button" class="btn btn-secondary"
               id="cancel-delete">취소</button>
       <button type="button" class="btn btn-danger"
@@ -236,15 +237,25 @@
     window.location.reload();
   }
 
+  document.querySelectorAll('.modal-overlay').forEach(function (modal) {
+    modal.addEventListener('click', function (e) {
+      if (e.target !== modal) return;
+      if (modal.id === 'create-modal') closeCreate();
+      if (modal.id === 'edit-modal') closeEdit();
+      if (modal.id === 'delete-modal') closeDelete();
+    });
+  });
+
   // ── Create Modal ──────────────────────────────────────────
   var createModal = document.getElementById('create-modal');
   document.getElementById('open-create-modal').addEventListener(
     'click', function () {
       document.getElementById('create-form').reset();
-      createModal.style.display = 'flex';
+      createModal.classList.add('active');
+      modalLifecycle.open(createModal, closeCreate);
     }
   );
-  function closeCreate() { createModal.style.display = 'none'; }
+  function closeCreate() { createModal.classList.remove('active'); modalLifecycle.close(createModal); }
   document.getElementById('close-create-modal')
     .addEventListener('click', closeCreate);
   document.getElementById('cancel-create')
@@ -274,20 +285,20 @@
       }).then(function (r) {
         if (!r.ok) {
           return r.json().then(function (j) {
-            showToast(j.detail || '저장 실패', 'error');
+            modalLifecycle.error(e.target, j.detail || '저장 실패');
           });
         }
         showToast('등록되었습니다.', 'success');
         reloadPage();
       }).catch(function () {
-        showToast('네트워크 오류', 'error');
+        modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.');
       });
     }
   );
 
   // ── Edit Modal ────────────────────────────────────────────
   var editModal = document.getElementById('edit-modal');
-  function closeEdit() { editModal.style.display = 'none'; }
+  function closeEdit() { editModal.classList.remove('active'); modalLifecycle.close(editModal); }
   document.getElementById('close-edit-modal')
     .addEventListener('click', closeEdit);
   document.getElementById('cancel-edit')
@@ -311,7 +322,8 @@
         c.email || '';
       document.getElementById('edit-sort-order').value =
         c.sort_order;
-      editModal.style.display = 'flex';
+      editModal.classList.add('active');
+      modalLifecycle.open(editModal, closeEdit);
     });
   });
 
@@ -338,13 +350,13 @@
       }).then(function (r) {
         if (!r.ok) {
           return r.json().then(function (j) {
-            showToast(j.detail || '저장 실패', 'error');
+            modalLifecycle.error(e.target, j.detail || '저장 실패');
           });
         }
         showToast('수정되었습니다.', 'success');
         reloadPage();
       }).catch(function () {
-        showToast('네트워크 오류', 'error');
+        modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.');
       });
     }
   );
@@ -354,7 +366,8 @@
   var pendingDeleteId = null;
 
   function closeDelete() {
-    deleteModal.style.display = 'none';
+    deleteModal.classList.remove('active');
+    modalLifecycle.close(deleteModal);
     pendingDeleteId = null;
   }
   document.getElementById('close-delete-modal')
@@ -370,7 +383,8 @@
       var msg = document.getElementById('delete-confirm-msg');
       msg.textContent =
         '"' + btn.dataset.name + '" 항목을 삭제하시겠습니까?';
-      deleteModal.style.display = 'flex';
+      deleteModal.classList.add('active');
+      modalLifecycle.open(deleteModal, closeDelete);
     });
   });
 
@@ -383,15 +397,15 @@
       }).then(function (r) {
         if (!r.ok) {
           return r.json().then(function (j) {
-            showToast(j.detail || '삭제 실패', 'error');
+            modalLifecycle.error(deleteModal, j.detail || '삭제 실패');
           });
         }
+        closeDelete();
         showToast('삭제되었습니다.', 'success');
         reloadPage();
       }).catch(function () {
-        showToast('네트워크 오류', 'error');
+        modalLifecycle.error(deleteModal, '삭제 결과를 확인할 수 없습니다. 목록을 새로 확인하세요.');
       });
-      closeDelete();
     }
   );
 }());

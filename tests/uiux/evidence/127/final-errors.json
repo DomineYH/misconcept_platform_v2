@@ -1,0 +1,755 @@
+{
+  "candidate": "d773d5ba938fb83e61036c29b7ac5cf337ad8b17",
+  "rows": [
+    {
+      "screen": "user-delete",
+      "theme": "light",
+      "width": 320,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 226.75,
+        "y": 788.40625,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "light",
+      "width": 320,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 109,
+        "y": 568.671875,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "light",
+      "width": 320,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 156.890625,
+        "y": 383.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "light",
+      "width": 390,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 296.75,
+        "y": 788.40625,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "light",
+      "width": 390,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 109,
+        "y": 542.671875,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "light",
+      "width": 390,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 169.765625,
+        "y": 339.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "light",
+      "width": 768,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 530.75,
+        "y": 483.46875,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "light",
+      "width": 768,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 109,
+        "y": 467.578125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "light",
+      "width": 768,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 547.765625,
+        "y": 339.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "light",
+      "width": 1024,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 627.0625,
+        "y": 428.28125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "light",
+      "width": 1024,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 109,
+        "y": 467.578125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "light",
+      "width": 1024,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 803.765625,
+        "y": 339.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "light",
+      "width": 1440,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 841.328125,
+        "y": 428.28125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "light",
+      "width": 1440,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 229,
+        "y": 441.578125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "light",
+      "width": 1440,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        183,
+        28,
+        28
+      ],
+      "background": [
+        255,
+        235,
+        238
+      ],
+      "ratio": 5.747206067118763,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 1099.765625,
+        "y": 339.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "dark",
+      "width": 320,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 226.75,
+        "y": 788.40625,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "dark",
+      "width": 320,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 109,
+        "y": 568.671875,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "dark",
+      "width": 320,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 156.890625,
+        "y": 383.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "dark",
+      "width": 390,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 296.75,
+        "y": 788.40625,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "dark",
+      "width": 390,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 109,
+        "y": 542.671875,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "dark",
+      "width": 390,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 169.765625,
+        "y": 339.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "dark",
+      "width": 768,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 530.75,
+        "y": 483.46875,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "dark",
+      "width": 768,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 109,
+        "y": 467.578125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "dark",
+      "width": 768,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 547.765625,
+        "y": 339.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "dark",
+      "width": 1024,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 627.0625,
+        "y": 428.28125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "dark",
+      "width": 1024,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 109,
+        "y": 467.578125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "dark",
+      "width": 1024,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 803.765625,
+        "y": 339.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    },
+    {
+      "screen": "user-delete",
+      "theme": "dark",
+      "width": 1440,
+      "text": "사용자 삭제를 완료하지 못했습니다. 권한을 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 841.328125,
+        "y": 428.28125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "group-delete",
+      "theme": "dark",
+      "width": 1440,
+      "text": "그룹 삭제를 완료하지 못했습니다. 권한과 멤버를 확인하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 229,
+        "y": 441.578125,
+        "width": 60,
+        "height": 44
+      }
+    },
+    {
+      "screen": "download",
+      "theme": "dark",
+      "width": 1440,
+      "text": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "foreground": [
+        239,
+        154,
+        154
+      ],
+      "background": [
+        61,
+        26,
+        26
+      ],
+      "ratio": 7.169970426335723,
+      "focused": true,
+      "overflow": false,
+      "target": {
+        "x": 1099.765625,
+        "y": 339.984375,
+        "width": 115.890625,
+        "height": 44
+      }
+    }
+  ]
+}

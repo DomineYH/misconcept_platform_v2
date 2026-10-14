@@ -4,14 +4,14 @@
 
 {% block content %}
 <!-- Mobile Tab Navigation -->
-<div class="mobile-tabs">
-  <button class="mobile-tab" data-panel="scenario">상황 정보</button>
-  <button class="mobile-tab active" data-panel="chat">대화</button>
+<div class="mobile-tabs" role="tablist" aria-label="대화 화면">
+  <button class="mobile-tab" data-panel="scenario" role="tab" id="mobile-tab-scenario" aria-controls="scenario-panel" aria-selected="false" tabindex="-1">상황 정보</button>
+  <button class="mobile-tab active" data-panel="chat" role="tab" id="mobile-tab-chat" aria-controls="chat-panel" aria-selected="true" tabindex="0">대화</button>
 </div>
 
 <div class="split-layout">
   <!-- Left Panel: Scenario Information -->
-  <aside class="scenario-panel panel-hidden" id="scenario-panel">
+  <aside class="scenario-panel panel-hidden" id="scenario-panel" aria-labelledby="mobile-tab-scenario">
     <button type="button"
             class="panel-toggle"
             id="scenario-panel-toggle"
@@ -39,16 +39,16 @@
     </div>
 
     <!-- Tab Navigation -->
-    <div class="info-tabs">
-      <button class="info-tab active" data-tab="guide">챗봇 활용<br>방법</button>
-      <button class="info-tab" data-tab="profile">학생 정보</button>
-      <button class="info-tab" data-tab="situation">문제 상황</button>
+    <div class="info-tabs" role="tablist" aria-label="상황 정보">
+      <button class="info-tab active" data-tab="guide" role="tab" id="info-tab-guide" aria-controls="tab-guide" aria-selected="true" tabindex="0">챗봇 활용<br>방법</button>
+      <button class="info-tab" data-tab="profile" role="tab" id="info-tab-profile" aria-controls="tab-profile" aria-selected="false" tabindex="-1">학생 정보</button>
+      <button class="info-tab" data-tab="situation" role="tab" id="info-tab-situation" aria-controls="tab-situation" aria-selected="false" tabindex="-1">문제 상황</button>
     </div>
 
     <!-- Tab Content Container -->
     <div class="tab-content">
       <!-- Chatbot Usage Guide Tab -->
-      <div class="tab-pane active" id="tab-guide">
+      <div class="tab-pane active" id="tab-guide" role="tabpanel" aria-labelledby="info-tab-guide" tabindex="0">
         <section class="info-section">
           <div class="guide-content">
             <p>
@@ -74,7 +74,7 @@
       </div>
 
       <!-- Student Profile Tab -->
-      <div class="tab-pane" id="tab-profile">
+      <div class="tab-pane" id="tab-profile" role="tabpanel" aria-labelledby="info-tab-profile" tabindex="0">
         {% if scenario.student_profile %}
         <section class="info-section">
           <p>{{ scenario.student_profile }}</p>
@@ -87,7 +87,7 @@
       </div>
 
       <!-- Learning Situation Tab -->
-      <div class="tab-pane" id="tab-situation">
+      <div class="tab-pane" id="tab-situation" role="tabpanel" aria-labelledby="info-tab-situation" tabindex="0">
         <section class="info-section">
           <div class="scenario-prompt">
             {% if (scenario.problem_situation or '')|trim %}
@@ -109,9 +109,9 @@
   </aside>
 
   <!-- Right Panel: Chat Interface -->
-  <section class="chat-panel" id="chat-panel">
+  <section class="chat-panel" id="chat-panel" aria-labelledby="mobile-tab-chat">
     <!-- Session status banner (hidden by default) -->
-    <div id="session-status" style="display: none;">
+    <div id="session-status" role="status" style="display: none;">
       <span id="session-status-text">이 대화는 종료되었습니다.</span>
       <button id="session-login-btn" class="btn-secondary"
         style="display:none; margin-left: 0.75rem;">
@@ -143,7 +143,7 @@
 
       {% if scenario.mentor_mode != 'off' %}
       <div class="lesson-controls" aria-label="멘토 도움">
-        <p id="mentor-help-status" role="status" aria-live="polite">완료된 학생 턴에 도움을 요청할 수 있습니다.</p>
+        <p id="mentor-help-status">완료된 학생 턴에 도움을 요청할 수 있습니다.</p>
         <button type="button" class="btn-secondary" id="request-mentor" disabled>멘토 도움 요청</button>
       </div>
       {% endif %}
@@ -152,7 +152,7 @@
       <form id="teacher-form" class="teacher-form">
         <div class="input-group">
           <textarea name="content" id="teacher-input" rows="1"
-            placeholder="메시지를 입력하세요..." required maxlength="5000"
+            aria-label="교사 메시지" placeholder="메시지를 입력하세요..." required maxlength="5000"
             oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
           <button type="submit" class="btn-icon-primary"
             hx-disable-element="self" title="전송" aria-label="메시지 전송">
@@ -172,7 +172,7 @@
 </div>
 
 <!-- Analysis Modal Overlay -->
-<div id="analysis-modal-overlay" class="modal-overlay hidden">
+<div id="analysis-modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="세션 분석 결과" tabindex="-1">
   <div id="analysis-modal-container" class="modal-container modal-xl">
     <!-- Modal content loaded via HTMX -->
   </div>

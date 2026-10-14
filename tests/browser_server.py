@@ -28,15 +28,141 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(path.query)
         if path.path in {"/fixtures/s6/users", "/fixtures/s6/scenarios"}:
             kind = path.path.rsplit("/", 1)[1]
+            fixture = list_fixture(
+                kind,
+                int(query.get("page", ["1"])[0]),
+                int(query.get("total", ["41"])[0]),
+                [int(value) for value in query.get("deleted", [])],
+            )
+            if kind == "scenarios" and "uiux123" in query:
+                rows = fixture["scenarios"]
+                if rows:
+                    rows[0].title = "긴한글시나리오제목" * 20
+                    rows[0].status = "published"
+                    rows[0].is_active = 0
+                    rows[0].review_required = True
+                if len(rows) > 1:
+                    rows[1].config_json = None
             body = (
                 templates.get_template(f"admin/{kind}.html")
+                .render(**fixture)
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/uiux/admin/groups":
+            body = (
+                templates.get_template("admin/groups.html")
                 .render(
-                    **list_fixture(
-                        kind,
-                        int(query.get("page", ["1"])[0]),
-                        int(query.get("total", ["41"])[0]),
-                        [int(value) for value in query.get("deleted", [])],
-                    )
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    groups_data=(
+                        []
+                        if "empty" in query
+                        else [
+                            dict(
+                                group=SimpleNamespace(
+                                    id=1,
+                                    name='긴 그룹 "따옴표" 이름\n' * 5,
+                                    description="합성 그룹 설명",
+                                ),
+                                member_count=int(
+                                    query.get("members", ["0"])[0]
+                                ),
+                                scenario_count=2,
+                            )
+                        ]
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path.startswith("/fixtures/uiux/admin/"):
+            from tests.uiux_admin_fixtures import admin_fixture
+
+            name = path.path.rsplit("/", 1)[1]
+            template, context = admin_fixture(
+                name, empty="empty" in query, active="active" in query
+            )
+            body = templates.get_template(template).render(**context).encode()
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/about/content":
+            from tests.uiux_admin_fixtures import contributors
+
+            body = (
+                templates.get_template("about_fragment.html")
+                .render(contributors=[] if "empty" in query else contributors())
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/login":
+            body = (
+                templates.get_template("login.html")
+                .render(
+                    error=(
+                        "사용자 ID 또는 비밀번호가 올바르지 않습니다."
+                        if "error" in query
+                        else None
+                    ),
+                    request=SimpleNamespace(
+                        url=SimpleNamespace(path=path.path),
+                        query_params={
+                            key: values[0] for key, values in query.items()
+                        },
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/uiux/comparison":
+            panel_count = int(query.get("panels", ["3"])[0])
+            body = (
+                templates.get_template("admin/comparison_conversation.html")
+                .render(
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    comparison=dict(
+                        snapshot=dict(
+                            conversation_id="visual-only",
+                            version=1,
+                            phase="awaiting_adoption",
+                            source_snapshot=dict(
+                                title="긴 한국어 시나리오 제목 " * 5
+                            ),
+                            expires_at="2026-11-01",
+                            pairs=[],
+                            pending_auto=False,
+                            pending_student_child_id="round-1",
+                            mentor_actions=[],
+                            allowed_actions=dict(
+                                turn=False, adopt=True, mentor=False, end=False
+                            ),
+                            children=[
+                                dict(
+                                    comparison_run_id="round-1",
+                                    target_role="student",
+                                    panels=[
+                                        dict(
+                                            panel_id=str(index),
+                                            status=(
+                                                "failed"
+                                                if index == 2
+                                                else "completed"
+                                            ),
+                                            text="같은 전체를 여러 부분으로 나누어 비교했어요.\n"
+                                            * 3,
+                                            model_config=dict(
+                                                model_id="긴모델이름" * 12
+                                            ),
+                                            error_code=(
+                                                "invalid_output"
+                                                if index == 2
+                                                else None
+                                            ),
+                                        )
+                                        for index in range(1, panel_count + 1)
+                                    ],
+                                )
+                            ],
+                        )
+                    ),
                 )
                 .encode()
             )
@@ -51,6 +177,38 @@ class Handler(BaseHTTPRequestHandler):
                 )
             ).encode()
             mime = "application/json"
+        elif path.path == "/fixtures/uiux122/history":
+            reconstructed = "reconstructed" in query
+            body = (
+                templates.get_template("session_history.html")
+                .render(
+                    user=SimpleNamespace(nickname="Teacher", role="teacher"),
+                    scenario_title="긴 과거 대화 제목 " * 12,
+                    session=SimpleNamespace(
+                        id=1,
+                        started_at="2026-10-01 09:00",
+                        ended_at="2026-10-01 10:00",
+                    ),
+                    snapshot_provenance=dict(
+                        snapshot_origin=(
+                            "legacy_reconstructed"
+                            if reconstructed
+                            else "native"
+                        ),
+                        snapshot_created_at=(
+                            "2026-10-02 10:00"
+                            if reconstructed
+                            else "2026-10-01 09:00"
+                        ),
+                        unknown_field_names=(
+                            ["당시 모델", "내부 설정"] if reconstructed else []
+                        ),
+                    ),
+                    analysis_result_url=f"/fixtures/s4/result?state={'legacy' if reconstructed else 'ok'}",
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
         elif path.path == "/fixtures/s4/history":
             body = (
                 templates.get_template("admin/sessions.html")
@@ -119,6 +277,8 @@ class Handler(BaseHTTPRequestHandler):
                 published="published" in query,
                 legacy=query.get("legacy", [""])[0],
             )
+            if "uiux123" in query:
+                editor["model_choices"][0]["display_name"] = "긴모델표시명" * 30
             if "ready" in query:
                 editor["model_choices"] = editor["model_choices"][
                     : int(query["ready"][0])
@@ -200,7 +360,11 @@ class Handler(BaseHTTPRequestHandler):
         }:
             scenario = SimpleNamespace(
                 id=1,
-                title="Browser regression",
+                title=(
+                    "긴한국어제목" * 15
+                    if "long" in query
+                    else "Browser regression"
+                ),
                 student_name="Student",
                 student_profile="Profile",
                 subject="Math",
@@ -230,6 +394,26 @@ class Handler(BaseHTTPRequestHandler):
                 "/admin/scenarios": "admin/scenarios.html",
             }[path.path]
             messages = []
+            if "uiux122_long" in query:
+                scenario.student_profile = (
+                    "공개 학생 소개를 읽으며 수업 맥락을 확인합니다. " * 80
+                )
+                scenario.problem_situation = (
+                    "전체가 같은 분수를 여러 단락의 설명과 그림으로 비교합니다.\n"
+                    * 80
+                )
+                messages = [
+                    SimpleNamespace(
+                        id=index,
+                        role="teacher" if index % 2 else "student",
+                        content="긴 한글 대화에서 근거를 확인하며 질문하고 답합니다. "
+                        * 8,
+                        created_at=None,
+                        turn_id=f"turn-{(index + 1) // 2}",
+                        turn_index=(index + 1) // 2,
+                    )
+                    for index in range(1, 61)
+                ]
             if "mentor_history" in query:
                 messages = [
                     SimpleNamespace(
@@ -274,7 +458,20 @@ class Handler(BaseHTTPRequestHandler):
                 templates.get_template(template)
                 .render(
                     scenario=scenario,
-                    scenarios=[scenario],
+                    scenarios=(
+                        []
+                        if "empty" in query
+                        else [
+                            SimpleNamespace(**{**vars(scenario), "id": index})
+                            for index in range(1, 4 if "many" in query else 2)
+                        ]
+                    ),
+                    request=SimpleNamespace(
+                        url=SimpleNamespace(path=path.path),
+                        query_params={
+                            key: values[0] for key, values in query.items()
+                        },
+                    ),
                     session_id=1,
                     student_name="Student",
                     user=SimpleNamespace(
@@ -342,6 +539,13 @@ class Handler(BaseHTTPRequestHandler):
             fixture = json.loads(
                 Path("tests/fixtures/api_usage.json").read_text()
             )
+            if "empty" in query:
+                fixture.update(
+                    logs=[],
+                    total_cost=0,
+                    unpriced_generation_attempts=0,
+                    model_list_calls=0,
+                )
             body = (
                 templates.get_template("admin/api_usage.html")
                 .render(

@@ -5,11 +5,12 @@ const error = document.getElementById('ai-error');
 const editor = document.getElementById('ai-editor');
 let state, busy = false, returnFocus;
 
-function showError(code) {
+function showError(code, location = document.activeElement.closest('#ai-editor, #ai-content article, #ai-content section')) {
   const messages = {401:'로그인이 필요합니다.', 403:'권한 또는 보안 토큰을 확인하세요.',
     409:'다른 변경 또는 진행 중 작업과 충돌했습니다. 설정을 다시 불러오세요.',
     422:'입력값 또는 현재 비밀번호를 확인하세요.', 429:'작업 한도에 도달했습니다. 잠시 후 다시 시도하세요.'};
   error.textContent = messages[code] || '작업을 완료할 수 없습니다. 연결 설정과 서비스 상태를 확인하세요.';
+  if (location) location.append(error);
   error.hidden = false;
   error.focus();
 }
@@ -28,15 +29,18 @@ async function request(path, body) {
 }
 
 async function load() {
+  status.textContent = '설정을 불러오는 중입니다.';
   try {
     const next = await request('state');
     state = next;
+    status.after(error);
     render(state, actions);
     error.hidden = true;
     status.textContent = '설정을 불러왔습니다. 화면 진입은 제공자를 호출하지 않습니다.';
     return true;
   } catch (code) {
-    showError(code);
+    status.after(error);
+    showError(code, null);
     status.textContent = 'AI 연결 설정을 불러올 수 없습니다. 관리자 연결 기능이 준비되었는지 확인하세요.';
     return false;
   }
@@ -65,6 +69,7 @@ async function submit(path, body, message = '작업을 완료했습니다.') {
 }
 
 function closeEditor() {
+  status.after(error);
   editor.replaceChildren();
   editor.hidden = true;
   let target = returnFocus;
@@ -81,6 +86,8 @@ function form(title, onSubmit) {
   returnFocus = document.activeElement;
   editor.replaceChildren(node('h2', title));
   editor.hidden = false;
+  error.hidden = true;
+  editor.append(error);
   const form = node('form');
   form.addEventListener('submit', event => { event.preventDefault(); onSubmit(form); });
   editor.append(form);
@@ -145,6 +152,7 @@ const actions = {
     field(f, 'display_name', '표시명', m.display_name, {type:'text', required:''});
     const enabled = field(f, 'enabled', '모델 활성', String(m.enabled), {}, [['false','비활성'],['true','활성']]);
     enabled.disabled = !m.enabled && (!m.capabilities || m.capabilities.metadata_conflict || !Object.values(m.verification_state).some(v => v.status === 'succeeded'));
+    if (enabled.disabled) f.append(node('p', '모델 활성화에는 기능 정의·목록 일치와 현재 역할 검증 성공이 필요합니다.'));
     f.append(node('p', '모델 ID는 등록 후 변경할 수 없습니다. 모델 비활성화는 신규 호출만 막습니다. 지원 옵션 변경은 서버에서 조합과 범위를 검증합니다.'));
     if (!m.capabilities) f.append(node('p', '기능 정의 필요: 옵션 편집과 역할 시험을 사용할 수 없습니다.'));
     if (m.capabilities) optionNotes(f, m.capabilities, savedOptions, options => { savedOptions = options; });
@@ -196,6 +204,7 @@ const actions = {
       for (const key of Object.keys(settings.limits)) limits[key] = Number(f.elements[`limit_${key}`].value);
       for (const key of Object.keys(settings.timeouts)) timeouts[key] = Number(f.elements[`timeout_${key}`].value);
       if (limits.admin >= limits.total || timeouts.student_first_output > timeouts.student_total || timeouts.mentor_first_output > timeouts.mentor_total) {
+        editor.append(error);
         error.hidden = false;
         error.textContent = '관리자 한도는 전체 한도보다 작아야 하고 첫 본문 제한은 전체 시간 제한 이하여야 합니다.';
         error.focus();

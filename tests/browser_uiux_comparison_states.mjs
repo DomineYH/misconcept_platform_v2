@@ -53,10 +53,12 @@ export default async function check(page) {
   assert(await b.getByRole('button',{name:'패널 중지',exact:true}).isEnabled(), 'active stop survives global action lock');
   assert.match(await b.innerText(), /잠정 응답 · 미완료 · 채택 불가/);
   await b.getByRole('button',{name:'패널 중지',exact:true}).click();
+  const automaticMentor = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/mentor'));
   await a.getByRole('button',{name:'학생 응답 채택',exact:true}).click();
   await page.getByText('요청 결과를 저장했습니다.',{exact:true}).waitFor();
   assert.equal(posts[1].body.generations[0].generation_id,'retry-2');
   assert.equal(posts[2].body.generation_id,'run-1');
+  await automaticMentor;
   assert.equal(posts[3].body.expected_version,2, 'automatic mentor uses the adopted version');
   assert.equal(posts[3].body.target_turn_id,'turn-1');
   assert.equal(posts[3].body.trigger,'auto');

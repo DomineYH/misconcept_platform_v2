@@ -1,3 +1,4 @@
+import {colorMath} from './uiux_color_math.mjs';
 import assert from 'node:assert/strict';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {measure, settle} from './browser_uiux_scenario_layout.mjs';
@@ -10,7 +11,7 @@ export default async function checkUncertainSave(page) {
   const measurements = [];
   async function capture(state,theme,width) {
     await settle(page);
-    const row = await page.evaluate(measure);
+    const row = await page.evaluate(`(${measure})(${colorMath})`);
     assert(!row.overflow);
     assert(row.text.every(item => item.ratio >= item.minimum),`${state} text contrast: ${JSON.stringify(row.text.filter(item => item.ratio < item.minimum))}`);
     assert(row.targets.every(item => item.width >= 44 && item.height >= 44),`${state} action targets`);

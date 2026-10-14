@@ -1,14 +1,10 @@
+import {colorMath} from './uiux_color_math.mjs';
 import assert from 'node:assert/strict';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {comparisonFixture, openComparison} from './s5_browser_fixtures.mjs';
 
-function measure() {
-  const rgba = value => value.match(/[\d.]+/g)?.map(Number) || [0,0,0,0];
-  const over = (fg,bg) => fg.slice(0,3).map((v,i) => v * (fg[3] ?? 1) + bg[i] * (1 - (fg[3] ?? 1)));
-  const background = el => !el ? [255,255,255] : over(rgba(getComputedStyle(el).backgroundColor),background(el.parentElement));
-  const luminance = rgb => rgb.map(v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v+.055)/1.055)**2.4; })
-    .reduce((sum,v,i) => sum + v * [.2126,.7152,.0722][i],0);
-  const contrast = (a,b) => (Math.max(luminance(a),luminance(b))+.05)/(Math.min(luminance(a),luminance(b))+.05);
+function measure(colorMath) {
+  const {rgba, over, background, contrast} = colorMath();
   const text = [], targets = [], borders = [];
   const root = document.querySelector('.comparison-page, #scenario-comparison');
   for (const el of root.querySelectorAll('*')) {
@@ -61,7 +57,7 @@ export default async function check(page) {
           await page.evaluate(async () => {
             await Promise.all(document.getAnimations().filter(a => a.effect.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {})));
           });
-          const row = {screen,theme,count,width,...await page.evaluate(measure)};
+          const row = {screen,theme,count,width,...await page.evaluate(`(${measure})(${colorMath})`)};
           rows.push(row);
           assert(!row.overflow,`${screen}/${theme}/${count}/${width}: no page overflow`);
           assert(row.text.every(t => t.ratio + .01 >= t.minimum),`${screen}/${theme}/${count}/${width}: composed text contrast ${JSON.stringify(row.text.filter(t => t.ratio + .01 < t.minimum))}`);
@@ -94,7 +90,7 @@ export default async function check(page) {
       await page.getByRole('button',{name:'상태 새로고침',exact:true}).click();
       await page.getByText('다른 패널 실행 중 · 완료 응답도 채택할 수 없습니다.',{exact:true}).waitFor();
       await page.evaluate(async () => { await Promise.all(document.getAnimations().filter(a => a.effect.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); });
-      rows.push({screen:'new-running',theme,count:3,width,...await page.evaluate(measure)});
+      rows.push({screen:'new-running',theme,count:3,width,...await page.evaluate(`(${measure})(${colorMath})`)});
       await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
             await page.screenshot({path:new URL(`new-running-${theme}-${width}.png`,out).pathname,fullPage:true});
       await page.getByLabel('공통 교사 질문',{exact:true}).evaluate(el => { el.value = '조회 실패에도 보존되는 초안'; });
@@ -102,7 +98,7 @@ export default async function check(page) {
       await page.getByRole('button',{name:'상태 새로고침',exact:true}).click();
       await page.getByText(/비교 대화를 찾거나 열 수 없습니다/).waitFor();
       await page.evaluate(async () => { await Promise.all(document.getAnimations().filter(a => a.effect.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); });
-      rows.push({screen:'new-unavailable',theme,count:3,width,...await page.evaluate(measure)});
+      rows.push({screen:'new-unavailable',theme,count:3,width,...await page.evaluate(`(${measure})(${colorMath})`)});
       await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
             await page.screenshot({path:new URL(`new-unavailable-${theme}-${width}.png`,out).pathname,fullPage:true});
       missing = false;
@@ -112,7 +108,7 @@ export default async function check(page) {
       await page.getByRole('article',{name:'패널 1',exact:true}).getByRole('button',{name:'학생 응답 채택',exact:true}).click();
       await page.getByText('요청 결과를 확인할 수 없습니다. 입력은 유지됩니다. 상태 새로고침으로 저장된 결과를 확인하세요.',{exact:true}).waitFor();
       await page.evaluate(async () => { await Promise.all(document.getAnimations().filter(a => a.effect.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); });
-      rows.push({screen:'new-uncertain',theme,count:3,width,...await page.evaluate(measure)});
+      rows.push({screen:'new-uncertain',theme,count:3,width,...await page.evaluate(`(${measure})(${colorMath})`)});
       await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
       await page.screenshot({path:new URL(`new-uncertain-${theme}-${width}.png`,out).pathname,fullPage:true});
     }

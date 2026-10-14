@@ -33,7 +33,7 @@ export default async function checkScenarioSaveFailures(page) {
   assert.equal(submissions[0].body.config.student.resolved_model_config.options.max_output_tokens, 900);
   response = {status:409, json:{detail:{code:'version_conflict', current_version:2}}};
   await publish.click();
-  await page.getByText('다른 관리자가 변경했습니다. 내 입력을 보존했습니다. 최신 버전: 2', {exact:true}).waitFor();
+  await page.getByText('다른 관리자가 변경했습니다. 현재 화면의 입력은 유지됩니다. 최신 버전: 2', {exact:true}).waitFor();
   await page.getByRole('button', {name:'1. 기본 정보', exact:true}).click();
   assert.equal(await page.getByLabel('제목', {exact:true}).inputValue(), '내 입력 {"x":1}');
   assert.equal(submissions.length, 2, 'no automatic retry or overwrite');

@@ -54,8 +54,12 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       // Update active tab
       document.querySelectorAll('.mobile-tab').forEach(t => {
         t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+        t.tabIndex = -1;
       });
       tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      tab.tabIndex = 0;
 
       // Show/hide panels
       const panelId = tab.dataset.panel;
@@ -80,8 +84,12 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       // Update active tab
       document.querySelectorAll('.info-tab').forEach(t => {
         t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+        t.tabIndex = -1;
       });
       tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      tab.tabIndex = 0;
 
       // Show/hide tab panes
       const tabId = tab.dataset.tab;
@@ -93,6 +101,19 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       if (targetPane) {
         targetPane.classList.add('active');
       }
+    });
+  });
+
+  document.querySelectorAll('.mobile-tabs, .info-tabs').forEach(list => {
+    list.addEventListener('keydown', event => {
+      const tabs = Array.from(list.querySelectorAll('[role="tab"]'));
+      const index = tabs.indexOf(document.activeElement);
+      if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
+        (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      tabs[next].click();
+      tabs[next].focus();
     });
   });
 
@@ -183,9 +204,9 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     const chatPanel = document.getElementById('chat-panel');
 
     if (window.innerWidth <= 768) {
-      // Mobile: show chat by default, hide scenario
-      scenarioPanel.classList.add('panel-hidden');
-      chatPanel.classList.remove('panel-hidden');
+      const showInfo = document.querySelector('.mobile-tab[data-panel="scenario"]').classList.contains('active');
+      scenarioPanel.classList.toggle('panel-hidden', !showInfo);
+      chatPanel.classList.toggle('panel-hidden', showInfo);
     } else {
       // Desktop: show both panels
       scenarioPanel.classList.remove('panel-hidden');
@@ -202,7 +223,12 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       document.querySelectorAll('.mobile-tab').forEach(t => {
         t.classList.remove('active');
       });
-      document.querySelector('[data-panel="chat"]').classList.add('active');
+      document.querySelectorAll('.mobile-tab').forEach(t => {
+        const selected = t.dataset.panel === 'chat';
+        t.classList.toggle('active', selected);
+        t.setAttribute('aria-selected', String(selected));
+        t.tabIndex = selected ? 0 : -1;
+      });
     }
   });
 
@@ -361,6 +387,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   function handleAuthExpired(source, redirectUrl = '/login') {
     if (authExpiredHandled) return;
     authExpiredHandled = true;
+    window.closeAnalysisModal?.();
 
     console.warn('Session expired detected from:', source);
     restoreInputOnError();
@@ -450,23 +477,71 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // ========================================
   // Modal Functions
   // ========================================
+  const analysisOverlay = document.getElementById('analysis-modal-overlay');
+  const analysisContainer = document.getElementById('analysis-modal-container');
+  const analysisBackground = document.querySelectorAll('body > header, body > footer, .mobile-tabs, .split-layout');
+  let modalLoad = 0;
+
   window.closeAnalysisModal = function closeAnalysisModal() {
-    const overlay = document.getElementById('analysis-modal-overlay');
-    overlay.classList.add('hidden');
-    overlay.classList.remove('flex');
-    document.getElementById('analysis-modal-container').innerHTML = '';
+    if (analysisOverlay.classList.contains('hidden')) return;
+    modalLoad++;
+    htmx.trigger(analysisContainer, 'htmx:abort');
+    analysisOverlay.classList.add('hidden');
+    analysisOverlay.classList.remove('flex');
+    analysisContainer.replaceChildren();
+    analysisBackground.forEach(el => { el.inert = false; });
+    document.getElementById('end-session-btn').focus({preventScroll:true});
+  };
+
+  async function loadAnalysisModal() {
+    const load = ++modalLoad;
+    htmx.trigger(analysisContainer, 'htmx:abort');
+    analysisOverlay.classList.remove('hidden');
+    analysisOverlay.classList.add('flex');
+    analysisBackground.forEach(el => { el.inert = true; });
+    analysisContainer.innerHTML = '<div class="modal-header"><h2>세션 분석 결과</h2><button type="button" class="close-modal-btn" aria-label="닫기">×</button></div><div class="modal-body"><p role="status">분석 결과를 불러오는 중입니다.</p></div><div class="modal-footer"></div>';
+    analysisContainer.querySelector('button').onclick = window.closeAnalysisModal;
+    analysisContainer.querySelector('button').focus();
+    let failed = false;
+    const checkResponse = event => { failed = event.detail.xhr.status >= 400; };
+    analysisContainer.addEventListener('htmx:afterRequest', checkResponse);
+    try {
+      await htmx.ajax('GET', `/sessions/${window.currentSessionId}/analysis_modal`,
+        {source:analysisContainer, target:'#analysis-modal-container', swap:'innerHTML'});
+      if (failed) throw new Error('modal_load_failed');
+      if (load !== modalLoad) {
+        if (analysisOverlay.classList.contains('hidden')) analysisContainer.replaceChildren();
+        return;
+      }
+      analysisContainer.querySelector('.close-modal-btn')?.focus({preventScroll:true});
+    } catch {
+      if (load !== modalLoad || authExpiredHandled) return;
+      const notice = analysisContainer.querySelector('[role="status"]');
+      notice.textContent = '분석 결과를 불러오지 못했습니다. 다시 불러오거나 닫을 수 있습니다.';
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'btn-secondary';
+      retry.textContent = '결과 다시 불러오기';
+      retry.onclick = loadAnalysisModal;
+      analysisContainer.querySelector('.modal-footer').append(retry);
+    } finally {
+      analysisContainer.removeEventListener('htmx:afterRequest', checkResponse);
+    }
   }
 
-  document.getElementById('analysis-modal-overlay').addEventListener('click', function(e) {
-    if (e.target.id === 'analysis-modal-overlay') {
-      window.closeAnalysisModal();
-    }
+  analysisOverlay.addEventListener('click', event => {
+    if (event.target === analysisOverlay) window.closeAnalysisModal();
   });
-
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-      window.closeAnalysisModal();
-    }
+  document.addEventListener('keydown', event => {
+    if (analysisOverlay.classList.contains('hidden')) return;
+    if (event.key === 'Escape') window.closeAnalysisModal();
+    if (event.key !== 'Tab') return;
+    const controls = Array.from(analysisContainer.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), [tabindex="0"]'))
+      .filter(el => el.getClientRects().length);
+    const first = controls[0], last = controls.at(-1);
+    if (!first) { event.preventDefault(); analysisOverlay.focus(); }
+    else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
 
   // ========================================
@@ -488,13 +563,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
     // Already analyzed — re-open modal
     if (state === 'done') {
-      const overlay = document.getElementById('analysis-modal-overlay');
-      htmx.ajax('GET', `/sessions/${window.currentSessionId}/analysis_modal`,
-        { target: '#analysis-modal-container', swap: 'innerHTML' })
-        .then(() => {
-          overlay.classList.remove('hidden');
-          overlay.classList.add('flex');
-        });
+      void loadAnalysisModal();
       return;
     }
 
@@ -529,23 +598,8 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         clearDraftMessage();
         const bannerText = document.getElementById('session-status-text');
         if (bannerText) bannerText.textContent = '이 대화는 종료되었습니다.';
-        const overlay = document.getElementById('analysis-modal-overlay');
-        htmx.ajax('GET', `/sessions/${window.currentSessionId}/analysis_modal`,
-          { target: '#analysis-modal-container', swap: 'innerHTML' })
-          .then(() => {
-            overlay.classList.remove('hidden');
-            overlay.classList.add('flex');
-
-            setAnalysisState('done');
-          })
-          .catch((err) => {
-            console.error('Analysis modal load failed', err);
-            if (authExpiredHandled) {
-              return;
-            }
-            alert('분석 결과를 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.');
-            setAnalysisState('ready-to-analyze');
-          });
+        setAnalysisState('done');
+        void loadAnalysisModal();
       } else {
         const error = analysisResult;
         alert(`분석 실패: ${error.detail || error.feedback || '알 수 없는 오류'}`);
@@ -811,6 +865,8 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       handleAuthExpired(`htmx:${path}`, extractRedirectUrl(triggerHeader));
       return;
     }
+
+    if (path.endsWith('/analysis_modal')) return;
 
     // Non-auth errors: reset polling fail counter
     if (isPolling) {

@@ -1032,6 +1032,7 @@ textarea {
 }
 
 .messages-container[data-mentor-stream] {
+  scroll-behavior: auto;
   overflow-anchor: none;
 }
 
@@ -1089,6 +1090,15 @@ textarea {
 }
 
 /* Input Area */
+.lesson-controls {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.lesson-controls p { margin: 0 0 0.5rem; }
+
 .teacher-form {
   background-color: var(--color-white);
   padding: 1rem 1.5rem;
@@ -1128,7 +1138,8 @@ textarea#teacher-input {
   font-family: inherit;
   font-size: var(--font-size-sm);
   line-height: 1.3;
-  max-height: 28px;
+  min-width: 0;
+  max-height: 120px;
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   color: var(--color-text-primary);
@@ -1193,6 +1204,7 @@ textarea#teacher-input {
    Split Layout - Chat Page
    ======================================== */
 .mobile-tabs {
+  height: 44px;
   display: none;
   background-color: var(--color-white);
   border-bottom: 1px solid var(--color-border-light);
@@ -1200,7 +1212,7 @@ textarea#teacher-input {
 
 .mobile-tab {
   flex: 1;
-  padding: 0.875rem 1rem;
+  padding: 0 1rem;
   text-align: center;
   cursor: pointer;
   background: var(--color-gray-50);
@@ -1223,15 +1235,22 @@ textarea#teacher-input {
   font-weight: 600;
 }
 
+main:has(.split-layout) {
+  max-width: none;
+  padding: 0;
+  min-height: 0;
+}
+
 .split-layout {
   display: flex;
-  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
   overflow: hidden;
   background-color: var(--color-gray-50);
 }
 
 .scenario-panel {
-  flex: 0 0 45%;
+  min-width: 0;
+  flex: 0 0 35%;
   padding: 2rem;
   overflow-y: auto;
   background-color: var(--color-white);
@@ -1241,7 +1260,9 @@ textarea#teacher-input {
 }
 
 .chat-panel {
-  flex: 1 1 55%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 65%;
   display: flex;
   flex-direction: column;
   background-color: var(--color-gray-50);
@@ -1249,6 +1270,8 @@ textarea#teacher-input {
 }
 
 .scenario-header {
+  flex-wrap: wrap;
+  padding-top: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -1259,6 +1282,8 @@ textarea#teacher-input {
 }
 
 .scenario-header h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 1.5rem;
   font-weight: 600;
   margin: 0;
@@ -1268,6 +1293,8 @@ textarea#teacher-input {
 }
 
 .scenario-header .header-actions {
+  max-width: 100%;
+  flex-wrap: wrap;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -1277,7 +1304,7 @@ textarea#teacher-input {
 .scenario-header .btn-secondary {
   font-size: var(--font-size-sm);
   padding: 0.5rem 0.75rem;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 /* Info Sections */
@@ -1351,6 +1378,7 @@ textarea#teacher-input {
 
 /* Chat Panel adjustments */
 .chat-panel .chat-wrapper {
+  min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1358,12 +1386,14 @@ textarea#teacher-input {
 }
 
 .chat-panel .messages-container {
+  min-height: 0;
   flex: 1;
   overflow-y: auto;
   padding: 1rem;
 }
 
 .chat-panel .teacher-form {
+  flex-shrink: 0;
   border-top: 1px solid var(--color-border-light);
 }
 
@@ -1386,10 +1416,10 @@ textarea#teacher-input {
 .panel-toggle {
   position: absolute;
   top: 0;
-  right: 0.75rem;
+  right: 2px;
   z-index: 2;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2882,6 +2912,7 @@ textarea#teacher-input {
 }
 
 .info-tab {
+  min-width: 0;
   flex: 1;
   padding: 0.75rem 1rem;
   background: transparent;
@@ -3015,7 +3046,7 @@ textarea#teacher-input {
 
   .split-layout {
     flex-direction: column;
-    height: calc(100vh - 104px);
+    height: calc(100dvh - 104px);
   }
 
   .scenario-panel,
@@ -3131,14 +3162,6 @@ textarea#teacher-input {
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {
-  .scenario-panel {
-    flex: 0 0 40%;
-  }
-
-  .chat-panel {
-    flex: 1 1 60%;
-  }
-
   .scenario-header h1 {
     font-size: 1.25rem;
   }
@@ -3402,8 +3425,52 @@ textarea#teacher-input {
   padding: 12px 0;
 }
 
+.session-history > h1 { margin-bottom: 1rem; }
+
+.session-history .history-provenance,
+.session-history #snapshot-provenance {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--color-border-light);
+  border-radius: 16px;
+  background: var(--color-bg-surface);
+}
+
+.session-history > .btn { margin-bottom: 0.75rem; }
+
+#analysis-modal-container {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
 [data-analysis-result] {
     overflow-wrap: anywhere;
+}
+
+[data-analysis-result] .analysis-latest-run,
+[data-analysis-result] .analysis-accepted-report {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: 16px;
+}
+
+[data-analysis-result] .analysis-latest-run h2,
+[data-analysis-result] .analysis-accepted-report h2 { margin-top: 0; }
+
+[data-analysis-result] .analysis-latest-run[data-status="running"] {
+  background: var(--color-info-bg);
+  border-left: 3px solid var(--color-info-text);
+}
+
+[data-analysis-result] .analysis-latest-run[data-status="failed"] {
+  background: var(--color-danger-bg);
+  border-left: 3px solid var(--color-danger-text);
+}
+
+[data-analysis-result] .analysis-accepted-report[data-status="degraded"] {
+  border-left: 3px solid var(--color-warning-text);
 }
 
 [data-analysis-result] .analysis-actions {

@@ -72,11 +72,17 @@ export default async function checkStudentStream(page) {
     teacher_message_id:11, turn_index:1, operation:'student', status:'running'
   }));
   await page.locator('[data-message-id="11"]').waitFor();
+  await page.evaluate(() => {
+    window.studentAnnouncements = [];
+    new MutationObserver(records => studentAnnouncements.push(...records.map(record => record.target.textContent)))
+      .observe(document.querySelector('.student-run-status'), {childList:true, subtree:true, characterData:true});
+  });
   await page.evaluate(() => emitStudentEvent('output.delta', {
     run_id:'run-1', turn_id:'turn-1', seq:1, text:'학생🙂<img src=x onerror="window.xss=1">'
   }));
   await page.waitForFunction(() => document.querySelector('.message-student .message-bubble')?.textContent.includes('학생🙂'));
   assert(await input.isDisabled(), 'delta is provisional');
+  assert(await page.evaluate(() => studentAnnouncements.length === 0 && !document.querySelector('.message-student .message-bubble').closest('[aria-live], [role="status"], [role="alert"], [role="log"]')), 'streamed tokens do not produce live status announcements');
   assert(await page.locator('.message-student img').count() === 0, 'delta renders as safe text');
   await page.evaluate(() => {
     emitStudentEvent('output.completed', {

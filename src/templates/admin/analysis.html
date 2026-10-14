@@ -17,7 +17,7 @@
               onsubmit="return submitAnalysisFilters(event)">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">시나리오</label>
-                <select name="scenario_id" class="rounded border-gray-300 text-sm">
+                <select name="scenario_id" aria-label="시나리오 필터" class="rounded border-gray-300 text-sm">
                     <option value="">모든 시나리오</option>
                     {% for scenario in scenarios %}
                     <option value="{{ scenario.id }}"
@@ -30,7 +30,7 @@
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">레이블</label>
-                <select name="label" class="rounded border-gray-300 text-sm">
+                <select name="label" aria-label="레이블 필터" class="rounded border-gray-300 text-sm">
                     <option value="">모든 레이블</option>
                     {% for lbl, display_name in available_labels.items() %}
                     <option value="{{ lbl }}"
@@ -43,14 +43,14 @@
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">시작일</label>
-                <input type="date" name="date_from"
+                <input type="date" name="date_from" aria-label="시작일"
                        value="{{ current_filters.date_from or '' }}"
                        class="rounded border-gray-300 text-sm">
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">종료일</label>
-                <input type="date" name="date_to"
+                <input type="date" name="date_to" aria-label="종료일"
                        value="{{ current_filters.date_to or '' }}"
                        class="rounded border-gray-300 text-sm">
             </div>
@@ -85,8 +85,8 @@
 
     <!-- Analysis Table -->
     <div class="bg-white rounded-lg shadow overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="min-w-full">
+        <div class="table-container" role="region" tabindex="0" aria-label="분석 목록">
+            <table class="data-table min-w-full">
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
@@ -173,7 +173,7 @@
 
 <!-- Detail Modal Container -->
 <div id="detail-modal"
-     class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+     class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="분석 상세">
 </div>
 
 <script>
@@ -191,20 +191,40 @@ function submitAnalysisFilters(e) {
   return false;
 }
 
+var detailCaller;
+htmx.on('htmx:beforeRequest', function(e) {
+    if (e.detail.target.id !== 'detail-modal') return;
+    detailCaller = e.detail.elt;
+    var modal = document.getElementById('detail-modal');
+    modal.innerHTML = '<div class="modal-container"><div class="modal-header"><h2>분석 상세</h2><button class="close-modal-btn" aria-label="닫기" onclick="closeDetailModal()">×</button></div><div class="modal-body" role="status">분석 상세를 불러오는 중...</div></div>';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    modalLifecycle.open(modal, closeDetailModal, detailCaller);
+});
+htmx.on('htmx:afterRequest', function(e) {
+    if (e.detail.target.id === 'detail-modal' && e.detail.failed && !e.detail.target.classList.contains('hidden')) {
+        modalLifecycle.error(e.detail.target, '분석 상세를 불러올 수 없습니다. 닫은 뒤 다시 시도하세요.');
+    }
+});
 // Show modal when content is loaded via HTMX
 htmx.on('htmx:afterSwap', function(e) {
-    if (e.detail.target.id === 'detail-modal') {
+    if (e.detail.target.id === 'detail-modal' && !e.detail.target.classList.contains('hidden')) {
         document.getElementById('detail-modal').classList.remove('hidden');
         document.getElementById('detail-modal').classList.add('flex');
+        modalLifecycle.open(document.getElementById('detail-modal'), closeDetailModal, detailCaller);
+        var close = e.detail.target.querySelector('button');
+        if (close && !e.detail.target.contains(document.activeElement)) close.focus();
     }
 });
 
 // Close modal function
 function closeDetailModal() {
+    if (detailCaller) htmx.trigger(detailCaller, 'htmx:abort');
     var modal = document.getElementById('detail-modal');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
     modal.innerHTML = '';
+    modalLifecycle.close(modal);
 }
 
 // Close on overlay click

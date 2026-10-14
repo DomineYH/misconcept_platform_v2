@@ -45,7 +45,7 @@
     gap: var(--spacing-xl);
     margin-top: var(--spacing-md);
     grid-template-columns: repeat(
-      auto-fill, minmax(280px, 1fr)
+      auto-fill, minmax(min(100%, 280px), 1fr)
     );
   }
   .contributor-card {
@@ -56,12 +56,14 @@
     box-shadow: var(--shadow-sm);
   }
   .contributor-name {
+    overflow-wrap: anywhere;
     font-size: var(--font-size-xl);
     font-weight: 700;
     color: var(--color-text-primary);
     margin-bottom: var(--spacing-xs);
   }
   .contributor-affiliation {
+    overflow-wrap: anywhere;
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
     margin-bottom: var(--spacing-md);
@@ -76,6 +78,8 @@
     color: var(--color-text-secondary);
   }
   .contact-item {
+    overflow-wrap: anywhere;
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);

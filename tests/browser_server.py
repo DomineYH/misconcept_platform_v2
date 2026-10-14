@@ -49,6 +49,48 @@ class Handler(BaseHTTPRequestHandler):
                 .encode()
             )
             mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/uiux/admin/groups":
+            body = (
+                templates.get_template("admin/groups.html")
+                .render(
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    groups_data=(
+                        []
+                        if "empty" in query
+                        else [
+                            dict(
+                                group=SimpleNamespace(
+                                    id=1,
+                                    name='긴 그룹 "따옴표" 이름\n' * 5,
+                                    description="합성 그룹 설명",
+                                ),
+                                member_count=0,
+                                scenario_count=2,
+                            )
+                        ]
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path.startswith("/fixtures/uiux/admin/"):
+            from tests.uiux_admin_fixtures import admin_fixture
+
+            name = path.path.rsplit("/", 1)[1]
+            template, context = admin_fixture(
+                name, empty="empty" in query, active="active" in query
+            )
+            body = templates.get_template(template).render(**context).encode()
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/about/content":
+            from tests.uiux_admin_fixtures import contributors
+
+            body = (
+                templates.get_template("about_fragment.html")
+                .render(contributors=contributors())
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
         elif path.path == "/login":
             body = (
                 templates.get_template("login.html")

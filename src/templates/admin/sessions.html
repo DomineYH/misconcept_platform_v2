@@ -11,7 +11,7 @@
 
   <div class="filters" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;">
     <form method="get" class="filter-form" id="filter-form" style="display:flex;align-items:center;gap:0.5rem;margin:0;">
-      <select name="teacher_id" onchange="submitFilters()">
+      <select name="teacher_id" aria-label="교사 필터" onchange="submitFilters()">
         <option value="">모든 교사</option>
         {% for teacher in teachers %}
         <option value="{{ teacher.id }}"
@@ -22,14 +22,14 @@
       </select>
 
       <div class="date-range-box">
-        <input type="date" name="date_from" value="{{ current_date_from }}"
+        <input type="date" name="date_from" aria-label="시작일" value="{{ current_date_from }}"
           onchange="submitFilters()" />
         <span class="date-range-sep">~</span>
-        <input type="date" name="date_to" value="{{ current_date_to }}"
+        <input type="date" name="date_to" aria-label="종료일" value="{{ current_date_to }}"
           onchange="submitFilters()" />
       </div>
     </form>
-    <div style="display:flex;align-items:center;gap:0.5rem;margin-left:auto;">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem;margin-left:auto;">
       <a id="btn-download-all" class="btn btn-sm btn-success"
          href="/admin/sessions/export{% if current_teacher_id or current_date_from or current_date_to %}?{% endif %}{% if current_teacher_id %}teacher_id={{ current_teacher_id }}&{% endif %}{% if current_date_from %}date_from={{ current_date_from }}&{% endif %}{% if current_date_to %}date_to={{ current_date_to }}{% endif %}"
          style="text-decoration:none;">전체 다운로드</a>
@@ -42,7 +42,7 @@
 
   <link rel="stylesheet" href="/static/css/sessions.css">
 
-  <div class="table-container">
+  <div class="table-container" role="region" tabindex="0" aria-label="세션 목록">
     <table class="data-table">
       <thead>
         <tr>
@@ -130,7 +130,7 @@
         {% else %}
         <tr>
           <td colspan="8" style="text-align: center; padding: 2rem;">
-            세션이 없습니다.
+            {% if current_teacher_id or current_date_from or current_date_to or current_page > 1 %}현재 필터 또는 페이지에 결과가 없습니다.{% else %}세션이 없습니다.{% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -173,7 +173,7 @@
 <div id="analysis-modal" class="modal-overlay hidden"
      role="dialog" aria-modal="true" aria-label="세션 분석 결과">
   <div class="modal-container modal-lg">
-    <div class="modal-body" id="analysis-modal-body">
+    <div id="analysis-modal-body" class="modal-form">
     </div>
   </div>
 </div>

@@ -54,42 +54,42 @@ function hideModal(id) {
 var analysisModal = document.getElementById('analysis-modal');
 var analysisModalBody =
   document.getElementById('analysis-modal-body');
-var analysisModalReturnFocus;
+var analysisModalRequest = 0;
 
 function showAnalysisModal(sessionId) {
-  analysisModalReturnFocus = document.activeElement;
+  var requestId = ++analysisModalRequest;
   analysisModalBody.innerHTML =
-    '<div style="text-align:center;padding:2rem;">' +
+    '<div class="modal-header"><h2>세션 분석 결과</h2><button class="close-modal-btn" aria-label="닫기" onclick="closeAnalysisModal()">×</button></div><div class="modal-body" role="status" style="text-align:center;padding:2rem;">' +
     '<span class="spinner spinner-md"></span>' +
     ' 분석 결과 로딩 중...</div>';
   analysisModal.classList.remove('hidden');
   analysisModal.classList.add('flex');
+  modalLifecycle.open(analysisModal, closeAnalysisModal);
 
   fetchWithRetry(
     '/admin/sessions/' + sessionId + '/analysis_modal'
   )
     .then(function (html) {
-      if (analysisModal.classList.contains('hidden')) return;
+      if (requestId !== analysisModalRequest) return;
       analysisModalBody.innerHTML = sanitizeHTML(html);
       mountAnalysisResults(analysisModalBody);
       var close = analysisModalBody.querySelector('.close-modal-btn');
-      if (close) close.focus();
+      if (close && !analysisModal.contains(document.activeElement)) close.focus();
     })
     .catch(function () {
-      analysisModalBody.innerHTML =
-        '<div style="text-align:center;padding:2rem;' +
-        'color:var(--color-danger);">' +
-        '분석 결과를 불러올 수 없습니다.</div>';
+      if (requestId !== analysisModalRequest) return;
+      var loading = analysisModalBody.querySelector('[role="status"]');
+      if (loading) { loading.replaceChildren(); loading.removeAttribute('role'); }
+      modalLifecycle.error(analysisModal, '분석 결과를 불러올 수 없습니다.');
     });
 }
 
 function closeAnalysisModal() {
+  ++analysisModalRequest;
   analysisModal.classList.add('hidden');
   analysisModal.classList.remove('flex');
   analysisModalBody.innerHTML = '';
-  if (analysisModalReturnFocus && analysisModalReturnFocus.isConnected) {
-    analysisModalReturnFocus.focus();
-  }
+  modalLifecycle.close(analysisModal);
 }
 
 analysisModal.addEventListener('click', function (e) {
@@ -232,23 +232,13 @@ document.body.addEventListener('htmx:afterSwap', function () {
   updateDownloadAllHref();
 });
 
-/* Close modals on Escape */
-document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape') {
-    if (!analysisModal.classList.contains('hidden')) {
-      closeAnalysisModal();
-    }
-  } else if (e.key === 'Tab' && !analysisModal.classList.contains('hidden')) {
-    var controls = Array.from(analysisModal.querySelectorAll(
-      'button:not(:disabled), a[href], summary'
-    )).filter(function (el) { return el.getClientRects().length; });
-    var first = controls[0], last = controls[controls.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-});
+/* HTMX refusals retain rows; transport failures leave the outcome unknown. */
+for (var eventName of ['htmx:responseError', 'htmx:sendError']) {
+  document.body.addEventListener(eventName, function (event) {
+    if (!event.detail.elt.closest('#sessions-tbody')) return;
+    modalLifecycle.error(document.querySelector('.table-container'),
+      event.type === 'htmx:sendError'
+        ? '작업 결과를 확인할 수 없습니다. 목록을 새로 확인하세요.'
+        : '세션 작업을 완료하지 못했습니다. 권한과 세션 상태를 확인하세요.');
+  });
+}

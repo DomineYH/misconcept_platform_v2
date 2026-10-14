@@ -33,7 +33,8 @@ export default async function checkAIProbes(page) {
   });
   await page.goto(`${base}/admin/ai`);
   const model = page.locator('[data-model="1"]');
-  await model.getByText('멘토: 재검증 필요 · 2026-10-08', {exact:true}).waitFor();
+  await model.getByText('멘토: 재검증 필요', {exact:true}).waitFor();
+  assert(await model.getByText('최근 역할 검증: 2026-10-08', {exact:true}).isVisible());
   assert.equal(starts.length, 0, 'old mentor evidence does not trigger a paid revalidation');
   await model.getByRole('button', {name:'학생봇 시험', exact:true}).focus();
   await page.keyboard.press('Enter');
@@ -80,7 +81,7 @@ export default async function checkAIProbes(page) {
   })) {
     data.models[0].verification_state.analysis = {status:'failed', error_code:code};
     await page.reload();
-    const row = model.locator('.ai-actions').filter({hasText:'사후 분석: 실패'});
+    const row = model.locator('.ai-role').filter({hasText:'사후 분석: 실패'});
     await row.getByText(guidance, {exact:true}).waitFor();
     assert(!(await row.innerText()).includes('응답 형식'), `${code} is not a format failure`);
   }

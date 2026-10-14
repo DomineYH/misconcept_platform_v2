@@ -9,7 +9,7 @@
     <a href="/admin/scenarios/new" class="btn btn-primary">통합 초안 작성</a>
   </header>
   <section class="filter-bar" aria-label="시나리오 검색">
-    <div class="search-box"><input type="search" id="search-input" aria-label="시나리오 검색" placeholder="시나리오 검색..." class="search-input"></div>
+    <div class="search-box"><input type="search" id="search-input" aria-label="시나리오 검색" placeholder="현재 페이지에서 검색..." aria-describedby="scenario-filter-help" class="search-input"></div>
     <div class="filter-group">
       <select id="filter-publication" class="filter-select" aria-label="게시 상태">
         <option value="">모든 게시 상태</option><option value="draft">초안</option><option value="published">게시</option>
@@ -19,6 +19,8 @@
       </select>
     </div>
   </section>
+  <p id="scenario-filter-help">검색과 필터는 현재 페이지의 시나리오에만 적용됩니다.</p>
+  <p id="scenario-filter-empty" role="status" hidden>현재 페이지에서 검색·필터에 맞는 시나리오가 없습니다.</p>
   <section class="scenarios-grid-container">
     <h2 class="section-title">시나리오 목록 <span class="count-badge">{{ scenarios|length }}개</span></h2>
     {% if scenarios %}

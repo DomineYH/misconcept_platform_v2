@@ -64,7 +64,7 @@ export function mountComparison(data, draft) {
   const panelNote = node('p', null, {role:'status'});
   const tabs = node('div', null, {class:'comparison-tabs', role:'tablist', 'aria-label':'비교 패널'});
   let selectedPanel = null;
-  const grid = node('div', null, {class:'comparison-grid'});
+  const grid = node('div', null, {class:'comparison-grid', role:'region', 'aria-label':'비교 패널 결과', tabindex:'0'});
   const addPanel = button('패널 추가', () => addModel(null));
   function available(model) {
     return model.enabled && model.connection_available && model.capabilities && !model.capabilities.metadata_conflict && model.verification_state[target.value]?.status === 'succeeded';
@@ -231,7 +231,7 @@ export function mountComparison(data, draft) {
       const response = await request(`/admin/comparisons/${comparison.comparison_run_id}/panels/${state.panel_id}/model`);
       if (!response.ok) {
         const messages = {409:'비교가 진행 중입니다. 종료 후 적용하세요.',
-          404:'비교 또는 패널이 없거나 만료되었습니다. 이력을 다시 확인하세요.',
+          404:'비교 또는 패널을 찾거나 열 수 없습니다. 이력을 다시 확인하세요.',
           422:'현재 역할 검증·연결·옵션을 확인한 뒤 적용하세요.'};
         notice.textContent = messages[response.status] || '모델을 적용하지 못했습니다. 다시 확인하세요.';
         return;
@@ -264,7 +264,7 @@ export function mountComparison(data, draft) {
       total.textContent = '';
       sync();
     }
-    const messages = {404:'비교가 만료되었거나 삭제되었습니다. 보존기간은 생성 후 30일입니다.',
+    const messages = {404:'비교를 찾거나 열 수 없습니다. 보존기간은 생성 후 30일입니다.',
       409:'진행 중 비교 또는 변경된 시도가 있습니다. 상태를 새로 확인하세요.', 429:'전체 패널 슬롯을 확보하지 못했습니다. 잠시 후 다시 실행하세요.',
       503:'AI 연결·모델 설정을 확인하세요.', 422:'공통 입력·모델 옵션을 확인하세요.', 413:'입력이 너무 큽니다.', 401:'로그인이 필요합니다.', 403:'권한 또는 보안 토큰을 확인하세요.'};
     errors.append(node('p', result?.detail?.code === 'scenario_not_found' ? '원본 시나리오를 찾을 수 없습니다. 새 초안에서 비교하세요.' : messages[response.status] || '비교 요청을 처리하지 못했습니다. 입력을 보존했습니다.'));

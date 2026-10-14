@@ -41,6 +41,80 @@ class Handler(BaseHTTPRequestHandler):
                 .encode()
             )
             mime = "text/html; charset=utf-8"
+        elif path.path == "/login":
+            body = (
+                templates.get_template("login.html")
+                .render(
+                    error=(
+                        "사용자 ID 또는 비밀번호가 올바르지 않습니다."
+                        if "error" in query
+                        else None
+                    ),
+                    request=SimpleNamespace(
+                        url=SimpleNamespace(path=path.path),
+                        query_params={
+                            key: values[0] for key, values in query.items()
+                        },
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/uiux/comparison":
+            panel_count = int(query.get("panels", ["3"])[0])
+            body = (
+                templates.get_template("admin/comparison_conversation.html")
+                .render(
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    comparison=dict(
+                        snapshot=dict(
+                            conversation_id="visual-only",
+                            version=1,
+                            phase="awaiting_adoption",
+                            source_snapshot=dict(
+                                title="긴 한국어 시나리오 제목 " * 5
+                            ),
+                            expires_at="2026-11-01",
+                            pairs=[],
+                            pending_auto=False,
+                            pending_student_child_id="round-1",
+                            mentor_actions=[],
+                            allowed_actions=dict(
+                                turn=False, adopt=True, mentor=False, end=False
+                            ),
+                            children=[
+                                dict(
+                                    comparison_run_id="round-1",
+                                    target_role="student",
+                                    panels=[
+                                        dict(
+                                            panel_id=str(index),
+                                            status=(
+                                                "failed"
+                                                if index == 2
+                                                else "completed"
+                                            ),
+                                            text="같은 전체를 여러 부분으로 나누어 비교했어요.\n"
+                                            * 3,
+                                            model_config=dict(
+                                                model_id="긴모델이름" * 12
+                                            ),
+                                            error_code=(
+                                                "invalid_output"
+                                                if index == 2
+                                                else None
+                                            ),
+                                        )
+                                        for index in range(1, panel_count + 1)
+                                    ],
+                                )
+                            ],
+                        )
+                    ),
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
         elif path.path == "/fixtures/s5/terminal":
             body = json.dumps(terminal_fixtures()).encode()
             mime = "application/json"
@@ -200,7 +274,11 @@ class Handler(BaseHTTPRequestHandler):
         }:
             scenario = SimpleNamespace(
                 id=1,
-                title="Browser regression",
+                title=(
+                    "긴한국어제목" * 15
+                    if "long" in query
+                    else "Browser regression"
+                ),
                 student_name="Student",
                 student_profile="Profile",
                 subject="Math",
@@ -274,7 +352,20 @@ class Handler(BaseHTTPRequestHandler):
                 templates.get_template(template)
                 .render(
                     scenario=scenario,
-                    scenarios=[scenario],
+                    scenarios=(
+                        []
+                        if "empty" in query
+                        else [
+                            SimpleNamespace(**{**vars(scenario), "id": index})
+                            for index in range(1, 4 if "many" in query else 2)
+                        ]
+                    ),
+                    request=SimpleNamespace(
+                        url=SimpleNamespace(path=path.path),
+                        query_params={
+                            key: values[0] for key, values in query.items()
+                        },
+                    ),
                     session_id=1,
                     student_name="Student",
                     user=SimpleNamespace(

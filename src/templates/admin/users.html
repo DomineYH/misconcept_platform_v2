@@ -114,21 +114,21 @@
     <div class="modal-body" id="bulk-modal-body">
       <!-- Step 1: Upload -->
       <div id="bulk-step-upload">
-        <div style="border:2px dashed var(--border-color,#4b5563);border-radius:12px;padding:40px 20px;text-align:center;">
+        <div style="border:2px dashed var(--color-border-medium);border-radius:12px;padding:40px 20px;text-align:center;">
           <p style="font-size:1.1rem;margin-bottom:8px;">CSV 파일을 선택하세요</p>
-          <p style="color:var(--text-muted,#9ca3af);font-size:0.85rem;margin-bottom:16px;">양식: username, nickname, role(선택), group(선택)</p>
+          <p style="color:var(--color-text-secondary);font-size:0.85rem;margin-bottom:16px;">양식: username, nickname, role(선택), group(선택)</p>
           <input type="file" id="bulk-file-input" accept=".csv" style="display:none;" />
           <button type="button" class="btn btn-primary" onclick="document.getElementById('bulk-file-input').click()">파일 선택</button>
-          <p id="bulk-file-name" style="margin-top:12px;color:var(--text-muted,#9ca3af);font-size:0.85rem;"></p>
+          <p id="bulk-file-name" style="margin-top:12px;color:var(--color-text-secondary);font-size:0.85rem;"></p>
         </div>
-        <p style="color:var(--text-muted,#9ca3af);font-size:0.8rem;margin-top:12px;text-align:center;">사용자마다 무작위 초기 비밀번호를 발급합니다.</p>
-        <p id="bulk-upload-error" style="color:#ef4444;text-align:center;margin-top:8px;display:none;"></p>
+        <p style="color:var(--color-text-secondary);font-size:0.8rem;margin-top:12px;text-align:center;">사용자마다 무작위 초기 비밀번호를 발급합니다.</p>
+        <p id="bulk-upload-error" style="color:var(--color-danger-text);text-align:center;margin-top:8px;display:none;"></p>
       </div>
 
       <!-- Step 2: Preview -->
       <div id="bulk-step-preview" style="display:none;">
-        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px;background:var(--bg-secondary,#1e293b);border-radius:8px;">
-          <span style="color:var(--text-muted,#9ca3af);font-size:0.85rem;white-space:nowrap;">일괄 지정:</span>
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px;background:var(--color-bg-secondary);border-radius:8px;">
+          <span style="color:var(--color-text-secondary);font-size:0.85rem;white-space:nowrap;">일괄 지정:</span>
           <select id="bulk-assign-role" class="filter-select" style="min-width:100px;">
             <option value="">역할 선택...</option>
             <option value="teacher">교사</option>
@@ -161,13 +161,13 @@
       <!-- Step 3: Result -->
       <div id="bulk-step-result" style="display:none;">
         <div style="display:flex;gap:16px;margin-bottom:20px;">
-          <div style="flex:1;background:rgba(34,197,94,0.1);border:1px solid #166534;border-radius:8px;padding:16px;text-align:center;">
-            <div id="bulk-success-count" style="font-size:1.8rem;font-weight:bold;color:#22c55e;">0</div>
-            <div style="font-size:0.85rem;color:#86efac;">성공</div>
+          <div style="flex:1;background:var(--color-success-bg);border:1px solid var(--color-success-text);border-radius:8px;padding:16px;text-align:center;">
+            <div id="bulk-success-count" style="font-size:1.8rem;font-weight:bold;color:var(--color-success-text);">0</div>
+            <div style="font-size:0.85rem;color:var(--color-success-text);">성공</div>
           </div>
-          <div style="flex:1;background:rgba(239,68,68,0.1);border:1px solid #991b1b;border-radius:8px;padding:16px;text-align:center;">
-            <div id="bulk-fail-count" style="font-size:1.8rem;font-weight:bold;color:#ef4444;">0</div>
-            <div style="font-size:0.85rem;color:#fca5a5;">실패</div>
+          <div style="flex:1;background:var(--color-danger-bg);border:1px solid var(--color-danger-text);border-radius:8px;padding:16px;text-align:center;">
+            <div id="bulk-fail-count" style="font-size:1.8rem;font-weight:bold;color:var(--color-danger-text);">0</div>
+            <div style="font-size:0.85rem;color:var(--color-danger-text);">실패</div>
           </div>
         </div>
         <div id="bulk-credential-list" style="display:none;">
@@ -184,7 +184,7 @@
           </div>
         </div>
         <div id="bulk-failure-list" style="display:none;">
-          <h4 style="color:#fca5a5;font-size:0.85rem;margin-bottom:8px;">실패 목록</h4>
+          <h4 style="color:var(--color-danger-text);font-size:0.85rem;margin-bottom:8px;">실패 목록</h4>
           <table class="data-table">
             <thead>
               <tr><th>사용자 ID</th><th>닉네임</th><th>실패 사유</th></tr>
@@ -598,7 +598,7 @@ document.addEventListener('keydown', e => {
       if (hasErr) errorCount++; else validCount++;
 
       const tr = document.createElement('tr');
-      if (hasErr) tr.style.background = 'rgba(239,68,68,0.1)';
+      if (hasErr) tr.style.background = 'var(--color-danger-bg)';
       tr.innerHTML = `
         <td>${idx + 1}</td>
         <td><input type="text" value="${escHtml(row.username)}" class="bulk-input" data-idx="${idx}" data-field="username" style="width:120px;"></td>
@@ -615,8 +615,8 @@ document.addEventListener('keydown', e => {
           </select>
         </td>
         <td>${hasErr
-          ? '<span style="color:#ef4444;font-size:0.8rem;">⚠ ' + escHtml(row.errors.join(', ')) + '</span>'
-          : '<span style="color:#22c55e;font-size:0.8rem;">✓ 정상</span>'
+          ? '<span style="color:var(--color-danger-text);font-size:0.8rem;">⚠ ' + escHtml(row.errors.join(', ')) + '</span>'
+          : '<span style="color:var(--color-success-text);font-size:0.8rem;">✓ 정상</span>'
         }</td>
         <td><button type="button" class="btn btn-sm btn-danger" onclick="removeBulkRow(${idx})">✕</button></td>
       `;
@@ -624,8 +624,8 @@ document.addEventListener('keydown', e => {
     });
 
     document.getElementById('bulk-summary').innerHTML =
-      `<span style="color:#22c55e;">정상 ${validCount}명</span> | ` +
-      `<span style="color:#ef4444;">에러 ${errorCount}명</span> | ` +
+      `<span style="color:var(--color-success-text);">정상 ${validCount}명</span> | ` +
+      `<span style="color:var(--color-danger-text);">에러 ${errorCount}명</span> | ` +
       `<span>총 ${bulkPreviewData.length}명</span>`;
     document.getElementById('bulk-register-btn').textContent = `등록 (${validCount}명)`;
 
@@ -749,9 +749,9 @@ document.addEventListener('keydown', e => {
       const tbody = document.getElementById('bulk-failure-body');
       tbody.innerHTML = '';
       data.failures.forEach(f => {
-        tbody.innerHTML += `<tr style="background:rgba(239,68,68,0.1);">
+        tbody.innerHTML += `<tr style="background:var(--color-danger-bg);">
           <td>${escHtml(f.username)}</td><td>${escHtml(f.nickname)}</td>
-          <td style="color:#fca5a5;">${escHtml(f.reason)}</td>
+          <td style="color:var(--color-danger-text);">${escHtml(f.reason)}</td>
         </tr>`;
       });
     }

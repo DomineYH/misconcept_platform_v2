@@ -1,0 +1,426 @@
+{
+  "candidate": "6224819e327832e9c14cca2e4e138374c4ec2514",
+  "method": "Actual production Jinja session_detail included in production layout; isolated synthetic HTTP HTML interception; no invented modal caller",
+  "rows": [
+    {
+      "state": "active",
+      "theme": "light",
+      "width": 320,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "light",
+      "width": 320,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "light",
+      "width": 320,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "light",
+      "width": 320,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "light",
+      "width": 320,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "light",
+      "width": 320,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "light",
+      "width": 1024,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "light",
+      "width": 1024,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "light",
+      "width": 1024,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "light",
+      "width": 1024,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "light",
+      "width": 1024,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "light",
+      "width": 1024,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "dark",
+      "width": 320,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "dark",
+      "width": 320,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "dark",
+      "width": 320,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "dark",
+      "width": 320,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "dark",
+      "width": 320,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "dark",
+      "width": 320,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "dark",
+      "width": 1024,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "dark",
+      "width": 1024,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "dark",
+      "width": 1024,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "dark",
+      "width": 1024,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "dark",
+      "width": 1024,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "dark",
+      "width": 1024,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "active",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "status": "진행중"
+    },
+    {
+      "state": "ended",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "deleted",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "status": "삭제됨"
+    },
+    {
+      "state": "empty",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "accepted",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "status": "완료"
+    },
+    {
+      "state": "legacy",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "status": "완료"
+    }
+  ]
+}

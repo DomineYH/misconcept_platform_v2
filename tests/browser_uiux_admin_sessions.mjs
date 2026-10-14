@@ -5,6 +5,8 @@ export default async function check(page) {
   await page.context().addCookies([{name:'csrftoken',value:'session-uiux',url:base}]);
   await page.route('**/admin/sessions/1/delete', route => route.fulfill({status:403,body:'denied'}));
   await page.goto(`${base}/fixtures/uiux/admin/sessions?active=1`);
+  const target = await page.locator('#select-all').boundingBox();
+  assert(target.width >= 44 && target.height >= 44, 'session selection has a 44px hit area');
   await page.locator('[hx-swap="delete"]').click();
   await page.locator('main .modal-error').waitFor({timeout:3000});
   assert.equal(await page.locator('#sessions-tbody tr').count(),1,'rejected deletion retains row');
@@ -16,6 +18,8 @@ export default async function check(page) {
   });
   await page.locator('[hx-swap="outerHTML"]').click();
   await page.locator('.session-checkbox').waitFor();
+  const replacedTarget = await page.locator('.session-checkbox').boundingBox();
+  assert(replacedTarget.width >= 44 && replacedTarget.height >= 44, 'replacement row retains the 44px selection target');
   await page.locator('.session-checkbox').check();
   assert.equal(await page.locator('#selected-count').innerText(),'1개 선택됨');
   assert.equal(await page.locator('#btn-download-selected').isEnabled(),true);

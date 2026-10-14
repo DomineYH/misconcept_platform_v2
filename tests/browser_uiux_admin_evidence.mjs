@@ -28,7 +28,7 @@ function measure() {
       const large = parseFloat(s.fontSize) >= 24 || (parseFloat(s.fontSize) >= 18.66 && Number(s.fontWeight) >= 700);
       text.push({text: ownText.slice(0, 80), color, background: bg, ratio: contrast(color, bg), minimum: large ? 3 : 4.5});
     }
-    if (el.matches('button, a.btn, a.btn-primary, [role="tab"]')) targets.push({text: (el.textContent.trim() || el.getAttribute('aria-label')).slice(0, 50), width: box.width, height: box.height});
+    if (el.matches('button, a.btn, a.btn-primary, [role="tab"], #select-all, .session-checkbox')) targets.push({text: (el.textContent.trim() || el.getAttribute('aria-label')).slice(0, 50), width: box.width, height: box.height});
     if (el.matches('input:not([type="checkbox"]), textarea, select, .btn-secondary')) {
       const color = rgba(s.borderTopColor).slice(0, 3);
       borders.push({name: el.id || el.name || el.textContent.slice(0, 30), inside: contrast(color, bg), outside: contrast(color, background(el.parentElement))});

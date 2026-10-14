@@ -797,7 +797,7 @@ textarea {
 }
 
 .scenarios-admin .page-header-admin { flex-wrap: wrap; gap: var(--spacing-md); }
-.scenarios-admin .header-content { flex-basis: 100%; min-width: 0; }
+.scenarios-admin .page-header-admin .header-content { flex-basis: 100%; min-width: 0; }
 .scenarios-admin .card-status { position: static; margin-bottom: var(--spacing-sm); }
 .scenarios-admin .card-body { padding-right: 0; }
 .scenarios-admin .card-actions { flex-wrap: wrap; }

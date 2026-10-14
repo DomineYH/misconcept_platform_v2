@@ -95,7 +95,8 @@ export default async function checkScenarioLayout(page) {
       await page.getByRole('searchbox',{name:'시나리오 검색',exact:true}).fill('현재 페이지에 없는 제목');
       await page.getByText('현재 페이지에서 검색·필터에 맞는 시나리오가 없습니다.',{exact:true}).waitFor({timeout:2000});
       await page.getByRole('searchbox',{name:'시나리오 검색',exact:true}).fill('');
-      const list = await page.evaluate(() => ({overflow:document.documentElement.scrollWidth > innerWidth,controls:[...document.querySelectorAll('.scenarios-admin .btn, .scenarios-admin select, .scenarios-admin input')].map(el => ({name:el.textContent.trim(),width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height}))}));
+      const list = await page.evaluate(() => ({headerWidth:document.querySelector('.page-header-admin').getBoundingClientRect().width,titleWidth:document.querySelector('.header-content').getBoundingClientRect().width,overflow:document.documentElement.scrollWidth > innerWidth,controls:[...document.querySelectorAll('.scenarios-admin .btn, .scenarios-admin select, .scenarios-admin input')].map(el => ({name:el.textContent.trim(),width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height}))}));
+      assert.equal(list.titleWidth,list.headerWidth,'list title has its own row before actions');
       assert(!list.overflow,`${theme}/${width}: list page overflow`);
       assert(list.controls.every(control => control.width >= 44 && control.height >= 44),'list actions have 44px targets');
       await settle(page);
@@ -104,7 +105,7 @@ export default async function checkScenarioLayout(page) {
       assert(listColors.borders.every(item => item.inside >= 3 && item.outside >= 3),'list input boundary contrast');
       measurements.push({screen:'list',theme,width,...list,...listColors});
       await page.evaluate(() => scrollTo(0,0));
-      if ([390,1440].includes(width)) await page.screenshot({path:new URL(`list-${theme}-${width}.png`,evidence).pathname,fullPage:true});
+      if ([390,1440].includes(width)) await page.screenshot({path:new URL(`list-${theme}-${width}.png`,evidence).pathname,fullPage:false});
     }
   }
   await writeFile(new URL('measurements.json',evidence),JSON.stringify(measurements,null,2)+'\n');

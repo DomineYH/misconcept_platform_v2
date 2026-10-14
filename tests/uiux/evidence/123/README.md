@@ -23,8 +23,9 @@ The editor also checks the exact 800px breakpoint, 320px preview, 24px gap,
 76px sticky reference and scrolling the end of a long preview into the viewport.
 Long Korean titles, public problem paragraphs, model display names and list
 publication/activation/review/conversion states are synthetic fixture inputs.
-The four editor and four list PNGs use 390/1440px in both themes, with full-page
-captures scrolled to the document top. Full-page images show more than one viewport.
+The four editor and four list PNGs use 390/1440px in both themes, with captures scrolled to the document top. Editor images show the full document;
+list images show the initial 900px viewport so headings and first-card actions
+remain legible. Measurements include the entire rendered list.
 
 `browser_uiux_scenario_errors.mjs` tests response loss → 422 → 409 at
 390/1440px in both themes. `error-measurements.json` and twelve additional PNGs

@@ -13,7 +13,7 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
     detail.replaceChildren();
     detail.hidden = true;
     invalidate(id);
-    notice.textContent = '비교가 만료되었거나 삭제되었습니다. 생성 후 30일이 지나면 조회·재시도·복사할 수 없습니다.';
+    notice.textContent = '비교를 찾거나 열 수 없습니다. 생성 후 30일이 지나면 조회·재시도·복사할 수 없습니다.';
   }
   async function load(after = null) {
     open.disabled = next.disabled = true;

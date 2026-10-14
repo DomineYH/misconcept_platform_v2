@@ -42,7 +42,7 @@ export default async function checkComparisonRolesAndHistory(page) {
   await page.route('**/admin/comparisons/comparison-1',route => route.fulfill({status:404,json:{detail:'Not found'}}));
   await page.getByRole('button',{name:'비교 이력',exact:true}).click();
   await page.getByRole('button',{name:'과거 비교 상세',exact:true}).click();
-  await page.getByText(/비교가 만료되었거나 삭제되었습니다/).waitFor();
+  await page.getByText(/비교를 찾거나 열 수 없습니다/).waitFor();
   assert.equal(await detail.getByRole('button',{name:'이 모델 적용',exact:true}).count(),0);
   assert.equal(fixture.requests[0].target_role,'analysis');
   return {pageErrors:[]};

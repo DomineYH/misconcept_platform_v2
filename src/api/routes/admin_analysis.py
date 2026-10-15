@@ -198,7 +198,7 @@ async def analysis_detail_modal(
         raise HTTPException(
             status_code=404,
             detail=translate(
-                "admin.analysis_not_found", display_language(request)
+                "teacher.analysis_not_found", display_language(request)
             ),
         )
 

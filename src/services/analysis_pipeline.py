@@ -15,6 +15,7 @@ from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
 )
+from src.i18n import translate
 from src.models import (
     ApiUsageLog,
     GenerationRun,
@@ -42,20 +43,28 @@ FALLBACK_FEEDBACK = (
 )
 
 
-async def load_analysis_lesson(db, session_id, actor_id):
+async def load_analysis_lesson(db, session_id, actor_id, *, language="ko"):
     session = await db.get(Session, session_id)
     user = await db.get(User, actor_id)
     if session is None or session.deleted_at is not None:
-        raise HTTPException(404, detail="Session not found")
+        raise HTTPException(
+            404, detail=translate("teacher.session_not_found", language)
+        )
     if user is None or (not user.is_admin and session.teacher_id != user.id):
-        raise HTTPException(403, detail="Forbidden")
-    require_native_session(session)
+        raise HTTPException(
+            403, detail=translate("teacher.forbidden", language)
+        )
+    require_native_session(session, language=language)
     if not session.ended_at:
-        raise HTTPException(400, detail="Session must be ended before analysis")
-    scenario = await validate_scenario_access(session.scenario_id, user, db)
+        raise HTTPException(
+            400, detail=translate("teacher.end_before_analysis", language)
+        )
+    scenario = await validate_scenario_access(
+        session.scenario_id, user, db, language=language
+    )
     if not scenario.is_active:
         raise configuration_error()
-    snapshot = read_lesson_snapshot(session)
+    snapshot = read_lesson_snapshot(session, language=language)
     try:
         await resolve_frozen_model(
             db, snapshot.config.analysis.resolved_model_config, "analysis"

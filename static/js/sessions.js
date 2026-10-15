@@ -80,7 +80,7 @@ function showAnalysisModal(sessionId) {
       if (requestId !== analysisModalRequest) return;
       var loading = analysisModalBody.querySelector('[role="status"]');
       if (loading) { loading.replaceChildren(); loading.removeAttribute('role'); }
-      modalLifecycle.error(analysisModal, uiLanguage.t('admin.analysis_load_failed'));
+      modalLifecycle.error(analysisModal, uiLanguage.t('teacher.analysis_load_failed'));
     }).finally(function () { sessionPendingRequests--; });
 }
 

@@ -4,7 +4,7 @@
 
 `src/i18n/catalog.json`의 모든 항목을 영역별로 나열했다. 키는 개발 참조용이며 화면에 표시하지 않는다. `{name}` 등의 보간 인자는 원문 콘텐츠를 삽입하는 자리다.
 
-총 1221개 키. `tests/test_i18n_catalog.py`에서 KO/EN 값, 보간 인자, 코드 참조 및 미사용 키를 검사한다. 알 수 없는 키와 영어 누락의 안전한 fallback은 서버·브라우저 언어 테스트로 확인한다.
+총 1210개 키. `tests/test_i18n_catalog.py`에서 KO/EN 값, 보간 인자, 코드 참조 및 미사용 키를 검사한다. 알 수 없는 키와 영어 누락의 안전한 fallback은 서버·브라우저 언어 테스트로 확인한다.
 
 ## 번역하지 않는 값과 예외
 
@@ -65,7 +65,7 @@
 | about | `about.loading` | 소개를 불러오는 중... | Loading About… |
 | about | `about.load_error` | 소개를 불러올 수 없습니다. About을 다시 눌러 주세요. | Could not load About. Select About to try again. |
 
-## teacher (328)
+## teacher (330)
 
 | area | key | ko | en |
 | --- | --- | --- | --- |
@@ -397,8 +397,10 @@
 | teacher | `teacher.student_storage_failed` | 학생 응답 저장에 실패했습니다. | Could not save the student response. |
 | teacher | `teacher.mentor_check_execution` | 멘토 실행 상태를 확인해주세요. | Check the mentor run status. |
 | teacher | `teacher.user_not_found` | 사용자를 찾을 수 없습니다. | User not found |
+| teacher | `teacher.chunk_partial_notice` | 부분 분석: 검증된 {reviewed} / {total}개 메시지의 결과입니다. 완료·실패·미실행 범위는 분석 범위에서 확인하세요. | Partial analysis: validated results for {reviewed} / {total} messages. Check analysis coverage for completed, failed and unprocessed ranges. |
+| teacher | `teacher.no_dialogue_feedback` | 대화가 없어 분석할 수 없습니다. | There is no conversation to analyze. |
 
-## admin (858)
+## admin (845)
 
 | area | key | ko | en |
 | --- | --- | --- | --- |
@@ -561,7 +563,7 @@
 | admin | `admin.changing_to_a_draft_prevents_teachers_from_starting_new_sessions_save_as_a_draft` | 초안으로 전환하면 교사의 새 세션 시작이 중단됩니다. 초안으로 저장하시겠습니까? | Changing to a draft prevents teachers from starting new sessions. Save as a draft? |
 | admin | `admin.another_administrator_made_changes_your_input_is_preserved_latest_version` | 다른 관리자가 변경했습니다. 현재 화면의 입력은 유지됩니다. 최신 버전: | Another administrator made changes. Your input is preserved. Latest version: |
 | admin | `admin.draft_saved` | 초안을 저장했습니다. | Draft saved. |
-| admin | `admin.published_2` | 게시했습니다. | Published. |
+| admin | `admin.publication_succeeded` | 게시했습니다. | Published. |
 | admin | `admin.please_log_in` | 로그인이 필요합니다. | Please log in. |
 | admin | `admin.check_your_permissions_or_security_token` | 권한 또는 보안 토큰을 확인하세요. | Check your permissions or security token. |
 | admin | `admin.scenario_not_found` | 시나리오를 찾을 수 없습니다. | Scenario not found. |
@@ -682,7 +684,7 @@
 | admin | `admin.history` | 이력 | History |
 | admin | `admin.actions` | 작업 | Actions |
 | admin | `admin.no_contributors_have_been_added` | 등록된 정보가 없습니다. | No contributors have been added. |
-| admin | `admin.add_contributor_2` | 새 등록자 추가 | Add contributor |
+| admin | `admin.add_contributor_heading` | 새 등록자 추가 | Add contributor |
 | admin | `admin.close` | 닫기 | Close |
 | admin | `admin.phone_number_optional` | 전화번호 (선택) | Phone number (optional) |
 | admin | `admin.email_optional` | 이메일 (선택) | Email (optional) |
@@ -711,14 +713,14 @@
 | admin | `admin.question` | 질문 | Question |
 | admin | `admin.confidence` | 신뢰도 | Confidence |
 | admin | `admin.time` | 시간 | Time |
-| admin | `admin.actions_2` | 액션 | Actions |
+| admin | `admin.analysis_actions` | 액션 | Actions |
 | admin | `admin.historical_data_read_only` | · 과거 자료 · 읽기 전용 | · Historical data · Read only |
 | admin | `admin.view_details` | 상세보기 | View details |
 | admin | `admin.no_analysis_results` | 분석 결과가 없습니다. | No analysis results. |
 | admin | `admin.analysis_details` | 분석 상세 | Analysis details |
 | admin | `admin.user_conversations_admin` | 사용자 대화 관리 - 관리자 | User conversations - Admin |
 | admin | `admin.download_conversation_history_by_user` | 사용자별 대화 내역 다운로드 | Download conversation history by user |
-| admin | `admin.user_conversations_2` | 사용자 대화 목록 | User conversations |
+| admin | `admin.user_conversations_table` | 사용자 대화 목록 | User conversations |
 | admin | `admin.nickname` | 닉네임 | Nickname |
 | admin | `admin.student_number` | 학번 | Student number |
 | admin | `admin.session_count` | 세션 수 | Session count |
@@ -744,18 +746,13 @@
 | admin | `admin.start_time` | 시작 시간 | Start time |
 | admin | `admin.end_time` | 종료 시간 | End time |
 | admin | `admin.status` | 상태 | Status |
-| admin | `admin.active_sessions_cannot_be_downloaded` | 진행중 세션 다운로드 불가 | Active sessions cannot be downloaded |
 | admin | `admin.completed` | 완료 | Completed |
 | admin | `admin.in_progress` | 진행중 | In progress |
-| admin | `admin.end_and_analyze_this_session` | 세션을 종료하고 분석하시겠습니까? | End and analyze this session? |
 | admin | `admin.end` | 종료 | End |
-| admin | `admin.analysis_results` | 분석결과 | Analysis results |
-| admin | `admin.delete_this_session_this_cannot_be_undone` | 세션을 삭제하시겠습니까? (복구 불가) | Delete this session? This cannot be undone. |
 | admin | `admin.no_results_for_the_current_filters_or_page` | 현재 필터 또는 페이지에 결과가 없습니다. | No results for the current filters or page. |
 | admin | `admin.no_sessions` | 세션이 없습니다. | No sessions. |
 | admin | `admin.first` | 처음 | First |
 | admin | `admin.last` | 마지막 | Last |
-| admin | `admin.session_analysis_results` | 세션 분석 결과 | Session analysis results |
 | admin | `admin.user_management_admin` | 사용자 관리 - 관리자 | User management - Admin |
 | admin | `admin.download_csv_template` | CSV 양식 다운로드 | Download CSV template |
 | admin | `admin.bulk_add` | 일괄 추가 | Bulk add |
@@ -796,7 +793,7 @@
 | admin | `admin.letters_numbers_underscores` | 영문/숫자/언더스코어 | Letters/numbers/underscores |
 | admin | `admin.password` | 비밀번호 | Password |
 | admin | `admin.no_group` | 그룹 없음 | No group |
-| admin | `admin.create_user_2` | 사용자 생성 | Create user |
+| admin | `admin.create_user_submit` | 사용자 생성 | Create user |
 | admin | `admin.edit_user` | 사용자 수정 | Edit user |
 | admin | `admin.reset_password` | 비밀번호 재설정 | Reset password |
 | admin | `admin.new_password` | 새 비밀번호 | New password |
@@ -815,7 +812,7 @@
 | admin | `admin.enter_group_name` | 그룹 이름 입력 | Enter group name |
 | admin | `admin.description` | 설명 | Description |
 | admin | `admin.group_description_optional` | 그룹 설명 (선택) | Group description (optional) |
-| admin | `admin.create_group_2` | 그룹 생성 | Create group |
+| admin | `admin.create_group_submit` | 그룹 생성 | Create group |
 | admin | `admin.edit_group` | 그룹 수정 | Edit group |
 | admin | `admin.ai_connections_and_models_admin` | AI 연결·모델 - 관리자 | AI connections and models - Admin |
 | admin | `admin.provider_connection_model_registration_role_tests_authoring_defaults_and_call_settings` | 제공자 연결 → 모델 등록 → 역할 시험 → 작성 기본값·호출 설정 | Provider connection → Model registration → Role tests → Authoring defaults and call settings |
@@ -844,7 +841,7 @@
 | admin | `admin.refused` | 거절 | Refused |
 | admin | `admin.timed_out` | 시간 초과 | Timed out |
 | admin | `admin.interrupted` | 중단 | Interrupted |
-| admin | `admin.in_progress_2` | 진행 중 | In progress |
+| admin | `admin.operation_in_progress` | 진행 중 | In progress |
 | admin | `admin.error` | 오류: | Error: |
 | admin | `admin.usage` | 사용량: | Usage: |
 | admin | `admin.complete` | 완전 | Complete |
@@ -970,8 +967,8 @@
 | admin | `admin.adopt_one_eligible_completed_response_to_update_the_canonical_conversation_history` | 완료 응답 중 서버가 허용한 응답 하나를 채택하면 다음 기준 대화 이력이 갱신됩니다. | Adopt one eligible completed response to update the canonical conversation history. |
 | admin | `admin.response_adoption_is_currently_unavailable_refresh_the_state_to_check_eligibility` | 현재 응답 채택이 허용되지 않습니다. 상태 새로고침으로 조건을 확인하세요. | Response adoption is currently unavailable. Refresh the state to check eligibility. |
 | admin | `admin.no_completed_response_is_available_to_adopt_check_retry_eligibility_for_the_current_panels` | 채택할 완료 응답이 없습니다. 현재 대상 패널의 재시도 조건을 확인하세요. | No completed response is available to adopt. Check retry eligibility for the current panels. |
-| admin | `admin.teacher_2` | 교사: | Teacher: |
-| admin | `admin.student_2` | 학생: | Student: |
+| admin | `admin.teacher_prefix` | 교사: | Teacher: |
+| admin | `admin.student_prefix` | 학생: | Student: |
 | admin | `admin.send_question` | 질문 보내기 | Send question |
 | admin | `admin.mentor_help` | 멘토 도움 | Mentor help |
 | admin | `admin.pending_automatic_check` | 대기 중 자동 검사 | Pending automatic check |
@@ -1005,7 +1002,7 @@
 | admin | `admin.untitled_draft` | 제목 없는 초안 | Untitled draft |
 | admin | `admin.details` | 상세 | Details |
 | admin | `admin.no_retained_comparisons` | 보존 중인 비교가 없습니다. | No retained comparisons. |
-| admin | `admin.created_2` | 생성 | Created |
+| admin | `admin.created_timestamp_label` | 생성 | Created |
 | admin | `admin.retained_for_30_days` | 30일 보존 | Retained for 30 days |
 | admin | `admin.current_question` | 현재 질문: | Current question: |
 | admin | `admin.common_input_hash` | 공통 입력 hash: | Common input hash: |
@@ -1021,8 +1018,6 @@
 | admin | `admin.waiting` | 대기 | Waiting |
 | admin | `admin.processing` | 처리 중 | Processing |
 | admin | `admin.streaming` | 스트리밍 | Streaming |
-| admin | `admin.complete_analysis` | 정상 분석 | Complete analysis |
-| admin | `admin.partial_analysis` | 부분 분석 | Partial analysis |
 | admin | `admin.response_validation_failed` | 응답 검증에 실패했습니다. | Response validation failed. |
 | admin | `admin.the_provider_request_limit_was_reached` | 제공자 요청 한도에 도달했습니다. | The provider request limit was reached. |
 | admin | `admin.the_provider_refused_the_response` | 제공자가 응답을 거절했습니다. | The provider refused the response. |
@@ -1040,9 +1035,9 @@
 | admin | `admin.provisional_response_incomplete_cannot_adopt` | 잠정 응답 · 미완료 · 채택 불가 | Provisional response · Incomplete · Cannot adopt |
 | admin | `admin.no_mentor_intervention` | 멘토 미개입 | No mentor intervention |
 | admin | `admin.mentor_coaching` | 멘토 코칭 | Mentor coaching |
-| admin | `admin.started_2` | 시작 | Started |
+| admin | `admin.started_timestamp_label` | 시작 | Started |
 | admin | `admin.total_time` | 전체 시간 | Total time |
-| admin | `admin.first_output_2` | 첫 본문 | First output |
+| admin | `admin.first_body_timestamp_label` | 첫 본문 | First output |
 | admin | `admin.actual_input` | 실제 입력 | Actual input |
 | admin | `admin.output` | 출력 | Output |
 | admin | `admin.tokens_cost` | 토큰 · 비용 | tokens · Cost |
@@ -1091,7 +1086,6 @@
 | admin | `admin.the_input_is_too_large` | 입력이 너무 큽니다. | The input is too large. |
 | admin | `admin.source_scenario_not_found_compare_from_a_new_draft` | 원본 시나리오를 찾을 수 없습니다. 새 초안에서 비교하세요. | Source scenario not found. Compare from a new draft. |
 | admin | `admin.could_not_process_the_comparison_request_your_input_is_preserved` | 비교 요청을 처리하지 못했습니다. 입력을 보존했습니다. | Could not process the comparison request. Your input is preserved. |
-| admin | `admin.check_your_input_2` | 입력을 확인하세요. | Check your input. |
 | admin | `admin.enable_the_mentor_and_add_a_completed_pair` | 멘토를 켜고 완료 쌍을 추가하세요. | Enable the mentor and add a completed pair. |
 | admin | `admin.enter_a_teacher_message` | 교사 메시지를 입력하세요. | Enter a teacher message. |
 | admin | `admin.checking_common_input_for_all_panels` | 전체 패널의 공통 입력을 확인 중입니다. | Checking common input for all panels. |
@@ -1107,19 +1101,19 @@
 | admin | `admin.comparison_input_reset_saved_comparison_records_are_preserved` | 편집 중 비교 입력을 초기화했습니다. 저장된 비교 기록은 유지됩니다. | Comparison input reset. Saved comparison records are preserved. |
 | admin | `admin.unsaved_draft` | 미저장 초안 | Unsaved draft |
 | admin | `admin.new_draft_no_source` | 새 작성 · 원본 없음 | New draft · No source |
-| admin | `admin.source_2` | 원본 | Source |
+| admin | `admin.source_scenario` | 원본 | Source |
 | admin | `admin.save_failed` | 저장 실패 | Save failed |
 | admin | `admin.added` | 등록되었습니다. | Added. |
-| admin | `admin.could_not_confirm_the_save_result_your_input_is_preserved_2` | 저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다. | Could not confirm the save result. Your input is preserved. |
+| admin | `admin.save_result_unknown_input_preserved` | 저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다. | Could not confirm the save result. Your input is preserved. |
 | admin | `admin.updated` | 수정되었습니다. | Updated. |
 | admin | `admin.delete_this_item` | 항목을 삭제하시겠습니까? | Delete this item? |
-| admin | `admin.deletion_failed_2` | 삭제 실패 | Deletion failed |
+| admin | `admin.contributor_deletion_failed` | 삭제 실패 | Deletion failed |
 | admin | `admin.deleted` | 삭제되었습니다. | Deleted. |
 | admin | `admin.could_not_confirm_deletion_check_the_list_again` | 삭제 결과를 확인할 수 없습니다. 목록을 새로 확인하세요. | Could not confirm deletion. Check the list again. |
 | admin | `admin.loading_analysis_details` | 분석 상세를 불러오는 중... | Loading analysis details... |
 | admin | `admin.could_not_load_analysis_details_close_and_try_again` | 분석 상세를 불러올 수 없습니다. 닫은 뒤 다시 시도하세요. | Could not load analysis details. Close and try again. |
 | admin | `admin.lookup_failed` | 조회 실패 | Lookup failed |
-| admin | `admin.no_completed_sessions_2` | 완료된 세션이 없습니다. | No completed sessions. |
+| admin | `admin.no_completed_sessions_message` | 완료된 세션이 없습니다. | No completed sessions. |
 | admin | `admin.date_and_time` | 일시 | Date and time |
 | admin | `admin.messages` | 메시지 | Messages |
 | admin | `admin.download` | 다운로드 | Download |
@@ -1145,27 +1139,23 @@
 | admin | `admin.group_deleted` | 그룹이 삭제되었습니다! | Group deleted! |
 | admin | `admin.list_page` | 현재 {page} 페이지 · 20개씩 · 총 {total}개 | Page {page} · 20 per page · {total} total |
 | admin | `admin.session_page` | 총 {total}개 중 {page}/{pages} 페이지 | Page {page}/{pages} · {total} total |
-| admin | `admin.select_session` | 세션 {id} 선택 | Select session {id} |
 | admin | `admin.people_count` | {count}명 | {count} |
 | admin | `admin.student_label` | 학생 | Student |
 | admin | `admin.group_has_members` | "{name}" 그룹에 {count}명의 멤버가 있어 삭제할 수 없습니다. 먼저 멤버를 다른 그룹으로 이동하세요. | Cannot delete group "{name}" with {count} members. Move its members to another group first. |
 | admin | `admin.admin_required` | 관리자 권한이 필요합니다. | Admin role required |
-| admin | `admin.session_missing` | 세션을 찾을 수 없습니다. | Session not found |
 | admin | `admin.session_deleted` | 이미 삭제된 세션입니다. | Session already deleted |
 | admin | `admin.end_before_analysis` | 분석을 보려면 먼저 세션을 종료하세요. | Session must be ended before viewing analysis |
-| admin | `admin.analysis_missing` | 분석을 찾을 수 없습니다. | Analysis not found |
 | admin | `admin.user_missing` | 사용자를 찾을 수 없습니다. | User not found |
 | admin | `admin.sessions_missing` | 세션이 없습니다. | No sessions found |
 | admin | `admin.session_selection_required` | 세션을 선택하세요. | No session_ids provided |
 | admin | `admin.valid_sessions_missing` | 유효한 세션이 없습니다. | No valid sessions |
 | admin | `admin.completed_sessions_missing` | 완료된 세션이 없습니다. | No completed sessions found |
 | admin | `admin.active_download` | 진행 중인 세션은 다운로드할 수 없습니다. | Cannot download active session |
-| admin | `admin.active_session` | 세션 {v0}이 진행 중입니다. 종료된 세션만 가능합니다. | Session {v0} is still active. Only ended allowed. |
+| admin | `admin.active_session` | 세션 {session_id}이 진행 중입니다. 종료된 세션만 가능합니다. | Session {session_id} is still active. Only ended allowed. |
 | admin | `admin.contributor_not_found` | 등록자를 찾을 수 없습니다. | Contributor not found. |
-| admin | `admin.analysis_not_found` | 분석을 찾을 수 없습니다 | Analysis not found |
 | admin | `admin.group_name_already_exists` | 이미 존재하는 그룹 이름입니다. | Group name already exists. |
 | admin | `admin.group_not_found` | 그룹을 찾을 수 없습니다. | Group not found. |
-| admin | `admin.cannot_delete_this_group_with_v0_members_move_its_members_to_another_group_first` | 이 그룹에 {v0}명의 멤버가 있어 삭제할 수 없습니다. 먼저 멤버를 다른 그룹으로 이동하세요. | Cannot delete this group with {v0} members. Move its members to another group first. |
+| admin | `admin.cannot_delete_group_with_members` | 이 그룹에 {member_count}명의 멤버가 있어 삭제할 수 없습니다. 먼저 멤버를 다른 그룹으로 이동하세요. | Cannot delete this group with {member_count} members. Move its members to another group first. |
 | admin | `admin.user_ids_may_contain_only_letters_numbers_and_underscores` | 사용자 ID는 영문, 숫자, 언더스코어만 사용 가능합니다. | User IDs may contain only letters, numbers and underscores. |
 | admin | `admin.user_id_already_exists` | 이미 존재하는 사용자 ID입니다. | User ID already exists. |
 | admin | `admin.invalid_role` | 유효하지 않은 역할입니다. | Invalid role. |
@@ -1176,21 +1166,21 @@
 | admin | `admin.the_file_exceeds_1mb` | 파일 크기가 1MB를 초과합니다. | The file exceeds 1MB. |
 | admin | `admin.unrecognized_file_encoding_use_utf_8_or_euc_kr` | 파일 인코딩을 인식할 수 없습니다. UTF-8 또는 EUC-KR을 사용해주세요. | Unrecognized file encoding. Use UTF-8 or EUC-KR. |
 | admin | `admin.could_not_read_csv_headers` | CSV 헤더를 읽을 수 없습니다. | Could not read CSV headers. |
-| admin | `admin.required_columns_are_missing_v0_found_columns_v1` | 필수 컬럼이 누락되었습니다: {v0}. (발견된 컬럼: {v1}) | Required columns are missing: {v0}. (Found columns: {v1}) |
+| admin | `admin.required_columns_missing` | 필수 컬럼이 누락되었습니다: {missing_columns}. (발견된 컬럼: {found_columns}) | Required columns are missing: {missing_columns}. (Found columns: {found_columns}) |
 | admin | `admin.the_csv_file_is_empty` | CSV 파일이 비어 있습니다. | The CSV file is empty. |
-| admin | `admin.upload_up_to_v0_users_current_count_v1` | 최대 {v0}명까지 업로드할 수 있습니다. 현재 {v1}명 | Upload up to {v0} users. Current count: {v1} |
+| admin | `admin.upload_user_limit` | 최대 {limit}명까지 업로드할 수 있습니다. 현재 {count}명 | Upload up to {limit} users. Current count: {count} |
 | admin | `admin.user_ids_must_contain_3_to_50_characters` | 사용자 ID는 3자 이상 50자 이하여야 합니다. | User IDs must contain 3 to 50 characters. |
 | admin | `admin.nicknames_must_contain_2_to_30_characters` | 닉네임은 2자 이상 30자 이하여야 합니다. | Nicknames must contain 2 to 30 characters. |
-| admin | `admin.invalid_role_v0` | 유효하지 않은 역할: {v0} | Invalid role: {v0} |
-| admin | `admin.user_id_already_exists_2` | 이미 존재하는 사용자 ID | User ID already exists |
+| admin | `admin.invalid_role_value` | 유효하지 않은 역할: {role} | Invalid role: {role} |
+| admin | `admin.bulk_user_id_exists` | 이미 존재하는 사용자 ID | User ID already exists |
 | admin | `admin.duplicate_user_id_in_csv` | CSV 내 중복된 사용자 ID | Duplicate user ID in CSV |
-| admin | `admin.group_not_found_v0` | 존재하지 않는 그룹: {v0} | Group not found: {v0} |
+| admin | `admin.group_not_found_value` | 존재하지 않는 그룹: {group_name} | Group not found: {group_name} |
 | admin | `admin.invalid_user_id_format` | 유효하지 않은 사용자 ID 형식 | Invalid user ID format |
-| admin | `admin.invalid_role_2` | 유효하지 않은 역할 | Invalid role |
+| admin | `admin.bulk_invalid_role` | 유효하지 않은 역할 | Invalid role |
 | admin | `admin.an_error_occurred_while_registering_the_user` | 사용자 등록 중 오류가 발생했습니다. | An error occurred while registering the user. |
-| admin | `admin.registered_model_v0_v1` | 등록 모델: {v0} ({v1}) | Registered model: {v0} ({v1}) |
-| admin | `admin.scenario_v0_v1_v2_v3_v4_v5` | 시나리오 #{v0} {v1} · {v2} ({v3}) · {v4} · {v5} | Scenario #{v0} {v1} · {v2} ({v3}) · {v4} · {v5} |
-| admin | `admin.v0_default_authoring_model_v1` | {v0} 작성 기본 모델: {v1} | {v0} default authoring model: {v1} |
+| admin | `admin.registered_model_description` | 등록 모델: {display_name} ({model_id}) | Registered model: {display_name} ({model_id}) |
+| admin | `admin.scenario_model_usage` | 시나리오 #{scenario_id} {title} · {role} ({model_id}) · {state} · {execution} | Scenario #{scenario_id} {title} · {role} ({model_id}) · {state} · {execution} |
+| admin | `admin.role_default_authoring_model` | {role} 작성 기본 모델: {model_name} | {role} default authoring model: {model_name} |
 | admin | `admin.mentor_off_excluded_from_execution` | 멘토 off · 실행 제외 | Mentor off · Excluded from execution |
 | admin | `admin.used_for_new_lessons` | 새 수업 실행 참조 | Used for new lessons |
 | admin | `admin.excluded_from_new_lessons` | 새 수업 실행 제외 | Excluded from new lessons |
@@ -1215,7 +1205,7 @@
 | admin | `admin.unspecified_uses_the_provider_default_level_level_and_budget_cannot_be_combined_this_app_edits_gemin` | 지정하지 않음은 제공자 기본 level을 사용합니다. level과 budget은 함께 지정할 수 없습니다. 이 앱의 Gemini 3 옵션 편집은 level을 사용합니다. 기존 budget 저장 값은 보존하며 명시적 수정이 필요합니다. | Unspecified uses the provider default level. level and budget cannot be combined. This app edits Gemini 3 options using level. Existing saved budgets are preserved and require explicit editing. |
 | admin | `admin.minimal_does_not_guarantee_that_thinking_is_fully_disabled` | minimal은 사고의 완전한 비활성화를 보장하지 않습니다. | minimal does not guarantee that thinking is fully disabled. |
 | admin | `admin.minimal_is_unsupported` | minimal은 지원하지 않습니다. | minimal is unsupported. |
-| admin | `admin.active_calls_v0` | 활성 호출: {v0}건 | Active calls: {v0} |
+| admin | `admin.active_call_count` | 활성 호출: {count}건 | Active calls: {count} |
 | admin | `admin.invalid_date` | {field} 날짜 형식이 유효하지 않습니다: '{value}' | Invalid {field} format: '{value}' |
 | admin | `admin.configuration` | 실행 설정 | Configuration |
 | admin | `admin.rubric_id` | ID | ID |
@@ -1253,7 +1243,6 @@
 | admin | `admin.decision_cap` | 개입 상한 도달 | Intervention cap reached |
 | admin | `admin.selected_count` | {count}개 선택됨 | {count} selected |
 | admin | `admin.sessions_loading` | 분석 결과 로딩 중... | Loading analysis results... |
-| admin | `admin.analysis_load_failed` | 분석 결과를 불러올 수 없습니다. | Could not load analysis results. |
 | admin | `admin.downloading` | 다운로드 중... | Downloading... |
 | admin | `admin.download_failed` | 다운로드 실패 | Download failed |
 | admin | `admin.selected_download_failed` | 선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요. | Could not download the selected sessions. Check permissions and session status, then try again. |

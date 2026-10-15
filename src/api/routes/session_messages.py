@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_helpers import load_session, require_native_session
-from src.api.routes.teacher_language import TeacherLanguageRoute
 from src.config import config
 from src.i18n import display_language, translate
 from src.models import Message, User
@@ -25,7 +24,7 @@ from src.services.session_history import session_display
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(route_class=TeacherLanguageRoute, tags=["Sessions"])
+router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 
@@ -92,8 +91,10 @@ async def send_message(
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     """Old tabs must reload; all new writes use durable execution rights."""
-    session = await load_session(session_id, user, db)
-    require_native_session(session)
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
+    require_native_session(session, language=display_language(request))
     return JSONResponse(
         {
             "code": "reload_required",
@@ -115,7 +116,9 @@ async def get_message_updates(
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     """Get new messages since last message ID for HTMX polling."""
-    session = await load_session(session_id, user, db)
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
 
     student_name = session_display(session)["student_name"]
 

@@ -1457,6 +1457,14 @@
     "user_not_found": {
       "ko": "사용자를 찾을 수 없습니다.",
       "en": "User not found"
+    },
+    "chunk_partial_notice": {
+      "ko": "부분 분석: 검증된 {reviewed} / {total}개 메시지의 결과입니다. 완료·실패·미실행 범위는 분석 범위에서 확인하세요.",
+      "en": "Partial analysis: validated results for {reviewed} / {total} messages. Check analysis coverage for completed, failed and unprocessed ranges."
+    },
+    "no_dialogue_feedback": {
+      "ko": "대화가 없어 분석할 수 없습니다.",
+      "en": "There is no conversation to analyze."
     }
   },
   "admin": {
@@ -2096,7 +2104,7 @@
       "ko": "초안을 저장했습니다.",
       "en": "Draft saved."
     },
-    "published_2": {
+    "publication_succeeded": {
       "ko": "게시했습니다.",
       "en": "Published."
     },
@@ -2580,7 +2588,7 @@
       "ko": "등록된 정보가 없습니다.",
       "en": "No contributors have been added."
     },
-    "add_contributor_2": {
+    "add_contributor_heading": {
       "ko": "새 등록자 추가",
       "en": "Add contributor"
     },
@@ -2696,7 +2704,7 @@
       "ko": "시간",
       "en": "Time"
     },
-    "actions_2": {
+    "analysis_actions": {
       "ko": "액션",
       "en": "Actions"
     },
@@ -2724,7 +2732,7 @@
       "ko": "사용자별 대화 내역 다운로드",
       "en": "Download conversation history by user"
     },
-    "user_conversations_2": {
+    "user_conversations_table": {
       "ko": "사용자 대화 목록",
       "en": "User conversations"
     },
@@ -2828,10 +2836,6 @@
       "ko": "상태",
       "en": "Status"
     },
-    "active_sessions_cannot_be_downloaded": {
-      "ko": "진행중 세션 다운로드 불가",
-      "en": "Active sessions cannot be downloaded"
-    },
     "completed": {
       "ko": "완료",
       "en": "Completed"
@@ -2840,21 +2844,9 @@
       "ko": "진행중",
       "en": "In progress"
     },
-    "end_and_analyze_this_session": {
-      "ko": "세션을 종료하고 분석하시겠습니까?",
-      "en": "End and analyze this session?"
-    },
     "end": {
       "ko": "종료",
       "en": "End"
-    },
-    "analysis_results": {
-      "ko": "분석결과",
-      "en": "Analysis results"
-    },
-    "delete_this_session_this_cannot_be_undone": {
-      "ko": "세션을 삭제하시겠습니까? (복구 불가)",
-      "en": "Delete this session? This cannot be undone."
     },
     "no_results_for_the_current_filters_or_page": {
       "ko": "현재 필터 또는 페이지에 결과가 없습니다.",
@@ -2871,10 +2863,6 @@
     "last": {
       "ko": "마지막",
       "en": "Last"
-    },
-    "session_analysis_results": {
-      "ko": "세션 분석 결과",
-      "en": "Session analysis results"
     },
     "user_management_admin": {
       "ko": "사용자 관리 - 관리자",
@@ -3036,7 +3024,7 @@
       "ko": "그룹 없음",
       "en": "No group"
     },
-    "create_user_2": {
+    "create_user_submit": {
       "ko": "사용자 생성",
       "en": "Create user"
     },
@@ -3112,7 +3100,7 @@
       "ko": "그룹 설명 (선택)",
       "en": "Group description (optional)"
     },
-    "create_group_2": {
+    "create_group_submit": {
       "ko": "그룹 생성",
       "en": "Create group"
     },
@@ -3228,7 +3216,7 @@
       "ko": "중단",
       "en": "Interrupted"
     },
-    "in_progress_2": {
+    "operation_in_progress": {
       "ko": "진행 중",
       "en": "In progress"
     },
@@ -3732,11 +3720,11 @@
       "ko": "채택할 완료 응답이 없습니다. 현재 대상 패널의 재시도 조건을 확인하세요.",
       "en": "No completed response is available to adopt. Check retry eligibility for the current panels."
     },
-    "teacher_2": {
+    "teacher_prefix": {
       "ko": "교사:",
       "en": "Teacher:"
     },
-    "student_2": {
+    "student_prefix": {
       "ko": "학생:",
       "en": "Student:"
     },
@@ -3872,7 +3860,7 @@
       "ko": "보존 중인 비교가 없습니다.",
       "en": "No retained comparisons."
     },
-    "created_2": {
+    "created_timestamp_label": {
       "ko": "생성",
       "en": "Created"
     },
@@ -3935,14 +3923,6 @@
     "streaming": {
       "ko": "스트리밍",
       "en": "Streaming"
-    },
-    "complete_analysis": {
-      "ko": "정상 분석",
-      "en": "Complete analysis"
-    },
-    "partial_analysis": {
-      "ko": "부분 분석",
-      "en": "Partial analysis"
     },
     "response_validation_failed": {
       "ko": "응답 검증에 실패했습니다.",
@@ -4012,7 +3992,7 @@
       "ko": "멘토 코칭",
       "en": "Mentor coaching"
     },
-    "started_2": {
+    "started_timestamp_label": {
       "ko": "시작",
       "en": "Started"
     },
@@ -4020,7 +4000,7 @@
       "ko": "전체 시간",
       "en": "Total time"
     },
-    "first_output_2": {
+    "first_body_timestamp_label": {
       "ko": "첫 본문",
       "en": "First output"
     },
@@ -4216,10 +4196,6 @@
       "ko": "비교 요청을 처리하지 못했습니다. 입력을 보존했습니다.",
       "en": "Could not process the comparison request. Your input is preserved."
     },
-    "check_your_input_2": {
-      "ko": "입력을 확인하세요.",
-      "en": "Check your input."
-    },
     "enable_the_mentor_and_add_a_completed_pair": {
       "ko": "멘토를 켜고 완료 쌍을 추가하세요.",
       "en": "Enable the mentor and add a completed pair."
@@ -4280,7 +4256,7 @@
       "ko": "새 작성 · 원본 없음",
       "en": "New draft · No source"
     },
-    "source_2": {
+    "source_scenario": {
       "ko": "원본",
       "en": "Source"
     },
@@ -4292,7 +4268,7 @@
       "ko": "등록되었습니다.",
       "en": "Added."
     },
-    "could_not_confirm_the_save_result_your_input_is_preserved_2": {
+    "save_result_unknown_input_preserved": {
       "ko": "저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.",
       "en": "Could not confirm the save result. Your input is preserved."
     },
@@ -4304,7 +4280,7 @@
       "ko": "항목을 삭제하시겠습니까?",
       "en": "Delete this item?"
     },
-    "deletion_failed_2": {
+    "contributor_deletion_failed": {
       "ko": "삭제 실패",
       "en": "Deletion failed"
     },
@@ -4328,7 +4304,7 @@
       "ko": "조회 실패",
       "en": "Lookup failed"
     },
-    "no_completed_sessions_2": {
+    "no_completed_sessions_message": {
       "ko": "완료된 세션이 없습니다.",
       "en": "No completed sessions."
     },
@@ -4432,10 +4408,6 @@
       "ko": "총 {total}개 중 {page}/{pages} 페이지",
       "en": "Page {page}/{pages} · {total} total"
     },
-    "select_session": {
-      "ko": "세션 {id} 선택",
-      "en": "Select session {id}"
-    },
     "people_count": {
       "ko": "{count}명",
       "en": "{count}"
@@ -4452,10 +4424,6 @@
       "ko": "관리자 권한이 필요합니다.",
       "en": "Admin role required"
     },
-    "session_missing": {
-      "ko": "세션을 찾을 수 없습니다.",
-      "en": "Session not found"
-    },
     "session_deleted": {
       "ko": "이미 삭제된 세션입니다.",
       "en": "Session already deleted"
@@ -4463,10 +4431,6 @@
     "end_before_analysis": {
       "ko": "분석을 보려면 먼저 세션을 종료하세요.",
       "en": "Session must be ended before viewing analysis"
-    },
-    "analysis_missing": {
-      "ko": "분석을 찾을 수 없습니다.",
-      "en": "Analysis not found"
     },
     "user_missing": {
       "ko": "사용자를 찾을 수 없습니다.",
@@ -4493,16 +4457,12 @@
       "en": "Cannot download active session"
     },
     "active_session": {
-      "ko": "세션 {v0}이 진행 중입니다. 종료된 세션만 가능합니다.",
-      "en": "Session {v0} is still active. Only ended allowed."
+      "ko": "세션 {session_id}이 진행 중입니다. 종료된 세션만 가능합니다.",
+      "en": "Session {session_id} is still active. Only ended allowed."
     },
     "contributor_not_found": {
       "ko": "등록자를 찾을 수 없습니다.",
       "en": "Contributor not found."
-    },
-    "analysis_not_found": {
-      "ko": "분석을 찾을 수 없습니다",
-      "en": "Analysis not found"
     },
     "group_name_already_exists": {
       "ko": "이미 존재하는 그룹 이름입니다.",
@@ -4512,9 +4472,9 @@
       "ko": "그룹을 찾을 수 없습니다.",
       "en": "Group not found."
     },
-    "cannot_delete_this_group_with_v0_members_move_its_members_to_another_group_first": {
-      "ko": "이 그룹에 {v0}명의 멤버가 있어 삭제할 수 없습니다. 먼저 멤버를 다른 그룹으로 이동하세요.",
-      "en": "Cannot delete this group with {v0} members. Move its members to another group first."
+    "cannot_delete_group_with_members": {
+      "ko": "이 그룹에 {member_count}명의 멤버가 있어 삭제할 수 없습니다. 먼저 멤버를 다른 그룹으로 이동하세요.",
+      "en": "Cannot delete this group with {member_count} members. Move its members to another group first."
     },
     "user_ids_may_contain_only_letters_numbers_and_underscores": {
       "ko": "사용자 ID는 영문, 숫자, 언더스코어만 사용 가능합니다.",
@@ -4556,17 +4516,17 @@
       "ko": "CSV 헤더를 읽을 수 없습니다.",
       "en": "Could not read CSV headers."
     },
-    "required_columns_are_missing_v0_found_columns_v1": {
-      "ko": "필수 컬럼이 누락되었습니다: {v0}. (발견된 컬럼: {v1})",
-      "en": "Required columns are missing: {v0}. (Found columns: {v1})"
+    "required_columns_missing": {
+      "ko": "필수 컬럼이 누락되었습니다: {missing_columns}. (발견된 컬럼: {found_columns})",
+      "en": "Required columns are missing: {missing_columns}. (Found columns: {found_columns})"
     },
     "the_csv_file_is_empty": {
       "ko": "CSV 파일이 비어 있습니다.",
       "en": "The CSV file is empty."
     },
-    "upload_up_to_v0_users_current_count_v1": {
-      "ko": "최대 {v0}명까지 업로드할 수 있습니다. 현재 {v1}명",
-      "en": "Upload up to {v0} users. Current count: {v1}"
+    "upload_user_limit": {
+      "ko": "최대 {limit}명까지 업로드할 수 있습니다. 현재 {count}명",
+      "en": "Upload up to {limit} users. Current count: {count}"
     },
     "user_ids_must_contain_3_to_50_characters": {
       "ko": "사용자 ID는 3자 이상 50자 이하여야 합니다.",
@@ -4576,11 +4536,11 @@
       "ko": "닉네임은 2자 이상 30자 이하여야 합니다.",
       "en": "Nicknames must contain 2 to 30 characters."
     },
-    "invalid_role_v0": {
-      "ko": "유효하지 않은 역할: {v0}",
-      "en": "Invalid role: {v0}"
+    "invalid_role_value": {
+      "ko": "유효하지 않은 역할: {role}",
+      "en": "Invalid role: {role}"
     },
-    "user_id_already_exists_2": {
+    "bulk_user_id_exists": {
       "ko": "이미 존재하는 사용자 ID",
       "en": "User ID already exists"
     },
@@ -4588,15 +4548,15 @@
       "ko": "CSV 내 중복된 사용자 ID",
       "en": "Duplicate user ID in CSV"
     },
-    "group_not_found_v0": {
-      "ko": "존재하지 않는 그룹: {v0}",
-      "en": "Group not found: {v0}"
+    "group_not_found_value": {
+      "ko": "존재하지 않는 그룹: {group_name}",
+      "en": "Group not found: {group_name}"
     },
     "invalid_user_id_format": {
       "ko": "유효하지 않은 사용자 ID 형식",
       "en": "Invalid user ID format"
     },
-    "invalid_role_2": {
+    "bulk_invalid_role": {
       "ko": "유효하지 않은 역할",
       "en": "Invalid role"
     },
@@ -4604,17 +4564,17 @@
       "ko": "사용자 등록 중 오류가 발생했습니다.",
       "en": "An error occurred while registering the user."
     },
-    "registered_model_v0_v1": {
-      "ko": "등록 모델: {v0} ({v1})",
-      "en": "Registered model: {v0} ({v1})"
+    "registered_model_description": {
+      "ko": "등록 모델: {display_name} ({model_id})",
+      "en": "Registered model: {display_name} ({model_id})"
     },
-    "scenario_v0_v1_v2_v3_v4_v5": {
-      "ko": "시나리오 #{v0} {v1} · {v2} ({v3}) · {v4} · {v5}",
-      "en": "Scenario #{v0} {v1} · {v2} ({v3}) · {v4} · {v5}"
+    "scenario_model_usage": {
+      "ko": "시나리오 #{scenario_id} {title} · {role} ({model_id}) · {state} · {execution}",
+      "en": "Scenario #{scenario_id} {title} · {role} ({model_id}) · {state} · {execution}"
     },
-    "v0_default_authoring_model_v1": {
-      "ko": "{v0} 작성 기본 모델: {v1}",
-      "en": "{v0} default authoring model: {v1}"
+    "role_default_authoring_model": {
+      "ko": "{role} 작성 기본 모델: {model_name}",
+      "en": "{role} default authoring model: {model_name}"
     },
     "mentor_off_excluded_from_execution": {
       "ko": "멘토 off · 실행 제외",
@@ -4712,9 +4672,9 @@
       "ko": "minimal은 지원하지 않습니다.",
       "en": "minimal is unsupported."
     },
-    "active_calls_v0": {
-      "ko": "활성 호출: {v0}건",
-      "en": "Active calls: {v0}"
+    "active_call_count": {
+      "ko": "활성 호출: {count}건",
+      "en": "Active calls: {count}"
     },
     "invalid_date": {
       "ko": "{field} 날짜 형식이 유효하지 않습니다: '{value}'",
@@ -4863,10 +4823,6 @@
     "sessions_loading": {
       "ko": "분석 결과 로딩 중...",
       "en": "Loading analysis results..."
-    },
-    "analysis_load_failed": {
-      "ko": "분석 결과를 불러올 수 없습니다.",
-      "en": "Could not load analysis results."
     },
     "downloading": {
       "ko": "다운로드 중...",

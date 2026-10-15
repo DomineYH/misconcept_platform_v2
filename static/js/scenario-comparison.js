@@ -286,7 +286,7 @@ export function mountComparison(data, draft) {
       const panel = panels.find(p => p.id === error.panel_id);
       const input = error.field === 'current_message' ? question : error.field === 'history' ? addHistory : panel?.settings.querySelector('select');
       if (input) input.setAttribute('aria-invalid', 'true');
-      errors.append(button(error.message || uiLanguage.t('admin.check_your_input_2'), () => input?.focus()));
+      errors.append(button(error.message || uiLanguage.t('common.check_input'), () => input?.focus()));
     }
     errors.focus();
   }
@@ -375,7 +375,7 @@ export function mountComparison(data, draft) {
       await consume(response, token);
       if (!locked()) { uncertain = false; savedComparison(); }
       if (streamToken !== token) return;
-      notice.textContent = locked() ? uiLanguage.t('admin.in_progress_2') : uiLanguage.t('admin.comparison_ended_check_each_panel_s_results');
+      notice.textContent = locked() ? uiLanguage.t('admin.operation_in_progress') : uiLanguage.t('admin.comparison_ended_check_each_panel_s_results');
       if (locked()) notice.textContent = uiLanguage.t('admin.in_progress_refresh_the_state_or_stop');
     } catch {
       if (streamToken !== token) return;
@@ -502,7 +502,7 @@ export function mountComparison(data, draft) {
   let initialized = false;
   uiLanguage.registerGuard(() => ({busy:Boolean(locked() || recovery || pendingRequests || uncertain || unacknowledgedStart), dirty:initialized && (comparisonValues() !== comparisonBaseline || [...rolePanels].some(([role,selections]) => role !== target.value && inputSnapshot(selections) !== roleBaselines.get(role)))}));
   open.addEventListener('click', () => {
-    source.textContent = `${draft().title || uiLanguage.t('admin.untitled_draft')} · ${uiLanguage.t('admin.unsaved_draft')} · ${data.id == null ? uiLanguage.t('admin.new_draft_no_source') : `${uiLanguage.t('admin.source_2')} #${data.id} · ${uiLanguage.t('admin.version')} ${data.config_version}`}`;
+    source.textContent = `${draft().title || uiLanguage.t('admin.untitled_draft')} · ${uiLanguage.t('admin.unsaved_draft')} · ${data.id == null ? uiLanguage.t('admin.new_draft_no_source') : `${uiLanguage.t('admin.source_scenario')} #${data.id} · ${uiLanguage.t('admin.version')} ${data.config_version}`}`;
     if (!initialized) { defaults(); initialized = true; comparisonBaseline = comparisonValues(); }
     roleNote();
     root.hidden = false;

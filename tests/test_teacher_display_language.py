@@ -185,3 +185,71 @@ def test_shared_session_row_localizes_actions_and_confirmation():
     assert 'hx-confirm="End and analyze this session?"' in html
     assert 'hx-confirm="Delete this session? (Cannot be undone)"' in html
     assert "원본 제목" in html
+
+
+def test_chunk_notice_translates_on_initial_page_and_shared_modal():
+    notice = "부분 분석: 검증된 6 / 7개 메시지의 결과입니다. 완료·실패·미실행 범위는 분석 범위에서 확인하세요."
+    for language, expected in (
+        (
+            "en",
+            "Partial analysis: validated results for 6 / 7 messages. Check analysis coverage for completed, failed and unprocessed ranges.",
+        ),
+        ("ko", notice),
+    ):
+        for template in ("analysis.html", "partials/analysis_modal.html"):
+            html = templates.get_template(template).render(
+                request=request(language),
+                user=SimpleNamespace(nickname="교사", role="teacher"),
+                session_id=1,
+                analysis_result_url="/sessions/1/analysis",
+                feedback=notice,
+                feedback_status="degraded",
+                accepted_report={
+                    "status": "degraded",
+                    "coverage": {
+                        "reviewed_message_ids": list(range(6)),
+                        "input_message_ids": list(range(7)),
+                        "chunks": [{"status": "failed"}],
+                    },
+                },
+            )
+            assert f"<p>{expected}</p>" in html
+            if language == "en":
+                assert f"<p>{notice}</p>" not in html
+
+
+def test_failure_and_no_dialogue_notices_use_status_without_rewriting_korean():
+    for status, stored, english in (
+        (
+            "failed",
+            "보관된 과거 실패 안내",
+            "Analysis feedback could not be generated.",
+        ),
+        (
+            "no_dialogue",
+            "대화가 없어 분석할 수 없습니다.",
+            "There is no conversation to analyze.",
+        ),
+    ):
+        for language in ("en", "ko"):
+            for template in ("analysis.html", "partials/analysis_modal.html"):
+                for initial in (False, True):
+                    html = templates.get_template(template).render(
+                        request=request(language),
+                        user=SimpleNamespace(nickname="교사", role="teacher"),
+                        session_id=1,
+                        feedback=stored,
+                        feedback_status=status,
+                        classification_enabled=False,
+                        distribution={},
+                        questions=[],
+                        messages=[],
+                        feedback_sections={},
+                        **(
+                            {"analysis_result_url": "/sessions/1/analysis"}
+                            if initial
+                            else {}
+                        ),
+                    )
+                    expected = english if language == "en" else stored
+                    assert f"<p>{expected}</p>" in html

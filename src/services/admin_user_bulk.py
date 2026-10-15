@@ -89,10 +89,10 @@ def parse_csv(file_content: bytes, language="ko") -> list[dict]:
         found = [f.strip() for f in reader.fieldnames]
         raise ValueError(
             translate(
-                "admin.required_columns_are_missing_v0_found_columns_v1",
+                "admin.required_columns_missing",
                 language,
-                v0=", ".join(sorted(missing)),
-                v1=", ".join(found),
+                missing_columns=", ".join(sorted(missing)),
+                found_columns=", ".join(found),
             )
         )
 
@@ -117,10 +117,10 @@ def parse_csv(file_content: bytes, language="ko") -> list[dict]:
     if len(rows) > MAX_ROWS:
         raise ValueError(
             translate(
-                "admin.upload_up_to_v0_users_current_count_v1",
+                "admin.upload_user_limit",
                 language,
-                v0=MAX_ROWS,
-                v1=len(rows),
+                limit=MAX_ROWS,
+                count=len(rows),
             )
         )
 
@@ -180,10 +180,12 @@ async def validate_bulk_users(
             )
 
         if role not in ("teacher", "admin"):
-            errors.append(translate("admin.invalid_role_v0", language, v0=role))
+            errors.append(
+                translate("admin.invalid_role_value", language, role=role)
+            )
 
         if username in existing_usernames:
-            errors.append(translate("admin.user_id_already_exists_2", language))
+            errors.append(translate("admin.bulk_user_id_exists", language))
 
         if username in seen_usernames:
             errors.append(translate("admin.duplicate_user_id_in_csv", language))
@@ -200,7 +202,9 @@ async def validate_bulk_users(
             else:
                 errors.append(
                     translate(
-                        "admin.group_not_found_v0", language, v0=group_name
+                        "admin.group_not_found_value",
+                        language,
+                        group_name=group_name,
                     )
                 )
                 resolved_group_name = group_name
@@ -263,9 +267,7 @@ async def register_bulk_users(
                 BulkFailure(
                     username=entry.username,
                     nickname=entry.nickname,
-                    reason=translate(
-                        "admin.user_id_already_exists_2", language
-                    ),
+                    reason=translate("admin.bulk_user_id_exists", language),
                 )
             )
             continue
@@ -303,7 +305,7 @@ async def register_bulk_users(
                 BulkFailure(
                     username=entry.username,
                     nickname=entry.nickname,
-                    reason=translate("admin.invalid_role_2", language),
+                    reason=translate("admin.bulk_invalid_role", language),
                 )
             )
             continue

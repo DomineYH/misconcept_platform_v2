@@ -55,6 +55,19 @@ REASON_KEYS = {
 }
 
 
+RUBRIC_FIELD_KEYS = {
+    "id": "rubric_id",
+    "name": "name",
+    "criteria": "criteria",
+    "level": "level",
+}
+ROLE_KEYS = {
+    "student": "student",
+    "mentor": "mentor",
+    "analysis": "post_session_analysis",
+}
+
+
 def review_notice(reason, language):
     path = reason.get("path", "").removeprefix("config.")
     field_key = FIELD_KEYS.get(path)
@@ -63,32 +76,18 @@ def review_notice(reason, language):
         r"analysis\.rubric\.(\d+)\.(id|name|criteria|level)", path
     )
     if row:
-        label = translate(
-            "admin."
-            + {
-                "id": "rubric_id",
-                "name": "name",
-                "criteria": "criteria",
-                "level": "level",
-            }[row[2]],
-            language,
-        )
+        label = translate("admin." + RUBRIC_FIELD_KEYS[row[2]], language)
         field = translate(
             "admin.rubric_field", language, index=int(row[1]) + 1, label=label
         )
     elif path.endswith(".resolved_model_config"):
         role = path.split(".")[0]
-        if role in ("student", "mentor", "analysis"):
+        if role in ROLE_KEYS:
             field = translate(
                 "admin.role_model",
                 language,
                 role=translate(
-                    "admin."
-                    + {
-                        "student": "student",
-                        "mentor": "mentor",
-                        "analysis": "post_session_analysis",
-                    }[role],
+                    "admin." + ROLE_KEYS[role],
                     language,
                 ),
             )

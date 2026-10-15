@@ -194,9 +194,9 @@ async def delete_group(
         raise HTTPException(
             status_code=400,
             detail=translate(
-                "admin.cannot_delete_this_group_with_v0_members_move_its_members_to_another_group_first",
+                "admin.cannot_delete_group_with_members",
                 display_language(request),
-                v0=member_count,
+                member_count=member_count,
             ),
         )
 

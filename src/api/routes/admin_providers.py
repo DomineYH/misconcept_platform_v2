@@ -202,9 +202,9 @@ async def provider_state(
                         )
                         + [
                             translate(
-                                "admin.active_calls_v0",
+                                "admin.active_call_count",
                                 display_language(request),
-                                v0=active_connection_count(p),
+                                count=active_connection_count(p),
                             )
                         ],
                     }

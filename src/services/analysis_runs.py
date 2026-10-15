@@ -16,6 +16,7 @@ from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
 )
+from src.i18n import translate
 from src.models import GenerationRun, Message, Session, User
 from src.models.provider_connection import now
 from src.services import analysis_pipeline
@@ -146,6 +147,7 @@ async def reserve_analysis(
     *,
     regenerate=False,
     plan_hash=None,
+    language="ko",
 ):
     async with execution_lock():
         async with factory() as db:
@@ -153,19 +155,26 @@ async def reserve_analysis(
             session = await db.get(Session, session_id)
             user = await db.get(User, actor_id)
             if session is None or session.deleted_at is not None:
-                raise HTTPException(404, detail="Session not found")
+                raise HTTPException(
+                    404, detail=translate("teacher.session_not_found", language)
+                )
             if user is None or (
                 not user.is_admin and session.teacher_id != actor_id
             ):
-                raise HTTPException(403, detail="Forbidden")
-            require_native_session(session)
+                raise HTTPException(
+                    403, detail=translate("teacher.forbidden", language)
+                )
+            require_native_session(session, language=language)
             if not session.ended_at:
                 raise HTTPException(
-                    400, detail="Session must be ended before analysis"
+                    400,
+                    detail=translate("teacher.end_before_analysis", language),
                 )
             if regenerate and not user.is_admin:
-                raise HTTPException(403, detail="Forbidden")
-            lesson = read_lesson_snapshot(session)
+                raise HTTPException(
+                    403, detail=translate("teacher.forbidden", language)
+                )
+            lesson = read_lesson_snapshot(session, language=language)
             messages = list(
                 await db.scalars(
                     select(Message)
@@ -214,7 +223,9 @@ async def reserve_analysis(
                     None,
                 )
             if plan_hash is not None and plan_hash != plan["plan_hash"]:
-                await validate_scenario_access(session.scenario_id, user, db)
+                await validate_scenario_access(
+                    session.scenario_id, user, db, language=language
+                )
                 return await plan_response(
                     db,
                     session_id,
@@ -223,7 +234,9 @@ async def reserve_analysis(
                     admin=user.is_admin,
                     detail=dict(code="plan_conflict"),
                 )
-            lesson = await load_analysis_lesson(db, session_id, actor_id)
+            lesson = await load_analysis_lesson(
+                db, session_id, actor_id, language=language
+            )
             connection, model, _ = await resolve_frozen_model(
                 db, lesson.config.analysis.resolved_model_config, "analysis"
             )
@@ -412,7 +425,14 @@ async def stop_analyses():
 
 
 async def request_analysis(
-    db, session_id, actor_id, request_id, *, regenerate=False, plan_hash=None
+    db,
+    session_id,
+    actor_id,
+    request_id,
+    *,
+    regenerate=False,
+    plan_hash=None,
+    language="ko",
 ):
     factory = async_sessionmaker(
         db.bind, expire_on_commit=False, autoflush=False
@@ -425,6 +445,7 @@ async def request_analysis(
         request_id,
         regenerate=regenerate,
         plan_hash=plan_hash,
+        language=language,
     )
     if execution is not None:
         start_analysis(factory, execution)
@@ -441,31 +462,39 @@ async def request_analysis(
     )
 
 
-async def get_run(db, session_id, run_id):
+async def get_run(db, session_id, run_id, *, language="ko"):
     run = await db.get(GenerationRun, run_id)
     if (
         run is None
         or run.session_id != session_id
         or run.operation != "analysis"
     ):
-        raise HTTPException(404, detail="Run not found")
+        raise HTTPException(
+            404, detail=translate("teacher.run_not_found", language)
+        )
     return run
 
 
-async def cancel_analysis(db, session_id, run_id, actor_id, *, admin=False):
+async def cancel_analysis(
+    db, session_id, run_id, actor_id, *, admin=False, language="ko"
+):
     await db.commit()
     await db.execute(text("BEGIN IMMEDIATE"))
     user = await db.get(User, actor_id, populate_existing=True)
     session = await db.get(Session, session_id, populate_existing=True)
     if session is None or session.deleted_at is not None:
-        raise HTTPException(404, detail="Session not found")
+        raise HTTPException(
+            404, detail=translate("teacher.session_not_found", language)
+        )
     if (
         user is None
         or (admin and not user.is_admin)
         or (not admin and session.teacher_id != actor_id)
     ):
-        raise HTTPException(403, detail="Forbidden")
-    run = await get_run(db, session_id, run_id)
+        raise HTTPException(
+            403, detail=translate("teacher.forbidden", language)
+        )
+    run = await get_run(db, session_id, run_id, language=language)
     if run.status == "running":
         run.status, run.error_code, run.finished_at = (
             "cancelled",

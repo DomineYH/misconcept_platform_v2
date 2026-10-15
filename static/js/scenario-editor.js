@@ -201,7 +201,7 @@ async function save(action) {
       }
       publicationStatus();
       status.dataset.state = 'success';
-      status.textContent = action === 'save_draft' ? uiLanguage.t('admin.draft_saved') : uiLanguage.t('admin.published_2');
+      status.textContent = action === 'save_draft' ? uiLanguage.t('admin.draft_saved') : uiLanguage.t('admin.publication_succeeded');
     } else {
       const messages = {401:uiLanguage.t('admin.please_log_in'), 403:uiLanguage.t('admin.check_your_permissions_or_security_token'), 404:uiLanguage.t('admin.scenario_not_found')};
       status.textContent = messages[response.status] || uiLanguage.t('admin.could_not_save_your_input_is_preserved');

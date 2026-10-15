@@ -238,8 +238,11 @@
         section.dataset.status = report.status;
         node(section, 'h2', uiLanguage.t('teacher.report_status', {report:root.dataset.comparison ? uiLanguage.t('teacher.comparison_report') : uiLanguage.t('teacher.accepted_report'), status:statuses[report.status] || uiLanguage.t('teacher.status_unknown')}));
         node(section, 'p', uiLanguage.t('teacher.report_created', {time:report.created_at || uiLanguage.t('teacher.unknown')}));
-        for (const text of report.brief_feedback) node(section, 'p', text, 'analysis-brief-feedback');
         const coverage = report.coverage;
+        const brief = document.documentElement.lang === 'en' && report.schema_version === 2 && report.status === 'degraded' && coverage?.chunks.length
+          ? [uiLanguage.t('teacher.chunk_partial_notice', {reviewed:coverage.reviewed_message_ids.length, total:coverage.input_message_ids.length})]
+          : report.brief_feedback;
+        for (const text of brief) node(section, 'p', text, 'analysis-brief-feedback');
         if (coverage) {
           node(section, 'h3', uiLanguage.t('teacher.coverage'));
           node(section, 'p', uiLanguage.t('teacher.conversation_reviewed', {reviewed:coverage.reviewed_message_ids.length, total:coverage.input_message_ids.length}));

@@ -188,3 +188,27 @@ the integrated candidate includes #135/#136 and the #130 header baseline.
   new copy and rerunning affected browser/HTTP checks in both languages, themes
   and the five required widths. #137 does not translate unimplemented future UI
   or claim either later issue is integrated.
+
+## Known conservative limitations (independent review F1/F2)
+
+The coordinator explicitly retained both behaviors after the independent review
+of `ae76de6`; #137 records them without changing their recovery or guard policy.
+
+- **F1 — lost comparison admission:** if a new comparison POST loses its response
+  before returning a run ID, `scenario-comparison.js` sets `unacknowledgedStart`.
+  There is no request-ID lookup that can establish that admission's outcome. The
+  flag remains set for the page lifetime, even after another comparison succeeds;
+  language switching stays blocked until a manual page reload. Do not treat a
+  different run's completion or clearing input as confirmation of the lost run.
+- **F2 — closed running analysis:** closing the teacher analysis result modal
+  mid-run leaves `chat.js`'s `analysisUnresolved` guard busy. Completion on the
+  server alone does not update the closed component. Reopen the result modal to
+  resume status polling and receive a confirmed terminal `analysis:state` event;
+  only then is that busy guard released.
+- **N3 — existing wire shape:** `mentor_generation.py` returns HTTP 400 with
+  `{code: 'session_ended'}` and no `message` for its ended-session reservation.
+  This pre-existing response remains unchanged. In-app clients translate by code;
+  external consumers must not assume all ended-session endpoints include a message.
+
+The review's **N5** Korean-only shared modal fallback is fixed in #137 through
+`common.check_input`, with a failing-then-passing browser form regression.

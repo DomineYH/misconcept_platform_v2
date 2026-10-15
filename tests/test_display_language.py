@@ -70,6 +70,10 @@ def test_direct_render_and_js_strings_share_safe_fallback_and_interpolation():
         assert html == (
             "안녕하세요 &lt;script&gt;alert(1)&lt;/script&gt;|표시할 수 없는 안내입니다."
         )
+        literal = templates.env.from_string(
+            "{{ t('teacher.greeting', name=name, other=other) }}"
+        ).render(request=request("en"), name="{other}", other="not the name")
+        assert literal == "안녕하세요 {other}"
         from src.i18n import ui_strings
 
         strings = ui_strings("en", ["teacher"])

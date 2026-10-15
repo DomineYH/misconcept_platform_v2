@@ -1,6 +1,7 @@
 """Request-scoped display language shared by templates and route errors."""
 
 import json
+import re
 from pathlib import Path
 
 from jinja2 import pass_context
@@ -27,9 +28,11 @@ def translate(key: str, language: str = "ko", **values) -> str:
     text = (
         entry.get(language) or entry.get("ko") or "표시할 수 없는 안내입니다."
     )
-    for name, value in values.items():
-        text = text.replace("{" + name + "}", str(value))
-    return text
+    return re.sub(
+        r"\{([^{}]+)\}",
+        lambda match: str(values.get(match[1], match[0])),
+        text,
+    )
 
 
 @pass_context

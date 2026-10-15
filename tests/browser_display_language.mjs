@@ -15,7 +15,26 @@ export default async function check(page) {
     await Promise.all([page.waitForEvent('load'), choose(language).click()]);
     assert.equal(await page.locator('html').getAttribute('lang'), language);
   }
+  // Exercise the public injected-string contract with a synthetic interpolated entry.
+  await page.route(`${base}/login`, async route => {
+    const response = await page.request.get(`${base}/login`);
+    const html = (await response.text()).replace(
+      /(<script id="ui-strings" type="application\/json">)([\s\S]*?)(<\/script>)/,
+      (_, open, json, close) => {
+        const strings = JSON.parse(json);
+        strings['common.interpolation_probe'] = 'Hello {name}';
+        return open + JSON.stringify(strings) + close;
+      }
+    );
+    await route.fulfill({response, body:html});
+  });
   await page.goto(`${base}/login`);
+  assert.deepEqual(await page.evaluate(() => [
+    uiLanguage.t('unknown.key'), uiLanguage.t('toString'), uiLanguage.t('__proto__')
+  ]), ['표시할 수 없는 안내입니다.', '표시할 수 없는 안내입니다.', '표시할 수 없는 안내입니다.']);
+  assert.equal(await page.evaluate(() => uiLanguage.t('common.interpolation_probe', {name:'$&<img>'})), 'Hello $&<img>');
+  assert.equal(await page.evaluate(() => uiLanguage.t('common.interpolation_probe', {name:'{other}', other:'not the name'})), 'Hello {other}');
+  await page.unroute(`${base}/login`);
   await switchTo('en');
   assert.equal(await choose('en').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.getByRole('group', {name:'Display language'}).count(), 1);
@@ -85,7 +104,7 @@ export default async function check(page) {
     const outcome = await page.evaluate(async () => {
       const target = document.createElement('div');
       document.body.append(target);
-      const fragment = await htmx.ajax('GET', '/about/content?empty=1', {target, swap:'innerHTML'});
+      await htmx.ajax('GET', '/about/content?empty=1', {target, swap:'innerHTML'});
       const result = target.textContent;
       target.remove();
       const external = uiLanguage.headers('https://example.org/test', {'X-UI-Language':'ko','x-csrf-token':'preserved'});

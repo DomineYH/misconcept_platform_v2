@@ -3,11 +3,9 @@ window.uiLanguage = (() => {
   const strings = JSON.parse(document.getElementById('ui-strings').textContent);
   const guards = new Set();
   function t(key, values = {}) {
-    let text = strings[key] || '표시할 수 없는 안내입니다.';
-    for (const [name, value] of Object.entries(values)) {
-      text = text.replaceAll(`{${name}}`, String(value));
-    }
-    return text;
+    const text = Object.hasOwn(strings, key) ? strings[key] : '표시할 수 없는 안내입니다.';
+    return text.replace(/\{([^{}]+)\}/g, (match, name) =>
+      Object.hasOwn(values, name) ? String(values[name]) : match);
   }
   function headers(url, initial) {
     const result = new Headers(initial);

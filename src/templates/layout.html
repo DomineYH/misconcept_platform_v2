@@ -37,26 +37,30 @@
         <span></span>
         <span></span>
       </button>
-      <ul class="nav-menu" id="nav-menu">
+      <div class="nav-menu" id="nav-menu">
+        <ul class="nav-links" aria-label="메뉴">
+          {% if user %}
+          <li><a class="nav-item" href="/scenarios"{% if current_path.startswith('/scenarios') %} aria-current="page"{% endif %}>시나리오</a></li>
+          {% endif %}
+          <li>
+            <button type="button" class="btn-link nav-item"
+                    id="open-about-modal">about</button>
+            <span id="about-load-error" role="alert" tabindex="-1" hidden></span>
+          </li>
+          {% if user and user.role == 'admin' %}
+          <li><a class="nav-item" href="/admin"{% if current_path.startswith('/admin') %} aria-current="page"{% endif %}>관리자</a></li>
+          {% endif %}
+        </ul>
         {% if user %}
-        <li><span class="nav-username">{{ user.nickname }}</span></li>
-        <li><a href="/scenarios"{% if current_path.startswith('/scenarios') %} aria-current="page"{% endif %}>시나리오</a></li>
+        <ul class="nav-account" aria-label="계정">
+          <li><span class="nav-username" title="{{ user.nickname }}">{{ user.nickname }}</span></li>
+          <li>
+            <button type="button" class="btn-link nav-item"
+                    onclick="doLogout()">로그아웃</button>
+          </li>
+        </ul>
         {% endif %}
-        <li>
-          <button type="button" class="btn-nav-about"
-                  id="open-about-modal">about</button>
-          <span id="about-load-error" role="alert" tabindex="-1" hidden></span>
-        </li>
-        {% if user and user.role == 'admin' %}
-        <li><a href="/admin"{% if current_path.startswith('/admin') %} aria-current="page"{% endif %}>관리자</a></li>
-        {% endif %}
-        {% if user %}
-        <li>
-          <button type="button" class="btn-logout"
-                  onclick="doLogout()">로그아웃</button>
-        </li>
-        {% endif %}
-      </ul>
+      </div>
     </nav>
   </header>
 

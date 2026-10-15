@@ -3,15 +3,15 @@
     {% if session.ended_at %}
     <input type="checkbox" class="session-checkbox"
            value="{{ session.id }}"
-           aria-label="세션 {{ session.id }} 선택">
+           aria-label="{{ t('teacher.select_session', id=session.id) }}">
     {% else %}
     <input type="checkbox" disabled
-           aria-label="진행중 세션 다운로드 불가">
+           aria-label="{{ t('teacher.active_download_unavailable') }}">
     {% endif %}
   </td>
   <td>{{ session.id }}</td>
   {% set display = session_display(session) %}
-  <td>{{ display.scenario_title }}{% if display.snapshot_provenance.snapshot_origin != 'native' %} · 과거 자료 · 읽기 전용{% endif %}</td>
+  <td>{{ display.scenario_title }}{% if display.snapshot_provenance.snapshot_origin != 'native' %} · {{ t('teacher.row_legacy') }}{% endif %}</td>
   <td>
     {% if session.teacher %}
     {{ session.teacher.nickname }}
@@ -30,22 +30,22 @@
   </td>
   <td>
     {% if session.ended_at %}
-      <span class="badge badge-success">완료</span>
+      <span class="badge badge-success">{{ t('teacher.completed') }}</span>
     {% else %}
-      <span class="badge badge-warning">진행중</span>
+      <span class="badge badge-warning">{{ t('teacher.in_progress') }}</span>
     {% endif %}
   </td>
   <td class="action-cell">
     {% if not session.ended_at and session.snapshot_origin == 'native' %}
     <button type="button"
       hx-post="/admin/sessions/{{ session.id }}/end"
-      hx-confirm="세션을 종료하고 분석하시겠습니까?"
+      hx-confirm="{{ t('teacher.confirm_end_analysis') }}"
       hx-target="closest tr"
       hx-swap="outerHTML"
       hx-indicator="#loading-{{ session.id }}"
       class="btn btn-sm btn-warning">
       <span class="htmx-indicator" id="loading-{{ session.id }}"><span class="spinner spinner-sm"></span></span>
-      <span class="btn-text">종료</span>
+      <span class="btn-text">{{ t('teacher.end') }}</span>
     </button>
     {% else %}
     <a href="/admin/sessions/{{ session.id }}/download"
@@ -53,14 +53,14 @@
     {% if session.summary or session.id in analysis_session_ids | default([]) %}
     <button type="button"
       class="btn btn-sm btn-info view-analysis-btn"
-      data-session-id="{{ session.id }}">분석결과</button>
+      data-session-id="{{ session.id }}">{{ t('teacher.analysis_result_action') }}</button>
     {% endif %}
     {% endif %}
     <button type="button"
       hx-post="/admin/sessions/{{ session.id }}/delete"
-      hx-confirm="세션을 삭제하시겠습니까? (복구 불가)"
+      hx-confirm="{{ t('teacher.confirm_delete_session') }}"
       hx-target="closest tr"
       hx-swap="delete"
-      class="btn btn-sm btn-danger">삭제</button>
+      class="btn btn-sm btn-danger">{{ t('teacher.delete') }}</button>
   </td>
 </tr>

@@ -141,6 +141,1319 @@
       "en": "Could not load About. Select About to try again."
     }
   },
-  "teacher": {},
+  "teacher": {
+    "scenarios_title": {
+      "ko": "시나리오 - 오개념 교정 대화 시뮬레이터",
+      "en": "Scenarios - Misconception Dialogue Simulator"
+    },
+    "choose_scenario": {
+      "ko": "시나리오 선택",
+      "en": "Choose a scenario"
+    },
+    "scenario_intro": {
+      "ko": "공개 문제와 학생 소개를 확인하고 대화를 시작하세요.",
+      "en": "Read the public problem and student profile, then start a conversation."
+    },
+    "problem_needed": {
+      "ko": "문제 상황 보완 필요",
+      "en": "Problem statement needed"
+    },
+    "public_profile": {
+      "ko": "공개 학생 소개",
+      "en": "Public student profile"
+    },
+    "start_chat": {
+      "ko": "대화 시작",
+      "en": "Start conversation"
+    },
+    "problem_unavailable": {
+      "ko": "공개 문제 상황이 설정되지 않아 시작할 수 없습니다. 관리자에게 문의하세요.",
+      "en": "A public problem is required to start. Contact an administrator."
+    },
+    "no_scenarios": {
+      "ko": "시나리오가 없습니다",
+      "en": "No scenarios available"
+    },
+    "no_assigned_scenarios": {
+      "ko": "현재 사용할 수 있는 배정된 시나리오가 없습니다.",
+      "en": "No assigned scenarios are currently available."
+    },
+    "check_assignment": {
+      "ko": "시나리오 배정과 게시 상태를 관리자에게 문의하세요.",
+      "en": "Ask an administrator about scenario assignment and publication."
+    },
+    "chat_screen": {
+      "ko": "대화 화면",
+      "en": "Conversation screen"
+    },
+    "situation_info": {
+      "ko": "상황 정보",
+      "en": "Scenario information"
+    },
+    "chat": {
+      "ko": "대화",
+      "en": "Conversation"
+    },
+    "panel_toggle_shortcut": {
+      "ko": "정보 패널 접기/펼치기 (Ctrl+B)",
+      "en": "Toggle information panel (Ctrl+B)"
+    },
+    "panel_toggle": {
+      "ko": "정보 패널 접기/펼치기",
+      "en": "Toggle information panel"
+    },
+    "end_and_analyze": {
+      "ko": "대화 종료 후 분석 보기",
+      "en": "End conversation and view analysis"
+    },
+    "leave": {
+      "ko": "나가기",
+      "en": "Leave"
+    },
+    "usage_guide": {
+      "ko": "챗봇 활용 방법",
+      "en": "Usage guide"
+    },
+    "student_info": {
+      "ko": "학생 정보",
+      "en": "Student information"
+    },
+    "problem": {
+      "ko": "문제 상황",
+      "en": "Problem statement"
+    },
+    "no_student_info": {
+      "ko": "학생 정보가 없습니다.",
+      "en": "No student information available."
+    },
+    "problem_contact": {
+      "ko": "문제 상황 보완 필요 — 관리자에게 문의하세요.",
+      "en": "Problem statement needed — contact an administrator."
+    },
+    "learning_objective": {
+      "ko": "학습목표:",
+      "en": "Learning objective:"
+    },
+    "target_grade": {
+      "ko": "대상 학년:",
+      "en": "Target grade:"
+    },
+    "chat_ended": {
+      "ko": "이 대화는 종료되었습니다.",
+      "en": "This conversation has ended."
+    },
+    "go_login": {
+      "ko": "로그인으로 이동",
+      "en": "Go to login"
+    },
+    "mentor_help": {
+      "ko": "멘토 도움",
+      "en": "Mentor help"
+    },
+    "mentor_help_available": {
+      "ko": "완료된 학생 턴에 도움을 요청할 수 있습니다.",
+      "en": "You can request help for a completed student turn."
+    },
+    "request_mentor": {
+      "ko": "멘토 도움 요청",
+      "en": "Request mentor help"
+    },
+    "teacher_message": {
+      "ko": "교사 메시지",
+      "en": "Teacher message"
+    },
+    "message_placeholder": {
+      "ko": "메시지를 입력하세요...",
+      "en": "Enter a message..."
+    },
+    "send_message": {
+      "ko": "메시지 전송",
+      "en": "Send message"
+    },
+    "send": {
+      "ko": "전송",
+      "en": "Send"
+    },
+    "analysis_results": {
+      "ko": "세션 분석 결과",
+      "en": "Session analysis results"
+    },
+    "mentor": {
+      "ko": "멘토",
+      "en": "Mentor"
+    },
+    "mentor_avatar": {
+      "ko": "멘",
+      "en": "M"
+    },
+    "student": {
+      "ko": "학생",
+      "en": "Student"
+    },
+    "guide_problem": {
+      "ko": "문제 상황을 확인한 후 {student}의 오개념을 해결해 봅시다.",
+      "en": "Read the problem and help {student} address their misconception."
+    },
+    "guide_analysis": {
+      "ko": "대화가 끝나면 {action}를 클릭해 보세요.",
+      "en": "When you finish, select {action}."
+    },
+    "guide_feedback_subject": {
+      "ko": "대화가 학생의 {subject}적 사고를 이끌어내기에 적절했는지 피드백을 받아봅시다.",
+      "en": "Get feedback on how the conversation supported the student’s thinking in {subject}."
+    },
+    "guide_feedback": {
+      "ko": "대화가 학생의 사고를 이끌어내기에 적절했는지 피드백을 받아봅시다.",
+      "en": "Get feedback on how the conversation supported the student’s thinking."
+    },
+    "analysis_title": {
+      "ko": "세션 분석",
+      "en": "Session analysis"
+    },
+    "analysis_report": {
+      "ko": "세션 분석 리포트",
+      "en": "Session analysis report"
+    },
+    "session_ended_at": {
+      "ko": "세션 종료 시간:",
+      "en": "Session ended:"
+    },
+    "view_original": {
+      "ko": "원래 대화 보기",
+      "en": "View original conversation"
+    },
+    "feedback_degraded": {
+      "ko": "일부 피드백 항목이 생성되지 않았어요",
+      "en": "Some feedback items could not be generated"
+    },
+    "feedback_failed": {
+      "ko": "분석 피드백을 생성할 수 없습니다.",
+      "en": "Analysis feedback could not be generated."
+    },
+    "duration": {
+      "ko": "대화 시간",
+      "en": "Conversation duration"
+    },
+    "cannot_calculate": {
+      "ko": "계산 불가",
+      "en": "Unavailable"
+    },
+    "teacher_questions": {
+      "ko": "선생님 질문",
+      "en": "Teacher questions"
+    },
+    "student_responses": {
+      "ko": "학생 응답",
+      "en": "Student responses"
+    },
+    "mentor_interventions": {
+      "ko": "멘토 개입",
+      "en": "Mentor interventions"
+    },
+    "download_csv": {
+      "ko": "CSV 다운로드",
+      "en": "Download CSV"
+    },
+    "back_scenarios": {
+      "ko": "시나리오로 돌아가기",
+      "en": "Back to scenarios"
+    },
+    "history_title": {
+      "ko": "과거 기록",
+      "en": "Session history"
+    },
+    "chat_history": {
+      "ko": "대화 기록",
+      "en": "Conversation history"
+    },
+    "native_provenance": {
+      "ko": "수업 시작 시 확정한 설정 · 원래 대화 기록",
+      "en": "Settings captured at session start · original conversation"
+    },
+    "no_end_record": {
+      "ko": "종료 기록 없음",
+      "en": "No end time recorded"
+    },
+    "started": {
+      "ko": "시작:",
+      "en": "Started:"
+    },
+    "ended": {
+      "ko": "종료:",
+      "en": "Ended:"
+    },
+    "view_existing_analysis": {
+      "ko": "기존 분석 보기",
+      "en": "View saved analysis"
+    },
+    "choose_new_practice": {
+      "ko": "새 연습 선택",
+      "en": "Choose a new practice"
+    },
+    "original_conversation": {
+      "ko": "원래 대화",
+      "en": "Original conversation"
+    },
+    "analysis_details": {
+      "ko": "상세 분석",
+      "en": "Detailed analysis"
+    },
+    "question_distribution": {
+      "ko": "질문 유형 분포",
+      "en": "Question type distribution"
+    },
+    "classification_off": {
+      "ko": "분류 미사용",
+      "en": "Classification disabled"
+    },
+    "analysis_tabs": {
+      "ko": "상세 분석 탭",
+      "en": "Analysis detail tabs"
+    },
+    "dialogue_coaching": {
+      "ko": "대화코칭",
+      "en": "Dialogue coaching"
+    },
+    "strengths": {
+      "ko": "우수한 점",
+      "en": "Strengths"
+    },
+    "improvements": {
+      "ko": "개선할 점",
+      "en": "Improvements"
+    },
+    "teacher": {
+      "ko": "선생님",
+      "en": "Teacher"
+    },
+    "good_dialogue": {
+      "ko": "잘 한 대화",
+      "en": "Effective dialogue"
+    },
+    "missed_moment": {
+      "ko": "놓친 순간",
+      "en": "Missed opportunity"
+    },
+    "no_messages": {
+      "ko": "대화 내역이 없습니다.",
+      "en": "No conversation messages."
+    },
+    "no_strengths": {
+      "ko": "우수한 점이 없습니다.",
+      "en": "No strengths identified."
+    },
+    "no_strong_questions": {
+      "ko": "우수한 질문이 없습니다.",
+      "en": "No strong questions identified."
+    },
+    "alternative_question_label": {
+      "ko": "대안 질문:",
+      "en": "Alternative question:"
+    },
+    "no_improvements": {
+      "ko": "개선할 점이 없습니다.",
+      "en": "No improvements identified."
+    },
+    "improved_sentence_label": {
+      "ko": "개선한 문장:",
+      "en": "Improved sentence:"
+    },
+    "improved_after_rerun": {
+      "ko": "개선한 문장은 분석 재실행 후 표시됩니다.",
+      "en": "Improved sentences appear after rerunning analysis."
+    },
+    "close": {
+      "ko": "닫기",
+      "en": "Close"
+    },
+    "question": {
+      "ko": "질문",
+      "en": "Question"
+    },
+    "classification": {
+      "ko": "분류",
+      "en": "Classification"
+    },
+    "grade_label": {
+      "ko": "평가:",
+      "en": "Grade:"
+    },
+    "unknown": {
+      "ko": "알 수 없음",
+      "en": "Unknown"
+    },
+    "confidence": {
+      "ko": "신뢰도",
+      "en": "Confidence"
+    },
+    "summary_label": {
+      "ko": "요약:",
+      "en": "Summary:"
+    },
+    "session_id_label": {
+      "ko": "세션 ID:",
+      "en": "Session ID:"
+    },
+    "scenario_label": {
+      "ko": "시나리오:",
+      "en": "Scenario:"
+    },
+    "analysis_time_label": {
+      "ko": "분석 시간:",
+      "en": "Analyzed:"
+    },
+    "view_full_page": {
+      "ko": "전체 화면으로 보기",
+      "en": "View full page"
+    },
+    "scenario_list": {
+      "ko": "시나리오 목록으로",
+      "en": "Scenario list"
+    },
+    "total": {
+      "ko": "총계",
+      "en": "Total"
+    },
+    "legacy_provenance": {
+      "ko": "과거 자료 · 재구성된 수업 설정 · 읽기 전용",
+      "en": "Historical data · reconstructed lesson settings · read only"
+    },
+    "reconstructed_at": {
+      "ko": "재구성 시각:",
+      "en": "Reconstructed:"
+    },
+    "not_reconstructed": {
+      "ko": "아직 재구성되지 않음",
+      "en": "Not yet reconstructed"
+    },
+    "not_original_settings": {
+      "ko": "실제 시작 시점의 설정을 증명하지 않습니다.",
+      "en": "This does not establish the settings at the original session start."
+    },
+    "unknown_settings": {
+      "ko": "당시 설정을 확인할 수 없음:",
+      "en": "Original settings unavailable:"
+    },
+    "reconstruction_notice": {
+      "ko": "설정 해시는 재구성 자료의 해시입니다. 기존 대화·분석 결과를 보존합니다. 재개·신규 발화·멘토 요청·재분석은 사용할 수 없습니다.",
+      "en": "The settings hash describes reconstructed data. Existing conversations and analysis are preserved. Resume, new messages, mentor requests and reanalysis are unavailable."
+    },
+    "session_id": {
+      "ko": "세션 ID",
+      "en": "Session ID"
+    },
+    "scenario": {
+      "ko": "시나리오",
+      "en": "Scenario"
+    },
+    "teacher_role": {
+      "ko": "교사",
+      "en": "Teacher"
+    },
+    "start_time": {
+      "ko": "시작 시간",
+      "en": "Start time"
+    },
+    "end_time": {
+      "ko": "종료 시간",
+      "en": "End time"
+    },
+    "status": {
+      "ko": "상태",
+      "en": "Status"
+    },
+    "deleted": {
+      "ko": "삭제됨",
+      "en": "Deleted"
+    },
+    "completed": {
+      "ko": "완료",
+      "en": "Completed"
+    },
+    "in_progress": {
+      "ko": "진행중",
+      "en": "In progress"
+    },
+    "post_analysis_result": {
+      "ko": "사후 분석 결과",
+      "en": "Post-session analysis results"
+    },
+    "turn_number": {
+      "ko": "{number}번째 턴",
+      "en": "Turn {number}"
+    },
+    "question_count": {
+      "ko": "{count}개 질문",
+      "en": "{count} questions"
+    },
+    "excellent_count": {
+      "ko": "우수 {count}개",
+      "en": "Excellent: {count}"
+    },
+    "improve_count": {
+      "ko": "개선 {count}개",
+      "en": "Needs improvement: {count}"
+    },
+    "analysis_detail_id": {
+      "ko": "분석 상세 (ID: {id})",
+      "en": "Analysis details (ID: {id})"
+    },
+    "minutes": {
+      "ko": "분",
+      "en": "min"
+    },
+    "seconds": {
+      "ko": "초",
+      "en": "sec"
+    },
+    "items_unit": {
+      "ko": "개",
+      "en": " items"
+    },
+    "times_unit": {
+      "ko": "회",
+      "en": " times"
+    },
+    "message_failed": {
+      "ko": "메시지를 전송하지 못했습니다. 다시 시도해주세요.",
+      "en": "Failed to send message. Please try again."
+    },
+    "network_error": {
+      "ko": "네트워크 오류입니다. 연결을 확인해주세요.",
+      "en": "Network error. Please check your connection."
+    },
+    "analysis_preparing": {
+      "ko": "분석 준비 중...",
+      "en": "Preparing analysis..."
+    },
+    "analyzing": {
+      "ko": "분석 중...",
+      "en": "Analyzing..."
+    },
+    "view_analysis": {
+      "ko": "분석 보기",
+      "en": "View analysis"
+    },
+    "view_analysis_again": {
+      "ko": "분석 다시 보기",
+      "en": "View analysis again"
+    },
+    "panel_expand": {
+      "ko": "정보 패널 펼치기",
+      "en": "Expand information panel"
+    },
+    "panel_collapse": {
+      "ko": "정보 패널 접기",
+      "en": "Collapse information panel"
+    },
+    "draft_restored": {
+      "ko": "이전 입력 메시지를 복원했습니다.",
+      "en": "Your previous draft message was restored."
+    },
+    "auth_expired": {
+      "ko": "로그인이 만료되었습니다. 다시 로그인해주세요.",
+      "en": "Your login has expired. Please log in again."
+    },
+    "session_expired": {
+      "ko": "세션이 만료되었습니다. 다시 로그인해 주세요.",
+      "en": "Your session has expired. Please log in again."
+    },
+    "close_failed_navigation": {
+      "ko": "세션 종료 요청에 실패했습니다. 계속 이동하시겠습니까?",
+      "en": "Could not close the session. Continue navigating?"
+    },
+    "analysis_modal_failed": {
+      "ko": "분석 결과를 불러오지 못했습니다. 다시 불러오거나 닫을 수 있습니다.",
+      "en": "Could not load analysis results. You can retry or close this dialog."
+    },
+    "reload_results": {
+      "ko": "결과 다시 불러오기",
+      "en": "Reload results"
+    },
+    "no_active_session": {
+      "ko": "활성 세션이 없습니다",
+      "en": "No active session"
+    },
+    "confirm_end": {
+      "ko": "이 세션을 종료하시겠습니까?",
+      "en": "End this session?"
+    },
+    "analysis_failed_alert": {
+      "ko": "분석에 실패했습니다",
+      "en": "Analysis failed"
+    },
+    "confirm_scenarios": {
+      "ko": "시나리오 목록으로 돌아가시겠습니까?",
+      "en": "Return to the scenario list?"
+    },
+    "already_ended": {
+      "ko": "이 대화는 이미 종료되었습니다.",
+      "en": "This conversation has already ended."
+    },
+    "start_new_session": {
+      "ko": "이 세션은 이미 종료되었습니다. 새 세션을 시작해주세요.",
+      "en": "This session has already ended. Please start a new session."
+    },
+    "request_failed": {
+      "ko": "요청 처리 중 오류가 발생했습니다",
+      "en": "Could not process the request"
+    },
+    "request_timeout": {
+      "ko": "요청 시간이 초과되었습니다. 다시 시도해주세요.",
+      "en": "The request timed out. Please try again."
+    },
+    "analysis_loading": {
+      "ko": "분석 결과를 불러오는 중입니다.",
+      "en": "Loading analysis results."
+    },
+    "generating": {
+      "ko": "응답 생성 중...",
+      "en": "Generating response..."
+    },
+    "student_retry": {
+      "ko": "학생 응답 다시 받기",
+      "en": "Retry student response"
+    },
+    "end_chat": {
+      "ko": "대화 종료",
+      "en": "End conversation"
+    },
+    "check_status": {
+      "ko": "상태 다시 확인",
+      "en": "Check status again"
+    },
+    "sending": {
+      "ko": "전송 중",
+      "en": "Sending"
+    },
+    "student_provisional": {
+      "ko": "학생 생성 중 · 잠정 응답",
+      "en": "Student generating · provisional response"
+    },
+    "saved": {
+      "ko": "저장 완료",
+      "en": "Saved"
+    },
+    "student_failed": {
+      "ko": "학생 응답 생성에 실패했습니다.",
+      "en": "Could not generate the student response."
+    },
+    "student_interrupted": {
+      "ko": "학생 응답이 중단되었습니다.",
+      "en": "The student response was interrupted."
+    },
+    "conversation_ended": {
+      "ko": "대화가 종료되었습니다.",
+      "en": "The conversation has ended."
+    },
+    "student_forbidden": {
+      "ko": "이 실행을 조회하거나 재시도할 권한이 없습니다. 응답 미완료·대화 기록에 미포함",
+      "en": "You cannot view or retry this run. Incomplete response · excluded from conversation history"
+    },
+    "student_checking": {
+      "ko": "상태 확인 중 · 응답 미완료·대화 기록에 미포함",
+      "en": "Checking status · incomplete response · excluded from conversation history"
+    },
+    "student_unknown_request": {
+      "ko": "요청 수락 여부를 확인할 수 없습니다. 같은 요청을 명시적으로 다시 전송할 수 있습니다.",
+      "en": "Request acceptance is unknown. You may explicitly resend the same request."
+    },
+    "resend_request": {
+      "ko": "같은 요청 다시 전송",
+      "en": "Resend same request"
+    },
+    "student_checking_saved": {
+      "ko": "학생 생성 중 · 저장 상태 확인 중",
+      "en": "Student generating · checking saved status"
+    },
+    "student_unknown_saved": {
+      "ko": "저장 상태가 아직 불명확합니다. 상태 다시 확인을 눌러주세요.",
+      "en": "Saved status is still unknown. Select Check status again."
+    },
+    "student_lookup_failed": {
+      "ko": "저장 상태를 확인하지 못했습니다. 상태 다시 확인을 눌러주세요.",
+      "en": "Could not check saved status. Select Check status again."
+    },
+    "student_context_limit": {
+      "ko": "입력이 너무 큽니다. 질문을 줄이거나 관리자에게 수업 설정 확인을 요청해주세요. 요청은 아직 수락되지 않았습니다.",
+      "en": "The input is too large. Shorten your question or ask an administrator to check the lesson settings. The request has not been accepted."
+    },
+    "student_previous_incomplete": {
+      "ko": " 기존 응답 미완료·대화 기록에 미포함",
+      "en": " Previous response incomplete · excluded from conversation history"
+    },
+    "student_configuration": {
+      "ko": "관리자에게 AI 연결과 학생 모델 검증을 요청해주세요. 요청은 아직 수락되지 않았습니다.",
+      "en": "Ask an administrator to check the AI connection and student model verification. The request has not been accepted."
+    },
+    "student_capacity": {
+      "ko": "호출 한도에 도달했습니다. 잠시 후 같은 요청을 다시 전송해주세요. 요청은 아직 수락되지 않았습니다.",
+      "en": "The call limit has been reached. Resend the same request later. The request has not been accepted."
+    },
+    "mentor_timeout": {
+      "ko": "멘토 응답 대기 시간이 초과되었습니다. 멘토를 다시 요청해주세요.",
+      "en": "The mentor response timed out. Request the mentor again."
+    },
+    "mentor_invalid": {
+      "ko": "멘토 응답 형식이 올바르지 않습니다. 멘토를 다시 요청하거나 관리자에게 설정 확인을 요청해주세요.",
+      "en": "The mentor response format is invalid. Request the mentor again or ask an administrator to check the settings."
+    },
+    "mentor_refused": {
+      "ko": "멘토 응답이 거절되었습니다. 멘토를 다시 요청하거나 관리자에게 설정 확인을 요청해주세요.",
+      "en": "The mentor response was refused. Request the mentor again or ask an administrator to check the settings."
+    },
+    "context_limit": {
+      "ko": "입력이 너무 큽니다. 질문을 줄이거나 관리자에게 수업 설정 확인을 요청해주세요.",
+      "en": "The input is too large. Shorten your question or ask an administrator to check the lesson settings."
+    },
+    "mentor_failed": {
+      "ko": "멘토 코칭 생성에 실패했습니다.",
+      "en": "Could not generate mentor coaching."
+    },
+    "mentor_retry": {
+      "ko": "멘토 다시 요청",
+      "en": "Request mentor again"
+    },
+    "mentor_no_coaching": {
+      "ko": "자동 검사 완료 · 코칭 없음",
+      "en": "Automatic check complete · no coaching"
+    },
+    "mentor_no_intervention": {
+      "ko": "멘토 미개입",
+      "en": "No mentor intervention"
+    },
+    "mentor_completed": {
+      "ko": "멘토 코칭 완료",
+      "en": "Mentor coaching complete"
+    },
+    "mentor_session_ended": {
+      "ko": "대화가 종료되어 멘토를 다시 요청할 수 없습니다.",
+      "en": "The conversation has ended. You cannot request the mentor again."
+    },
+    "mentor_checking": {
+      "ko": "멘토 저장 상태 확인 중",
+      "en": "Checking saved mentor status"
+    },
+    "mentor_forbidden": {
+      "ko": "이 멘토 실행을 조회할 권한이 없습니다.",
+      "en": "You do not have permission to view this mentor run."
+    },
+    "mentor_unknown_request": {
+      "ko": "멘토 요청 수락 여부를 확인할 수 없습니다.",
+      "en": "Mentor request acceptance is unknown."
+    },
+    "mentor_unknown_saved": {
+      "ko": "멘토 저장 상태가 아직 불명확합니다. 상태 다시 확인을 눌러주세요.",
+      "en": "Saved mentor status is still unknown. Select Check status again."
+    },
+    "mentor_processing": {
+      "ko": "멘토 처리 중",
+      "en": "Mentor processing"
+    },
+    "mentor_busy": {
+      "ko": "이전 코칭 처리 중 — 이후 다시 요청 가능",
+      "en": "Previous coaching in progress — you can request again later"
+    },
+    "mentor_limit": {
+      "ko": "최근 완료 턴의 개입 상한에 도달했습니다.",
+      "en": "The intervention limit for the latest completed turn has been reached."
+    },
+    "mentor_interval": {
+      "ko": "자동 검사 간격 대기 중 — 도움 버튼으로 요청할 수 있습니다.",
+      "en": "Waiting for the automatic check interval — use the help button to request coaching."
+    },
+    "mentor_unavailable": {
+      "ko": "현재 멘토 도움을 사용할 수 없습니다.",
+      "en": "Mentor help is currently unavailable."
+    },
+    "mentor_obsolete": {
+      "ko": "더 최신 학생 턴이 완료되어 이 턴은 더 이상 재요청할 수 없습니다.",
+      "en": "A newer student turn has completed. You cannot request this turn again."
+    },
+    "mentor_configuration": {
+      "ko": "관리자에게 AI 연결과 멘토 모델 검증을 요청해주세요.",
+      "en": "Ask an administrator to check the AI connection and mentor model verification."
+    },
+    "mentor_capacity": {
+      "ko": "AI 호출이 많습니다. 잠시 후 멘토를 다시 요청해주세요.",
+      "en": "There are too many AI calls. Request the mentor again later."
+    },
+    "mentor_request_failed": {
+      "ko": "멘토 요청을 처리하지 못했습니다.",
+      "en": "Could not process the mentor request."
+    },
+    "mentor_auth_expired": {
+      "ko": "로그인이 만료되어 멘토를 다시 요청할 수 없습니다.",
+      "en": "Your login has expired. You cannot request the mentor again."
+    },
+    "mentor_page_left": {
+      "ko": "페이지 이동으로 멘토 코칭이 중단되었습니다.",
+      "en": "Mentor coaching was interrupted by page navigation."
+    },
+    "student_incomplete": {
+      "ko": "{reason} 응답 미완료·대화 기록에 미포함",
+      "en": "{reason} Incomplete response · excluded from conversation history"
+    },
+    "student_configuration_error": {
+      "ko": "관리자에게 AI 연결과 학생 모델 검증을 요청해주세요.",
+      "en": "Ask an administrator to check the AI connection and student model verification."
+    },
+    "mentor_target_turn": {
+      "ko": "{name} · 대상 턴 {turn}",
+      "en": "{name} · target turn {turn}"
+    },
+    "unknown_scenario_context": {
+      "ko": "시나리오 제목·과목·학년",
+      "en": "Scenario title, subject and grade"
+    },
+    "unknown_config": {
+      "ko": "전체 수업 설정",
+      "en": "All lesson settings"
+    },
+    "unknown_problem": {
+      "ko": "공개 문제·학습목표",
+      "en": "Public problem and learning objective"
+    },
+    "unknown_student": {
+      "ko": "학생봇 소개·지시·모델·옵션",
+      "en": "Student bot profile, instructions, model and options"
+    },
+    "unknown_mentor": {
+      "ko": "멘토 설정",
+      "en": "Mentor settings"
+    },
+    "unknown_analysis": {
+      "ko": "분석 기준·지시·모델·옵션",
+      "en": "Analysis rubric, instructions, model and options"
+    },
+    "unknown_runtime": {
+      "ko": "문맥 턴 제한",
+      "en": "Context turn limit"
+    },
+    "unknown_other": {
+      "ko": "그 밖의 설정",
+      "en": "Other settings"
+    },
+    "session_not_found": {
+      "ko": "세션을 찾을 수 없습니다.",
+      "en": "Session not found"
+    },
+    "scenario_not_found": {
+      "ko": "시나리오를 찾을 수 없습니다.",
+      "en": "Scenario not found"
+    },
+    "turn_not_found": {
+      "ko": "턴을 찾을 수 없습니다.",
+      "en": "Turn not found"
+    },
+    "run_not_found": {
+      "ko": "실행을 찾을 수 없습니다.",
+      "en": "Run not found"
+    },
+    "analysis_not_found": {
+      "ko": "분석을 찾을 수 없습니다.",
+      "en": "Analysis not found"
+    },
+    "forbidden": {
+      "ko": "접근 권한이 없습니다.",
+      "en": "Forbidden"
+    },
+    "end_before_analysis": {
+      "ko": "분석을 보려면 먼저 세션을 종료해주세요.",
+      "en": "End the session before viewing analysis."
+    },
+    "no_group": {
+      "ko": "그룹이 배정되지 않았습니다.",
+      "en": "No group has been assigned."
+    },
+    "scenario_forbidden": {
+      "ko": "이 시나리오에 대한 접근 권한이 없습니다.",
+      "en": "You do not have access to this scenario."
+    },
+    "start_failed": {
+      "ko": "대화 세션을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.",
+      "en": "Could not start the conversation. Please try again later."
+    },
+    "reload_required": {
+      "ko": "새로고침 후 다시 전송해주세요.",
+      "en": "Reload the page before sending again."
+    },
+    "legacy_read_only_error": {
+      "ko": "과거 세션은 읽기 전용입니다. 게시된 시나리오로 새 연습을 시작해주세요.",
+      "en": "Historical sessions are read only. Start a new practice with a published scenario."
+    },
+    "shorten_question": {
+      "ko": "질문을 짧게 수정하거나 관리자에게 AI 설정을 확인해주세요.",
+      "en": "Shorten the question or ask an administrator to check the AI settings."
+    },
+    "check_ai_settings": {
+      "ko": "관리자에게 AI 설정을 확인하거나 잠시 후 다시 시도해주세요.",
+      "en": "Ask an administrator to check the AI settings or try again later."
+    },
+    "check_mentor_settings": {
+      "ko": "관리자에게 AI 연결과 멘토 모델 검증을 요청하거나 잠시 후 다시 시도해주세요.",
+      "en": "Ask an administrator to check the AI connection and mentor model verification, or try again later."
+    },
+    "latest_run": {
+      "ko": "최신 실행: {status}",
+      "en": "Latest run: {status}"
+    },
+    "source_unknown": {
+      "ko": "원문 위치 알 수 없음: {quote}",
+      "en": "Source location unknown: {quote}"
+    },
+    "source_quote": {
+      "ko": "원문 {id}: {quote}",
+      "en": "Source {id}: {quote}"
+    },
+    "source_moved": {
+      "ko": "메시지 {id} 원문으로 이동했습니다.",
+      "en": "Moved to the original text of message {id}."
+    },
+    "run_started": {
+      "ko": "실행 시작: {time}",
+      "en": "Run started: {time}"
+    },
+    "run_finished": {
+      "ko": "실행 종료: {time}",
+      "en": "Run finished: {time}"
+    },
+    "report_preserved": {
+      "ko": "{report} 보존했습니다. 최신 실행의 결과와 구별해 확인하세요.",
+      "en": "{report} was preserved. Review it separately from the latest run outcome."
+    },
+    "plan_range": {
+      "ko": "대상 범위: 메시지 {ids} · {count}개",
+      "en": "Target coverage: messages {ids} · {count} items"
+    },
+    "plan_calls": {
+      "ko": "{chunks}개 분할 + 종합 · 예상 생성 호출 {calls}회",
+      "en": "{chunks} chunks + synthesis · {calls} estimated generation calls"
+    },
+    "plan_tokens": {
+      "ko": "추정 입력 {input} · 추정 출력 {output} 토큰",
+      "en": "Estimated input {input} · estimated output {output} tokens"
+    },
+    "plan_retries": {
+      "ko": "일시 장애 재시도 상한: 호출당 {limit}회 · 최대 {attempts}회 시도",
+      "en": "Transient error retry limit: {limit} per call · at most {attempts} attempts"
+    },
+    "chunk_messages": {
+      "ko": "분할 {number}: 메시지 {ids}",
+      "en": "Chunk {number}: messages {ids}"
+    },
+    "merge_tokens": {
+      "ko": "종합 입력 상한 추정 {input} · 종합 출력 추정 {output} 토큰",
+      "en": "Estimated synthesis input limit {input} · estimated synthesis output {output} tokens"
+    },
+    "report_status": {
+      "ko": "{report}: {status}",
+      "en": "{report}: {status}"
+    },
+    "report_created": {
+      "ko": "생성 시각: {time}",
+      "en": "Created: {time}"
+    },
+    "conversation_reviewed": {
+      "ko": "대화 검토: {reviewed} / {total}개 메시지",
+      "en": "Conversation reviewed: {reviewed} / {total} messages"
+    },
+    "reviewed_messages": {
+      "ko": "검토한 메시지: {ids}",
+      "en": "Reviewed messages: {ids}"
+    },
+    "classification_denominator": {
+      "ko": "분류 비율 분모: {classified}개 · 전체 교사 발화: {total}개",
+      "en": "Classification denominator: {classified} · all teacher messages: {total}"
+    },
+    "coverage_count": {
+      "ko": "{label}: {count}개",
+      "en": "{label}: {count} items"
+    },
+    "affected_messages": {
+      "ko": "해당 메시지: {ids}",
+      "en": "Affected messages: {ids}"
+    },
+    "missing_student_count": {
+      "ko": "학생 응답 없음: {count}개",
+      "en": "Missing student responses: {count}"
+    },
+    "missing_student_evidence": {
+      "ko": "해당 메시지: {ids} · 학생 이해 변화의 근거로 사용하지 않습니다.",
+      "en": "Affected messages: {ids} · not used as evidence of changes in student understanding."
+    },
+    "chunk_status": {
+      "ko": "분할 {status} · 메시지 {ids}",
+      "en": "Chunk {status} · messages {ids}"
+    },
+    "not_run": {
+      "ko": "미실행",
+      "en": "Not run"
+    },
+    "distribution_item": {
+      "ko": "{name}: {count}개 · {percentage}",
+      "en": "{name}: {count} items · {percentage}"
+    },
+    "alternative_question": {
+      "ko": "대안 질문: {question}",
+      "en": "Alternative question: {question}"
+    },
+    "message_role": {
+      "ko": "메시지 {id} · {role}",
+      "en": "Message {id} · {role}"
+    },
+    "message_time": {
+      "ko": "시각: {time}",
+      "en": "Time: {time}"
+    },
+    "message_grade": {
+      "ko": "분류: {label} · 평가: {grade}",
+      "en": "Classification: {label} · grade: {grade}"
+    },
+    "message_reason": {
+      "ko": "판정 이유: {reason}",
+      "en": "Reason: {reason}"
+    },
+    "improved_sentence": {
+      "ko": "개선한 문장: {sentence}",
+      "en": "Improved sentence: {sentence}"
+    },
+    "analysis_ok": {
+      "ko": "정상 분석",
+      "en": "Complete analysis"
+    },
+    "analysis_degraded": {
+      "ko": "부분 분석",
+      "en": "Degraded analysis"
+    },
+    "analysis_failed": {
+      "ko": "분석 실패",
+      "en": "Analysis failed"
+    },
+    "analysis_legacy": {
+      "ko": "과거 분석",
+      "en": "Historical analysis"
+    },
+    "analysis_running": {
+      "ko": "분석 진행 중",
+      "en": "Analysis running"
+    },
+    "analysis_cancelled": {
+      "ko": "분석 취소됨",
+      "en": "Analysis cancelled"
+    },
+    "analysis_interrupted": {
+      "ko": "분석 중단됨",
+      "en": "Analysis interrupted"
+    },
+    "no_dialogue": {
+      "ko": "대화 없음",
+      "en": "No dialogue"
+    },
+    "analysis_ready": {
+      "ko": "분석 실행 전",
+      "en": "Analysis not started"
+    },
+    "plan_required": {
+      "ko": "분할 계획 확인 대기",
+      "en": "Awaiting chunk plan confirmation"
+    },
+    "status_unknown": {
+      "ko": "상태 확인 불가",
+      "en": "Status unavailable"
+    },
+    "analysis_status_error": {
+      "ko": "실행 상태를 확인할 수 없습니다. 분석을 새로 실행하지 않고 상태를 다시 확인하세요.",
+      "en": "Run status is unknown. Check status again without starting a new analysis."
+    },
+    "analysis_requesting": {
+      "ko": "분석을 요청하고 있습니다.",
+      "en": "Requesting analysis."
+    },
+    "analysis_request_conflict": {
+      "ko": "요청 입력이 변경되어 재전송할 수 없습니다. 결과를 새로고침하여 확인하세요.",
+      "en": "Request inputs changed and cannot be resent. Refresh the result to check."
+    },
+    "analysis_busy_found": {
+      "ko": "진행 중인 분석 실행의 상태를 확인했습니다.",
+      "en": "The active analysis run status has been retrieved."
+    },
+    "analysis_plan_changed": {
+      "ko": "계획이 변경되었습니다. 새 범위를 확인하고 실행을 다시 확인하세요.",
+      "en": "The plan changed. Review the new coverage and confirm execution again."
+    },
+    "analysis_plan_limit": {
+      "ko": "분석 계획의 한도를 초과해 실행하지 않았습니다.",
+      "en": "The analysis plan exceeds the limits and was not executed."
+    },
+    "analysis_request_result": {
+      "ko": "분석 요청 결과를 확인하세요.",
+      "en": "Review the analysis request result."
+    },
+    "request_unknown": {
+      "ko": "요청 결과를 확인할 수 없습니다. 같은 요청을 다시 전송할 수 있습니다.",
+      "en": "The request outcome is unknown. You can resend the same request."
+    },
+    "analysis_superseded": {
+      "ko": "이 요청의 보고서는 이후 분석으로 대체되었습니다. 최신 결과는 세션 분석 화면에서 확인하세요.",
+      "en": "This request’s report was superseded by a later analysis. View the latest result on the session analysis page."
+    },
+    "preserved_legacy": {
+      "ko": "과거 분석을",
+      "en": "Historical analysis"
+    },
+    "preserved_degraded": {
+      "ko": "이전 부분 분석을",
+      "en": "Previous degraded analysis"
+    },
+    "preserved_ok": {
+      "ko": "이전 정상 결과를",
+      "en": "Previous complete result"
+    },
+    "analysis_preserved_running": {
+      "ko": "새 분석이 진행 중입니다. 아래 채택된 보고서는 새 정상 결과가 검증될 때까지 유지됩니다.",
+      "en": "A new analysis is running. The accepted report below is preserved until a new complete result is validated."
+    },
+    "analysis_retry_notice": {
+      "ko": "분석을 완료하지 못했습니다. 다시 시도할 수 있습니다.",
+      "en": "Analysis could not be completed. You can retry."
+    },
+    "analysis_failed_notice": {
+      "ko": "분석을 완료하지 못했습니다. 기존 결과와 허용된 행동을 확인하세요.",
+      "en": "Analysis could not be completed. Review the saved result and available actions."
+    },
+    "analysis_empty_coverage": {
+      "ko": "분석 가능 범위: 0개 메시지 · 호출 없이 안내합니다.",
+      "en": "Analysis coverage: 0 messages · no AI calls made."
+    },
+    "legacy_read_only": {
+      "ko": "과거 자료 · 읽기 전용 · 재분석할 수 없습니다.",
+      "en": "Historical data · read only · reanalysis unavailable."
+    },
+    "cancel_cost_notice": {
+      "ko": "취소해도 이미 발생한 제공자 비용은 되돌릴 수 없습니다.",
+      "en": "Cancellation cannot reverse provider costs already incurred."
+    },
+    "cancel_analysis": {
+      "ko": "진행 중 분석 취소",
+      "en": "Cancel running analysis"
+    },
+    "check_analysis_status": {
+      "ko": "실행 상태 다시 확인",
+      "en": "Check run status again"
+    },
+    "plan_blocked": {
+      "ko": "분석 계획 불가",
+      "en": "Analysis planning blocked"
+    },
+    "plan_confirm": {
+      "ko": "분할 실행 전 확인",
+      "en": "Confirm before running chunks"
+    },
+    "estimate_notice": {
+      "ko": "추정치이며 실제 사용량이나 비용을 보장하지 않습니다.",
+      "en": "These are estimates and do not guarantee actual usage or cost."
+    },
+    "preserve_notice": {
+      "ko": "기존 정상 결과는 새 정상 결과가 검증될 때까지 보존합니다. 부분 분석이나 실패로 덮어쓰지 않습니다.",
+      "en": "The existing complete result is preserved until a new complete result is validated. Degraded or failed analysis does not overwrite it."
+    },
+    "unit_too_large": {
+      "ko": "한 입력 단위가 분석 한도를 초과합니다. 대화를 줄여서 실행하지 않습니다.",
+      "en": "One input unit exceeds the analysis limit. The conversation will not be shortened to run analysis."
+    },
+    "too_many_chunks": {
+      "ko": "대화가 최대 8개 분할을 초과합니다.",
+      "en": "The conversation exceeds the maximum of 8 chunks."
+    },
+    "merge_too_large": {
+      "ko": "종합할 분석 결과가 한도를 초과합니다.",
+      "en": "The analysis results exceed the synthesis limit."
+    },
+    "unknown_limits": {
+      "ko": "분석에 필요한 모델 한도를 확인할 수 없습니다.",
+      "en": "The model limits required for analysis are unknown."
+    },
+    "catalog_limit_conflict": {
+      "ko": "카탈로그의 모델 한도가 검증된 한도보다 작아 실행할 수 없습니다.",
+      "en": "The catalog model limits are below the verified limits. Analysis cannot run."
+    },
+    "output_limit_missing": {
+      "ko": "저장된 출력 상한이 없어 분석 계획을 만들 수 없습니다.",
+      "en": "No output limit is saved. An analysis plan cannot be created."
+    },
+    "output_limit_exceeded": {
+      "ko": "저장된 출력 상한이 모델의 최대 출력 한도를 초과합니다.",
+      "en": "The saved output limit exceeds the model’s maximum output limit."
+    },
+    "plan_unknown": {
+      "ko": "분석 범위와 한도를 확인할 수 없어 실행하지 않습니다.",
+      "en": "Analysis coverage and limits are unknown. Analysis will not run."
+    },
+    "run_chunks": {
+      "ko": "확인하고 분할 실행",
+      "en": "Confirm and run chunks"
+    },
+    "cancel_chunks": {
+      "ko": "분할 실행 취소",
+      "en": "Cancel chunk execution"
+    },
+    "chunks_cancelled": {
+      "ko": "분할 분석을 실행하지 않았습니다. 기존 결과는 유지됩니다.",
+      "en": "Chunk analysis was not started. Existing results are preserved."
+    },
+    "view_plan": {
+      "ko": "분할 계획 다시 보기",
+      "en": "View chunk plan again"
+    },
+    "retry_analysis": {
+      "ko": "분석 재시도",
+      "en": "Retry analysis"
+    },
+    "regenerate_analysis": {
+      "ko": "분석 재생성",
+      "en": "Regenerate analysis"
+    },
+    "run_analysis": {
+      "ko": "분석 실행",
+      "en": "Run analysis"
+    },
+    "comparison_report": {
+      "ko": "검증된 비교 분석",
+      "en": "Validated comparison analysis"
+    },
+    "accepted_report": {
+      "ko": "채택된 보고서",
+      "en": "Accepted report"
+    },
+    "coverage": {
+      "ko": "분석 범위",
+      "en": "Analysis coverage"
+    },
+    "none": {
+      "ko": "없음",
+      "en": "None"
+    },
+    "non_analyzable": {
+      "ko": "비분석",
+      "en": "Not analyzable"
+    },
+    "unclassified": {
+      "ko": "미분류",
+      "en": "Unclassified"
+    },
+    "missing_classification": {
+      "ko": "분류 누락",
+      "en": "Missing classification"
+    },
+    "invalid_classification": {
+      "ko": "검증 제외",
+      "en": "Excluded by validation"
+    },
+    "legacy_coverage": {
+      "ko": "원문 근거·분석 범위: 알 수 없음 · 과거 결과를 그대로 표시합니다.",
+      "en": "Source evidence and analysis coverage: unknown · historical results shown unchanged."
+    },
+    "legacy_classification": {
+      "ko": "과거 분류 사용 여부: 알 수 없음",
+      "en": "Historical classification setting: unknown"
+    },
+    "zero_denominator": {
+      "ko": "비율 산정 불가 · 분류 분모 0개",
+      "en": "Percentage unavailable · classification denominator is 0"
+    },
+    "percentage_unknown": {
+      "ko": "비율 산정 불가",
+      "en": "Percentage unavailable"
+    },
+    "findings_title": {
+      "ko": "오개념 관찰",
+      "en": "Misconception findings"
+    },
+    "findings_notice": {
+      "ko": "학생 발화에 관한 관찰이며, 교사 개입의 인과 효과나 학생 능력 점수가 아닙니다.",
+      "en": "These are observations of student statements, not causal effects of teacher intervention or scores of student ability."
+    },
+    "maintained": {
+      "ko": "오개념 유지",
+      "en": "Misconception maintained"
+    },
+    "changed": {
+      "ko": "관찰 가능한 변화",
+      "en": "Observable change"
+    },
+    "deviated": {
+      "ko": "설정 이탈",
+      "en": "Deviation from the scenario"
+    },
+    "insufficient_evidence": {
+      "ko": "판단 근거 부족",
+      "en": "Insufficient evidence"
+    },
+    "legacy_findings": {
+      "ko": "과거 오개념 관찰: 알 수 없음",
+      "en": "Historical misconception findings: unknown"
+    },
+    "no_findings": {
+      "ko": "검증된 오개념 관찰 근거가 없습니다.",
+      "en": "No validated evidence for misconception findings."
+    },
+    "message_classifications": {
+      "ko": "발화별 분류",
+      "en": "Message classifications"
+    },
+    "analysis_load_failed": {
+      "ko": "분석 결과를 불러올 수 없습니다.",
+      "en": "Could not load analysis results."
+    },
+    "collapse_analysis": {
+      "ko": "상세 분석 접기",
+      "en": "Collapse detailed analysis"
+    },
+    "active_download_unavailable": {
+      "ko": "진행중 세션 다운로드 불가",
+      "en": "Active sessions cannot be downloaded"
+    },
+    "row_legacy": {
+      "ko": "과거 자료 · 읽기 전용",
+      "en": "Historical data · read only"
+    },
+    "confirm_end_analysis": {
+      "ko": "세션을 종료하고 분석하시겠습니까?",
+      "en": "End and analyze this session?"
+    },
+    "confirm_delete_session": {
+      "ko": "세션을 삭제하시겠습니까? (복구 불가)",
+      "en": "Delete this session? (Cannot be undone)"
+    },
+    "end": {
+      "ko": "종료",
+      "en": "End"
+    },
+    "analysis_result_action": {
+      "ko": "분석결과",
+      "en": "Analysis results"
+    },
+    "delete": {
+      "ko": "삭제",
+      "en": "Delete"
+    },
+    "select_session": {
+      "ko": "세션 {id} 선택",
+      "en": "Select session {id}"
+    },
+    "student_storage_failed": {
+      "ko": "학생 응답 저장에 실패했습니다.",
+      "en": "Could not save the student response."
+    },
+    "mentor_check_execution": {
+      "ko": "멘토 실행 상태를 확인해주세요.",
+      "en": "Check the mentor run status."
+    },
+    "user_not_found": {
+      "ko": "사용자를 찾을 수 없습니다.",
+      "en": "User not found"
+    }
+  },
   "admin": {}
 }

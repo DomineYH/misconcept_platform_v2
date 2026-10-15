@@ -14,8 +14,10 @@ from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
 )
+from src.api.routes.teacher_language import TeacherLanguageRoute
 from src.api.schemas import AnalysisRequest
 from src.config import config
+from src.i18n import display_language, translate
 from src.models import (
     UiEvent,
     User,
@@ -31,7 +33,7 @@ from src.services.analysis_runs import (
 )
 from src.services.export import CSVExporter
 
-router = APIRouter(tags=["Sessions"])
+router = APIRouter(route_class=TeacherLanguageRoute, tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 
@@ -184,6 +186,7 @@ async def log_analysis_detail_opened(
 @router.get("/sessions/{session_id}/export.csv")
 async def export_session(
     session_id: int,
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
@@ -193,8 +196,13 @@ async def export_session(
     exporter = CSVExporter()
     try:
         csv_content = await exporter.export_session(session_id, db)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail=translate(
+                "teacher.session_not_found", display_language(request)
+            ),
+        )
 
     return Response(
         content="\ufeff" + csv_content,

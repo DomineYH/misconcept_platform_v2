@@ -91,7 +91,13 @@ async def mark_session_ended(
     await db.refresh(session, ["ended_at"])
     if session.ended_at:
         if not force:
-            raise HTTPException(status_code=400, detail="Session already ended")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "session_ended",
+                    "message": "대화가 종료되었습니다.",
+                },
+            )
         await db.commit()
         return session.ended_at, True
 

@@ -12,31 +12,31 @@
         aria-controls="analysis-detail-panel"
         data-session-id="{{ session_id }}"
         onclick="toggleAnalysisDetail(this)">
-    상세 분석
+    {{ t('teacher.analysis_details') }}
 </button>
 
 <div id="analysis-detail-panel" hidden>
     <section class="analysis-section">
-        <h3>질문 유형 분포</h3>
+        <h3>{{ t('teacher.question_distribution') }}</h3>
         {% if classification_enabled is defined and classification_enabled == false %}
-        <p class="empty-state">분류 미사용</p>
+        <p class="empty-state">{{ t('teacher.classification_off') }}</p>
         {% else %}
         {% include "partials/analysis_bar.html" %}
         {% endif %}
     </section>
 
-    <div role="tablist" class="analysis-tabs" aria-label="상세 분석 탭">
+    <div role="tablist" class="analysis-tabs" aria-label="{{ t('teacher.analysis_tabs') }}">
         <button type="button" role="tab" id="tab-coach"
                 aria-controls="panel-coach" aria-selected="true" tabindex="0">
-            대화코칭
+            {{ t('teacher.dialogue_coaching') }}
         </button>
         <button type="button" role="tab" id="tab-strong"
                 aria-controls="panel-strong" aria-selected="false" tabindex="-1">
-            우수한 점
+            {{ t('teacher.strengths') }}
         </button>
         <button type="button" role="tab" id="tab-improve"
                 aria-controls="panel-improve" aria-selected="false" tabindex="-1">
-            개선할 점
+            {{ t('teacher.improvements') }}
         </button>
     </div>
 
@@ -53,18 +53,18 @@
                 {%- endif %}">
                 <div class="coach-msg__head">
                     <span class="coach-msg__role">
-                        {%- if m.role == 'teacher' %}선생님
-                        {%- elif m.role == 'student' %}학생
-                        {%- elif m.role == 'tutor' %}멘토
+                        {%- if m.role == 'teacher' %}{{ t('teacher.teacher') }}
+                        {%- elif m.role == 'student' %}{{ t('teacher.student') }}
+                        {%- elif m.role == 'tutor' %}{{ t('teacher.mentor') }}
                         {%- else %}{{ m.role }}{% endif -%}
                     </span>
                     {% if m.turn_index %}
-                    <span class="coach-msg__turn">{{ m.turn_index }}번째 턴</span>
+                    <span class="coach-msg__turn">{{ t('teacher.turn_number', number=m.turn_index) }}</span>
                     {% endif %}
                     {% if m.role == 'teacher' and m.level == 'high' %}
-                    <span class="coach-msg__tag tag--good">잘 한 대화</span>
+                    <span class="coach-msg__tag tag--good">{{ t('teacher.good_dialogue') }}</span>
                     {% elif m.role == 'teacher' and m.level == 'low' %}
-                    <span class="coach-msg__tag tag--bad">놓친 순간</span>
+                    <span class="coach-msg__tag tag--bad">{{ t('teacher.missed_moment') }}</span>
                     {% endif %}
                 </div>
                 <p class="coach-msg__content">{{ m.content }}</p>
@@ -72,7 +72,7 @@
             {% endfor %}
         </ol>
         {% else %}
-        <p class="empty-state">대화 내역이 없습니다.</p>
+        <p class="empty-state">{{ t('teacher.no_messages') }}</p>
         {% endif %}
     </section>
 
@@ -85,7 +85,7 @@
             <p class="strong-card__reason">{{ item.reason }}</p>
         </article>
         {% else %}
-        <p class="empty-state">우수한 점이 없습니다.</p>
+        <p class="empty-state">{{ t('teacher.no_strengths') }}</p>
         {% endfor %}
         {% else %}
         {% set high_qs = [] %}
@@ -112,7 +112,7 @@
             {% endfor %}
         </div>
         {% else %}
-        <p class="empty-state">우수한 질문이 없습니다.</p>
+        <p class="empty-state">{{ t('teacher.no_strong_questions') }}</p>
         {% endif %}
         {% endif %}
     </section>
@@ -124,11 +124,11 @@
         <article class="improve-card">
             <p class="improve-card__q">{{ item.student_quote }}</p>
             <p class="improve-card__why">{{ item.missed_reason }}</p>
-            <p class="improve-card__rewrite"><strong>대안 질문:</strong> {{ item.alternative_question }}</p>
+            <p class="improve-card__rewrite"><strong>{{ t('teacher.alternative_question_label') }}</strong> {{ item.alternative_question }}</p>
             <p>{{ item.alternative_reason }}</p>
         </article>
         {% else %}
-        <p class="empty-state">개선할 점이 없습니다.</p>
+        <p class="empty-state">{{ t('teacher.no_improvements') }}</p>
         {% endfor %}
         {% else %}
         {% set low_qs = [] %}
@@ -153,19 +153,19 @@
                 {% endif %}
                 {% if q.reasoning and q.reasoning.improved_sentence %}
                 <p class="improve-card__rewrite">
-                    <strong>개선한 문장:</strong>
+                    <strong>{{ t('teacher.improved_sentence_label') }}</strong>
                     {{ q.reasoning.improved_sentence }}
                 </p>
                 {% else %}
                 <p class="improve-card__rewrite improve-card__rewrite--missing">
-                    개선한 문장은 분석 재실행 후 표시됩니다.
+                    {{ t('teacher.improved_after_rerun') }}
                 </p>
                 {% endif %}
             </article>
             {% endfor %}
         </div>
         {% else %}
-        <p class="empty-state">개선할 점이 없습니다.</p>
+        <p class="empty-state">{{ t('teacher.no_improvements') }}</p>
         {% endif %}
         {% endif %}
     </section>

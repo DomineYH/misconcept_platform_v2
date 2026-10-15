@@ -16,7 +16,7 @@ export default async function checkStudentErrors(page) {
         // Tab storage must precede the first byte of the request.
         errorFixture.saved = JSON.parse(sessionStorage.getItem('chat-run-1'));
         if (errorFixture.mode === 'post403') return Response.json({detail:'Forbidden'}, {status:403});
-        if (errorFixture.mode === 'ended') return Response.json({detail:'Session already ended'}, {status:400});
+        if (errorFixture.mode === 'ended') return Response.json({detail:{code:'session_ended', message:'This wording can change freely'}}, {status:400});
         if (errorFixture.mode === 'configuration') return Response.json({detail:{code:'configuration_unavailable'}}, {status:503});
         if (errorFixture.mode === 'capacity') return Response.json({detail:{code:'call_limit_reached'}}, {status:429});
         return new Response('', {headers:{'Content-Type':'text/event-stream'}});

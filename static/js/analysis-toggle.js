@@ -51,7 +51,7 @@ function toggleAnalysisDetail(btn) {
   if (!panel) return;
   btn.setAttribute('aria-expanded', String(!expanded));
   panel.hidden = expanded;
-  btn.textContent = expanded ? '상세 분석' : '상세 분석 접기';
+  btn.textContent = expanded ? uiLanguage.t('teacher.analysis_details') : uiLanguage.t('teacher.collapse_analysis');
 
   if (!expanded) {
     bindAnalysisTabs(panel);
@@ -64,7 +64,7 @@ function toggleAnalysisDetail(btn) {
     if (sessionId) {
       fetch('/sessions/' + sessionId + '/analysis/detail-opened', {
         method: 'POST',
-        headers: getAnalysisCsrfHeaders(),
+        headers: uiLanguage.headers('/sessions/' + sessionId + '/analysis/detail-opened', getAnalysisCsrfHeaders()),
         credentials: 'same-origin',
       }).catch(function () { /* silent */ });
     }

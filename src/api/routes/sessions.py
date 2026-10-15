@@ -23,13 +23,14 @@ from src.api.routes.session_helpers import (
 # Import sub-routers to include all session routes
 from src.api.routes.session_messages import router as messages_router
 from src.api.routes.student_generation import router as student_router
+from src.api.routes.teacher_language import TeacherLanguageRoute
 from src.config import config
 from src.models import Message, User
 from src.services.analysis_results import load_analysis_response
 from src.services.lesson_snapshots import start_lesson
 from src.services.session_history import session_display
 
-router = APIRouter(tags=["Sessions"])
+router = APIRouter(route_class=TeacherLanguageRoute, tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 # Include sub-routers

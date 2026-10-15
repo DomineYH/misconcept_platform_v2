@@ -17,13 +17,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_helpers import load_session, require_native_session
+from src.api.routes.teacher_language import TeacherLanguageRoute
 from src.config import config
+from src.i18n import display_language, translate
 from src.models import Message, User
 from src.services.session_history import session_display
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Sessions"])
+router = APIRouter(route_class=TeacherLanguageRoute, tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 
@@ -93,7 +95,12 @@ async def send_message(
     session = await load_session(session_id, user, db)
     require_native_session(session)
     return JSONResponse(
-        {"code": "reload_required", "detail": "새로고침 후 다시 전송해주세요."},
+        {
+            "code": "reload_required",
+            "detail": translate(
+                "teacher.reload_required", display_language(request)
+            ),
+        },
         status_code=410,
     )
 

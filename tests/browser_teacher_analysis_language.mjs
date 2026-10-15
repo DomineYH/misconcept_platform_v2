@@ -12,7 +12,7 @@ export default async function check(page) {
   const result = page.locator('[data-analysis-result]');
   await result.getByRole('heading', {name:'Accepted report: Degraded analysis'}).waitFor();
   assert(await result.getByText('Conversation reviewed: 6 / 7 messages', {exact:true}).isVisible());
-  assert(await result.getByText('학생의 생각을 원문으로 확인하며 질문했습니다.', {exact:true}).isVisible());
+  assert(await result.getByText('Partial analysis: validated results for 6 / 7 messages. Check analysis coverage for completed, failed and unprocessed ranges.', {exact:true}).isVisible());
   assert(await result.getByText('추론 질문: 2 items · 100%', {exact:true}).isVisible());
   assert.deepEqual(requests, ['en']);
   const running = await (await page.request.get(`${base}/fixtures/s4/result?state=running`)).json();

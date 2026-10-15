@@ -24,7 +24,7 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
       list.replaceChildren(node('h3', uiLanguage.t('admin.my_comparison_history_newest_first_20_per_page')));
       for (const item of data.items) {
         const row = node('article');
-        row.append(node('p', `${roles[item.target_role]} · ${item.source_origin === 'saved_scenario_edit' ? uiLanguage.t('admin.unsaved_edits_to_a_saved_scenario') : uiLanguage.t('admin.new_draft')} · ${item.created_at} · ${item.status === 'running' ? uiLanguage.t('admin.in_progress_2') : uiLanguage.t('admin.end')}`),
+        row.append(node('p', `${roles[item.target_role]} · ${item.source_origin === 'saved_scenario_edit' ? uiLanguage.t('admin.unsaved_edits_to_a_saved_scenario') : uiLanguage.t('admin.new_draft')} · ${item.created_at} · ${item.status === 'running' ? uiLanguage.t('admin.operation_in_progress') : uiLanguage.t('admin.end')}`),
           button(`${item.title || uiLanguage.t('admin.untitled_draft')} ${uiLanguage.t('admin.details')}`, () => show(item.comparison_run_id)));
         for (const status of item.panel_statuses || []) row.append(node('p', statusLabel(status, item.target_role) || uiLanguage.t('admin.unknown')));
         list.append(row);
@@ -44,7 +44,7 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
       detail.hidden = false;
       const title = node('h3', uiLanguage.t('admin.comparison_history_details'), {tabindex:'-1'});
       detail.append(title, node('p', `${data.source_snapshot?.title || uiLanguage.t('admin.untitled_draft')} · ${roles[data.target_role]}`),
-        node('p', `${uiLanguage.t('admin.created_2')} ${data.created_at} · ${uiLanguage.t('admin.expires')} ${data.expires_at} · ${uiLanguage.t('admin.retained_for_30_days')}`));
+        node('p', `${uiLanguage.t('admin.created_timestamp_label')} ${data.created_at} · ${uiLanguage.t('admin.expires')} ${data.expires_at} · ${uiLanguage.t('admin.retained_for_30_days')}`));
       detail.append(node('h4', uiLanguage.t('admin.canonical_conversation_history')));
       for (const message of data.canonical_context || []) detail.append(node('p', `${message.role === 'teacher' ? uiLanguage.t('admin.teacher') : uiLanguage.t('admin.student_label')}: ${message.content}`, {class:'comparison-text'}));
       detail.append(node('p', `${uiLanguage.t('admin.current_question')} ${data.current_message ?? uiLanguage.t('admin.none')}`, {class:'comparison-text'}),

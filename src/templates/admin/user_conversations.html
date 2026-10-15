@@ -10,7 +10,7 @@
     <p class="subtitle">{{ t('admin.download_conversation_history_by_user') }}</p>
   </header>
 
-  <div class="table-container user-list-container" role="region" tabindex="0" aria-label="{{ t('admin.user_conversations_2') }}">
+  <div class="table-container user-list-container" role="region" tabindex="0" aria-label="{{ t('admin.user_conversations_table') }}">
     <table class="data-table">
       <thead>
         <tr>
@@ -108,9 +108,8 @@ function showSessionList(userId) {
   modalLifecycle.open(document.getElementById('sessionModal'), () => closeModal('sessionModal'));
 
   pendingRequests++;
-  fetch('/admin/user-conversations/' +
-    userId + '/sessions', {headers:uiLanguage.headers('/admin/user-conversations/' +
-    userId + '/sessions')})
+  const url = '/admin/user-conversations/' + userId + '/sessions';
+  fetch(url, {headers:uiLanguage.headers(url)})
   .then(function(r) {
     if (!r.ok) throw new Error(uiLanguage.t('admin.lookup_failed'));
     return r.json();
@@ -118,7 +117,7 @@ function showSessionList(userId) {
   .then(function(sessions) {
     if (requestId !== sessionListRequest) return;
     if (!sessions.length) {
-      content.textContent = uiLanguage.t('admin.no_completed_sessions_2');
+      content.textContent = uiLanguage.t('admin.no_completed_sessions_message');
       return;
     }
     const container = document.createElement('div');

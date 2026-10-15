@@ -29,8 +29,10 @@
         {% endif %}
         {% elif feedback_status == 'failed' %}
         <div class="analysis-feedback">
-            <p>{{ feedback if feedback else t('teacher.feedback_failed') }}</p>
+            <p>{{ t('teacher.feedback_failed') if display_language(request) == 'en' else (feedback if feedback else t('teacher.feedback_failed')) }}</p>
         </div>
+        {% elif feedback_status == 'no_dialogue' %}
+        <div class="analysis-feedback"><p>{{ t('teacher.no_dialogue_feedback') }}</p></div>
         {% else %}
         <div class="analysis-feedback">
             <p>{{ feedback }}</p>

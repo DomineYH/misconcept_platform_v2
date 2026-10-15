@@ -86,7 +86,7 @@
   <div class="modal-backdrop" id="create-modal-backdrop"></div>
   <div class="modal-container">
     <div class="modal-header">
-      <h2 id="create-modal-title">{{ t('admin.add_contributor_2') }}</h2>
+      <h2 id="create-modal-title">{{ t('admin.add_contributor_heading') }}</h2>
       <button type="button" class="modal-close"
               aria-label="{{ t('admin.close') }}" id="close-create-modal">×</button>
     </div>
@@ -297,7 +297,7 @@ let editBaseline;
         showToast(uiLanguage.t('admin.added'), 'success');
         reloadPage();
       }).catch(function () {
-        modalLifecycle.error(e.target, uiLanguage.t('admin.could_not_confirm_the_save_result_your_input_is_preserved_2'));
+        modalLifecycle.error(e.target, uiLanguage.t('admin.save_result_unknown_input_preserved'));
       }).finally(function () { pendingRequests--; });
     }
   );
@@ -364,7 +364,7 @@ let editBaseline;
         showToast(uiLanguage.t('admin.updated'), 'success');
         reloadPage();
       }).catch(function () {
-        modalLifecycle.error(e.target, uiLanguage.t('admin.could_not_confirm_the_save_result_your_input_is_preserved_2'));
+        modalLifecycle.error(e.target, uiLanguage.t('admin.save_result_unknown_input_preserved'));
       }).finally(function () { pendingRequests--; });
     }
   );
@@ -406,7 +406,7 @@ let editBaseline;
       }).then(function (r) {
         if (!r.ok) {
           return r.json().then(function (j) {
-            modalLifecycle.error(deleteModal, j.detail || uiLanguage.t('admin.deletion_failed_2'));
+            modalLifecycle.error(deleteModal, j.detail || uiLanguage.t('admin.contributor_deletion_failed'));
           });
         }
         closeDelete();

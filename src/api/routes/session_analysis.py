@@ -14,7 +14,6 @@ from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
 )
-from src.api.routes.teacher_language import TeacherLanguageRoute
 from src.api.schemas import AnalysisRequest
 from src.config import config
 from src.i18n import display_language, translate
@@ -33,7 +32,7 @@ from src.services.analysis_runs import (
 )
 from src.services.export import CSVExporter
 
-router = APIRouter(route_class=TeacherLanguageRoute, tags=["Sessions"])
+router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 
@@ -47,8 +46,12 @@ async def end_session(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Commit the end, then reserve analysis or return its confirmation plan."""
-    session = await load_session(session_id, user, db)
-    ended_at, _ = await mark_session_ended(session, db, force=True)
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
+    ended_at, _ = await mark_session_ended(
+        session, db, force=True, language=display_language(request)
+    )
     request_id = (
         body.request_id
         if body
@@ -65,6 +68,7 @@ async def end_session(
         user.id,
         request_id,
         plan_hash=body.plan_hash if body else None,
+        language=display_language(request),
     )
 
 
@@ -78,9 +82,14 @@ async def analyze_session_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Reserve an analysis independently of the response connection."""
-    await load_session(session_id, user, db)
+    await load_session(session_id, user, db, language=display_language(request))
     return await request_analysis(
-        db, session_id, user.id, body.request_id, plan_hash=body.plan_hash
+        db,
+        session_id,
+        user.id,
+        body.request_id,
+        plan_hash=body.plan_hash,
+        language=display_language(request),
     )
 
 
@@ -89,19 +98,29 @@ async def get_analysis(
     session_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ) -> dict:
     """Get session analysis report."""
-    session = await load_session(session_id, user, db)
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
 
     if not session.ended_at:
         raise HTTPException(
             status_code=400,
-            detail="Session must be ended before viewing analysis",
+            detail=translate(
+                "teacher.end_before_analysis", display_language(request)
+            ),
         )
 
     analysis_data = await load_analysis_response(session_id, db)
     if analysis_data is None:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+        raise HTTPException(
+            status_code=404,
+            detail=translate(
+                "teacher.analysis_not_found", display_language(request)
+            ),
+        )
     return analysis_data
 
 
@@ -113,7 +132,7 @@ async def get_analysis_page(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Render analysis HTML page."""
-    analysis_data = await get_analysis(session_id, user, db)
+    analysis_data = await get_analysis(session_id, user, db, request=request)
 
     return templates.TemplateResponse(
         "analysis.html",
@@ -141,7 +160,7 @@ async def get_analysis_modal(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Render analysis modal content (HTMX partial)."""
-    analysis_data = await get_analysis(session_id, user, db)
+    analysis_data = await get_analysis(session_id, user, db, request=request)
 
     return templates.TemplateResponse(
         "partials/analysis_modal.html",
@@ -164,12 +183,13 @@ async def get_analysis_modal(
     status_code=204,
 )
 async def log_analysis_detail_opened(
+    request: Request,
     session_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     """Log that the user opened the analysis detail view."""
-    await load_session(session_id, user, db)
+    await load_session(session_id, user, db, language=display_language(request))
 
     db.add(
         UiEvent(
@@ -191,7 +211,7 @@ async def export_session(
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     """Export session with analysis to CSV."""
-    await load_session(session_id, user, db)
+    await load_session(session_id, user, db, language=display_language(request))
 
     exporter = CSVExporter()
     try:
@@ -217,23 +237,32 @@ async def export_session(
 
 @router.get("/sessions/{session_id}/analysis/runs/{run_id}")
 async def get_analysis_run(
+    request: Request,
     session_id: int,
     run_id: str,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    await load_session(session_id, user, db)
-    return await run_response(db, await get_run(db, session_id, run_id))
+    await load_session(session_id, user, db, language=display_language(request))
+    return await run_response(
+        db,
+        await get_run(
+            db, session_id, run_id, language=display_language(request)
+        ),
+    )
 
 
 @router.post(
     "/sessions/{session_id}/analysis/runs/{run_id}/cancel", status_code=202
 )
 async def cancel_analysis_run(
+    request: Request,
     session_id: int,
     run_id: str,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    await load_session(session_id, user, db)
-    return await cancel_analysis(db, session_id, run_id, user.id)
+    await load_session(session_id, user, db, language=display_language(request))
+    return await cancel_analysis(
+        db, session_id, run_id, user.id, language=display_language(request)
+    )

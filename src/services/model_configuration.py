@@ -34,10 +34,10 @@ def connection_impact(
     registered = [m for m in models if m["provider"] == provider]
     impact = [
         translate(
-            "admin.registered_model_v0_v1",
+            "admin.registered_model_description",
             language,
-            v0=m["display_name"],
-            v1=m["model_id"],
+            display_name=m["display_name"],
+            model_id=m["model_id"],
         )
         for m in registered
     ]
@@ -47,10 +47,12 @@ def connection_impact(
             if default and default["model_config_id"] in by_id:
                 impact.append(
                     translate(
-                        "admin.v0_default_authoring_model_v1",
+                        "admin.role_default_authoring_model",
                         language,
-                        v0=role,
-                        v1=by_id[default["model_config_id"]]["display_name"],
+                        role=role,
+                        model_name=by_id[default["model_config_id"]][
+                            "display_name"
+                        ],
                     )
                 )
     for scenario in scenarios:
@@ -84,14 +86,14 @@ def connection_impact(
             )
             impact.append(
                 translate(
-                    "admin.scenario_v0_v1_v2_v3_v4_v5",
+                    "admin.scenario_model_usage",
                     language,
-                    v0=scenario.id,
-                    v1=scenario.title,
-                    v2=role,
-                    v3=selection["model_id"],
-                    v4=state,
-                    v5=execution,
+                    scenario_id=scenario.id,
+                    title=scenario.title,
+                    role=role,
+                    model_id=selection["model_id"],
+                    state=state,
+                    execution=execution,
                 )
             )
     return impact

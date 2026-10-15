@@ -3,6 +3,7 @@
 from datetime import datetime
 from uuid import uuid4
 
+import pytest
 from test_mentor_generation import mentor as mentor_fixture
 from test_scenario_api import client as client_fixture
 from test_scenario_api import login
@@ -13,6 +14,26 @@ client = client_fixture
 scenario_payload = scenario_fixture
 student = student_fixture
 mentor = mentor_fixture
+
+
+@pytest.mark.parametrize("action", ["end", "analyze_regenerate"])
+async def test_admin_shared_legacy_error_uses_request_language(
+    data, client, action
+):
+    login(client, data.admin)
+    client.cookies.set("ui_lang", "ko")
+    response = await client.post(
+        f"/admin/sessions/{data.session.id}/{action}",
+        json={"request_id": str(uuid4())},
+        headers={"X-UI-Language": "en"},
+    )
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": {
+            "code": "legacy_read_only",
+            "message": "Historical sessions are read only. Start a new practice with a published scenario.",
+        }
+    }
 
 
 async def test_ended_student_request_has_stable_code_and_localized_message(

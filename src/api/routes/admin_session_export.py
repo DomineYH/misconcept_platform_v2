@@ -145,7 +145,7 @@ async def export_selected_sessions(
                     translate(
                         "admin.active_session",
                         display_language(request),
-                        v0=s.id,
+                        session_id=s.id,
                     )
                 ),
             )
@@ -298,7 +298,7 @@ async def download_session(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=translate(
-                "admin.session_missing", display_language(request)
+                "teacher.session_not_found", display_language(request)
             ),
         )
 

@@ -12,6 +12,7 @@ from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
 )
+from src.i18n import translate
 from src.models import (
     AppSetting,
     GenerationRun,
@@ -31,12 +32,18 @@ from src.services.tutor_bot import build_mentor_request
 
 
 async def reserve_mentor(
-    factory, session_id, turn_id, user, request_id, trigger
+    factory, session_id, turn_id, user, request_id, trigger, *, language="ko"
 ):
     async with execution_lock():
         try:
             return await _reserve_mentor(
-                factory, session_id, turn_id, user, request_id, trigger
+                factory,
+                session_id,
+                turn_id,
+                user,
+                request_id,
+                trigger,
+                language=language,
             )
         except InvocationError as error:
             raise HTTPException(
@@ -48,9 +55,11 @@ async def reserve_mentor(
                 detail={
                     "code": error.code,
                     "message": (
-                        "질문을 짧게 수정하거나 관리자에게 AI 설정을 확인해주세요."
+                        translate("teacher.shorten_question", language)
                         if error.code == "context_limit"
-                        else "관리자에게 AI 연결과 멘토 모델 검증을 요청하거나 잠시 후 다시 시도해주세요."
+                        else translate(
+                            "teacher.check_mentor_settings", language
+                        )
                     ),
                 },
                 headers=(
@@ -62,7 +71,7 @@ async def reserve_mentor(
 
 
 async def _reserve_mentor(
-    factory, session_id, turn_id, user, request_id, trigger
+    factory, session_id, turn_id, user, request_id, trigger, *, language="ko"
 ):
     input_hash = digest(
         {
@@ -75,7 +84,7 @@ async def _reserve_mentor(
     )
     async with factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
-        session = await load_session(session_id, user, db)
+        session = await load_session(session_id, user, db, language=language)
         scenario = await db.get(Scenario, session.scenario_id)
         if not user.is_admin:
             access = await db.scalar(
@@ -85,8 +94,10 @@ async def _reserve_mentor(
                 )
             )
             if access is None:
-                raise HTTPException(403, detail="Forbidden")
-        require_native_session(session)
+                raise HTTPException(
+                    403, detail=translate("teacher.forbidden", language)
+                )
+        require_native_session(session, language=language)
         existing = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.owner_id == user.id,
@@ -106,7 +117,9 @@ async def _reserve_mentor(
             )
         )
         if teacher is None:
-            raise HTTPException(404, detail="Turn not found")
+            raise HTTPException(
+                404, detail=translate("teacher.turn_not_found", language)
+            )
         completed = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.session_id == session_id,
@@ -120,10 +133,12 @@ async def _reserve_mentor(
             return await snapshot(db, completed), None
         if session.ended_at:
             raise HTTPException(400, detail={"code": "session_ended"})
-        await validate_scenario_access(scenario.id, user, db)
+        await validate_scenario_access(scenario.id, user, db, language=language)
         if not scenario.is_active:
-            raise HTTPException(404, detail="Scenario not found")
-        lesson = read_lesson_snapshot(session)
+            raise HTTPException(
+                404, detail=translate("teacher.scenario_not_found", language)
+            )
+        lesson = read_lesson_snapshot(session, language=language)
         if lesson.config.mentor.mode == "off":
             raise HTTPException(400, detail={"code": "mentor_disabled"})
         if trigger == "auto" and lesson.config.mentor.mode != "auto":

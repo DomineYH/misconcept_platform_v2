@@ -212,3 +212,27 @@ of `ae76de6`; #137 records them without changing their recovery or guard policy.
 
 The review's **N5** Korean-only shared modal fallback is fixed in #137 through
 `common.check_input`, with a failing-then-passing browser form regression.
+
+
+## #133 review repair: analysis notices and exact Korean copy
+
+App-generated v2 chunked partial-analysis notices are localized at display time
+using the existing degraded status and chunk coverage. Single-call AI feedback
+remains original content; Korean report copy and every stored/JSON feedback value
+remain verbatim. Initial page/modal rendering uses the same status and coverage
+as the browser renderer. Failed analyses use a localized status notice in English;
+no-dialogue outcomes use a localized no-dialogue notice. Neither path compares
+stored message text or changes the stored payload or response schema.
+
+Historical partial feedback without chunk coverage has no reliable discriminator
+between an app notice and AI content. Approved-style exception: preserve that
+feedback verbatim rather than infer its origin from the wording or migrate data.
+Existing failure notices likewise retain their exact historical Korean wording;
+the English display uses the failure status when its precise historical subtype
+cannot be identified. No historical text is rewritten.
+
+The coordinator's repair decision preserves `admin.end_before_analysis` and
+`teacher.end_before_analysis` separately because their Korean wording differs.
+Other merges require identical Korean or punctuation/whitespace-only differences;
+wording variants keep separate, meaningful keys. Shared session/analysis strings
+remain owned by `teacher`; admin JS consumers include the teacher catalog area.

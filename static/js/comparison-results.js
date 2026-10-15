@@ -2,8 +2,8 @@ import {node, button, roles} from './ai-render.js';
 
 export const completedStatuses = ['completed','ok','degraded'];
 export const active = status => ['waiting', 'running', 'streaming'].includes(status);
-export const statusLabels = {waiting:uiLanguage.t('admin.waiting'), running:uiLanguage.t('admin.processing'), streaming:uiLanguage.t('admin.streaming'), completed:uiLanguage.t('admin.completed'), ok:uiLanguage.t('admin.complete_analysis'), degraded:uiLanguage.t('admin.partial_analysis'), failed:uiLanguage.t('admin.failed'), cancelled:uiLanguage.t('admin.cancel'), interrupted:uiLanguage.t('admin.interrupted')};
-export const statusLabel = (status, role) => status === 'running' ? role === 'student' ? uiLanguage.t('admin.streaming') : role === 'analysis' ? uiLanguage.t('admin.in_progress_2') : statusLabels[status] : statusLabels[status];
+export const statusLabels = {waiting:uiLanguage.t('admin.waiting'), running:uiLanguage.t('admin.processing'), streaming:uiLanguage.t('admin.streaming'), completed:uiLanguage.t('admin.completed'), ok:uiLanguage.t('teacher.analysis_ok'), degraded:uiLanguage.t('teacher.analysis_degraded'), failed:uiLanguage.t('admin.failed'), cancelled:uiLanguage.t('admin.cancel'), interrupted:uiLanguage.t('admin.interrupted')};
+export const statusLabel = (status, role) => status === 'running' ? role === 'student' ? uiLanguage.t('admin.streaming') : role === 'analysis' ? uiLanguage.t('admin.operation_in_progress') : statusLabels[status] : statusLabels[status];
 
 export function failureMessage(panel) {
   const code = panel.error_code;
@@ -40,8 +40,8 @@ export function renderComparisonResult(root, panel, role, actions, locked) {
       messages:panel.result.messages || [], permissions:{}, actions:{}});
   }
   const timing = panel.timing || {}, usage = panel.usage || {};
-  root.append(node('p', `${uiLanguage.t('admin.started_2')} ${timing.started_at ?? uiLanguage.t('admin.unknown')} · ${uiLanguage.t('admin.end')} ${timing.finished_at ?? uiLanguage.t('admin.unknown')}`),
-    node('p', `${uiLanguage.t('admin.total_time')} ${timing.total_ms == null ? uiLanguage.t('admin.unknown') : `${timing.total_ms} ms`} · ${uiLanguage.t('admin.first_output_2')} ${role !== 'student' ? 'N/A' : timing.first_output_ms == null ? uiLanguage.t('admin.unknown') : `${timing.first_output_ms} ms`}`),
+  root.append(node('p', `${uiLanguage.t('admin.started_timestamp_label')} ${timing.started_at ?? uiLanguage.t('admin.unknown')} · ${uiLanguage.t('admin.end')} ${timing.finished_at ?? uiLanguage.t('admin.unknown')}`),
+    node('p', `${uiLanguage.t('admin.total_time')} ${timing.total_ms == null ? uiLanguage.t('admin.unknown') : `${timing.total_ms} ms`} · ${uiLanguage.t('admin.first_body_timestamp_label')} ${role !== 'student' ? 'N/A' : timing.first_output_ms == null ? uiLanguage.t('admin.unknown') : `${timing.first_output_ms} ms`}`),
     node('p', `${uiLanguage.t('admin.actual_input')} ${usage.input_tokens ?? uiLanguage.t('admin.unknown')} · ${uiLanguage.t('admin.output')} ${usage.output_tokens ?? uiLanguage.t('admin.unknown')} ${uiLanguage.t('admin.tokens_cost')} ${usage.cost ?? uiLanguage.t('admin.unknown')}`),
     node('p', `${uiLanguage.t('admin.requested_model')} ${panel.model_config?.model_id ?? uiLanguage.t('admin.unknown')} · ${uiLanguage.t('admin.returned_model')} ${panel.provider_model_id ?? uiLanguage.t('admin.unknown')}`));
   root.append(node('p', `${uiLanguage.t('admin.applied_options')} ${JSON.stringify(panel.applied_options ?? {})}`));

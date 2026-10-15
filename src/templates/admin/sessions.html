@@ -67,10 +67,10 @@
             {% if session.ended_at %}
             <input type="checkbox" class="session-checkbox"
                    value="{{ session.id }}"
-                   aria-label="{{ t('admin.select_session', id=session.id) }}">
+                   aria-label="{{ t('teacher.select_session', id=session.id) }}">
             {% else %}
             <input type="checkbox" disabled
-                   aria-label="{{ t('admin.active_sessions_cannot_be_downloaded') }}">
+                   aria-label="{{ t('teacher.active_download_unavailable') }}">
             {% endif %}
           </td>
           <td>{{ session.id }}</td>
@@ -103,7 +103,7 @@
             {% if not session.ended_at and session.snapshot_origin == 'native' %}
             <button type="button"
               hx-post="/admin/sessions/{{ session.id }}/end"
-              hx-confirm="{{ t('admin.end_and_analyze_this_session') }}"
+              hx-confirm="{{ t('teacher.confirm_end_analysis') }}"
               hx-target="closest tr"
               hx-swap="outerHTML"
               hx-indicator="#loading-{{ session.id }}"
@@ -117,12 +117,12 @@
             {% if session.summary or session.id in analysis_session_ids %}
             <button type="button"
               class="btn btn-sm btn-info view-analysis-btn"
-              data-session-id="{{ session.id }}">{{ t('admin.analysis_results') }}</button>
+              data-session-id="{{ session.id }}">{{ t('teacher.analysis_result_action') }}</button>
             {% endif %}
             {% endif %}
             <button type="button"
               hx-post="/admin/sessions/{{ session.id }}/delete"
-              hx-confirm="{{ t('admin.delete_this_session_this_cannot_be_undone') }}"
+              hx-confirm="{{ t('teacher.confirm_delete_session') }}"
               hx-target="closest tr"
               hx-swap="delete"
               class="btn btn-sm btn-danger">{{ t('admin.delete') }}</button>
@@ -172,14 +172,14 @@
 
 <!-- Analysis Modal -->
 <div id="analysis-modal" class="modal-overlay hidden"
-     role="dialog" aria-modal="true" aria-label="{{ t('admin.session_analysis_results') }}">
+     role="dialog" aria-modal="true" aria-label="{{ t('teacher.analysis_results') }}">
   <div class="modal-container modal-lg">
     <div id="analysis-modal-body" class="modal-form">
     </div>
   </div>
 </div>
 
-<template id="admin-session-loading"><div class="modal-header"><h2>{{ t('admin.session_analysis_results') }}</h2><button class="close-modal-btn" aria-label="{{ t('admin.close') }}" onclick="closeAnalysisModal()">×</button></div><div class="modal-body" role="status" style="text-align:center;padding:2rem;"><span class="spinner spinner-md"></span> {{ t('admin.sessions_loading') }}</div></template>
+<template id="admin-session-loading"><div class="modal-header"><h2>{{ t('teacher.analysis_results') }}</h2><button class="close-modal-btn" aria-label="{{ t('admin.close') }}" onclick="closeAnalysisModal()">×</button></div><div class="modal-body" role="status" style="text-align:center;padding:2rem;"><span class="spinner spinner-md"></span> {{ t('admin.sessions_loading') }}</div></template>
 <script src="/static/js/sessions.js"></script>
 
 <script>

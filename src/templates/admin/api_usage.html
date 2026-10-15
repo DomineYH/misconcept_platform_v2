@@ -34,7 +34,7 @@
         <td>{{ {'student': t('admin.student'), 'tutor': t('admin.mentor'), 'mentor': t('admin.mentor'), 'analysis': t('admin.post_session_analysis')}.get(role, observed(role)) }}{% if role %} ({{ role }}){% endif %}</td>
         <td>{{ observed(log.operation) }}{% if log.usage_scope|default(none) == "comparison" %}<div>{{ t('admin.admin_comparison_comparison') }}</div>{% endif %}</td>
         <td>
-          {{ {'succeeded': t('admin.succeeded'), 'completed': t('admin.succeeded'), 'failed': t('admin.failed'), 'refused': t('admin.refused'), 'cancelled': t('admin.cancel'), 'timed_out': t('admin.timed_out'), 'interrupted': t('admin.interrupted'), 'running': t('admin.in_progress_2')}.get(status, observed(status)) }}
+          {{ {'succeeded': t('admin.succeeded'), 'completed': t('admin.succeeded'), 'failed': t('admin.failed'), 'refused': t('admin.refused'), 'cancelled': t('admin.cancel'), 'timed_out': t('admin.timed_out'), 'interrupted': t('admin.interrupted'), 'running': t('admin.operation_in_progress')}.get(status, observed(status)) }}
           {% if log.error_code is defined and log.error_code %}<div>{{ t('admin.error') }} {{ log.error_code }}</div>{% endif %}
           <div>{{ t('admin.usage') }} {% if log.usage_complete is not defined or log.usage_complete is none %}{{ t('admin.unknown') }}{% elif log.usage_complete %}{{ t('admin.complete') }}{% else %}{{ t('admin.partial_unknown') }}{% endif %}</div>
         </td>

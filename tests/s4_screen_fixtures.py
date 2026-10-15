@@ -112,6 +112,9 @@ def analysis_fixture(state="ok", admin=False):
     )
     if state == "partial":
         report["status"] = "degraded"
+        report["brief_feedback"] = [
+            "부분 분석: 검증된 6 / 7개 메시지의 결과입니다. 완료·실패·미실행 범위는 분석 범위에서 확인하세요."
+        ]
         coverage = report["coverage"]
         coverage.update(
             reviewed_message_ids=[101, 102, 103, 104, 105, 106],

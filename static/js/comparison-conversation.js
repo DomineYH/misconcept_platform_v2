@@ -158,7 +158,7 @@ function render() {
   else if (state.phase === 'retry_required') dialogue.append(node('p', uiLanguage.t('admin.no_completed_response_is_available_to_adopt_check_retry_eligibility_for_the_current_panels')));
   for (const pair of state.pairs) {
     const row = node('article', null, {'data-pair':pair.turn_id});
-    row.append(node('p', `${uiLanguage.t('admin.teacher_2')} ${pair.teacher}`, {class:'comparison-text'}), node('p', `${uiLanguage.t('admin.student_2')} ${pair.student}`, {class:'comparison-text'}));
+    row.append(node('p', `${uiLanguage.t('admin.teacher_prefix')} ${pair.teacher}`, {class:'comparison-text'}), node('p', `${uiLanguage.t('admin.student_prefix')} ${pair.student}`, {class:'comparison-text'}));
     dialogue.append(row);
   }
   const allowed = unavailable ? {} : state.allowed_actions || {};

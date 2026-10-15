@@ -4,9 +4,8 @@ import json
 import re
 from pathlib import Path
 
-from src.api.routes.teacher_language import ERROR_KEYS
 from src.i18n import ui_strings
-from src.i18n.admin import FIELD_KEYS, REASON_KEYS
+from src.i18n.admin import FIELD_KEYS, REASON_KEYS, ROLE_KEYS, RUBRIC_FIELD_KEYS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,8 +36,7 @@ def test_catalog_has_both_languages_matching_parameters_and_no_unused_keys():
     # These consumers build keys from finite protocol enums or field mappings.
     dynamic = {
         "common": {"guard_busy", "guard_input", "cookie_failed"},
-        "teacher": set(ERROR_KEYS.values())
-        | {
+        "teacher": {
             "unknown_scenario_context",
             "unknown_config",
             "unknown_problem",
@@ -50,15 +48,10 @@ def test_catalog_has_both_languages_matching_parameters_and_no_unused_keys():
         },
         "admin": set(FIELD_KEYS.values())
         | set(REASON_KEYS.values())
+        | set(ROLE_KEYS.values())
+        | set(RUBRIC_FIELD_KEYS.values())
         | {
             "review_input",
-            "rubric_id",
-            "name",
-            "criteria",
-            "level",
-            "student",
-            "mentor",
-            "post_session_analysis",
             "teacher",
             "admin",
             "stop_panel",

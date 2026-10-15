@@ -1,15 +1,18 @@
 <!DOCTYPE html>
-<html lang="ko">
+{% set ui_lang = display_language(request if request is defined else none) %}
+<html lang="{{ ui_lang }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0">
   <title>
     {% block title %}
-    오개념 교정 대화 시뮬레이터
+    {{ t('common.product') }}
     {% endblock %}
   </title>
   <link rel="stylesheet" href="/static/css/styles.css">
+  <script id="ui-strings" type="application/json">{{ ui_strings(ui_lang, i18n_areas|default([]))|tojson }}</script>
+  <script src="/static/js/display-language.js"></script>
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/analysis-toggle.js"></script>
   <script src="/static/js/modal-lifecycle.js"></script>
@@ -27,39 +30,46 @@
   </script>
 </head>
 <body>
-  <a href="#main-content" class="skip-link">본문으로 건너뛰기</a>
+  <a href="#main-content" class="skip-link">{{ t('common.skip') }}</a>
   {% set current_path = request.url.path if request is defined else '' %}
   <header>
-    <nav aria-label="주 탐색">
-      <h1>오개념 교정 대화 시뮬레이터</h1>
-      <button class="hamburger" aria-label="메뉴" aria-expanded="false" aria-controls="nav-menu">
+    <nav aria-label="{{ t('common.navigation') }}">
+      <h1>{{ t('common.product') }}</h1>
+      <button class="hamburger" aria-label="{{ t('common.menu') }}" aria-expanded="false" aria-controls="nav-menu">
         <span></span>
         <span></span>
         <span></span>
       </button>
       <div class="nav-menu" id="nav-menu">
-        <ul class="nav-links" aria-label="메뉴">
+        <div class="language-selector" role="group" aria-label="{{ t('common.language') }}">
+          <button type="button" data-ui-language="ko" aria-pressed="{{ 'true' if ui_lang == 'ko' else 'false' }}">한국어</button>
+          <button type="button" data-ui-language="en" aria-pressed="{{ 'true' if ui_lang == 'en' else 'false' }}">English</button>
+        </div>
+        <ul class="nav-links" aria-label="{{ t('common.menu') }}">
           {% if user %}
-          <li><a class="nav-item" href="/scenarios"{% if current_path.startswith('/scenarios') %} aria-current="page"{% endif %}>시나리오</a></li>
+          <li><a class="nav-item" href="/scenarios"{% if current_path.startswith('/scenarios') %} aria-current="page"{% endif %}>{{ t('common.scenarios') }}</a></li>
           {% endif %}
           <li>
             <button type="button" class="btn-link nav-item"
-                    id="open-about-modal">about</button>
-            <span id="about-load-error" role="alert" tabindex="-1" hidden></span>
+                    id="open-about-modal">{{ t('about.title') }}</button>
           </li>
           {% if user and user.role == 'admin' %}
-          <li><a class="nav-item" href="/admin"{% if current_path.startswith('/admin') %} aria-current="page"{% endif %}>관리자</a></li>
+          <li><a class="nav-item" href="/admin"{% if current_path.startswith('/admin') %} aria-current="page"{% endif %}>{{ t('common.admin') }}</a></li>
           {% endif %}
         </ul>
         {% if user %}
-        <ul class="nav-account" aria-label="계정">
+        <ul class="nav-account" aria-label="{{ t('common.account') }}">
           <li><span class="nav-username" title="{{ user.nickname }}">{{ user.nickname }}</span></li>
           <li>
             <button type="button" class="btn-link nav-item"
-                    onclick="doLogout()">로그아웃</button>
+                    onclick="doLogout()">{{ t('common.logout') }}</button>
           </li>
         </ul>
         {% endif %}
+        <div class="nav-notices">
+          <span id="about-load-error" role="alert" tabindex="-1" hidden></span>
+          <p id="language-notice" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+        </div>
       </div>
     </nav>
   </header>
@@ -72,16 +82,20 @@
 
   <footer>
     <p>
-      오개념 교정 대화 시뮬레이터 v0.1.0 |
-      교육 연구 도구
+      {{ t('common.product') }} v0.1.0 |
+      {{ t('common.footer') }}
     </p>
   </footer>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
+  <template id="about-loading">
+    <div class="modal-header"><h2>{{ t('about.heading') }}</h2><button type="button" class="modal-close" aria-label="{{ t('common.close') }}" onclick="closeAboutModal()">×</button></div>
+    <div class="modal-body" role="status">{{ t('about.loading') }}</div>
+  </template>
   <!-- About Modal -->
   <div id="about-modal-overlay" class="modal-overlay"
        role="dialog" aria-modal="true"
-       aria-label="About">
+       aria-label="{{ t('about.heading') }}">
     <div id="about-modal-container"
          class="modal-container modal-xl">
     </div>
@@ -112,7 +126,7 @@
 
       const closeButton = document.createElement('button');
       closeButton.className = 'toast-close';
-      closeButton.setAttribute('aria-label', 'Close');
+      closeButton.setAttribute('aria-label', uiLanguage.t('common.close'));
       closeButton.textContent = '×';
       closeButton.onclick = function() { this.parentElement.remove(); };
 
@@ -143,9 +157,9 @@
       var match = document.cookie.match(
         /(?:^|;\s*)csrftoken=([^;]*)/
       );
-      var headers = {};
+      var headers = uiLanguage.headers('/logout');
       if (match) {
-        headers['x-csrf-token'] = match[1];
+        headers.set('x-csrf-token', match[1]);
       }
       fetch('/logout', {
         method: 'POST',
@@ -179,11 +193,11 @@
       overlay.classList.add('active');
       if (!aboutLoaded) {
         document.getElementById('about-modal-container').innerHTML =
-          '<div class="modal-header"><h2>About</h2><button type="button" class="modal-close" aria-label="닫기" onclick="closeAboutModal()">×</button></div><div class="modal-body" role="status">소개를 불러오는 중...</div>';
+          document.getElementById('about-loading').innerHTML;
       }
       modalLifecycle.open(overlay, closeAboutModal);
       if (!aboutLoaded) {
-        fetch('/about/content')
+        fetch('/about/content', {headers: uiLanguage.headers('/about/content')})
           .then(function(r) {
             if (!r.ok) throw new Error(r.status);
             return r.text();
@@ -201,7 +215,7 @@
             if (requestId !== aboutRequest) return;
             closeAboutModal();
             var notice = document.getElementById('about-load-error');
-            notice.textContent = '소개를 불러올 수 없습니다. About을 다시 눌러 주세요.';
+            notice.textContent = uiLanguage.t('about.load_error');
             notice.hidden = false;
             notice.focus();
           });

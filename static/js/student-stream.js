@@ -12,6 +12,12 @@ export function mountStudentStream(ui) {
   const draftKey = `chat-draft-${ui.sessionId}`;
   let pending, teacher, student, status, actions, retry;
   let lookupBusy = false;
+  let sessionEnded = false;
+  document.addEventListener('chat:ended', () => { sessionEnded = true; });
+  uiLanguage.registerGuard(() => ({
+    dirty: Boolean(input.value),
+    busy: lookupBusy || (!sessionEnded && Boolean(pending) && ['sending', 'running', 'unknown'].includes(pending.status))
+  }));
   let forbidden = false;
   let recoveryTimer, recoveryStartedAt, recoveryStep;
   let leftPage = false, lifetime = new AbortController();
@@ -68,21 +74,21 @@ export function mountStudentStream(ui) {
     retry = document.createElement('button');
     retry.type = 'button';
     retry.className = 'btn-secondary';
-    retry.textContent = '학생 응답 다시 받기';
+    retry.textContent = uiLanguage.t('teacher.student_retry');
     retry.addEventListener('click', () => void send(true));
     const end = document.createElement('button');
     end.type = 'button';
     end.className = 'btn-secondary';
-    end.textContent = '대화 종료';
+    end.textContent = uiLanguage.t('teacher.end_chat');
     end.addEventListener('click', () => document.getElementById('end-session-btn').click());
     const check = document.createElement('button');
     check.type = 'button';
     check.className = 'btn-secondary';
-    check.textContent = '상태 다시 확인';
+    check.textContent = uiLanguage.t('teacher.check_status');
     check.addEventListener('click', () => void recover());
     actions.append(retry, end, check);
     student.querySelector('.message-content-wrapper').append(actions);
-    status.textContent = '전송 중';
+    status.textContent = uiLanguage.t('teacher.sending');
     container.scrollTop = container.scrollHeight;
   }
 
@@ -94,7 +100,7 @@ export function mountStudentStream(ui) {
       reconcile(teacher, data.teacher_message_id);
       teacher.dataset.turnId = student.dataset.turnId = data.turn_id;
       teacher.dataset.turnIndex = student.dataset.turnIndex = data.turn_index;
-      status.textContent = '학생 생성 중 · 잠정 응답';
+      status.textContent = uiLanguage.t('teacher.student_provisional');
       persist();
     } else if (type === 'output.delta') {
       if (data.run_id !== pending.run_id) return;
@@ -103,7 +109,7 @@ export function mountStudentStream(ui) {
       if (data.run_id !== pending.run_id) return;
       reconcile(student, data.message.id);
       student.querySelector('.message-bubble').textContent = data.message.content;
-      status.textContent = '저장 완료';
+      status.textContent = uiLanguage.t('teacher.saved');
       clearTimeout(recoveryTimer);
       pending = null;
       sessionStorage.setItem(draftKey, input.value);
@@ -116,8 +122,14 @@ export function mountStudentStream(ui) {
       Object.assign(pending, data);
       clearTimeout(recoveryTimer);
       pending.partial_text = student.querySelector('.message-bubble').textContent;
-      status.textContent = `${data.message} 응답 미완료·대화 기록에 미포함`;
+      status.textContent = uiLanguage.t('teacher.student_incomplete', {reason:
+        data.status === 'cancelled' ? uiLanguage.t('teacher.conversation_ended') :
+        (data.code || data.error_code) === 'configuration_unavailable' ? uiLanguage.t('teacher.student_configuration_error') :
+        (data.code || data.error_code) === 'storage_error' ? uiLanguage.t('teacher.student_storage_failed') :
+        data.status === 'interrupted' ? uiLanguage.t('teacher.student_interrupted') :
+        uiLanguage.t('teacher.student_failed')});
       actions.hidden = false;
+      retry.textContent = uiLanguage.t('teacher.student_retry');
       retry.disabled = !data.retryable;
       if (!input.value) input.value = pending.content;
       persist();
@@ -136,8 +148,8 @@ export function mountStudentStream(ui) {
     } else if (['failed', 'interrupted', 'cancelled'].includes(data.status)) {
       student.querySelector('.message-bubble').textContent = data.partial_text || '';
       event(`run.${data.status}`, {...data, message:{
-        failed:'학생 응답 생성에 실패했습니다.', interrupted:'학생 응답이 중단되었습니다.',
-        cancelled:'대화가 종료되었습니다.'
+        failed:uiLanguage.t('teacher.student_failed'), interrupted:uiLanguage.t('teacher.student_interrupted'),
+        cancelled:uiLanguage.t('teacher.conversation_ended')
       }[data.status]});
     }
   }
@@ -157,7 +169,7 @@ export function mountStudentStream(ui) {
     clearTimeout(recoveryTimer);
     pending.status = 'forbidden';
     pending.retryable = false;
-    status.textContent = '이 실행을 조회하거나 재시도할 권한이 없습니다. 응답 미완료·대화 기록에 미포함';
+    status.textContent = uiLanguage.t('teacher.student_forbidden');
     actions.hidden = true;
     if (!input.value) input.value = pending.content;
     persist();
@@ -173,7 +185,7 @@ export function mountStudentStream(ui) {
     }
     lookupBusy = true;
     const attempt = pending;
-    status.textContent = '상태 확인 중 · 응답 미완료·대화 기록에 미포함';
+    status.textContent = uiLanguage.t('teacher.student_checking');
     actions.hidden = false;
     retry.disabled = true;
     try {
@@ -186,8 +198,8 @@ export function mountStudentStream(ui) {
       else if (response.status === 404) {
         pending.status = 'unknown';
         pending.retryable = true;
-        status.textContent = '요청 수락 여부를 확인할 수 없습니다. 같은 요청을 명시적으로 다시 전송할 수 있습니다.';
-        retry.textContent = '같은 요청 다시 전송';
+        status.textContent = uiLanguage.t('teacher.student_unknown_request');
+        retry.textContent = uiLanguage.t('teacher.resend_request');
         retry.disabled = false;
         if (!input.value) input.value = pending.content;
         persist();
@@ -195,20 +207,20 @@ export function mountStudentStream(ui) {
       else if (response.ok) {
         applySnapshot(await response.json());
         if (pending?.status === 'running') {
-          status.textContent = '학생 생성 중 · 저장 상태 확인 중';
+          status.textContent = uiLanguage.t('teacher.student_checking_saved');
           const elapsed = [1000, 3000, 7000, 15000, 30000][recoveryStep++];
           if (elapsed !== undefined && Date.now() < recoveryStartedAt + 30000) {
             recoveryTimer = setTimeout(() => void recover(false), Math.max(0, recoveryStartedAt + elapsed - Date.now()));
           } else {
-            status.textContent = '저장 상태가 아직 불명확합니다. 상태 다시 확인을 눌러주세요.';
+            status.textContent = uiLanguage.t('teacher.student_unknown_saved');
           }
         }
       }
-      else status.textContent = '저장 상태를 확인하지 못했습니다. 상태 다시 확인을 눌러주세요.';
+      else status.textContent = uiLanguage.t('teacher.student_lookup_failed');
     } catch (error) {
       if (leftPage) return;
       if (error.code === 'AUTH_EXPIRED') expire();
-      else status.textContent = '저장 상태를 확인하지 못했습니다. 상태 다시 확인을 눌러주세요.';
+      else status.textContent = uiLanguage.t('teacher.student_lookup_failed');
     } finally {
       lookupBusy = false;
       sync();
@@ -224,10 +236,10 @@ export function mountStudentStream(ui) {
       pending = {...pending, request_id:resend ? pending.request_id : crypto.randomUUID(),
         request_turn_id:resend ? pending.request_turn_id : pending.turn_id,
         status:'sending', run_id:null, partial_text:''};
-      retry.textContent = '학생 응답 다시 받기';
+      retry.textContent = uiLanguage.t('teacher.student_retry');
       teacher.dataset.requestId = pending.request_id;
       student.querySelector('.message-bubble').textContent = '';
-      status.textContent = '전송 중';
+      status.textContent = uiLanguage.t('teacher.sending');
       actions.hidden = true;
     } else {
       if (pending || !input.value.trim()) return;
@@ -258,11 +270,11 @@ export function mountStudentStream(ui) {
         return;
       }
       if (response.status === 422 && (await response.clone().json()).detail?.code === 'context_limit') {
-        status.textContent = '입력이 너무 큽니다. 질문을 줄이거나 관리자에게 수업 설정 확인을 요청해주세요. 요청은 아직 수락되지 않았습니다.';
+        status.textContent = uiLanguage.t('teacher.student_context_limit');
         if (!input.value) input.value = pending.content;
         if (body.turn_id) {
           pending = previous;
-          status.textContent += ' 기존 응답 미완료·대화 기록에 미포함';
+          status.textContent += uiLanguage.t('teacher.student_previous_incomplete');
           teacher.dataset.requestId = pending.request_id;
           student.querySelector('.message-bubble').textContent = pending.partial_text || '';
           actions.hidden = false;
@@ -280,9 +292,9 @@ export function mountStudentStream(ui) {
         if (!input.disabled) input.focus();
         return;
       }
-      if (response.status === 400 && (await response.clone().json()).detail === 'Session already ended') {
+      if (response.status === 400 && (await response.clone().json()).detail?.code === 'session_ended') {
         event('run.cancelled', {run_id:pending.run_id, status:'cancelled', code:'session_ended',
-          message:'대화가 종료되었습니다.', retryable:false});
+          message:uiLanguage.t('teacher.conversation_ended'), retryable:false});
         return;
       }
       if (response.status === 503 || response.status === 429) {
@@ -291,9 +303,9 @@ export function mountStudentStream(ui) {
           pending.status = 'unknown';
           pending.retryable = true;
           status.textContent = detail.code === 'configuration_unavailable' ?
-            '관리자에게 AI 연결과 학생 모델 검증을 요청해주세요. 요청은 아직 수락되지 않았습니다.' :
-            '호출 한도에 도달했습니다. 잠시 후 같은 요청을 다시 전송해주세요. 요청은 아직 수락되지 않았습니다.';
-          retry.textContent = '같은 요청 다시 전송';
+            uiLanguage.t('teacher.student_configuration') :
+            uiLanguage.t('teacher.student_capacity');
+          retry.textContent = uiLanguage.t('teacher.resend_request');
           retry.disabled = false;
           actions.hidden = false;
           if (!input.value) input.value = pending.content;

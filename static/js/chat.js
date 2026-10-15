@@ -14,6 +14,16 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   let messageSending = false;
   let chatClosed = Boolean(chatConfig.ended);
   let lastSentContent = '';
+  let sessionClosing = false;
+  let analysisUnresolved = false;
+  uiLanguage.registerGuard(() => ({
+    dirty: Boolean(document.getElementById('teacher-input').value || lastSentContent),
+    busy: messageSending || sessionClosing || analysisUnresolved ||
+      ['ending', 'analyzing'].includes(document.getElementById('end-session-btn').dataset.state)
+  }));
+  document.addEventListener('analysis:state', event => {
+    if (event.detail.sessionId === String(chatConfig.sessionId)) analysisUnresolved = event.detail.busy;
+  });
   let pollingAuthFailCount = 0;
   const MAX_POLLING_AUTH_FAILS = 3;
 
@@ -32,8 +42,8 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     const busy = ['ending', 'analyzing'].includes(state);
     btn.dataset.state = state;
     btn.textContent = {
-      active: '대화 종료 후 분석 보기', ending: '분석 준비 중...',
-      analyzing: '분석 중...', 'ready-to-analyze': '분석 보기', done: '분석 다시 보기'
+      active: uiLanguage.t('teacher.end_and_analyze'), ending: uiLanguage.t('teacher.analysis_preparing'),
+      analyzing: uiLanguage.t('teacher.analyzing'), 'ready-to-analyze': uiLanguage.t('teacher.view_analysis'), done: uiLanguage.t('teacher.view_analysis_again')
     }[state];
     btn.setAttribute('aria-busy', String(busy));
     document.getElementById('return-to-scenarios-btn').disabled = authExpiredHandled || busy || state === 'active';
@@ -134,11 +144,11 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     if (collapsed) {
       panel.setAttribute('data-collapsed', 'true');
       toggle.setAttribute('aria-expanded', 'false');
-      toggle.setAttribute('aria-label', '정보 패널 펼치기');
+      toggle.setAttribute('aria-label', uiLanguage.t('teacher.panel_expand'));
     } else {
       panel.removeAttribute('data-collapsed');
       toggle.setAttribute('aria-expanded', 'true');
-      toggle.setAttribute('aria-label', '정보 패널 접기');
+      toggle.setAttribute('aria-label', uiLanguage.t('teacher.panel_collapse'));
     }
   }
 
@@ -347,7 +357,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     input.style.height = input.scrollHeight + 'px';
 
     if (typeof showToast === 'function') {
-      showToast('이전 입력 메시지를 복원했습니다.', 'info', 3500);
+      showToast(uiLanguage.t('teacher.draft_restored'), 'info', 3500);
     }
   }
 
@@ -392,7 +402,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     console.warn('Session expired detected from:', source);
     restoreInputOnError();
     saveDraftMessage();
-    lockChatUI('로그인이 만료되었습니다. 다시 로그인해주세요.', {
+    lockChatUI(uiLanguage.t('teacher.auth_expired'), {
       showLoginButton: true
     });
 
@@ -402,14 +412,15 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     }
 
     if (typeof showToast === 'function') {
-      showToast('세션이 만료되었습니다. 다시 로그인해 주세요.', 'warning', 6000);
+      showToast(uiLanguage.t('teacher.session_expired'), 'warning', 6000);
     }
   }
 
   async function fetchWithAuthGuard(url, options) {
     const response = await fetch(url, {
       credentials: 'same-origin',
-      ...options
+      ...options,
+      headers: uiLanguage.headers(url, options?.headers)
     });
 
     if (isAuthExpiredResponse(response)) {
@@ -443,6 +454,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       return;
     }
 
+    sessionClosing = true;
     try {
       const response = await fetchWithAuthGuard(`/sessions/${window.currentSessionId}/close`, {
         method: 'POST',
@@ -453,7 +465,8 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         const data = await safeReadJson(response);
         console.log('Session closed:', data);
         clearDraftMessage();
-        lockChatUI('이 대화는 종료되었습니다.');
+        document.dispatchEvent(new Event('chat:ended'));
+        lockChatUI(uiLanguage.t('teacher.chat_ended'));
 
         setTimeout(() => {
           window.location.href = url;
@@ -461,7 +474,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       } else {
         const error = await safeReadJson(response);
         console.error('Failed to close session:', error);
-        alert(`세션 종료 실패: ${error.detail || error.feedback || '알 수 없는 오류'}. 계속 이동하시겠습니까?`);
+        alert(uiLanguage.t('teacher.close_failed_navigation'));
         window.location.href = url;
       }
     } catch (error) {
@@ -469,8 +482,10 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         return;
       }
       console.error('Network error closing session:', error);
-      alert('세션 종료 요청에 실패했습니다. 계속 이동하시겠습니까?');
+      alert(uiLanguage.t('teacher.close_failed_navigation'));
       window.location.href = url;
+    } finally {
+      sessionClosing = false;
     }
   }
 
@@ -499,7 +514,10 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     analysisOverlay.classList.remove('hidden');
     analysisOverlay.classList.add('flex');
     analysisBackground.forEach(el => { el.inert = true; });
-    analysisContainer.innerHTML = '<div class="modal-header"><h2>세션 분석 결과</h2><button type="button" class="close-modal-btn" aria-label="닫기">×</button></div><div class="modal-body"><p role="status">분석 결과를 불러오는 중입니다.</p></div><div class="modal-footer"></div>';
+    analysisContainer.innerHTML = '<div class="modal-header"><h2></h2><button type="button" class="close-modal-btn">×</button></div><div class="modal-body"><p role="status"></p></div><div class="modal-footer"></div>';
+    analysisContainer.querySelector('h2').textContent = uiLanguage.t('teacher.analysis_results');
+    analysisContainer.querySelector('button').setAttribute('aria-label', uiLanguage.t('teacher.close'));
+    analysisContainer.querySelector('[role="status"]').textContent = uiLanguage.t('teacher.analysis_loading');
     analysisContainer.querySelector('button').onclick = window.closeAnalysisModal;
     analysisContainer.querySelector('button').focus();
     let failed = false;
@@ -517,11 +535,11 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     } catch {
       if (load !== modalLoad || authExpiredHandled) return;
       const notice = analysisContainer.querySelector('[role="status"]');
-      notice.textContent = '분석 결과를 불러오지 못했습니다. 다시 불러오거나 닫을 수 있습니다.';
+      notice.textContent = uiLanguage.t('teacher.analysis_modal_failed');
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'btn-secondary';
-      retry.textContent = '결과 다시 불러오기';
+      retry.textContent = uiLanguage.t('teacher.reload_results');
       retry.onclick = loadAnalysisModal;
       analysisContainer.querySelector('.modal-footer').append(retry);
     } finally {
@@ -549,7 +567,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // ========================================
   document.getElementById('end-session-btn').addEventListener('click', async () => {
     if (!window.currentSessionId) {
-      alert('활성 세션이 없습니다');
+      alert(uiLanguage.t('teacher.no_active_session'));
       return;
     }
 
@@ -571,15 +589,16 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
     // Active session — confirm end
     if (!skipEnd) {
-      if (!confirm('이 세션을 종료하시겠습니까?')) {
+      if (!confirm(uiLanguage.t('teacher.confirm_end'))) {
         return;
       }
     }
 
     btn.dataset.analysisRequestId ||= crypto.randomUUID();
     btn.dataset.analysisRequestUrl ||= `/sessions/${window.currentSessionId}/${skipEnd ? 'analyze' : 'end'}`;
+    analysisUnresolved = true;
     setAnalysisState(skipEnd ? 'analyzing' : 'ending');
-    lockChatUI('분석 준비 중...');
+    lockChatUI(uiLanguage.t('teacher.analysis_preparing'));
 
     try {
       const analyzeResponse = await fetchWithAuthGuard(btn.dataset.analysisRequestUrl, {
@@ -589,6 +608,9 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       });
 
       const analysisResult = await safeReadJson(analyzeResponse);
+      analysisUnresolved = analyzeResponse.status >= 500 || analyzeResponse.status === 202 ||
+        analysisResult.latest_run?.status === 'running' || analysisResult.detail?.code === 'analysis_busy';
+      if (analyzeResponse.ok) document.dispatchEvent(new Event('chat:ended'));
       if (analyzeResponse.ok || analysisResult.detail?.code === 'request_conflict') {
         delete btn.dataset.analysisRequestId;
         delete btn.dataset.analysisRequestUrl;
@@ -597,12 +619,11 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       if ((analyzeResponse.ok && (analyzeResponse.status === 202 || !analysisResult.retryable)) || (analyzeResponse.status === 422 && analysisResult.plan) || activeRun) {
         clearDraftMessage();
         const bannerText = document.getElementById('session-status-text');
-        if (bannerText) bannerText.textContent = '이 대화는 종료되었습니다.';
+        if (bannerText) bannerText.textContent = uiLanguage.t('teacher.chat_ended');
         setAnalysisState('done');
         void loadAnalysisModal();
       } else {
-        const error = analysisResult;
-        alert(`분석 실패: ${error.detail || error.feedback || '알 수 없는 오류'}`);
+        alert(uiLanguage.t('teacher.analysis_failed_alert'));
         setAnalysisState('ready-to-analyze');
       }
     } catch (error) {
@@ -610,13 +631,13 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         return;
       }
       console.error('Failed to analyze session:', error);
-      alert('분석에 실패했습니다');
+      alert(uiLanguage.t('teacher.analysis_failed_alert'));
       setAnalysisState('ready-to-analyze');
     }
   });
 
   document.getElementById('return-to-scenarios-btn').addEventListener('click', async () => {
-    if (!confirm('시나리오 목록으로 돌아가시겠습니까?')) {
+    if (!confirm(uiLanguage.t('teacher.confirm_scenarios'))) {
       return;
     }
 
@@ -735,10 +756,11 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
           <div class="typing-dots">
             <span></span><span></span><span></span>
           </div>
-          응답 생성 중...
+          <span class="typing-label"></span>
         </div>
       </div>
     `;
+    typingEl.querySelector('.typing-label').textContent = uiLanguage.t('teacher.generating');
     container.appendChild(typingEl);
 
     // Pause polling during POST to avoid race conditions
@@ -888,16 +910,14 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         fullEvent: event.detail
       });
 
-      let errorMsg = 'Failed to send message. Please try again.';
+      let errorMsg = uiLanguage.t('teacher.message_failed');
       try {
         const errorData = JSON.parse(xhr.responseText);
         if (errorData.detail) {
-          errorMsg = `Error: ${errorData.detail}`;
-
-          if (errorData.detail.includes('already ended') || errorData.detail.includes('종료')) {
-            lockChatUI('이 대화는 이미 종료되었습니다.');
+          if (errorData.detail?.code === 'session_ended' || errorData.code === 'session_ended') {
+            lockChatUI(uiLanguage.t('teacher.already_ended'));
             setAnalysisState('ready-to-analyze');
-            errorMsg = '이 세션은 이미 종료되었습니다. 새 세션을 시작해주세요.';
+            errorMsg = uiLanguage.t('teacher.start_new_session');
           }
         }
       } catch (e) {
@@ -908,7 +928,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     } else {
       if (!isPolling) {
         console.error('HTMX error:', event.detail);
-        alert('요청 처리 중 오류가 발생했습니다');
+        alert(uiLanguage.t('teacher.request_failed'));
       } else {
         console.warn('Polling error (may be temporary):', xhr.status);
       }
@@ -928,7 +948,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         path: event.detail.pathInfo.requestPath,
         fullEvent: event.detail
       });
-      alert('Network error. Please check your connection.');
+      alert(uiLanguage.t('teacher.network_error'));
     } else {
       console.warn('Network error on polling (may be temporary)');
     }
@@ -942,7 +962,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     )) {
       restoreInputOnError();
       finishSending();
-      alert('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+      alert(uiLanguage.t('teacher.request_timeout'));
     }
   });
 
@@ -983,7 +1003,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     const lastId = getLastMessageId();
     document.getElementById('last-message-id').value = lastId;
     if (chatClosed) {
-      lockChatUI('이 대화는 종료되었습니다.');
+      lockChatUI(uiLanguage.t('teacher.chat_ended'));
       setAnalysisState('ready-to-analyze');
     } else {
       setAnalysisState('active');
@@ -1003,8 +1023,9 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     isLocked: () => authExpiredHandled || chatClosed,
     expire: () => handleAuthExpired('student-stream'),
     end: () => {
-      lockChatUI('이 대화는 종료되었습니다.');
+      lockChatUI(uiLanguage.t('teacher.chat_ended'));
       setAnalysisState('ready-to-analyze');
+      document.dispatchEvent(new Event('chat:ended'));
     }
   };
   if (document.readyState === 'loading') {

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
+from src.api.routes.teacher_language import TeacherLanguageRoute
 from src.models import Scenario, User
 from src.models.scenario_group import ScenarioGroup
 from src.services.lesson_snapshots import (
@@ -19,7 +20,7 @@ from src.services.lesson_snapshots import (
     start_lesson,
 )
 
-router = APIRouter(tags=["Scenarios"])
+router = APIRouter(route_class=TeacherLanguageRoute, tags=["Scenarios"])
 
 
 @router.get("/", response_class=HTMLResponse)

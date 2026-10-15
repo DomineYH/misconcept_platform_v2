@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['admin', 'teacher'] %}
 {% block title %}시나리오 작성 - 관리자{% endblock %}
 {% macro text_field(path, label, kind='text', limit=50000, hint='') %}
 <div class="form-group">

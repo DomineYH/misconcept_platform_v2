@@ -271,8 +271,8 @@
         else for (const item of report.distribution) {
           node(section, 'p', uiLanguage.t('teacher.distribution_item', {name:item.name, count:item.count, percentage:item.percentage == null ? uiLanguage.t('teacher.percentage_unknown') : item.percentage + '%'}));
         }
-        node(section, 'h3', uiLanguage.t('teacher.misconceptions'));
-        node(section, 'p', uiLanguage.t('teacher.misconception_notice'));
+        node(section, 'h3', uiLanguage.t('teacher.findings_title'));
+        node(section, 'p', uiLanguage.t('teacher.findings_notice'));
         const kinds = {maintained: uiLanguage.t('teacher.maintained'), changed: uiLanguage.t('teacher.changed'), deviated: uiLanguage.t('teacher.deviated'), insufficient_evidence: uiLanguage.t('teacher.insufficient_evidence')};
         for (const finding of report.misconception_findings) {
           const card = node(section, 'article');

@@ -1366,11 +1366,11 @@
       "ko": "비율 산정 불가",
       "en": "Percentage unavailable"
     },
-    "misconceptions": {
+    "findings_title": {
       "ko": "오개념 관찰",
       "en": "Misconception findings"
     },
-    "misconception_notice": {
+    "findings_notice": {
       "ko": "학생 발화에 관한 관찰이며, 교사 개입의 인과 효과나 학생 능력 점수가 아닙니다.",
       "en": "These are observations of student statements, not causal effects of teacher intervention or scores of student ability."
     },

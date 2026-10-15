@@ -33,16 +33,23 @@ export default async function check(page) {
   assert.match(await page.locator('#login-error').innerText(), /user ID or password is incorrect/);
 
   // Input protection checks the current values, including values left after failure.
+  await page.setViewportSize({width:320,height:900});
+  await openMenu();
   await page.locator('#username').fill('failed_user');
   await choose('ko').click();
   assert.equal(await page.locator('#language-notice').innerText(), 'Save or clear your input before switching languages.');
   assert.equal(await page.locator('#username').inputValue(), 'failed_user');
+  const noticeBox = await page.locator('#language-notice').boundingBox();
+  const menuBox = await page.locator('#nav-menu').boundingBox();
+  assert(noticeBox.y + noticeBox.height <= menuBox.y || noticeBox.y >= menuBox.y + menuBox.height, 'blocked notice remains visible outside mobile menu');
   await page.locator('#username').fill('');
   await page.locator('#password').fill('password123');
   await choose('ko').click();
   assert.equal(await page.locator('html').getAttribute('lang'), 'en');
   await page.locator('#password').fill('');
   await switchTo('ko');
+
+  await page.setViewportSize({width:1280,height:900});
 
   // Guard readers combine independent tasks and can be unregistered.
   await page.evaluate(() => {

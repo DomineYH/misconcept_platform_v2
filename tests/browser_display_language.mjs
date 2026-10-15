@@ -48,6 +48,22 @@ export default async function check(page) {
   assert(Math.abs(cookie.expires - Date.now() / 1000 - 31536000) < 10, 'one year');
   await page.reload();
   assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+  await page.setViewportSize({width:769,height:900});
+  await page.route('**/about/content', route => route.fulfill({status:500,body:''}));
+  await page.locator('#open-about-modal').click();
+  await page.locator('#about-load-error').waitFor({state:'visible'});
+  assert.equal(await page.locator('#about-load-error').innerText(), 'Could not load About. Select About to try again.');
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'English About failure does not overflow the header');
+  const aboutAction = await page.locator('#open-about-modal').boundingBox();
+  assert(aboutAction.y >= 0 && aboutAction.y + aboutAction.height <= 60, 'About failure keeps its action inside the header');
+  await page.locator('#username').fill('draft_user');
+  await choose('ko').click();
+  const aboutNotice = await page.locator('#about-load-error').boundingBox();
+  const languageNotice = await page.locator('#language-notice').boundingBox();
+  assert(aboutNotice.y + aboutNotice.height <= languageNotice.y, 'simultaneous notices stack without overlap');
+  await page.locator('#username').fill('');
+  await page.unroute('**/about/content');
+  await page.setViewportSize({width:1280,height:900});
   await page.goto(`${base}/login?error=1`);
   assert.match(await page.locator('#login-error').innerText(), /user ID or password is incorrect/);
 

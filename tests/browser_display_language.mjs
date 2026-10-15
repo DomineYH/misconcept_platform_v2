@@ -58,9 +58,10 @@ export default async function check(page) {
   await choose('ko').click();
   assert.equal(await page.locator('#language-notice').innerText(), 'Save or clear your input before switching languages.');
   assert.equal(await page.locator('#username').inputValue(), 'failed_user');
-  const noticeBox = await page.locator('#language-notice').boundingBox();
-  const menuBox = await page.locator('#nav-menu').boundingBox();
-  assert(noticeBox.y + noticeBox.height <= menuBox.y || noticeBox.y >= menuBox.y + menuBox.height, 'blocked notice remains visible outside mobile menu');
+  assert(await page.locator('#language-notice').evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+  }), 'blocked notice is not obscured by the mobile menu');
   await page.locator('#username').fill('');
   await page.locator('#password').fill('password123');
   await choose('ko').click();
@@ -158,7 +159,7 @@ export default async function check(page) {
     await page.context().addCookies([{name:'ui_lang',value:'en',url:base}]);
     for (const width of [320,390,768,769,1024,1440]) {
       await page.setViewportSize({width,height:900});
-      for (const path of ['/login','/scenarios','/admin/scenarios?long_nickname=1']) {
+      for (const path of ['/login','/scenarios','/admin/scenarios?long_nickname=1','/chat']) {
         await page.goto(`${base}${path}`);
         await openMenu();
         assert.equal(await page.locator('html').getAttribute('lang'), 'en');
@@ -187,6 +188,10 @@ export default async function check(page) {
           return {text:contrast(rgba(s.color),background(el)),focus:contrast(rgba(s.outlineColor),background(el)),outline:s.outlineWidth};
         `));
         assert(colors.text >= 4.5 && colors.focus >= 3 && colors.outline === '2px', 'contrast and focus');
+        if (path === '/chat') {
+          const composer = await page.locator('#teacher-form').boundingBox();
+          assert(composer.y + composer.height <= 900, 'English header preserves composer viewport');
+        }
         if (path.includes('long_nickname')) assert.equal(await page.locator('.nav-username').innerText(), '긴한글별명'.repeat(20));
       }
     }

@@ -1,10 +1,12 @@
 """Limit comparison bodies before parsing and never echo submitted input."""
 
+from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from src.api.dependencies import AuthenticationRequired
+from src.i18n import display_language, translate
 
 REQUEST_LIMIT = 2 * 1024 * 1024
 
@@ -38,6 +40,22 @@ class ComparisonRoute(APIRoute):
                     {"detail": {"code": "authentication_required"}},
                     status_code=401,
                 )
+            except HTTPException as exc:
+                if isinstance(exc.detail, dict) and "errors" in exc.detail:
+                    exc.detail = {
+                        **exc.detail,
+                        "errors": [
+                            {
+                                **item,
+                                "message": translate(
+                                    "admin.comparison_input_error",
+                                    display_language(request),
+                                ),
+                            }
+                            for item in exc.detail["errors"]
+                        ],
+                    }
+                raise
             except RequestValidationError as error:
                 return JSONResponse(
                     {
@@ -50,7 +68,10 @@ class ComparisonRoute(APIRoute):
                                         for part in item["loc"]
                                         if part != "body"
                                     ),
-                                    message="입력 형식과 한도를 확인하세요.",
+                                    message=translate(
+                                        "admin.input_format",
+                                        display_language(request),
+                                    ),
                                 )
                                 for item in error.errors()
                             ],

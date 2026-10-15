@@ -123,3 +123,15 @@ candidate, including #131/#132 changes merged after this inventory.
 +comments, logs, AI instructions and data literals in these files are not a batch
 +translation target. FastAPI/browser-provided validation mechanics retain their
 +existing contracts; app-owned login credential/ID errors are covered by #134.
+
+## Historical untranslated evidence (coordinator-approved #136 exceptions)
+
+- Historical `conversion_provenance.field/source/target` remains verbatim,
+  including app-authored Korean sentences and excerpt prefixes embedded in
+  those values. Translate surrounding labels and current UI only; do not
+  rewrite stored JSON or infer translations from historical message text.
+- Localize persisted review notices through explicit `code/path` catalog
+  mappings, without reading their message text. Where that pair is ambiguous
+  (for example `title/invalid_source`), use a field-specific general notice.
+  Newly produced notices may retain their existing stored form. No schema
+  change is required. #137 verifies both exceptions in the integrated candidate.

@@ -1455,5 +1455,3426 @@
       "en": "User not found"
     }
   },
-  "admin": {}
+  "admin": {
+    "admin_dashboard_misconception_dialogue_simulator": {
+      "ko": "관리자 대시보드 - 오개념 교정 대화 시뮬레이터",
+      "en": "Admin dashboard - Misconception Dialogue Simulator"
+    },
+    "dashboard": {
+      "ko": "관리자 대시보드",
+      "en": "Admin dashboard"
+    },
+    "ai_connections_and_models": {
+      "ko": "AI 연결·모델",
+      "en": "AI connections and models"
+    },
+    "provider_connections_role_tests_and_authoring_defaults": {
+      "ko": "제공자 연결, 역할 시험 및 작성 기본값",
+      "en": "Provider connections, role tests and authoring defaults"
+    },
+    "scenario_management": {
+      "ko": "시나리오 관리",
+      "en": "Scenario management"
+    },
+    "create_and_edit_dialogue_scenarios": {
+      "ko": "대화 시나리오 생성 및 편집",
+      "en": "Create and edit dialogue scenarios"
+    },
+    "model_comparison": {
+      "ko": "모델 비교",
+      "en": "Model comparison"
+    },
+    "test_models_and_options_with_common_context": {
+      "ko": "동일 맥락으로 모델·옵션 시험",
+      "en": "Test models and options with common context"
+    },
+    "user_conversations": {
+      "ko": "사용자 대화 관리",
+      "en": "User conversations"
+    },
+    "download_conversations_by_user": {
+      "ko": "사용자별 대화 다운로드",
+      "en": "Download conversations by user"
+    },
+    "user_management": {
+      "ko": "사용자 관리",
+      "en": "User management"
+    },
+    "create_edit_and_delete_users": {
+      "ko": "사용자 생성, 수정 및 삭제",
+      "en": "Create, edit and delete users"
+    },
+    "group_management": {
+      "ko": "그룹 관리",
+      "en": "Group management"
+    },
+    "manage_user_groups_and_scenario_access": {
+      "ko": "사용자 그룹 및 시나리오 접근 관리",
+      "en": "Manage user groups and scenario access"
+    },
+    "about_management": {
+      "ko": "소개 관리",
+      "en": "About management"
+    },
+    "add_and_edit_developer_and_administrator_information": {
+      "ko": "개발자 및 관리자 정보 등록·수정",
+      "en": "Add and edit developer and administrator information"
+    },
+    "scenario_management_admin": {
+      "ko": "시나리오 관리 - 관리자",
+      "en": "Scenario management - Admin"
+    },
+    "choose_a_saved_scenario_to_compare": {
+      "ko": "비교할 저장 시나리오 선택",
+      "en": "Choose a saved scenario to compare"
+    },
+    "write_publish_and_manage_scenario_settings": {
+      "ko": "통합 설정 작성, 게시 및 관리",
+      "en": "Write, publish and manage scenario settings"
+    },
+    "whole_model_comparison": {
+      "ko": "전체 모델 비교",
+      "en": "Whole-model comparison"
+    },
+    "comparison_history": {
+      "ko": "비교 이력",
+      "en": "Comparison history"
+    },
+    "create_scenario_draft": {
+      "ko": "통합 초안 작성",
+      "en": "Create scenario draft"
+    },
+    "search_scenarios": {
+      "ko": "시나리오 검색",
+      "en": "Search scenarios"
+    },
+    "search_this_page": {
+      "ko": "현재 페이지에서 검색...",
+      "en": "Search this page..."
+    },
+    "publication_status": {
+      "ko": "게시 상태",
+      "en": "Publication status"
+    },
+    "all_publication_states": {
+      "ko": "모든 게시 상태",
+      "en": "All publication states"
+    },
+    "draft": {
+      "ko": "초안",
+      "en": "Draft"
+    },
+    "publish": {
+      "ko": "게시",
+      "en": "Publish"
+    },
+    "activation_status": {
+      "ko": "활성 상태",
+      "en": "Activation status"
+    },
+    "all_activation_states": {
+      "ko": "모든 활성 상태",
+      "en": "All activation states"
+    },
+    "active": {
+      "ko": "활성",
+      "en": "Active"
+    },
+    "inactive": {
+      "ko": "비활성",
+      "en": "Inactive"
+    },
+    "search_and_filters_apply_only_to_scenarios_on_this_page": {
+      "ko": "검색과 필터는 현재 페이지의 시나리오에만 적용됩니다.",
+      "en": "Search and filters apply only to scenarios on this page."
+    },
+    "no_scenarios_on_this_page_match_your_search_and_filters": {
+      "ko": "현재 페이지에서 검색·필터에 맞는 시나리오가 없습니다.",
+      "en": "No scenarios on this page match your search and filters."
+    },
+    "scenarios": {
+      "ko": "시나리오 목록",
+      "en": "Scenarios"
+    },
+    "review_required": {
+      "ko": "검토 필요",
+      "en": "Review required"
+    },
+    "conversion_required": {
+      "ko": "변환 필요",
+      "en": "Conversion required"
+    },
+    "session": {
+      "ko": "세션",
+      "en": "Session"
+    },
+    "conversations": {
+      "ko": "대화목록",
+      "en": "Conversations"
+    },
+    "edit": {
+      "ko": "수정",
+      "en": "Edit"
+    },
+    "delete": {
+      "ko": "삭제",
+      "en": "Delete"
+    },
+    "no_results_on_this_page": {
+      "ko": "이 페이지에 결과가 없습니다.",
+      "en": "No results on this page."
+    },
+    "no_scenarios": {
+      "ko": "시나리오가 없습니다",
+      "en": "No scenarios"
+    },
+    "list_pages": {
+      "ko": "목록 페이지",
+      "en": "List pages"
+    },
+    "total": {
+      "ko": "총",
+      "en": "Total"
+    },
+    "previous": {
+      "ko": "이전",
+      "en": "Previous"
+    },
+    "next": {
+      "ko": "다음",
+      "en": "Next"
+    },
+    "scenario": {
+      "ko": "시나리오",
+      "en": "Scenario"
+    },
+    "another_administrator_made_changes_reload_and_check_again": {
+      "ko": "다른 관리자가 변경했습니다. 새로고침 후 확인하세요.",
+      "en": "Another administrator made changes. Reload and check again."
+    },
+    "deletion_failed": {
+      "ko": "삭제에 실패했습니다.",
+      "en": "Deletion failed."
+    },
+    "scenario_editor_admin": {
+      "ko": "시나리오 작성 - 관리자",
+      "en": "Scenario editor - Admin"
+    },
+    "model_settings_internal_execution": {
+      "ko": "모델 설정 · 내부 실행용",
+      "en": "model settings · Internal execution"
+    },
+    "provider_model": {
+      "ko": "제공자 / 모델",
+      "en": "provider / model"
+    },
+    "saved_options_are_not_merged_with_current_defaults_changing_the_model_displays_its_new_default_optio": {
+      "ko": "저장된 옵션은 현재 기본값과 합치지 않습니다. 모델을 변경하면 새 기본 옵션을 표시합니다.",
+      "en": "Saved options are not merged with current defaults. Changing the model displays its new default options."
+    },
+    "scenario_editor": {
+      "ko": "시나리오 작성",
+      "en": "Scenario editor"
+    },
+    "frozen_comparison_conditions_are_open_in_a_new_draft_a_scenario_is_created_only_when_you_save_or_pub": {
+      "ko": "비교의 고정 조건을 새 초안에 열었습니다. 별도 저장 또는 게시 전에는 시나리오가 생성되지 않습니다.",
+      "en": "Frozen comparison conditions are open in a new draft. A scenario is created only when you save or publish."
+    },
+    "write_public_content_and_internal_instructions_separately_use_pseudonyms_and_educational_personas_in": {
+      "ko": "공개 내용과 내부 지시를 나누어 작성하세요. 실제 학생의 식별 정보 대신 가명·교육 페르소나를 사용하세요.",
+      "en": "Write public content and internal instructions separately. Use pseudonyms and educational personas instead of identifying real students."
+    },
+    "items_to_complete_before_publication": {
+      "ko": "게시 전 보완 항목",
+      "en": "Items to complete before publication"
+    },
+    "reload_latest_version": {
+      "ko": "최신 내용 다시 불러오기",
+      "en": "Reload latest version"
+    },
+    "conversion_review": {
+      "ko": "변환 검토",
+      "en": "Conversion review"
+    },
+    "review_legacy_scenario_conversion": {
+      "ko": "기존 시나리오 변환 검토",
+      "en": "Review legacy scenario conversion"
+    },
+    "this_migration_evidence_is_for_administrators_all_legacy_scenarios_are_drafts_requiring_review_origi": {
+      "ko": "관리자 전용 이전 근거입니다. 모든 기존 시나리오는 검토가 필요한 초안입니다. 원문을 공개 소개로 자동 사용하지 않습니다.",
+      "en": "This migration evidence is for administrators. All legacy scenarios are drafts requiring review. Original text is not automatically used as a public profile."
+    },
+    "original": {
+      "ko": "원문",
+      "en": "Original"
+    },
+    "converted_value": {
+      "ko": "변환값",
+      "en": "Converted value"
+    },
+    "admin_only_original_archive_reference": {
+      "ko": "관리자 전용 원문 archive 참조",
+      "en": "Admin-only original archive reference"
+    },
+    "original_sha_256": {
+      "ko": "원문 SHA-256",
+      "en": "Original SHA-256"
+    },
+    "converted_value_sha_256": {
+      "ko": "변환값 SHA-256",
+      "en": "Converted value SHA-256"
+    },
+    "deployment_settings_source_capture_time": {
+      "ko": "배포 설정 출처 / 수집 시각",
+      "en": "Deployment settings source / Capture time"
+    },
+    "legacy_subcall_settings": {
+      "ko": "이전 하위 호출 설정",
+      "en": "Legacy subcall settings"
+    },
+    "see_the_completion_notices_for_review_reasons_acknowledgement_alone_cannot_resolve_missing_required_": {
+      "ko": "검토 사유는 보완 안내에서 확인하세요. 누락된 필수 내용은 확인만으로 해소할 수 없습니다.",
+      "en": "See the completion notices for review reasons. Acknowledgement alone cannot resolve missing required content."
+    },
+    "i_have_reviewed_this_version_s_conversion_warnings": {
+      "ko": "이 버전의 변환 경고를 검토했습니다.",
+      "en": "I have reviewed this version's conversion warnings."
+    },
+    "compare_the_saved_scenario_across_all_roles": {
+      "ko": "저장된 시나리오 전체 비교",
+      "en": "Compare the saved scenario across all roles"
+    },
+    "the_legacy_individual_role_comparison_is_below_start_whole_model_comparisons_from_a_saved_scenario": {
+      "ko": "아래는 이전 역할별 단독 비교입니다. 전체 비교는 저장된 시나리오에서 시작하세요.",
+      "en": "The legacy individual role comparison is below. Start whole-model comparisons from a saved scenario."
+    },
+    "open_model_comparison": {
+      "ko": "모델 비교 열기",
+      "en": "Open model comparison"
+    },
+    "model_comparison_with_common_context": {
+      "ko": "동일 맥락 모델 비교",
+      "en": "Model comparison with common context"
+    },
+    "common_scenario_model": {
+      "ko": "시나리오 공통 모델",
+      "en": "Common scenario model"
+    },
+    "authoring_steps": {
+      "ko": "작성 단계",
+      "en": "Authoring steps"
+    },
+    "basic_information": {
+      "ko": "기본 정보",
+      "en": "Basic information"
+    },
+    "problem_situation": {
+      "ko": "문제 상황",
+      "en": "Problem situation"
+    },
+    "student": {
+      "ko": "학생봇",
+      "en": "Student"
+    },
+    "mentor": {
+      "ko": "멘토",
+      "en": "Mentor"
+    },
+    "post_session_analysis": {
+      "ko": "사후 분석",
+      "en": "Post-session analysis"
+    },
+    "1_basic_information": {
+      "ko": "1. 기본 정보",
+      "en": "1. Basic information"
+    },
+    "title": {
+      "ko": "제목",
+      "en": "Title"
+    },
+    "subject": {
+      "ko": "교과",
+      "en": "Subject"
+    },
+    "target_grade": {
+      "ko": "대상 학년",
+      "en": "Target grade"
+    },
+    "recent_completed_turns_in_context": {
+      "ko": "최근 완료 턴 문맥 상한",
+      "en": "Recent completed turns in context"
+    },
+    "use_1_100_turns_for_student_and_mentor_context_analysis_uses_the_full_dialogue": {
+      "ko": "학생봇·멘토의 문맥 1–100턴. 분석에는 전체 대화를 사용합니다.",
+      "en": "Use 1–100 turns for student and mentor context. Analysis uses the full dialogue."
+    },
+    "assigned_groups": {
+      "ko": "배정 그룹",
+      "en": "Assigned groups"
+    },
+    "2_problem_situation": {
+      "ko": "2. 문제 상황",
+      "en": "2. Problem situation"
+    },
+    "visible_to_teachers": {
+      "ko": "교사에게 공개",
+      "en": "Visible to teachers"
+    },
+    "public_problem_situation": {
+      "ko": "공개 문제 상황",
+      "en": "Public problem situation"
+    },
+    "learning_objective": {
+      "ko": "학습목표",
+      "en": "Learning objective"
+    },
+    "3_student": {
+      "ko": "3. 학생봇",
+      "en": "3. Student"
+    },
+    "student_name": {
+      "ko": "학생봇 이름",
+      "en": "Student name"
+    },
+    "public_student_profile_optional": {
+      "ko": "공개 학생 소개 (선택)",
+      "en": "Public student profile (optional)"
+    },
+    "internal_execution_hidden_from_teachers": {
+      "ko": "내부 실행용 · 교사에게 비공개",
+      "en": "Internal execution · Hidden from teachers"
+    },
+    "internal_student_profile_optional": {
+      "ko": "내부 학생 프로필 (선택)",
+      "en": "Internal student profile (optional)"
+    },
+    "target_misconception": {
+      "ko": "목표 오개념",
+      "en": "Target misconception"
+    },
+    "student_behavior_instructions": {
+      "ko": "학생봇 행동 지시",
+      "en": "Student behavior instructions"
+    },
+    "tone_participation_response_length_follow_up_questions_conditions_for_changing_misconceptions": {
+      "ko": "말투 · 참여도 · 반응 길이 · 되묻기 여부 · 오개념 변화 조건",
+      "en": "Tone · Participation · Response length · Follow-up questions · Conditions for changing misconceptions"
+    },
+    "4_mentor": {
+      "ko": "4. 멘토",
+      "en": "4. Mentor"
+    },
+    "mentor_mode": {
+      "ko": "멘토 사용 모드",
+      "en": "Mentor mode"
+    },
+    "off_disabled": {
+      "ko": "off · 사용 안 함",
+      "en": "off · Disabled"
+    },
+    "manual_help_button": {
+      "ko": "manual · 도움 버튼",
+      "en": "manual · Help button"
+    },
+    "auto_check_after_completed_turns": {
+      "ko": "auto · 완료 턴 뒤 자동 검사",
+      "en": "auto · Check after completed turns"
+    },
+    "mentor_name": {
+      "ko": "멘토 이름",
+      "en": "Mentor name"
+    },
+    "mentor_welcome_message_optional": {
+      "ko": "멘토 환영문 (선택)",
+      "en": "Mentor welcome message (optional)"
+    },
+    "static_guidance_this_does_not_make_an_ai_call_or_add_a_dialogue_turn": {
+      "ko": "정적 안내입니다. AI 호출이나 대화 턴이 아닙니다.",
+      "en": "Static guidance; this does not make an AI call or add a dialogue turn."
+    },
+    "mentor_behavior_instructions": {
+      "ko": "멘토 행동 지시",
+      "en": "Mentor behavior instructions"
+    },
+    "coaching_approach_tone_feedback_length": {
+      "ko": "코칭 방식 · 말투 · 피드백 길이",
+      "en": "Coaching approach · Tone · Feedback length"
+    },
+    "automatic_intervention_condition": {
+      "ko": "자동 개입 조건",
+      "en": "Automatic intervention condition"
+    },
+    "first_completed_turn_to_check": {
+      "ko": "검사 시작 완료 턴",
+      "en": "First completed turn to check"
+    },
+    "minimum_completed_turns_between_checks": {
+      "ko": "검사 사이 최소 완료 턴",
+      "en": "Minimum completed turns between checks"
+    },
+    "recent_completed_turn_window": {
+      "ko": "집계할 최근 완료 턴",
+      "en": "Recent completed turn window"
+    },
+    "maximum_interventions_in_the_recent_turn_window": {
+      "ko": "최근 완료 턴 내 최대 개입 수",
+      "en": "Maximum interventions in the recent turn window"
+    },
+    "no_intervention_and_accepted_failed_checks_also_consume_the_interval_checks_and_coaching_use_up_to_t": {
+      "ko": "미개입·승인된 실패 검사도 간격을 소비합니다. 자동 검사 후 코칭까지 최대 두 호출입니다. 자동 모드의 수동 도움도 최근 턴 상한을 공유합니다.",
+      "en": "No-intervention and accepted failed checks also consume the interval. Checks and coaching use up to two calls. Manual help in automatic mode shares the recent-turn cap."
+    },
+    "5_post_session_analysis": {
+      "ko": "5. 사후 분석",
+      "en": "5. Post-session analysis"
+    },
+    "internal_evaluation_hidden_from_teachers": {
+      "ko": "내부 평가용 · 교사에게 비공개",
+      "en": "Internal evaluation · Hidden from teachers"
+    },
+    "analysis_context": {
+      "ko": "분석 맥락",
+      "en": "Analysis context"
+    },
+    "correct_answer_and_expected_understanding": {
+      "ko": "정답·기대 이해",
+      "en": "Correct answer and expected understanding"
+    },
+    "analysis_instructions_and_focus": {
+      "ko": "분석 지시·강조점",
+      "en": "Analysis instructions and focus"
+    },
+    "enable_utterance_classification": {
+      "ko": "발화 분류 사용",
+      "en": "Enable utterance classification"
+    },
+    "rubric_name": {
+      "ko": "분류 기준 이름",
+      "en": "Rubric name"
+    },
+    "rubric_description": {
+      "ko": "분류 기준 설명",
+      "en": "Rubric description"
+    },
+    "classification_display_name": {
+      "ko": "분류 표시명",
+      "en": "Classification display name"
+    },
+    "publication_requires_1_20_complete_rows_ids_may_contain_letters_numbers_underscores_and_hyphens_use_": {
+      "ko": "게시할 때 1–20개 완성 행이 필요합니다. ID는 영문·숫자·밑줄·하이픈으로 구성하고 ID와 이름은 중복 없이 작성하세요.",
+      "en": "Publication requires 1–20 complete rows. IDs may contain letters, numbers, underscores and hyphens. Use unique IDs and names."
+    },
+    "add_rubric_item": {
+      "ko": "분류 기준 추가",
+      "en": "Add rubric item"
+    },
+    "overall_feedback_strengths_improvements_and_alternative_questions_remain_available_when_classificati": {
+      "ko": "분류를 끄더라도 총평·강점·개선점·대안 질문은 유지합니다.",
+      "en": "Overall feedback, strengths, improvements and alternative questions remain available when classification is disabled."
+    },
+    "previous_step": {
+      "ko": "이전 단계",
+      "en": "Previous step"
+    },
+    "next_step": {
+      "ko": "다음 단계",
+      "en": "Next step"
+    },
+    "save_draft": {
+      "ko": "초안으로 저장",
+      "en": "Save draft"
+    },
+    "publication_is_not_available_yet": {
+      "ko": "게시 기능 준비 중",
+      "en": "Publication is not available yet"
+    },
+    "teacher_view_preview": {
+      "ko": "교사 화면 미리보기",
+      "en": "Teacher view preview"
+    },
+    "review_execution_settings": {
+      "ko": "실행 설정 확인",
+      "en": "Review execution settings"
+    },
+    "0_items_to_complete": {
+      "ko": "보완 항목 0개",
+      "en": "0 items to complete"
+    },
+    "classification": {
+      "ko": "분류",
+      "en": "Classification"
+    },
+    "name": {
+      "ko": "이름",
+      "en": "Name"
+    },
+    "criteria": {
+      "ko": "판정 기준",
+      "en": "Criteria"
+    },
+    "level": {
+      "ko": "수준",
+      "en": "Level"
+    },
+    "unspecified": {
+      "ko": "지정하지 않음",
+      "en": "Unspecified"
+    },
+    "delete_this_rubric_item": {
+      "ko": "이 분류 기준을 삭제하시겠습니까?",
+      "en": "Delete this rubric item?"
+    },
+    "mentor_disabled_hidden_input_is_preserved": {
+      "ko": "멘토를 사용하지 않습니다. 숨긴 입력은 보존합니다.",
+      "en": "Mentor disabled. Hidden input is preserved."
+    },
+    "request_help_after_a_completed_student_turn_manual_requests_have_no_total_count_cap": {
+      "ko": "완료된 학생 턴에서 도움 버튼으로 요청합니다. 수동 총횟수 상한은 없습니다.",
+      "en": "Request help after a completed student turn. Manual requests have no total-count cap."
+    },
+    "check_conditions_after_completed_turns_the_help_button_is_also_available": {
+      "ko": "완료 턴 뒤 조건을 검사합니다. 도움 버튼으로도 요청할 수 있습니다.",
+      "en": "Check conditions after completed turns. The Help button is also available."
+    },
+    "selection_required": {
+      "ko": "선택 필요",
+      "en": "Selection required"
+    },
+    "disabled": {
+      "ko": "미사용",
+      "en": "Disabled"
+    },
+    "current_status": {
+      "ko": "현재 상태:",
+      "en": "Current status:"
+    },
+    "published": {
+      "ko": "게시됨",
+      "en": "Published"
+    },
+    "version": {
+      "ko": "버전",
+      "en": "Version"
+    },
+    "publish_changes": {
+      "ko": "수정 후 게시",
+      "en": "Publish changes"
+    },
+    "check_your_input": {
+      "ko": "입력값을 확인하세요.",
+      "en": "Check your input."
+    },
+    "items_to_complete": {
+      "ko": "보완 항목",
+      "en": "Items to complete"
+    },
+    "changing_to_a_draft_prevents_teachers_from_starting_new_sessions_save_as_a_draft": {
+      "ko": "초안으로 전환하면 교사의 새 세션 시작이 중단됩니다. 초안으로 저장하시겠습니까?",
+      "en": "Changing to a draft prevents teachers from starting new sessions. Save as a draft?"
+    },
+    "another_administrator_made_changes_your_input_is_preserved_latest_version": {
+      "ko": "다른 관리자가 변경했습니다. 현재 화면의 입력은 유지됩니다. 최신 버전:",
+      "en": "Another administrator made changes. Your input is preserved. Latest version:"
+    },
+    "draft_saved": {
+      "ko": "초안을 저장했습니다.",
+      "en": "Draft saved."
+    },
+    "published_2": {
+      "ko": "게시했습니다.",
+      "en": "Published."
+    },
+    "please_log_in": {
+      "ko": "로그인이 필요합니다.",
+      "en": "Please log in."
+    },
+    "check_your_permissions_or_security_token": {
+      "ko": "권한 또는 보안 토큰을 확인하세요.",
+      "en": "Check your permissions or security token."
+    },
+    "scenario_not_found": {
+      "ko": "시나리오를 찾을 수 없습니다.",
+      "en": "Scenario not found."
+    },
+    "could_not_save_your_input_is_preserved": {
+      "ko": "저장하지 못했습니다. 입력을 보존했습니다.",
+      "en": "Could not save. Your input is preserved."
+    },
+    "could_not_confirm_the_save_result_your_input_is_preserved": {
+      "ko": "저장 결과를 확인할 수 없습니다. 현재 화면의 입력은 유지됩니다.",
+      "en": "Could not confirm the save result. Your input is preserved."
+    },
+    "reloading_the_latest_version_discards_unsaved_input_reload": {
+      "ko": "최신 내용을 불러오면 저장하지 않은 입력을 잃습니다. 다시 불러오시겠습니까?",
+      "en": "Reloading the latest version discards unsaved input. Reload?"
+    },
+    "cannot_publish_complete_required_fields_and_validate_again_on_the_server": {
+      "ko": "게시 불가 · 필수 내용을 보완하고 서버에서 다시 검증해야 합니다.",
+      "en": "Cannot publish · Complete required fields and validate again on the server."
+    },
+    "review_acknowledged_required_content_and_models_will_be_validated_again_on_publication": {
+      "ko": "검토 확인됨 · 게시 시 필수 내용과 모델을 다시 검증합니다.",
+      "en": "Review acknowledged · Required content and models will be validated again on publication."
+    },
+    "cannot_publish_acknowledge_the_conversion_warnings_first": {
+      "ko": "게시 불가 · 변환 경고 검토 확인이 필요합니다.",
+      "en": "Cannot publish · Acknowledge the conversion warnings first."
+    },
+    "comparison_model_and_per_role_options_applied_save_or_publish_separately": {
+      "ko": "비교 모델과 역할별 옵션을 적용했습니다. 별도 저장 또는 게시가 필요합니다.",
+      "en": "Comparison model and per-role options applied. Save or publish separately."
+    },
+    "unverified": {
+      "ko": "미검증",
+      "en": "Unverified"
+    },
+    "verifying": {
+      "ko": "검증 중",
+      "en": "Verifying"
+    },
+    "succeeded": {
+      "ko": "성공",
+      "en": "Succeeded"
+    },
+    "failed": {
+      "ko": "실패",
+      "en": "Failed"
+    },
+    "reverification_required": {
+      "ko": "재검증 필요",
+      "en": "Reverification required"
+    },
+    "connection_unavailable": {
+      "ko": "연결 사용 불가",
+      "en": "Connection unavailable"
+    },
+    "capability_definition_required": {
+      "ko": "기능 정의 필요",
+      "en": "Capability definition required"
+    },
+    "select_a_common_model": {
+      "ko": "공통 모델 선택 필요",
+      "en": "Select a common model"
+    },
+    "existing_per_role_models_are_preserved_explicitly_select_a_common_model_before_saving": {
+      "ko": "기존 역할별 모델을 보존했습니다. 공통 모델을 명시적으로 선택해야 저장할 수 있습니다.",
+      "en": "Existing per-role models are preserved. Explicitly select a common model before saving."
+    },
+    "all_active_roles_use_the_same_model_options_are_preserved_per_role": {
+      "ko": "모든 활성 역할에 같은 모델을 사용합니다. 옵션은 역할별로 보존합니다.",
+      "en": "All active roles use the same model. Options are preserved per role."
+    },
+    "select_a_model": {
+      "ko": "모델 선택 필요",
+      "en": "Select a model"
+    },
+    "unavailable": {
+      "ko": "사용 불가",
+      "en": "Unavailable"
+    },
+    "default_model_unavailable_select_a_model": {
+      "ko": "기본 모델 사용 불가 · 모델 선택 필요",
+      "en": "Default model unavailable · Select a model"
+    },
+    "registered_model_unavailable": {
+      "ko": "등록 모델 사용 불가",
+      "en": "Registered model unavailable"
+    },
+    "capability_definition_and_provider_catalog_mismatch": {
+      "ko": "기능 정의·제공자 목록 불일치",
+      "en": "Capability definition and provider catalog mismatch"
+    },
+    "model_changed_new_default_options_displayed": {
+      "ko": "모델 변경: 새 기본 옵션을 표시했습니다.",
+      "en": "Model changed: new default options displayed."
+    },
+    "unconfigured": {
+      "ko": "미설정",
+      "en": "Unconfigured"
+    },
+    "available": {
+      "ko": "사용 가능",
+      "en": "Available"
+    },
+    "decryption_failed": {
+      "ko": "복호화 실패",
+      "en": "Decryption failed"
+    },
+    "the_response_was_refused_check_settings_and_test_again": {
+      "ko": "응답이 거절되었습니다. 설정을 확인한 후 다시 시험하세요.",
+      "en": "The response was refused. Check settings and test again."
+    },
+    "the_output_limit_was_reached_check_settings_and_test_again": {
+      "ko": "출력 길이 상한에 도달했습니다. 설정을 확인한 후 다시 시험하세요.",
+      "en": "The output limit was reached. Check settings and test again."
+    },
+    "the_response_is_not_complete_json_check_settings_and_test_again": {
+      "ko": "완전한 JSON 응답이 아닙니다. 설정을 확인한 후 다시 시험하세요.",
+      "en": "The response is not complete JSON. Check settings and test again."
+    },
+    "a_label_utterance_reference_or_quotation_is_invalid_check_settings_and_test_again": {
+      "ko": "레이블·발화 참조 또는 인용이 유효하지 않습니다. 설정을 확인한 후 다시 시험하세요.",
+      "en": "A label, utterance reference or quotation is invalid. Check settings and test again."
+    },
+    "required_results_are_empty_check_settings_and_test_again": {
+      "ko": "필요한 결과가 비어 있습니다. 설정을 확인한 후 다시 시험하세요.",
+      "en": "Required results are empty. Check settings and test again."
+    },
+    "the_response_format_does_not_match_the_role_contract_check_settings_and_test_again": {
+      "ko": "응답 형식이 역할 계약과 일치하지 않습니다. 설정을 확인한 후 다시 시험하세요.",
+      "en": "The response format does not match the role contract. Check settings and test again."
+    },
+    "the_provider_encountered_a_temporary_problem_test_again_shortly": {
+      "ko": "제공자에 일시적인 문제가 발생했습니다. 잠시 후 다시 시험하세요.",
+      "en": "The provider encountered a temporary problem. Test again shortly."
+    },
+    "the_provider_connection_timed_out_check_the_connection": {
+      "ko": "제공자 연결 시간이 초과되었습니다. 연결 상태를 확인하세요.",
+      "en": "The provider connection timed out. Check the connection."
+    },
+    "the_first_response_timed_out_check_the_timeout_settings": {
+      "ko": "첫 응답 대기 시간이 초과되었습니다. 시간 제한을 확인하세요.",
+      "en": "The first response timed out. Check the timeout settings."
+    },
+    "the_total_call_timeout_was_reached_check_the_timeout_settings": {
+      "ko": "전체 호출 시간이 초과되었습니다. 시간 제한을 확인하세요.",
+      "en": "The total call timeout was reached. Check the timeout settings."
+    },
+    "the_concurrent_call_limit_was_reached_wait_for_active_calls_to_finish_before_testing_again": {
+      "ko": "동시 호출 한도에 도달했습니다. 진행 중인 호출이 끝난 후 다시 시험하세요.",
+      "en": "The concurrent call limit was reached. Wait for active calls to finish before testing again."
+    },
+    "unsupported_saved_value": {
+      "ko": "지원하지 않는 저장 값",
+      "en": "Unsupported saved value"
+    },
+    "capability_definition": {
+      "ko": "기능 정의:",
+      "en": "Capability definition:"
+    },
+    "official_verification": {
+      "ko": "공식 확인",
+      "en": "Official verification"
+    },
+    "default": {
+      "ko": "기본값:",
+      "en": "Default:"
+    },
+    "these_saved_options_are_absent_from_the_capability_definition_editing_other_fields_preserves_them_ch": {
+      "ko": "기능 정의에 없는 저장 옵션입니다. 다른 필드 수정으로 삭제하지 않으며, 제거를 선택한 뒤 저장해야 삭제됩니다.",
+      "en": "These saved options are absent from the capability definition. Editing other fields preserves them. Choose removal and save to delete them."
+    },
+    "remove_undefined_saved_options": {
+      "ko": "정의에 없는 저장 옵션 제거",
+      "en": "Remove undefined saved options"
+    },
+    "master_key_required_restore_the_original_infrastructure_master_key_and_version_saving_keys_and_ai_ca": {
+      "ko": "마스터 키 설정 필요: 인프라의 원래 마스터 키와 버전을 복원하세요. 키 저장과 AI 호출은 사용할 수 없습니다.",
+      "en": "Master key required: restore the original infrastructure master key and version. Saving keys and AI calls are unavailable."
+    },
+    "provider_connections": {
+      "ko": "제공자 연결",
+      "en": "Provider connections"
+    },
+    "1_provider_connections": {
+      "ko": "1. 제공자 연결",
+      "en": "1. Provider connections"
+    },
+    "non_generation_verification_and_catalog_refresh_are_separate_from_role_verification_and_educational_": {
+      "ko": "비생성 확인과 모델 목록 갱신은 역할 검증·교육 품질 승인과 별개입니다.",
+      "en": "Non-generation verification and catalog refresh are separate from role verification and educational quality approval."
+    },
+    "key": {
+      "ko": "키",
+      "en": "Key"
+    },
+    "registered": {
+      "ko": "등록됨",
+      "en": "Registered"
+    },
+    "not_registered": {
+      "ko": "미등록",
+      "en": "Not registered"
+    },
+    "latest_non_generation_verification": {
+      "ko": "최근 비생성 확인:",
+      "en": "Latest non-generation verification:"
+    },
+    "none": {
+      "ko": "없음",
+      "en": "None"
+    },
+    "restore_the_original_master_key_and_version_if_recovery_is_impossible_delete_and_register_the_key_ag": {
+      "ko": "원래 마스터 키·버전을 복원하세요. 복구할 수 없다면 현재 비밀번호로 키를 삭제한 후 재등록하세요.",
+      "en": "Restore the original master key and version. If recovery is impossible, delete and register the key again using your current password."
+    },
+    "latest_non_generation_verification_failed_check_connection_settings_and_access_permissions": {
+      "ko": "최근 비생성 확인 실패. 연결 설정과 접근 권한을 확인하세요.",
+      "en": "Latest non-generation verification failed. Check connection settings and access permissions."
+    },
+    "replace_key": {
+      "ko": "키 교체",
+      "en": "Replace key"
+    },
+    "save_key": {
+      "ko": "키 저장",
+      "en": "Save key"
+    },
+    "disable": {
+      "ko": "비활성화",
+      "en": "Disable"
+    },
+    "re_enable": {
+      "ko": "재활성화",
+      "en": "Re-enable"
+    },
+    "delete_key": {
+      "ko": "키 삭제",
+      "en": "Delete key"
+    },
+    "verify_without_generation_and_refresh_catalog": {
+      "ko": "비생성 확인·목록 갱신",
+      "en": "Verify without generation and refresh catalog"
+    },
+    "the_model_catalog_is_not_available_yet": {
+      "ko": "모델 목록은 아직 제공되지 않습니다.",
+      "en": "The model catalog is not available yet."
+    },
+    "model_catalog_no_lookup_recorded": {
+      "ko": "모델 목록: 조회 기록 없음",
+      "en": "Model catalog: no lookup recorded"
+    },
+    "model_catalog": {
+      "ko": "모델 목록:",
+      "en": "Model catalog:"
+    },
+    "stale_catalog": {
+      "ko": "오래된 목록",
+      "en": "Stale catalog"
+    },
+    "recent_catalog": {
+      "ko": "최근 목록",
+      "en": "Recent catalog"
+    },
+    "last_refreshed": {
+      "ko": "마지막 갱신",
+      "en": "Last refreshed"
+    },
+    "this_catalog_is_for_reference_it_does_not_guarantee_access_or_successful_role_verification": {
+      "ko": "참고 목록입니다. 접근 가능 여부나 역할 검증 성공을 보장하지 않습니다.",
+      "en": "This catalog is for reference. It does not guarantee access or successful role verification."
+    },
+    "lifecycle_unknown": {
+      "ko": "수명주기 미확인",
+      "en": "Lifecycle unknown"
+    },
+    "stable": {
+      "ko": "안정",
+      "en": "Stable"
+    },
+    "release_status_unknown": {
+      "ko": "릴리스 상태 미확인",
+      "en": "Release status unknown"
+    },
+    "choose_model_id": {
+      "ko": "모델 ID 선택",
+      "en": "Choose model ID"
+    },
+    "register_selected_model": {
+      "ko": "선택 모델 등록",
+      "en": "Register selected model"
+    },
+    "enter_model_id_manually": {
+      "ko": "모델 ID 직접 입력",
+      "en": "Enter model ID manually"
+    },
+    "model_settings": {
+      "ko": "모델 설정",
+      "en": "Model settings"
+    },
+    "2_model_settings_and_role_verification": {
+      "ko": "2. 모델 설정·역할 검증",
+      "en": "2. Model settings and role verification"
+    },
+    "check_response_format_verification_separately_for_each_role_test_success_does_not_guarantee_educatio": {
+      "ko": "각 역할의 응답 형식 검증을 따로 확인하세요. 시험 성공은 교육적 품질 보증이 아닙니다.",
+      "en": "Check response-format verification separately for each role. Test success does not guarantee educational quality."
+    },
+    "no_registered_models_choose_a_catalog_entry_under_a_provider_connection_or_enter_a_model_id_manually": {
+      "ko": "등록한 모델이 없습니다. 제공자 연결에서 목록을 선택하거나 모델 ID를 직접 입력해 등록하세요.",
+      "en": "No registered models. Choose a catalog entry under a provider connection or enter a model ID manually."
+    },
+    "model_registration_and_role_tests_are_not_available_yet": {
+      "ko": "모델 등록·역할 시험은 아직 제공되지 않습니다.",
+      "en": "Model registration and role tests are not available yet."
+    },
+    "role_tests_are_not_available_yet": {
+      "ko": "역할 시험은 아직 제공되지 않습니다.",
+      "en": "Role tests are not available yet."
+    },
+    "capability_definition_available": {
+      "ko": "기능 정의 있음",
+      "en": "Capability definition available"
+    },
+    "edit_display_name_activation_and_options": {
+      "ko": "표시명·활성·옵션 수정",
+      "en": "Edit display name, activation and options"
+    },
+    "capability_definition_and_provider_catalog_do_not_match_role_tests_and_execution_are_unavailable": {
+      "ko": "기능 정의·제공자 목록 불일치: 역할 시험과 실행을 사용할 수 없습니다.",
+      "en": "Capability definition and provider catalog do not match: role tests and execution are unavailable."
+    },
+    "role_verification": {
+      "ko": "역할 검증",
+      "en": "Role verification"
+    },
+    "latest_role_verification": {
+      "ko": "최근 역할 검증:",
+      "en": "Latest role verification:"
+    },
+    "the_role_response_format_test_failed_check_settings_and_test_again": {
+      "ko": "역할 응답 형식 시험에 실패했습니다. 설정을 확인한 후 다시 시험하세요.",
+      "en": "The role response-format test failed. Check settings and test again."
+    },
+    "the_test_output_limit_conflicts_with_saved_options_explicitly_update_the_saved_options": {
+      "ko": "시험 출력 상한 또는 저장 옵션 제약과 충돌합니다. 저장 옵션을 명시적으로 수정하세요.",
+      "en": "The test output limit conflicts with saved options. Explicitly update the saved options."
+    },
+    "this_role_test_is_not_available_yet": {
+      "ko": "이 역할 시험은 아직 제공되지 않습니다.",
+      "en": "This role test is not available yet."
+    },
+    "role_tests_require_a_capability_definition": {
+      "ko": "기능 정의가 없어 역할 시험을 사용할 수 없습니다.",
+      "en": "Role tests require a capability definition."
+    },
+    "resolve_the_capability_definition_and_provider_catalog_mismatch_before_testing": {
+      "ko": "기능 정의·제공자 목록 불일치를 해결한 후 시험하세요.",
+      "en": "Resolve the capability definition and provider catalog mismatch before testing."
+    },
+    "restore_the_master_key_before_testing": {
+      "ko": "마스터 키를 복원한 후 시험하세요.",
+      "en": "Restore the master key before testing."
+    },
+    "resolve_the_connection_key_decryption_failure_before_testing": {
+      "ko": "연결 키 복호화 실패를 해결한 후 시험하세요.",
+      "en": "Resolve the connection key decryption failure before testing."
+    },
+    "register_a_provider_key_before_testing": {
+      "ko": "제공자 키를 등록한 후 시험하세요.",
+      "en": "Register a provider key before testing."
+    },
+    "re_enable_the_provider_connection_before_testing": {
+      "ko": "제공자 연결을 재활성화한 후 시험하세요.",
+      "en": "Re-enable the provider connection before testing."
+    },
+    "check_provider_connection_settings_before_testing": {
+      "ko": "제공자 연결 설정을 확인한 후 시험하세요.",
+      "en": "Check provider connection settings before testing."
+    },
+    "update_the_test_output_limit_and_saved_options_before_testing": {
+      "ko": "시험 출력 상한·저장 옵션을 수정한 후 시험하세요.",
+      "en": "Update the test output limit and saved options before testing."
+    },
+    "you_can_check_or_cancel_the_running_test": {
+      "ko": "진행 중인 시험을 조회하거나 취소할 수 있습니다.",
+      "en": "You can check or cancel the running test."
+    },
+    "test": {
+      "ko": "시험",
+      "en": "Test"
+    },
+    "check_progress": {
+      "ko": "진행 조회",
+      "en": "Check progress"
+    },
+    "cancel_test": {
+      "ko": "시험 취소",
+      "en": "Cancel test"
+    },
+    "authoring_defaults_and_call_settings": {
+      "ko": "작성 기본값·호출 설정",
+      "en": "Authoring defaults and call settings"
+    },
+    "3_authoring_defaults_and_call_settings": {
+      "ko": "3. 작성 기본값·호출 설정",
+      "en": "3. Authoring defaults and call settings"
+    },
+    "authoring_defaults_apply_only_to_new_scenarios_existing_scenarios_and_sessions_remain_unchanged_unav": {
+      "ko": "작성 기본값은 새 시나리오 작성에만 사용합니다. 기존 시나리오와 세션은 변경하지 않습니다. 사용 불가 기본값을 다른 모델로 자동 대체하지 않습니다.",
+      "en": "Authoring defaults apply only to new scenarios. Existing scenarios and sessions remain unchanged. Unavailable defaults are not automatically replaced."
+    },
+    "authoring_defaults_and_call_settings_are_not_available_yet": {
+      "ko": "작성 기본값·호출 설정은 아직 제공되지 않습니다.",
+      "en": "Authoring defaults and call settings are not available yet."
+    },
+    "default_model_unavailable": {
+      "ko": "기본 모델 사용 불가",
+      "en": "Default model unavailable"
+    },
+    "no_default": {
+      "ko": "기본값 없음",
+      "en": "No default"
+    },
+    "edit_authoring_defaults_and_call_settings": {
+      "ko": "작성 기본값·호출 설정 수정",
+      "en": "Edit authoring defaults and call settings"
+    },
+    "item_count": {
+      "ko": "{count}개",
+      "en": "{count}"
+    },
+    "scenario_delete_confirm": {
+      "ko": "\"{title}\" 시나리오를 삭제하시겠습니까?\n관련 세션 {count}개도 함께 숨겨집니다.",
+      "en": "Delete scenario \"{title}\"?\nIts {count} related sessions will also be hidden."
+    },
+    "about_management_admin": {
+      "ko": "소개 관리 - 관리자",
+      "en": "About management - Admin"
+    },
+    "add_contributor": {
+      "ko": "+ 새 등록",
+      "en": "+ Add contributor"
+    },
+    "contributors": {
+      "ko": "소개 목록",
+      "en": "Contributors"
+    },
+    "order": {
+      "ko": "순서",
+      "en": "Order"
+    },
+    "affiliation": {
+      "ko": "소속",
+      "en": "Affiliation"
+    },
+    "contact": {
+      "ko": "연락처",
+      "en": "Contact"
+    },
+    "history": {
+      "ko": "이력",
+      "en": "History"
+    },
+    "actions": {
+      "ko": "작업",
+      "en": "Actions"
+    },
+    "no_contributors_have_been_added": {
+      "ko": "등록된 정보가 없습니다.",
+      "en": "No contributors have been added."
+    },
+    "add_contributor_2": {
+      "ko": "새 등록자 추가",
+      "en": "Add contributor"
+    },
+    "close": {
+      "ko": "닫기",
+      "en": "Close"
+    },
+    "phone_number_optional": {
+      "ko": "전화번호 (선택)",
+      "en": "Phone number (optional)"
+    },
+    "email_optional": {
+      "ko": "이메일 (선택)",
+      "en": "Email (optional)"
+    },
+    "display_order": {
+      "ko": "표시 순서",
+      "en": "Display order"
+    },
+    "cancel": {
+      "ko": "취소",
+      "en": "Cancel"
+    },
+    "save": {
+      "ko": "저장",
+      "en": "Save"
+    },
+    "edit_contributor": {
+      "ko": "등록자 수정",
+      "en": "Edit contributor"
+    },
+    "confirm_deletion": {
+      "ko": "삭제 확인",
+      "en": "Confirm deletion"
+    },
+    "analysis_management_admin": {
+      "ko": "분석 관리 - 관리자",
+      "en": "Analysis management - Admin"
+    },
+    "analysis_management": {
+      "ko": "분석 관리",
+      "en": "Analysis management"
+    },
+    "view_and_manage_question_analysis_results": {
+      "ko": "전체 질문 분석 결과 조회 및 관리",
+      "en": "View and manage question analysis results"
+    },
+    "scenario_filter": {
+      "ko": "시나리오 필터",
+      "en": "Scenario filter"
+    },
+    "all_scenarios": {
+      "ko": "모든 시나리오",
+      "en": "All scenarios"
+    },
+    "label": {
+      "ko": "레이블",
+      "en": "Label"
+    },
+    "label_filter": {
+      "ko": "레이블 필터",
+      "en": "Label filter"
+    },
+    "all_labels": {
+      "ko": "모든 레이블",
+      "en": "All labels"
+    },
+    "start_date": {
+      "ko": "시작일",
+      "en": "Start date"
+    },
+    "end_date": {
+      "ko": "종료일",
+      "en": "End date"
+    },
+    "apply_filters": {
+      "ko": "필터 적용",
+      "en": "Apply filters"
+    },
+    "reset": {
+      "ko": "초기화",
+      "en": "Reset"
+    },
+    "total_analyses": {
+      "ko": "총 분석 수",
+      "en": "Total analyses"
+    },
+    "average_confidence": {
+      "ko": "평균 신뢰도",
+      "en": "Average confidence"
+    },
+    "not_available": {
+      "ko": "산정 불가",
+      "en": "Not available"
+    },
+    "most_frequent_type": {
+      "ko": "가장 많은 유형",
+      "en": "Most frequent type"
+    },
+    "analyses": {
+      "ko": "분석 목록",
+      "en": "Analyses"
+    },
+    "question": {
+      "ko": "질문",
+      "en": "Question"
+    },
+    "confidence": {
+      "ko": "신뢰도",
+      "en": "Confidence"
+    },
+    "time": {
+      "ko": "시간",
+      "en": "Time"
+    },
+    "actions_2": {
+      "ko": "액션",
+      "en": "Actions"
+    },
+    "historical_data_read_only": {
+      "ko": "· 과거 자료 · 읽기 전용",
+      "en": "· Historical data · Read only"
+    },
+    "view_details": {
+      "ko": "상세보기",
+      "en": "View details"
+    },
+    "no_analysis_results": {
+      "ko": "분석 결과가 없습니다.",
+      "en": "No analysis results."
+    },
+    "analysis_details": {
+      "ko": "분석 상세",
+      "en": "Analysis details"
+    },
+    "user_conversations_admin": {
+      "ko": "사용자 대화 관리 - 관리자",
+      "en": "User conversations - Admin"
+    },
+    "download_conversation_history_by_user": {
+      "ko": "사용자별 대화 내역 다운로드",
+      "en": "Download conversation history by user"
+    },
+    "user_conversations_2": {
+      "ko": "사용자 대화 목록",
+      "en": "User conversations"
+    },
+    "nickname": {
+      "ko": "닉네임",
+      "en": "Nickname"
+    },
+    "student_number": {
+      "ko": "학번",
+      "en": "Student number"
+    },
+    "session_count": {
+      "ko": "세션 수",
+      "en": "Session count"
+    },
+    "last_session": {
+      "ko": "마지막 세션",
+      "en": "Last session"
+    },
+    "download_all_as_csv": {
+      "ko": "전체 CSV 다운로드",
+      "en": "Download all as CSV"
+    },
+    "all": {
+      "ko": "전체",
+      "en": "All"
+    },
+    "download_individual_sessions": {
+      "ko": "개별 세션 다운로드",
+      "en": "Download individual sessions"
+    },
+    "individual": {
+      "ko": "개별",
+      "en": "Individual"
+    },
+    "no_completed_sessions": {
+      "ko": "완료된 세션 없음",
+      "en": "No completed sessions"
+    },
+    "no_users_have_conversation_history": {
+      "ko": "대화 기록이 있는 사용자가 없습니다.",
+      "en": "No users have conversation history."
+    },
+    "loading": {
+      "ko": "로딩 중...",
+      "en": "Loading..."
+    },
+    "dialogue_sessions_admin": {
+      "ko": "대화 세션 관리 - 관리자",
+      "en": "Dialogue sessions - Admin"
+    },
+    "dialogue_sessions": {
+      "ko": "대화 세션 관리",
+      "en": "Dialogue sessions"
+    },
+    "view_end_and_delete_sessions": {
+      "ko": "세션 조회, 종료, 삭제",
+      "en": "View, end and delete sessions"
+    },
+    "teacher_filter": {
+      "ko": "교사 필터",
+      "en": "Teacher filter"
+    },
+    "all_teachers": {
+      "ko": "모든 교사",
+      "en": "All teachers"
+    },
+    "download_all": {
+      "ko": "전체 다운로드",
+      "en": "Download all"
+    },
+    "download_selected": {
+      "ko": "선택 다운로드",
+      "en": "Download selected"
+    },
+    "0_selected": {
+      "ko": "0개 선택됨",
+      "en": "0 selected"
+    },
+    "sessions": {
+      "ko": "세션 목록",
+      "en": "Sessions"
+    },
+    "select_all_sessions": {
+      "ko": "모든 세션 선택",
+      "en": "Select all sessions"
+    },
+    "teacher": {
+      "ko": "교사",
+      "en": "Teacher"
+    },
+    "start_time": {
+      "ko": "시작 시간",
+      "en": "Start time"
+    },
+    "end_time": {
+      "ko": "종료 시간",
+      "en": "End time"
+    },
+    "status": {
+      "ko": "상태",
+      "en": "Status"
+    },
+    "active_sessions_cannot_be_downloaded": {
+      "ko": "진행중 세션 다운로드 불가",
+      "en": "Active sessions cannot be downloaded"
+    },
+    "completed": {
+      "ko": "완료",
+      "en": "Completed"
+    },
+    "in_progress": {
+      "ko": "진행중",
+      "en": "In progress"
+    },
+    "end_and_analyze_this_session": {
+      "ko": "세션을 종료하고 분석하시겠습니까?",
+      "en": "End and analyze this session?"
+    },
+    "end": {
+      "ko": "종료",
+      "en": "End"
+    },
+    "analysis_results": {
+      "ko": "분석결과",
+      "en": "Analysis results"
+    },
+    "delete_this_session_this_cannot_be_undone": {
+      "ko": "세션을 삭제하시겠습니까? (복구 불가)",
+      "en": "Delete this session? This cannot be undone."
+    },
+    "no_results_for_the_current_filters_or_page": {
+      "ko": "현재 필터 또는 페이지에 결과가 없습니다.",
+      "en": "No results for the current filters or page."
+    },
+    "no_sessions": {
+      "ko": "세션이 없습니다.",
+      "en": "No sessions."
+    },
+    "first": {
+      "ko": "처음",
+      "en": "First"
+    },
+    "last": {
+      "ko": "마지막",
+      "en": "Last"
+    },
+    "session_analysis_results": {
+      "ko": "세션 분석 결과",
+      "en": "Session analysis results"
+    },
+    "user_management_admin": {
+      "ko": "사용자 관리 - 관리자",
+      "en": "User management - Admin"
+    },
+    "download_csv_template": {
+      "ko": "CSV 양식 다운로드",
+      "en": "Download CSV template"
+    },
+    "bulk_add": {
+      "ko": "일괄 추가",
+      "en": "Bulk add"
+    },
+    "new_user": {
+      "ko": "+ 새 사용자",
+      "en": "+ New user"
+    },
+    "search_users": {
+      "ko": "사용자 검색...",
+      "en": "Search users..."
+    },
+    "all_roles": {
+      "ko": "모든 역할",
+      "en": "All roles"
+    },
+    "admin": {
+      "ko": "관리자",
+      "en": "Admin"
+    },
+    "all_groups": {
+      "ko": "모든 그룹",
+      "en": "All groups"
+    },
+    "no_users_on_this_page_match_your_search_and_filters": {
+      "ko": "현재 페이지에서 검색·필터에 맞는 사용자가 없습니다.",
+      "en": "No users on this page match your search and filters."
+    },
+    "users": {
+      "ko": "사용자 목록",
+      "en": "Users"
+    },
+    "user_id": {
+      "ko": "사용자 ID",
+      "en": "User ID"
+    },
+    "role": {
+      "ko": "역할",
+      "en": "Role"
+    },
+    "group": {
+      "ko": "그룹",
+      "en": "Group"
+    },
+    "created": {
+      "ko": "생성일",
+      "en": "Created"
+    },
+    "no_users": {
+      "ko": "사용자가 없습니다.",
+      "en": "No users."
+    },
+    "bulk_add_users": {
+      "ko": "일괄 사용자 추가",
+      "en": "Bulk add users"
+    },
+    "choose_a_csv_file": {
+      "ko": "CSV 파일을 선택하세요",
+      "en": "Choose a CSV file"
+    },
+    "format_username_nickname_role_optional_group_optional": {
+      "ko": "양식: username, nickname, role(선택), group(선택)",
+      "en": "Format: username, nickname, role(optional), group(optional)"
+    },
+    "choose_file": {
+      "ko": "파일 선택",
+      "en": "Choose file"
+    },
+    "a_random_initial_password_is_issued_for_each_user": {
+      "ko": "사용자마다 무작위 초기 비밀번호를 발급합니다.",
+      "en": "A random initial password is issued for each user."
+    },
+    "bulk_assignment": {
+      "ko": "일괄 지정:",
+      "en": "Bulk assignment:"
+    },
+    "choose_role": {
+      "ko": "역할 선택...",
+      "en": "Choose role..."
+    },
+    "choose_group": {
+      "ko": "그룹 선택...",
+      "en": "Choose group..."
+    },
+    "apply": {
+      "ko": "적용",
+      "en": "Apply"
+    },
+    "bulk_registration_preview": {
+      "ko": "일괄 등록 미리보기",
+      "en": "Bulk registration preview"
+    },
+    "add_user": {
+      "ko": "+ 사용자 추가",
+      "en": "+ Add user"
+    },
+    "available_only_until_this_screen_is_closed": {
+      "ko": "이 화면을 닫으면 다시 볼 수 없음",
+      "en": "Available only until this screen is closed"
+    },
+    "copy_the_initial_passwords_or_save_them_as_csv_to_share_with_users": {
+      "ko": "초기 비밀번호를 복사하거나 CSV로 저장해 사용자에게 전달하세요.",
+      "en": "Copy the initial passwords or save them as CSV to share with users."
+    },
+    "copy_credentials": {
+      "ko": "자격 증명 복사",
+      "en": "Copy credentials"
+    },
+    "download_credentials_csv": {
+      "ko": "자격 증명 CSV 다운로드",
+      "en": "Download credentials CSV"
+    },
+    "one_time_credentials": {
+      "ko": "일회 자격 증명",
+      "en": "One-time credentials"
+    },
+    "initial_password": {
+      "ko": "초기 비밀번호",
+      "en": "Initial password"
+    },
+    "failures": {
+      "ko": "실패 목록",
+      "en": "Failures"
+    },
+    "registration_failures": {
+      "ko": "등록 실패 목록",
+      "en": "Registration failures"
+    },
+    "failure_reason": {
+      "ko": "실패 사유",
+      "en": "Failure reason"
+    },
+    "register": {
+      "ko": "등록",
+      "en": "Register"
+    },
+    "create_user": {
+      "ko": "새 사용자 생성",
+      "en": "Create user"
+    },
+    "letters_numbers_underscores": {
+      "ko": "영문/숫자/언더스코어",
+      "en": "Letters/numbers/underscores"
+    },
+    "password": {
+      "ko": "비밀번호",
+      "en": "Password"
+    },
+    "no_group": {
+      "ko": "그룹 없음",
+      "en": "No group"
+    },
+    "create_user_2": {
+      "ko": "사용자 생성",
+      "en": "Create user"
+    },
+    "edit_user": {
+      "ko": "사용자 수정",
+      "en": "Edit user"
+    },
+    "reset_password": {
+      "ko": "비밀번호 재설정",
+      "en": "Reset password"
+    },
+    "new_password": {
+      "ko": "새 비밀번호",
+      "en": "New password"
+    },
+    "enter_a_value_to_change_the_password": {
+      "ko": "입력하면 비밀번호가 변경됩니다",
+      "en": "Enter a value to change the password"
+    },
+    "save_changes": {
+      "ko": "변경사항 저장",
+      "en": "Save changes"
+    },
+    "group_management_admin": {
+      "ko": "그룹 관리 - 관리자",
+      "en": "Group management - Admin"
+    },
+    "create_and_manage_user_groups": {
+      "ko": "사용자 그룹 생성 및 관리",
+      "en": "Create and manage user groups"
+    },
+    "new_group": {
+      "ko": "+ 새 그룹",
+      "en": "+ New group"
+    },
+    "groups": {
+      "ko": "그룹 목록",
+      "en": "Groups"
+    },
+    "members": {
+      "ko": "멤버",
+      "en": "Members"
+    },
+    "no_groups": {
+      "ko": "그룹이 없습니다",
+      "en": "No groups"
+    },
+    "no_groups_have_been_added": {
+      "ko": "등록된 그룹이 없습니다.",
+      "en": "No groups have been added."
+    },
+    "create_the_first_group": {
+      "ko": "+ 첫 번째 그룹 만들기",
+      "en": "+ Create the first group"
+    },
+    "create_group": {
+      "ko": "새 그룹 생성",
+      "en": "Create group"
+    },
+    "group_name": {
+      "ko": "그룹 이름",
+      "en": "Group name"
+    },
+    "enter_group_name": {
+      "ko": "그룹 이름 입력",
+      "en": "Enter group name"
+    },
+    "description": {
+      "ko": "설명",
+      "en": "Description"
+    },
+    "group_description_optional": {
+      "ko": "그룹 설명 (선택)",
+      "en": "Group description (optional)"
+    },
+    "create_group_2": {
+      "ko": "그룹 생성",
+      "en": "Create group"
+    },
+    "edit_group": {
+      "ko": "그룹 수정",
+      "en": "Edit group"
+    },
+    "ai_connections_and_models_admin": {
+      "ko": "AI 연결·모델 - 관리자",
+      "en": "AI connections and models - Admin"
+    },
+    "provider_connection_model_registration_role_tests_authoring_defaults_and_call_settings": {
+      "ko": "제공자 연결 → 모델 등록 → 역할 시험 → 작성 기본값·호출 설정",
+      "en": "Provider connection → Model registration → Role tests → Authoring defaults and call settings"
+    },
+    "loading_settings": {
+      "ko": "설정을 불러오는 중입니다.",
+      "en": "Loading settings."
+    },
+    "reload_settings": {
+      "ko": "설정 다시 불러오기",
+      "en": "Reload settings"
+    },
+    "selected_action": {
+      "ko": "선택한 작업",
+      "en": "Selected action"
+    },
+    "api_usage_admin": {
+      "ko": "API 사용량 - 관리자",
+      "en": "API usage - Admin"
+    },
+    "unknown": {
+      "ko": "알 수 없음",
+      "en": "Unknown"
+    },
+    "record": {
+      "ko": "기록",
+      "en": "Record"
+    },
+    "provider": {
+      "ko": "제공자",
+      "en": "Provider"
+    },
+    "model": {
+      "ko": "모델",
+      "en": "Model"
+    },
+    "purpose": {
+      "ko": "목적",
+      "en": "Purpose"
+    },
+    "attempt": {
+      "ko": "시도",
+      "en": "Attempt"
+    },
+    "time_utc": {
+      "ko": "시간 (UTC)",
+      "en": "Time (UTC)"
+    },
+    "input_tokens": {
+      "ko": "입력 토큰",
+      "en": "Input tokens"
+    },
+    "output_tokens": {
+      "ko": "출력 토큰",
+      "en": "Output tokens"
+    },
+    "cache_read_tokens": {
+      "ko": "캐시 읽기 토큰",
+      "en": "Cache read tokens"
+    },
+    "cache_write_tokens": {
+      "ko": "캐시 쓰기 토큰",
+      "en": "Cache write tokens"
+    },
+    "reasoning_tokens": {
+      "ko": "추론 토큰",
+      "en": "Reasoning tokens"
+    },
+    "total_tokens": {
+      "ko": "총 토큰",
+      "en": "Total tokens"
+    },
+    "estimated_cost_usd": {
+      "ko": "추정 비용 (USD)",
+      "en": "Estimated cost (USD)"
+    },
+    "pricing_date_and_source": {
+      "ko": "단가 기준일·근거",
+      "en": "Pricing date and source"
+    },
+    "legacy_record": {
+      "ko": "기존 기록",
+      "en": "Legacy record"
+    },
+    "call_attempt": {
+      "ko": "호출 시도",
+      "en": "Call attempt"
+    },
+    "admin_comparison_comparison": {
+      "ko": "관리자 비교 (comparison)",
+      "en": "Admin comparison (comparison)"
+    },
+    "refused": {
+      "ko": "거절",
+      "en": "Refused"
+    },
+    "timed_out": {
+      "ko": "시간 초과",
+      "en": "Timed out"
+    },
+    "interrupted": {
+      "ko": "중단",
+      "en": "Interrupted"
+    },
+    "in_progress_2": {
+      "ko": "진행 중",
+      "en": "In progress"
+    },
+    "error": {
+      "ko": "오류:",
+      "en": "Error:"
+    },
+    "usage": {
+      "ko": "사용량:",
+      "en": "Usage:"
+    },
+    "complete": {
+      "ko": "완전",
+      "en": "Complete"
+    },
+    "partial_unknown": {
+      "ko": "일부 / 알 수 없음",
+      "en": "Partial / Unknown"
+    },
+    "started": {
+      "ko": "시작:",
+      "en": "Started:"
+    },
+    "first_output": {
+      "ko": "첫 출력:",
+      "en": "First output:"
+    },
+    "ended": {
+      "ko": "종료:",
+      "en": "Ended:"
+    },
+    "retry_delay_ms": {
+      "ko": "재시도 대기 (ms):",
+      "en": "Retry delay (ms):"
+    },
+    "source": {
+      "ko": "근거:",
+      "en": "Source:"
+    },
+    "no_records": {
+      "ko": "기록이 없습니다.",
+      "en": "No records."
+    },
+    "api_usage": {
+      "ko": "API 사용량",
+      "en": "API usage"
+    },
+    "call_attempts_token_usage_and_known_estimated_costs_by_provider": {
+      "ko": "제공자별 호출 시도·토큰 사용량·알려진 추정 비용",
+      "en": "Call attempts, token usage and known estimated costs by provider"
+    },
+    "usage_summary": {
+      "ko": "사용량 요약",
+      "en": "Usage summary"
+    },
+    "known_estimated_cost_total": {
+      "ko": "알려진 추정 비용 합계",
+      "en": "Known estimated cost total"
+    },
+    "generation_attempts_with_unknown_cost": {
+      "ko": "미산정 생성 시도 수",
+      "en": "Generation attempts with unknown cost"
+    },
+    "non_generation_catalog_calls": {
+      "ko": "비생성 목록 호출 수",
+      "en": "Non-generation catalog calls"
+    },
+    "this_subtotal_covers_known_generation_cost_estimates_only_it_excludes_unknown_costs_and_catalog_call": {
+      "ko": "생성 호출의 알려진 추정 비용만 더한 부분 합계이며, 전체 과금액이 아닙니다. 미산정 비용과 비생성 목록 호출은 합계에서 제외합니다.",
+      "en": "This subtotal covers known generation cost estimates only. It excludes unknown costs and catalog calls and does not represent the full bill."
+    },
+    "new_estimates_use_verified_published_paid_rates_actual_charges_may_differ_with_free_usage_credits_di": {
+      "ko": "새 추정 비용은 확인된 공시 유료 단가 기준입니다. 무료 이용·크레딧·개별 할인·세금에 따른 실제 청구액은 다를 수 있습니다.",
+      "en": "New estimates use verified published paid rates. Actual charges may differ with free usage, credits, discounts and taxes."
+    },
+    "legacy_costs_are_preserved_legacy_records_cannot_establish_total_attempts_failures_retries_or_unknow": {
+      "ko": "기존 기록의 비용을 보존합니다. 기존 기록만으로는 실패·재시도를 포함한 전체 시도 수와 미산정 건수를 확인할 수 없습니다.",
+      "en": "Legacy costs are preserved. Legacy records cannot establish total attempts, failures, retries or unknown costs."
+    },
+    "unknown_cost_counts_include_only_recorded_generation_attempts_legacy_records_without_attempt_data_ar": {
+      "ko": "미산정 생성 시도 수는 호출 원장에 기록된 시도만 셉니다. 시도 정보가 없는 기존 기록은 이 건수에 포함하지 않습니다.",
+      "en": "Unknown-cost counts include only recorded generation attempts. Legacy records without attempt data are excluded."
+    },
+    "totals_cover_all_records_the_tables_show_the_latest_100_unobserved_values_appear_as_unknown_rather_t": {
+      "ko": "합계·건수는 전체 기록 기준이며, 아래 표는 최근 100건입니다. 관측되지 않은 값은 ‘알 수 없음’으로 표시하며 0으로 대체하지 않습니다.",
+      "en": "Totals cover all records; the tables show the latest 100. Unobserved values appear as Unknown rather than zero."
+    },
+    "cache_and_reasoning_tokens_are_breakdowns_not_added_to_totals_again_cancellation_or_interruption_doe": {
+      "ko": "캐시·추론 토큰은 상세 항목이며 총량에 다시 더하지 않습니다. 취소·중단은 제공자의 과금 중단을 보장하지 않습니다.",
+      "en": "Cache and reasoning tokens are breakdowns, not added to totals again. Cancellation or interruption does not guarantee billing stops."
+    },
+    "focus_the_table_and_use_the_left_and_right_arrow_keys_to_view_all_columns": {
+      "ko": "표에 초점을 두고 좌우 방향키로 모든 열을 확인할 수 있습니다.",
+      "en": "Focus the table and use the left and right arrow keys to view all columns."
+    },
+    "generation_calls_and_legacy_records": {
+      "ko": "생성 호출 및 기존 기록",
+      "en": "Generation calls and legacy records"
+    },
+    "non_generation_catalog_calls_excluded_from_generation_costs": {
+      "ko": "비생성 목록 호출 — 생성 비용 집계에서 제외",
+      "en": "Non-generation catalog calls — excluded from generation costs"
+    },
+    "scenario_model_comparison_admin": {
+      "ko": "시나리오 모델 비교 - 관리자",
+      "en": "Scenario model comparison - Admin"
+    },
+    "scenario_model_comparison": {
+      "ko": "시나리오 모델 비교",
+      "en": "Scenario model comparison"
+    },
+    "choose_a_saved_scenario": {
+      "ko": "저장된 시나리오 선택",
+      "en": "Choose a saved scenario"
+    },
+    "all_panels_use_the_same_question_and_adopted_dialogue_results_are_retained_for_30_days_after_creatio": {
+      "ko": "모든 패널이 같은 질문과 채택된 대화를 사용합니다. 결과는 생성 후 30일 동안 보존합니다.",
+      "en": "All panels use the same question and adopted dialogue. Results are retained for 30 days after creation."
+    },
+    "adopting_a_student_response_updates_the_canonical_conversation_history_applying_a_model_opens_the_ed": {
+      "ko": "학생 응답 채택은 기준 대화 이력을 갱신합니다. 모델 적용은 작성기로 이동하며 별도 저장 또는 게시가 필요합니다. 비교 자료는 수업 기록과 분리됩니다.",
+      "en": "Adopting a student response updates the canonical conversation history. Applying a model opens the editor and requires a separate save or publication. Comparison data is separate from classroom records."
+    },
+    "canonical_dialogue": {
+      "ko": "기준 대화",
+      "en": "Canonical dialogue"
+    },
+    "comparison_conversation_controls": {
+      "ko": "비교 대화 조작",
+      "en": "Comparison conversation controls"
+    },
+    "common_teacher_question": {
+      "ko": "공통 교사 질문",
+      "en": "Common teacher question"
+    },
+    "results_by_model": {
+      "ko": "모델별 결과",
+      "en": "Results by model"
+    },
+    "conversation_comparison_history": {
+      "ko": "전체 비교 이력",
+      "en": "Conversation comparison history"
+    },
+    "legacy_role_comparison_history": {
+      "ko": "이전 역할별 비교 이력",
+      "en": "Legacy role comparison history"
+    },
+    "a_change_or_running_task_caused_a_conflict_reload_the_settings": {
+      "ko": "다른 변경 또는 진행 중 작업과 충돌했습니다. 설정을 다시 불러오세요.",
+      "en": "A change or running task caused a conflict. Reload the settings."
+    },
+    "check_your_input_or_current_password": {
+      "ko": "입력값 또는 현재 비밀번호를 확인하세요.",
+      "en": "Check your input or current password."
+    },
+    "the_task_limit_has_been_reached_try_again_shortly": {
+      "ko": "작업 한도에 도달했습니다. 잠시 후 다시 시도하세요.",
+      "en": "The task limit has been reached. Try again shortly."
+    },
+    "could_not_complete_the_task_check_connection_settings_and_service_status": {
+      "ko": "작업을 완료할 수 없습니다. 연결 설정과 서비스 상태를 확인하세요.",
+      "en": "Could not complete the task. Check connection settings and service status."
+    },
+    "settings_loaded_opening_this_page_does_not_call_providers": {
+      "ko": "설정을 불러왔습니다. 화면 진입은 제공자를 호출하지 않습니다.",
+      "en": "Settings loaded. Opening this page does not call providers."
+    },
+    "could_not_load_ai_connection_settings_check_that_administrator_connection_management_is_available": {
+      "ko": "AI 연결 설정을 불러올 수 없습니다. 관리자 연결 기능이 준비되었는지 확인하세요.",
+      "en": "Could not load AI connection settings. Check that administrator connection management is available."
+    },
+    "task_completed": {
+      "ko": "작업을 완료했습니다.",
+      "en": "Task completed."
+    },
+    "working": {
+      "ko": "작업 중입니다.",
+      "en": "Working."
+    },
+    "reload_the_latest_state": {
+      "ko": "최신 상태를 다시 불러오세요.",
+      "en": "Reload the latest state."
+    },
+    "task_failed": {
+      "ko": "작업에 실패했습니다.",
+      "en": "Task failed."
+    },
+    "change_connection": {
+      "ko": "연결 변경",
+      "en": "Change connection"
+    },
+    "replacing_a_key_or_re_enabling_a_connection_requires_role_reverification_calls_started_before_replac": {
+      "ko": "키 교체·재활성화 후에는 역할 재검증이 필요합니다. 교체 전에 시작한 호출은 기존 키로 완료할 수 있습니다. 비활성화·삭제는 새 호출을 즉시 차단하고 이전 키로 시작한 호출에도 중단을 요청합니다. 제공자 처리 및 이미 발생한 비용은 취소되지 않을 수 있습니다. 모델 설정과 과거 기록은 보존합니다.",
+      "en": "Replacing a key or re-enabling a connection requires role reverification. Calls started before replacement may finish with the previous key. Disabling or deleting blocks new calls immediately and requests cancellation of earlier calls. Provider processing and incurred costs may not be cancelled. Model settings and historical records are preserved."
+    },
+    "affected_items": {
+      "ko": "영향 범위",
+      "en": "Affected items"
+    },
+    "new_api_key": {
+      "ko": "새 API 키",
+      "en": "New API key"
+    },
+    "current_password": {
+      "ko": "현재 비밀번호",
+      "en": "Current password"
+    },
+    "submit_change": {
+      "ko": "변경 제출",
+      "en": "Submit change"
+    },
+    "non_generation_verification_and_catalog_refresh_completed": {
+      "ko": "비생성 확인·목록 갱신을 완료했습니다.",
+      "en": "Non-generation verification and catalog refresh completed."
+    },
+    "register_model": {
+      "ko": "모델 등록",
+      "en": "Register model"
+    },
+    "model_registered_role_testing_is_required_before_execution": {
+      "ko": "모델 등록을 완료했습니다. 역할 시험 전에는 실행할 수 없습니다.",
+      "en": "Model registered. Role testing is required before execution."
+    },
+    "new_models_are_registered_as_disabled_and_unverified_catalog_listing_does_not_replace_role_testing_m": {
+      "ko": "새 모델은 비활성·미검증으로 등록합니다. 목록에 있어도 역할 시험은 별도로 필요합니다. 직접 입력 모델은 기능 정의가 필요할 수 있습니다.",
+      "en": "New models are registered as disabled and unverified. Catalog listing does not replace role testing. Manually entered models may need a capability definition."
+    },
+    "model_id": {
+      "ko": "모델 ID",
+      "en": "Model ID"
+    },
+    "display_name": {
+      "ko": "표시명",
+      "en": "Display name"
+    },
+    "model_enabled": {
+      "ko": "모델 활성",
+      "en": "Model enabled"
+    },
+    "enabling_requires_a_matching_capability_definition_and_catalog_plus_successful_current_role_verifica": {
+      "ko": "모델 활성화에는 기능 정의·목록 일치와 현재 역할 검증 성공이 필요합니다.",
+      "en": "Enabling requires a matching capability definition and catalog, plus successful current role verification."
+    },
+    "model_ids_cannot_change_after_registration_disabling_blocks_new_calls_only_the_server_validates_supp": {
+      "ko": "모델 ID는 등록 후 변경할 수 없습니다. 모델 비활성화는 신규 호출만 막습니다. 지원 옵션 변경은 서버에서 조합과 범위를 검증합니다.",
+      "en": "Model IDs cannot change after registration. Disabling blocks new calls only. The server validates supported option combinations and ranges."
+    },
+    "capability_definition_required_option_editing_and_role_tests_are_unavailable": {
+      "ko": "기능 정의 필요: 옵션 편집과 역할 시험을 사용할 수 없습니다.",
+      "en": "Capability definition required: option editing and role tests are unavailable."
+    },
+    "save_model_settings": {
+      "ko": "모델 설정 저장",
+      "en": "Save model settings"
+    },
+    "role_test": {
+      "ko": "역할 시험",
+      "en": "Role test"
+    },
+    "role_test_started_check_progress_or_cancel_explicitly": {
+      "ko": "역할 시험을 시작했습니다. 진행 조회 또는 명시적 취소를 사용할 수 있습니다.",
+      "en": "Role test started. Check progress or cancel explicitly."
+    },
+    "plain_text_and_streaming": {
+      "ko": "일반 텍스트와 스트리밍",
+      "en": "Plain text and streaming"
+    },
+    "verify_manual_coaching_and_automatic_no_intervention_as_separate_structured_responses": {
+      "ko": "수동 코칭과 자동 미개입을 각각 단일 구조화 응답으로 확인",
+      "en": "Verify manual coaching and automatic no-intervention as separate structured responses"
+    },
+    "v2_single_analysis_and_evidence_subset_synthesis_json": {
+      "ko": "v2 단일 분석과 근거 부분집합 종합 JSON",
+      "en": "v2 single analysis and evidence-subset synthesis JSON"
+    },
+    "up_to_2_generation_calls_maximum_output_per_call": {
+      "ko": "최대 2회 생성 호출 · 각 호출 최대 출력",
+      "en": "Up to 2 generation calls · Maximum output per call"
+    },
+    "tokens_no_automatic_retries": {
+      "ko": "토큰 · 자동 재시도 0회",
+      "en": "tokens · No automatic retries"
+    },
+    "charges_may_apply_tests_use_fixed_synthetic_inputs_success_does_not_guarantee_educational_quality_a_": {
+      "ko": "유료 비용이 발생할 수 있습니다. 고정 합성 입력을 사용하며 시험 성공은 교육적 품질 보증이 아닙니다. 첫 단계 실패 시 다음 호출은 하지 않습니다.",
+      "en": "Charges may apply. Tests use fixed synthetic inputs; success does not guarantee educational quality. A failed first step prevents the next call."
+    },
+    "each_administrator_can_run_one_test_batch_at_a_time_tests_do_not_queue_when_capacity_is_unavailable_": {
+      "ko": "관리자당 시험은 한 묶음만 진행할 수 있습니다. 한도 부족 시 대기하지 않으므로 잠시 후 다시 시도하세요. 페이지를 닫아도 시험은 재시작하거나 중단되지 않습니다. 진행 조회와 시험 취소를 사용하세요.",
+      "en": "Each administrator can run one test batch at a time. Tests do not queue when capacity is unavailable; try again shortly. Closing this page neither restarts nor stops the test. Use progress lookup or cancellation."
+    },
+    "start_test": {
+      "ko": "시험 시작",
+      "en": "Start test"
+    },
+    "test_status": {
+      "ko": "시험 상태:",
+      "en": "Test status:"
+    },
+    "stopped": {
+      "ko": "중단됨",
+      "en": "Stopped"
+    },
+    "cancellation_requested_provider_processing_and_incurred_costs_may_not_be_cancelled": {
+      "ko": "중단을 요청했습니다. 제공자 처리 및 이미 발생한 비용은 취소되지 않을 수 있습니다.",
+      "en": "Cancellation requested. Provider processing and incurred costs may not be cancelled."
+    },
+    "the_admin_limit_must_be_below_the_total_limit_and_first_output_timeouts_must_not_exceed_total_timeou": {
+      "ko": "관리자 한도는 전체 한도보다 작아야 하고 첫 본문 제한은 전체 시간 제한 이하여야 합니다.",
+      "en": "The admin limit must be below the total limit, and first-output timeouts must not exceed total timeouts."
+    },
+    "defaults_apply_to_new_scenarios_only_existing_scenarios_and_sessions_remain_unchanged_unavailable_de": {
+      "ko": "새 시나리오 작성용 기본값입니다. 기존 시나리오·세션은 변경하지 않습니다. 사용 불가 기본값을 자동으로 대체하지 않습니다. 한도·시간 변경은 이후 시작 호출에 적용합니다.",
+      "en": "Defaults apply to new scenarios only. Existing scenarios and sessions remain unchanged. Unavailable defaults are not automatically replaced. Limit and timeout changes apply to future calls."
+    },
+    "default_authoring_model": {
+      "ko": "작성 기본 모델",
+      "en": "Default authoring model"
+    },
+    "total_call_limit": {
+      "ko": "전체 호출 한도",
+      "en": "Total call limit"
+    },
+    "openai_call_limit": {
+      "ko": "OpenAI 호출 한도",
+      "en": "OpenAI call limit"
+    },
+    "claude_call_limit": {
+      "ko": "Claude 호출 한도",
+      "en": "Claude call limit"
+    },
+    "gemini_call_limit": {
+      "ko": "Gemini 호출 한도",
+      "en": "Gemini call limit"
+    },
+    "admin_task_limit": {
+      "ko": "관리자 작업 한도",
+      "en": "Admin task limit"
+    },
+    "concurrent_call_limits": {
+      "ko": "동시 호출 한도",
+      "en": "Concurrent call limits"
+    },
+    "connection_timeout_seconds": {
+      "ko": "연결 제한(초)",
+      "en": "Connection timeout (seconds)"
+    },
+    "student_first_output_timeout_seconds": {
+      "ko": "학생봇 첫 본문 제한(초)",
+      "en": "Student first-output timeout (seconds)"
+    },
+    "student_total_timeout_seconds": {
+      "ko": "학생봇 전체 제한(초)",
+      "en": "Student total timeout (seconds)"
+    },
+    "mentor_first_output_timeout_seconds": {
+      "ko": "멘토 첫 본문 제한(초)",
+      "en": "Mentor first-output timeout (seconds)"
+    },
+    "mentor_total_timeout_seconds": {
+      "ko": "멘토 전체 제한(초)",
+      "en": "Mentor total timeout (seconds)"
+    },
+    "analysis_total_timeout_seconds": {
+      "ko": "사후 분석 전체 제한(초)",
+      "en": "Analysis total timeout (seconds)"
+    },
+    "catalog_total_timeout_seconds": {
+      "ko": "목록 전체 제한(초)",
+      "en": "Catalog total timeout (seconds)"
+    },
+    "timeouts": {
+      "ko": "시간 제한",
+      "en": "Timeouts"
+    },
+    "save_settings": {
+      "ko": "설정 저장",
+      "en": "Save settings"
+    },
+    "conversation_open": {
+      "ko": "대화 진행",
+      "en": "Conversation open"
+    },
+    "generating_responses": {
+      "ko": "응답 생성 중",
+      "en": "Generating responses"
+    },
+    "awaiting_student_response_adoption": {
+      "ko": "학생 응답 채택 대기",
+      "en": "Awaiting student response adoption"
+    },
+    "current_panel_retry_required": {
+      "ko": "현재 패널 재시도 필요",
+      "en": "Current panel retry required"
+    },
+    "analyzing": {
+      "ko": "사후 분석 중",
+      "en": "Analyzing"
+    },
+    "comparison_ended": {
+      "ko": "비교 종료",
+      "en": "Comparison ended"
+    },
+    "could_not_retrieve_comparison_records": {
+      "ko": "비교 기록을 조회할 수 없습니다.",
+      "en": "Could not retrieve comparison records."
+    },
+    "saved_comparison_state_confirmed": {
+      "ko": "저장된 비교 상태를 확인했습니다.",
+      "en": "Saved comparison state confirmed."
+    },
+    "could_not_find_or_open_this_comparison_conversation_your_input_is_preserved_choose_a_saved_scenario_": {
+      "ko": "비교 대화를 찾거나 열 수 없습니다. 입력은 유지됩니다. 저장된 시나리오 선택 또는 상태 새로고침을 사용하세요.",
+      "en": "Could not find or open this comparison conversation. Your input is preserved. Choose a saved scenario or refresh the state."
+    },
+    "another_request_was_processed_first_refresh_the_state": {
+      "ko": "다른 요청이 먼저 처리되었습니다. 상태를 새로고침하세요.",
+      "en": "Another request was processed first. Refresh the state."
+    },
+    "a_comparison_is_running": {
+      "ko": "실행 중인 비교가 있습니다.",
+      "en": "A comparison is running."
+    },
+    "adopt_a_completed_response_or_handle_the_automatic_check_first": {
+      "ko": "완료 응답 채택 또는 자동 검사를 먼저 처리하세요.",
+      "en": "Adopt a completed response or handle the automatic check first."
+    },
+    "check_the_model_connection_and_role_verification": {
+      "ko": "모델·연결·역할 검증을 확인하세요.",
+      "en": "Check the model, connection and role verification."
+    },
+    "the_execution_contract_changed_start_a_new_comparison": {
+      "ko": "실행 계약이 변경되었습니다. 새 비교를 시작하세요.",
+      "en": "The execution contract changed. Start a new comparison."
+    },
+    "check_the_input_limits_so_all_panels_can_process_the_common_input": {
+      "ko": "모든 패널이 공통 입력을 처리할 수 있도록 입력 한도를 확인하세요.",
+      "en": "Check the input limits so all panels can process the common input."
+    },
+    "the_attempt_changed_refresh_the_state": {
+      "ko": "시도가 변경되었습니다. 상태를 새로고침하세요.",
+      "en": "The attempt changed. Refresh the state."
+    },
+    "the_concurrent_call_limit_was_reached": {
+      "ko": "동시 호출 한도에 도달했습니다.",
+      "en": "The concurrent call limit was reached."
+    },
+    "could_not_find_or_open_this_comparison_conversation": {
+      "ko": "비교 대화를 찾거나 열 수 없습니다.",
+      "en": "Could not find or open this comparison conversation."
+    },
+    "could_not_process_the_request_your_input_is_preserved": {
+      "ko": "요청을 처리하지 못했습니다. 입력을 보존했습니다.",
+      "en": "Could not process the request. Your input is preserved."
+    },
+    "request_results_saved": {
+      "ko": "요청 결과를 저장했습니다.",
+      "en": "Request results saved."
+    },
+    "could_not_confirm_the_request_result_your_input_is_preserved_refresh_the_state_to_check_saved_result": {
+      "ko": "요청 결과를 확인할 수 없습니다. 입력은 유지됩니다. 상태 새로고침으로 저장된 결과를 확인하세요.",
+      "en": "Could not confirm the request result. Your input is preserved. Refresh the state to check saved results."
+    },
+    "recovery_lookup_ended_without_confirming_the_request_result_refresh_the_state_or_use_an_allowed_stop": {
+      "ko": "복구 조회가 끝났습니다. 요청 결과는 확인되지 않았습니다. 상태 새로고침 또는 허용된 중지를 사용하세요.",
+      "en": "Recovery lookup ended without confirming the request result. Refresh the state or use an allowed stop action."
+    },
+    "check_the_current_model_connection_role_verification_or_source_scenario": {
+      "ko": "현재 모델·연결·역할 검증 또는 원본 시나리오를 확인하세요.",
+      "en": "Check the current model, connection, role verification or source scenario."
+    },
+    "canonical_conversation_history": {
+      "ko": "기준 대화 이력",
+      "en": "Canonical conversation history"
+    },
+    "overall_status": {
+      "ko": "전체 상태:",
+      "en": "Overall status:"
+    },
+    "expires": {
+      "ko": "만료",
+      "en": "Expires"
+    },
+    "other_panels_are_running_completed_responses_cannot_be_adopted_yet": {
+      "ko": "다른 패널 실행 중 · 완료 응답도 채택할 수 없습니다.",
+      "en": "Other panels are running · Completed responses cannot be adopted yet."
+    },
+    "an_automatic_mentor_check_is_pending_for_the_adopted_turn_complete_it_before_the_next_question_or_en": {
+      "ko": "채택된 턴의 자동 멘토 검사가 대기 중입니다. 검사 후 다음 질문 또는 종료를 진행하세요.",
+      "en": "An automatic mentor check is pending for the adopted turn. Complete it before the next question or ending."
+    },
+    "adopt_one_eligible_completed_response_to_update_the_canonical_conversation_history": {
+      "ko": "완료 응답 중 서버가 허용한 응답 하나를 채택하면 다음 기준 대화 이력이 갱신됩니다.",
+      "en": "Adopt one eligible completed response to update the canonical conversation history."
+    },
+    "response_adoption_is_currently_unavailable_refresh_the_state_to_check_eligibility": {
+      "ko": "현재 응답 채택이 허용되지 않습니다. 상태 새로고침으로 조건을 확인하세요.",
+      "en": "Response adoption is currently unavailable. Refresh the state to check eligibility."
+    },
+    "no_completed_response_is_available_to_adopt_check_retry_eligibility_for_the_current_panels": {
+      "ko": "채택할 완료 응답이 없습니다. 현재 대상 패널의 재시도 조건을 확인하세요.",
+      "en": "No completed response is available to adopt. Check retry eligibility for the current panels."
+    },
+    "teacher_2": {
+      "ko": "교사:",
+      "en": "Teacher:"
+    },
+    "student_2": {
+      "ko": "학생:",
+      "en": "Student:"
+    },
+    "send_question": {
+      "ko": "질문 보내기",
+      "en": "Send question"
+    },
+    "mentor_help": {
+      "ko": "멘토 도움",
+      "en": "Mentor help"
+    },
+    "pending_automatic_check": {
+      "ko": "대기 중 자동 검사",
+      "en": "Pending automatic check"
+    },
+    "end_comparison_and_analyze": {
+      "ko": "비교 종료 및 분석",
+      "en": "End comparison and analyze"
+    },
+    "refresh_state": {
+      "ko": "상태 새로고침",
+      "en": "Refresh state"
+    },
+    "results": {
+      "ko": "결과",
+      "en": "Results"
+    },
+    "panel": {
+      "ko": "패널",
+      "en": "Panel"
+    },
+    "adopt_student_response": {
+      "ko": "학생 응답 채택",
+      "en": "Adopt student response"
+    },
+    "retry_panel": {
+      "ko": "패널 재시도",
+      "en": "Retry panel"
+    },
+    "stop_panel": {
+      "ko": "패널 중지",
+      "en": "Stop panel"
+    },
+    "turn": {
+      "ko": "턴",
+      "en": "Turn"
+    },
+    "stop_all": {
+      "ko": "전체 중지",
+      "en": "Stop all"
+    },
+    "choose_a_saved_scenario_first": {
+      "ko": "저장된 시나리오를 먼저 선택하세요.",
+      "en": "Choose a saved scenario first."
+    },
+    "number_of_comparison_models": {
+      "ko": "비교 모델 수",
+      "en": "Number of comparison models"
+    },
+    "start_comparison": {
+      "ko": "비교 시작",
+      "en": "Start comparison"
+    },
+    "common_model": {
+      "ko": "공통 모델",
+      "en": "Common model"
+    },
+    "could_not_load_comparison_history_try_again": {
+      "ko": "비교 이력을 불러오지 못했습니다. 다시 확인하세요.",
+      "en": "Could not load comparison history. Try again."
+    },
+    "no_retained_comparison_conversations": {
+      "ko": "보존 중인 비교 대화가 없습니다.",
+      "en": "No retained comparison conversations."
+    },
+    "delete_comparison_record": {
+      "ko": "비교 기록 삭제",
+      "en": "Delete comparison record"
+    },
+    "delete_the_entire_comparison_record_the_cost_ledger_will_be_retained": {
+      "ko": "전체 비교 기록을 삭제하시겠습니까? 비용 원장은 보존됩니다.",
+      "en": "Delete the entire comparison record? The cost ledger will be retained."
+    },
+    "could_not_confirm_deletion_the_current_list_is_preserved": {
+      "ko": "비교 기록 삭제 결과를 확인할 수 없습니다. 현재 목록은 유지됩니다.",
+      "en": "Could not confirm deletion. The current list is preserved."
+    },
+    "could_not_delete_the_comparison_record_check_the_state_again": {
+      "ko": "비교 기록을 삭제하지 못했습니다. 상태를 새로 확인하세요.",
+      "en": "Could not delete the comparison record. Check the state again."
+    },
+    "next_20": {
+      "ko": "다음 20개",
+      "en": "Next 20"
+    },
+    "comparison_history_list": {
+      "ko": "비교 이력 목록",
+      "en": "Comparison history list"
+    },
+    "comparison_history_details": {
+      "ko": "비교 이력 상세",
+      "en": "Comparison history details"
+    },
+    "your_comparisons_are_retained_for_30_days_after_creation_retrying_does_not_extend_their_expiry": {
+      "ko": "내 비교 기록은 생성 후 30일 동안 보존합니다. 재시도해도 만료 시각은 연장되지 않습니다.",
+      "en": "Your comparisons are retained for 30 days after creation. Retrying does not extend their expiry."
+    },
+    "could_not_find_or_open_the_comparison_viewing_retrying_and_copying_are_unavailable_after_30_days": {
+      "ko": "비교를 찾거나 열 수 없습니다. 생성 후 30일이 지나면 조회·재시도·복사할 수 없습니다.",
+      "en": "Could not find or open the comparison. Viewing, retrying and copying are unavailable after 30 days."
+    },
+    "my_comparison_history_newest_first_20_per_page": {
+      "ko": "내 비교 이력 · 최신순 · 20개씩",
+      "en": "My comparison history · Newest first · 20 per page"
+    },
+    "unsaved_edits_to_a_saved_scenario": {
+      "ko": "저장 시나리오의 미저장 수정",
+      "en": "Unsaved edits to a saved scenario"
+    },
+    "new_draft": {
+      "ko": "새 초안",
+      "en": "New draft"
+    },
+    "untitled_draft": {
+      "ko": "제목 없는 초안",
+      "en": "Untitled draft"
+    },
+    "details": {
+      "ko": "상세",
+      "en": "Details"
+    },
+    "no_retained_comparisons": {
+      "ko": "보존 중인 비교가 없습니다.",
+      "en": "No retained comparisons."
+    },
+    "created_2": {
+      "ko": "생성",
+      "en": "Created"
+    },
+    "retained_for_30_days": {
+      "ko": "30일 보존",
+      "en": "Retained for 30 days"
+    },
+    "current_question": {
+      "ko": "현재 질문:",
+      "en": "Current question:"
+    },
+    "common_input_hash": {
+      "ko": "공통 입력 hash:",
+      "en": "Common input hash:"
+    },
+    "historical_panel": {
+      "ko": "과거 패널",
+      "en": "Historical panel"
+    },
+    "apply_this_model": {
+      "ko": "이 모델 적용",
+      "en": "Apply this model"
+    },
+    "open_source_scenario_editor": {
+      "ko": "원본 시나리오 편집 폼 열기",
+      "en": "Open source scenario editor"
+    },
+    "open_new_draft_with_these_conditions": {
+      "ko": "이 조건으로 새 초안 열기",
+      "en": "Open new draft with these conditions"
+    },
+    "delete_this_comparison_s_input_and_results_the_cost_ledger_will_be_retained": {
+      "ko": "이 비교의 입력과 결과를 삭제하시겠습니까? 비용 원장은 보존됩니다.",
+      "en": "Delete this comparison's input and results? The cost ledger will be retained."
+    },
+    "comparison_deleted_the_incurred_cost_ledger_is_retained": {
+      "ko": "비교 기록을 삭제했습니다. 발생한 비용 원장은 보존됩니다.",
+      "en": "Comparison deleted. The incurred-cost ledger is retained."
+    },
+    "could_not_delete_stop_the_running_comparison_before_deleting_again": {
+      "ko": "삭제하지 못했습니다. 진행 중 비교는 중지 후 다시 삭제하세요.",
+      "en": "Could not delete. Stop the running comparison before deleting again."
+    },
+    "running_comparisons_cannot_be_deleted_stop_the_comparison_and_check_again": {
+      "ko": "진행 중 비교는 삭제할 수 없습니다. 중지 후 다시 확인하세요.",
+      "en": "Running comparisons cannot be deleted. Stop the comparison and check again."
+    },
+    "could_not_load_comparison_details_try_again": {
+      "ko": "비교 상세를 불러오지 못했습니다. 다시 확인하세요.",
+      "en": "Could not load comparison details. Try again."
+    },
+    "waiting": {
+      "ko": "대기",
+      "en": "Waiting"
+    },
+    "processing": {
+      "ko": "처리 중",
+      "en": "Processing"
+    },
+    "streaming": {
+      "ko": "스트리밍",
+      "en": "Streaming"
+    },
+    "complete_analysis": {
+      "ko": "정상 분석",
+      "en": "Complete analysis"
+    },
+    "partial_analysis": {
+      "ko": "부분 분석",
+      "en": "Partial analysis"
+    },
+    "response_validation_failed": {
+      "ko": "응답 검증에 실패했습니다.",
+      "en": "Response validation failed."
+    },
+    "the_provider_request_limit_was_reached": {
+      "ko": "제공자 요청 한도에 도달했습니다.",
+      "en": "The provider request limit was reached."
+    },
+    "the_provider_refused_the_response": {
+      "ko": "제공자가 응답을 거절했습니다.",
+      "en": "The provider refused the response."
+    },
+    "the_response_timed_out": {
+      "ko": "응답 제한 시간을 초과했습니다.",
+      "en": "The response timed out."
+    },
+    "the_output_limit_was_reached": {
+      "ko": "출력 한도에 도달했습니다.",
+      "en": "The output limit was reached."
+    },
+    "this_run_was_cancelled_by_an_administrator": {
+      "ko": "관리자가 취소한 실행입니다.",
+      "en": "This run was cancelled by an administrator."
+    },
+    "permissions_or_ai_connection_model_availability_changed": {
+      "ko": "권한 또는 AI 연결·모델 사용 가능 상태가 변경되었습니다.",
+      "en": "Permissions or AI connection/model availability changed."
+    },
+    "saving_results_failed": {
+      "ko": "결과 저장에 실패했습니다.",
+      "en": "Saving results failed."
+    },
+    "execution_was_interrupted": {
+      "ko": "실행이 중단되었습니다.",
+      "en": "Execution was interrupted."
+    },
+    "the_provider_call_failed": {
+      "ko": "제공자 호출에 실패했습니다.",
+      "en": "The provider call failed."
+    },
+    "validated_partial_results_available": {
+      "ko": "검증된 부분 결과 있음",
+      "en": "Validated partial results available"
+    },
+    "no_validated_partial_results": {
+      "ko": "검증된 부분 결과 없음",
+      "en": "No validated partial results"
+    },
+    "model_unknown": {
+      "ko": "모델 unknown",
+      "en": "Model unknown"
+    },
+    "status_unknown": {
+      "ko": "상태 unknown",
+      "en": "Status unknown"
+    },
+    "provisional_response_incomplete_cannot_adopt": {
+      "ko": "잠정 응답 · 미완료 · 채택 불가",
+      "en": "Provisional response · Incomplete · Cannot adopt"
+    },
+    "no_mentor_intervention": {
+      "ko": "멘토 미개입",
+      "en": "No mentor intervention"
+    },
+    "mentor_coaching": {
+      "ko": "멘토 코칭",
+      "en": "Mentor coaching"
+    },
+    "started_2": {
+      "ko": "시작",
+      "en": "Started"
+    },
+    "total_time": {
+      "ko": "전체 시간",
+      "en": "Total time"
+    },
+    "first_output_2": {
+      "ko": "첫 본문",
+      "en": "First output"
+    },
+    "actual_input": {
+      "ko": "실제 입력",
+      "en": "Actual input"
+    },
+    "output": {
+      "ko": "출력",
+      "en": "Output"
+    },
+    "tokens_cost": {
+      "ko": "토큰 · 비용",
+      "en": "tokens · Cost"
+    },
+    "requested_model": {
+      "ko": "요청 모델",
+      "en": "Requested model"
+    },
+    "returned_model": {
+      "ko": "반환 모델",
+      "en": "Returned model"
+    },
+    "applied_options": {
+      "ko": "적용 옵션:",
+      "en": "Applied options:"
+    },
+    "retries_incur_additional_costs_previous_attempts": {
+      "ko": "재시도는 추가 비용이 발생합니다. 이전 시도",
+      "en": "Retries incur additional costs. Previous attempts"
+    },
+    "cancellation_does_not_guarantee_refunds_of_incurred_costs": {
+      "ko": "회 · 취소해도 발생한 비용은 환불을 보장하지 않습니다.",
+      "en": "· Cancellation does not guarantee refunds of incurred costs."
+    },
+    "previous_attempt": {
+      "ko": "이전 시도",
+      "en": "Previous attempt"
+    },
+    "cost": {
+      "ko": "비용",
+      "en": "Cost"
+    },
+    "close_comparison": {
+      "ko": "비교 닫기",
+      "en": "Close comparison"
+    },
+    "common_input": {
+      "ko": "공통 입력",
+      "en": "Common input"
+    },
+    "comparison_role": {
+      "ko": "비교 대상",
+      "en": "Comparison role"
+    },
+    "add_completed_pair": {
+      "ko": "완료 쌍 추가",
+      "en": "Add completed pair"
+    },
+    "current_student_question": {
+      "ko": "학생 현재 질문",
+      "en": "Current student question"
+    },
+    "comparison_panels": {
+      "ko": "비교 패널",
+      "en": "Comparison panels"
+    },
+    "comparison_panel_results": {
+      "ko": "비교 패널 결과",
+      "en": "Comparison panel results"
+    },
+    "add_panel": {
+      "ko": "패널 추가",
+      "en": "Add panel"
+    },
+    "unconfigured_verify_the_target_role_in_ai_connections_and_models": {
+      "ko": "미설정 · AI 연결·모델에서 대상 역할을 검증하세요.",
+      "en": "Unconfigured · Verify the target role in AI connections and models."
+    },
+    "single_panel_test": {
+      "ko": "단독 테스트",
+      "en": "Single-panel test"
+    },
+    "panels_common_context_comparison": {
+      "ko": "패널 · 동일 맥락 비교",
+      "en": "panels · Common-context comparison"
+    },
+    "model_and_options": {
+      "ko": "모델·옵션",
+      "en": "Model and options"
+    },
+    "remove": {
+      "ko": "제거",
+      "en": "Remove"
+    },
+    "last_teacher_message_analysis_optional": {
+      "ko": "마지막 교사 메시지 (분석, 선택)",
+      "en": "Last teacher message (analysis, optional)"
+    },
+    "the_full_canonical_conversation_history_is_used_classroom_recent_turn_limits_automatic_truncation_an": {
+      "ko": "기준 대화 이력 전체를 사용합니다. 수업의 최근 N턴 제한·자동 절삭·분할은 적용하지 않습니다. ",
+      "en": "The full canonical conversation history is used. Classroom recent-turn limits, automatic truncation and splitting do not apply. "
+    },
+    "mentor_off_enable_it_in_the_editor_before_running": {
+      "ko": "멘토 off · 편집 폼에서 켠 뒤 실행하세요.",
+      "en": "Mentor off · Enable it in the editor before running."
+    },
+    "intervention_judgment_test_classroom_start_turn_interval_and_count_limits_do_not_apply": {
+      "ko": "개입 판단 시험: 수업의 시작 턴·간격·횟수 제한은 적용하지 않음",
+      "en": "Intervention judgment test: classroom start-turn, interval and count limits do not apply"
+    },
+    "request_manual_coaching_for_the_last_completed_pair": {
+      "ko": "마지막 완료 쌍에 수동 코칭을 요청합니다.",
+      "en": "Request manual coaching for the last completed pair."
+    },
+    "analyze_the_full_dialogue_in_one_call_comparison_results_do_not_replace_educational_quality_approval": {
+      "ko": "대화 전체를 단일 호출로 분석합니다. 비교 결과는 교육 품질 승인을 대신하지 않습니다.",
+      "en": "Analyze the full dialogue in one call. Comparison results do not replace educational quality approval."
+    },
+    "compare_student_responses_to_the_current_question": {
+      "ko": "현재 질문에 대한 학생 응답을 비교합니다.",
+      "en": "Compare student responses to the current question."
+    },
+    "run_comparison": {
+      "ko": "비교 실행",
+      "en": "Run comparison"
+    },
+    "partial_subtotal_unknown_costs_present": {
+      "ko": "부분 합계 (미확인 비용 포함)",
+      "en": "Partial subtotal (unknown costs present)"
+    },
+    "total_cost": {
+      "ko": "비용 합계",
+      "en": "Total cost"
+    },
+    "canonical_history_is_ready_for_the_next_comparison_the_original_comparison_is_preserved": {
+      "ko": "다음 비교의 기준 대화 이력을 준비했습니다. 원본 비교는 유지됩니다.",
+      "en": "Canonical history is ready for the next comparison. The original comparison is preserved."
+    },
+    "open_the_source_editor_or_a_new_draft_with_these_conditions_to_apply_the_model": {
+      "ko": "현재 원본 편집 폼 또는 이 조건의 새 초안을 열어 적용하세요.",
+      "en": "Open the source editor or a new draft with these conditions to apply the model."
+    },
+    "the_comparison_is_running_apply_after_it_ends": {
+      "ko": "비교가 진행 중입니다. 종료 후 적용하세요.",
+      "en": "The comparison is running. Apply after it ends."
+    },
+    "could_not_find_or_open_the_comparison_or_panel_check_the_history_again": {
+      "ko": "비교 또는 패널을 찾거나 열 수 없습니다. 이력을 다시 확인하세요.",
+      "en": "Could not find or open the comparison or panel. Check the history again."
+    },
+    "check_current_role_verification_connection_and_options_before_applying": {
+      "ko": "현재 역할 검증·연결·옵션을 확인한 뒤 적용하세요.",
+      "en": "Check current role verification, connection and options before applying."
+    },
+    "could_not_apply_the_model_check_again": {
+      "ko": "모델을 적용하지 못했습니다. 다시 확인하세요.",
+      "en": "Could not apply the model. Check again."
+    },
+    "model_and_options_were_applied_to_the_unsaved_form_save_or_publish_separately": {
+      "ko": "대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.",
+      "en": "Model and options were applied to the unsaved form. Save or publish separately."
+    },
+    "could_not_find_or_open_the_comparison_records_are_retained_for_30_days_after_creation": {
+      "ko": "비교를 찾거나 열 수 없습니다. 보존기간은 생성 후 30일입니다.",
+      "en": "Could not find or open the comparison. Records are retained for 30 days after creation."
+    },
+    "a_comparison_is_running_or_an_attempt_changed_check_the_state_again": {
+      "ko": "진행 중 비교 또는 변경된 시도가 있습니다. 상태를 새로 확인하세요.",
+      "en": "A comparison is running or an attempt changed. Check the state again."
+    },
+    "could_not_reserve_capacity_for_all_panels_try_again_shortly": {
+      "ko": "전체 패널 슬롯을 확보하지 못했습니다. 잠시 후 다시 실행하세요.",
+      "en": "Could not reserve capacity for all panels. Try again shortly."
+    },
+    "check_ai_connection_and_model_settings": {
+      "ko": "AI 연결·모델 설정을 확인하세요.",
+      "en": "Check AI connection and model settings."
+    },
+    "check_common_input_and_model_options": {
+      "ko": "공통 입력·모델 옵션을 확인하세요.",
+      "en": "Check common input and model options."
+    },
+    "the_input_is_too_large": {
+      "ko": "입력이 너무 큽니다.",
+      "en": "The input is too large."
+    },
+    "source_scenario_not_found_compare_from_a_new_draft": {
+      "ko": "원본 시나리오를 찾을 수 없습니다. 새 초안에서 비교하세요.",
+      "en": "Source scenario not found. Compare from a new draft."
+    },
+    "could_not_process_the_comparison_request_your_input_is_preserved": {
+      "ko": "비교 요청을 처리하지 못했습니다. 입력을 보존했습니다.",
+      "en": "Could not process the comparison request. Your input is preserved."
+    },
+    "check_your_input_2": {
+      "ko": "입력을 확인하세요.",
+      "en": "Check your input."
+    },
+    "enable_the_mentor_and_add_a_completed_pair": {
+      "ko": "멘토를 켜고 완료 쌍을 추가하세요.",
+      "en": "Enable the mentor and add a completed pair."
+    },
+    "enter_a_teacher_message": {
+      "ko": "교사 메시지를 입력하세요.",
+      "en": "Enter a teacher message."
+    },
+    "checking_common_input_for_all_panels": {
+      "ko": "전체 패널의 공통 입력을 확인 중입니다.",
+      "en": "Checking common input for all panels."
+    },
+    "comparison_ended_check_each_panel_s_results": {
+      "ko": "비교가 종료되었습니다. 패널별 결과를 확인하세요.",
+      "en": "Comparison ended. Check each panel's results."
+    },
+    "in_progress_refresh_the_state_or_stop": {
+      "ko": "진행 중 · 상태 새로고침 또는 중지를 사용할 수 있습니다.",
+      "en": "In progress · Refresh the state or stop."
+    },
+    "connection_interrupted_refresh_the_state_to_check_saved_results_your_input_is_preserved": {
+      "ko": "연결이 중단되었습니다. 상태 새로고침으로 저장된 결과를 확인하세요. 입력을 보존했습니다.",
+      "en": "Connection interrupted. Refresh the state to check saved results. Your input is preserved."
+    },
+    "frozen_conditions_from_a_saved_comparison": {
+      "ko": "저장된 비교의 고정 조건",
+      "en": "Frozen conditions from a saved comparison"
+    },
+    "saved_comparison_results_recovered": {
+      "ko": "저장된 비교 결과를 복구했습니다.",
+      "en": "Saved comparison results recovered."
+    },
+    "recovery_lookup_ended_refresh_the_state_or_stop": {
+      "ko": "복구 조회가 끝났습니다. 상태 새로고침 또는 중지를 사용하세요.",
+      "en": "Recovery lookup ended. Refresh the state or stop."
+    },
+    "could_not_confirm_the_state_check_again": {
+      "ko": "상태를 확인하지 못했습니다. 다시 확인하세요.",
+      "en": "Could not confirm the state. Check again."
+    },
+    "could_not_confirm_the_stop_state_refresh_the_state": {
+      "ko": "중지 상태를 확인하지 못했습니다. 상태를 새로 확인하세요.",
+      "en": "Could not confirm the stop state. Refresh the state."
+    },
+    "reset_comparison_input": {
+      "ko": "비교 입력 초기화",
+      "en": "Reset comparison input"
+    },
+    "comparison_input_reset_saved_comparison_records_are_preserved": {
+      "ko": "편집 중 비교 입력을 초기화했습니다. 저장된 비교 기록은 유지됩니다.",
+      "en": "Comparison input reset. Saved comparison records are preserved."
+    },
+    "unsaved_draft": {
+      "ko": "미저장 초안",
+      "en": "Unsaved draft"
+    },
+    "new_draft_no_source": {
+      "ko": "새 작성 · 원본 없음",
+      "en": "New draft · No source"
+    },
+    "source_2": {
+      "ko": "원본",
+      "en": "Source"
+    },
+    "save_failed": {
+      "ko": "저장 실패",
+      "en": "Save failed"
+    },
+    "added": {
+      "ko": "등록되었습니다.",
+      "en": "Added."
+    },
+    "could_not_confirm_the_save_result_your_input_is_preserved_2": {
+      "ko": "저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.",
+      "en": "Could not confirm the save result. Your input is preserved."
+    },
+    "updated": {
+      "ko": "수정되었습니다.",
+      "en": "Updated."
+    },
+    "delete_this_item": {
+      "ko": "항목을 삭제하시겠습니까?",
+      "en": "Delete this item?"
+    },
+    "deletion_failed_2": {
+      "ko": "삭제 실패",
+      "en": "Deletion failed"
+    },
+    "deleted": {
+      "ko": "삭제되었습니다.",
+      "en": "Deleted."
+    },
+    "could_not_confirm_deletion_check_the_list_again": {
+      "ko": "삭제 결과를 확인할 수 없습니다. 목록을 새로 확인하세요.",
+      "en": "Could not confirm deletion. Check the list again."
+    },
+    "loading_analysis_details": {
+      "ko": "분석 상세를 불러오는 중...",
+      "en": "Loading analysis details..."
+    },
+    "could_not_load_analysis_details_close_and_try_again": {
+      "ko": "분석 상세를 불러올 수 없습니다. 닫은 뒤 다시 시도하세요.",
+      "en": "Could not load analysis details. Close and try again."
+    },
+    "lookup_failed": {
+      "ko": "조회 실패",
+      "en": "Lookup failed"
+    },
+    "no_completed_sessions_2": {
+      "ko": "완료된 세션이 없습니다.",
+      "en": "No completed sessions."
+    },
+    "date_and_time": {
+      "ko": "일시",
+      "en": "Date and time"
+    },
+    "messages": {
+      "ko": "메시지",
+      "en": "Messages"
+    },
+    "download": {
+      "ko": "다운로드",
+      "en": "Download"
+    },
+    "individual_sessions": {
+      "ko": "개별 세션 목록",
+      "en": "Individual sessions"
+    },
+    "could_not_load_the_session_list": {
+      "ko": "세션 목록을 불러올 수 없습니다.",
+      "en": "Could not load the session list."
+    },
+    "user_created": {
+      "ko": "사용자가 생성되었습니다!",
+      "en": "User created!"
+    },
+    "user_updated": {
+      "ko": "사용자가 업데이트되었습니다!",
+      "en": "User updated!"
+    },
+    "delete_this_user": {
+      "ko": "사용자를 삭제하시겠습니까?",
+      "en": "Delete this user?"
+    },
+    "user_deleted": {
+      "ko": "사용자가 삭제되었습니다!",
+      "en": "User deleted!"
+    },
+    "an_error_occurred_while_processing_the_file": {
+      "ko": "파일 처리 중 오류가 발생했습니다.",
+      "en": "An error occurred while processing the file."
+    },
+    "could_not_connect_to_the_server": {
+      "ko": "서버 연결에 실패했습니다.",
+      "en": "Could not connect to the server."
+    },
+    "bulk_add_users_preview": {
+      "ko": "일괄 사용자 추가 — 미리보기",
+      "en": "Bulk add users — Preview"
+    },
+    "valid": {
+      "ko": "정상",
+      "en": "Valid"
+    },
+    "errors": {
+      "ko": "에러",
+      "en": "Errors"
+    },
+    "no_valid_users_to_register": {
+      "ko": "등록할 유효한 사용자가 없습니다.",
+      "en": "No valid users to register."
+    },
+    "could_not_confirm_registration_check_the_user_list_before_trying_again": {
+      "ko": "등록 결과를 확인할 수 없습니다. 사용자 목록을 확인한 뒤 다시 시도하세요.",
+      "en": "Could not confirm registration. Check the user list before trying again."
+    },
+    "bulk_add_users_results": {
+      "ko": "일괄 사용자 추가 — 결과",
+      "en": "Bulk add users — Results"
+    },
+    "copied": {
+      "ko": "복사했습니다.",
+      "en": "Copied."
+    },
+    "could_not_copy_download_as_csv": {
+      "ko": "복사할 수 없습니다. CSV로 내려받으세요.",
+      "en": "Could not copy. Download as CSV."
+    },
+    "group_created": {
+      "ko": "그룹이 생성되었습니다!",
+      "en": "Group created!"
+    },
+    "group_updated": {
+      "ko": "그룹이 업데이트되었습니다!",
+      "en": "Group updated!"
+    },
+    "delete_this_group": {
+      "ko": "그룹을 삭제하시겠습니까?",
+      "en": "Delete this group?"
+    },
+    "group_deleted": {
+      "ko": "그룹이 삭제되었습니다!",
+      "en": "Group deleted!"
+    },
+    "list_page": {
+      "ko": "현재 {page} 페이지 · 20개씩 · 총 {total}개",
+      "en": "Page {page} · 20 per page · {total} total"
+    },
+    "session_page": {
+      "ko": "총 {total}개 중 {page}/{pages} 페이지",
+      "en": "Page {page}/{pages} · {total} total"
+    },
+    "select_session": {
+      "ko": "세션 {id} 선택",
+      "en": "Select session {id}"
+    },
+    "people_count": {
+      "ko": "{count}명",
+      "en": "{count}"
+    },
+    "student_label": {
+      "ko": "학생",
+      "en": "Student"
+    },
+    "group_has_members": {
+      "ko": "\"{name}\" 그룹에 {count}명의 멤버가 있어 삭제할 수 없습니다. 먼저 멤버를 다른 그룹으로 이동하세요.",
+      "en": "Cannot delete group \"{name}\" with {count} members. Move its members to another group first."
+    },
+    "admin_required": {
+      "ko": "관리자 권한이 필요합니다.",
+      "en": "Admin role required"
+    },
+    "session_missing": {
+      "ko": "세션을 찾을 수 없습니다.",
+      "en": "Session not found"
+    },
+    "session_deleted": {
+      "ko": "이미 삭제된 세션입니다.",
+      "en": "Session already deleted"
+    },
+    "end_before_analysis": {
+      "ko": "분석을 보려면 먼저 세션을 종료하세요.",
+      "en": "Session must be ended before viewing analysis"
+    },
+    "analysis_missing": {
+      "ko": "분석을 찾을 수 없습니다.",
+      "en": "Analysis not found"
+    },
+    "user_missing": {
+      "ko": "사용자를 찾을 수 없습니다.",
+      "en": "User not found"
+    },
+    "sessions_missing": {
+      "ko": "세션이 없습니다.",
+      "en": "No sessions found"
+    },
+    "session_selection_required": {
+      "ko": "세션을 선택하세요.",
+      "en": "No session_ids provided"
+    },
+    "valid_sessions_missing": {
+      "ko": "유효한 세션이 없습니다.",
+      "en": "No valid sessions"
+    },
+    "completed_sessions_missing": {
+      "ko": "완료된 세션이 없습니다.",
+      "en": "No completed sessions found"
+    },
+    "active_download": {
+      "ko": "진행 중인 세션은 다운로드할 수 없습니다.",
+      "en": "Cannot download active session"
+    },
+    "active_session": {
+      "ko": "세션 {v0}이 진행 중입니다. 종료된 세션만 가능합니다.",
+      "en": "Session {v0} is still active. Only ended allowed."
+    },
+    "contributor_not_found": {
+      "ko": "등록자를 찾을 수 없습니다.",
+      "en": "Contributor not found."
+    },
+    "analysis_not_found": {
+      "ko": "분석을 찾을 수 없습니다",
+      "en": "Analysis not found"
+    },
+    "group_name_already_exists": {
+      "ko": "이미 존재하는 그룹 이름입니다.",
+      "en": "Group name already exists."
+    },
+    "group_not_found": {
+      "ko": "그룹을 찾을 수 없습니다.",
+      "en": "Group not found."
+    },
+    "cannot_delete_this_group_with_v0_members_move_its_members_to_another_group_first": {
+      "ko": "이 그룹에 {v0}명의 멤버가 있어 삭제할 수 없습니다. 먼저 멤버를 다른 그룹으로 이동하세요.",
+      "en": "Cannot delete this group with {v0} members. Move its members to another group first."
+    },
+    "user_ids_may_contain_only_letters_numbers_and_underscores": {
+      "ko": "사용자 ID는 영문, 숫자, 언더스코어만 사용 가능합니다.",
+      "en": "User IDs may contain only letters, numbers and underscores."
+    },
+    "user_id_already_exists": {
+      "ko": "이미 존재하는 사용자 ID입니다.",
+      "en": "User ID already exists."
+    },
+    "invalid_role": {
+      "ko": "유효하지 않은 역할입니다.",
+      "en": "Invalid role."
+    },
+    "user_not_found": {
+      "ko": "사용자를 찾을 수 없습니다.",
+      "en": "User not found."
+    },
+    "you_cannot_delete_yourself": {
+      "ko": "자기 자신은 삭제할 수 없습니다.",
+      "en": "You cannot delete yourself."
+    },
+    "users_with_active_sessions_cannot_be_deleted_end_their_sessions_first": {
+      "ko": "활성 세션이 있는 사용자는 삭제할 수 없습니다. 먼저 세션을 종료해주세요.",
+      "en": "Users with active sessions cannot be deleted. End their sessions first."
+    },
+    "users_with_model_test_records_cannot_be_deleted": {
+      "ko": "모델 시험 기록이 있는 사용자는 삭제할 수 없습니다.",
+      "en": "Users with model test records cannot be deleted."
+    },
+    "the_file_exceeds_1mb": {
+      "ko": "파일 크기가 1MB를 초과합니다.",
+      "en": "The file exceeds 1MB."
+    },
+    "unrecognized_file_encoding_use_utf_8_or_euc_kr": {
+      "ko": "파일 인코딩을 인식할 수 없습니다. UTF-8 또는 EUC-KR을 사용해주세요.",
+      "en": "Unrecognized file encoding. Use UTF-8 or EUC-KR."
+    },
+    "could_not_read_csv_headers": {
+      "ko": "CSV 헤더를 읽을 수 없습니다.",
+      "en": "Could not read CSV headers."
+    },
+    "required_columns_are_missing_v0_found_columns_v1": {
+      "ko": "필수 컬럼이 누락되었습니다: {v0}. (발견된 컬럼: {v1})",
+      "en": "Required columns are missing: {v0}. (Found columns: {v1})"
+    },
+    "the_csv_file_is_empty": {
+      "ko": "CSV 파일이 비어 있습니다.",
+      "en": "The CSV file is empty."
+    },
+    "upload_up_to_v0_users_current_count_v1": {
+      "ko": "최대 {v0}명까지 업로드할 수 있습니다. 현재 {v1}명",
+      "en": "Upload up to {v0} users. Current count: {v1}"
+    },
+    "user_ids_must_contain_3_to_50_characters": {
+      "ko": "사용자 ID는 3자 이상 50자 이하여야 합니다.",
+      "en": "User IDs must contain 3 to 50 characters."
+    },
+    "nicknames_must_contain_2_to_30_characters": {
+      "ko": "닉네임은 2자 이상 30자 이하여야 합니다.",
+      "en": "Nicknames must contain 2 to 30 characters."
+    },
+    "invalid_role_v0": {
+      "ko": "유효하지 않은 역할: {v0}",
+      "en": "Invalid role: {v0}"
+    },
+    "user_id_already_exists_2": {
+      "ko": "이미 존재하는 사용자 ID",
+      "en": "User ID already exists"
+    },
+    "duplicate_user_id_in_csv": {
+      "ko": "CSV 내 중복된 사용자 ID",
+      "en": "Duplicate user ID in CSV"
+    },
+    "group_not_found_v0": {
+      "ko": "존재하지 않는 그룹: {v0}",
+      "en": "Group not found: {v0}"
+    },
+    "invalid_user_id_format": {
+      "ko": "유효하지 않은 사용자 ID 형식",
+      "en": "Invalid user ID format"
+    },
+    "invalid_role_2": {
+      "ko": "유효하지 않은 역할",
+      "en": "Invalid role"
+    },
+    "an_error_occurred_while_registering_the_user": {
+      "ko": "사용자 등록 중 오류가 발생했습니다.",
+      "en": "An error occurred while registering the user."
+    },
+    "registered_model_v0_v1": {
+      "ko": "등록 모델: {v0} ({v1})",
+      "en": "Registered model: {v0} ({v1})"
+    },
+    "scenario_v0_v1_v2_v3_v4_v5": {
+      "ko": "시나리오 #{v0} {v1} · {v2} ({v3}) · {v4} · {v5}",
+      "en": "Scenario #{v0} {v1} · {v2} ({v3}) · {v4} · {v5}"
+    },
+    "v0_default_authoring_model_v1": {
+      "ko": "{v0} 작성 기본 모델: {v1}",
+      "en": "{v0} default authoring model: {v1}"
+    },
+    "mentor_off_excluded_from_execution": {
+      "ko": "멘토 off · 실행 제외",
+      "en": "Mentor off · Excluded from execution"
+    },
+    "used_for_new_lessons": {
+      "ko": "새 수업 실행 참조",
+      "en": "Used for new lessons"
+    },
+    "excluded_from_new_lessons": {
+      "ko": "새 수업 실행 제외",
+      "en": "Excluded from new lessons"
+    },
+    "maximum_output_tokens": {
+      "ko": "최대 출력 토큰",
+      "en": "Maximum output tokens"
+    },
+    "reasoning_effort": {
+      "ko": "추론 수준",
+      "en": "Reasoning effort"
+    },
+    "temperature": {
+      "ko": "다양성",
+      "en": "Temperature"
+    },
+    "unspecified_uses_the_provider_default": {
+      "ko": "지정하지 않음은 제공자 기본값을 사용합니다.",
+      "en": "Unspecified uses the provider default."
+    },
+    "the_official_default_reasoning_effort_needs_verification_unspecified_omits_the_value_and_does_not_su": {
+      "ko": "공식 기본 추론 수준은 확인 필요입니다. 지정하지 않음은 값을 보내지 않으며, 다른 모델의 기본값으로 대체하지 않습니다.",
+      "en": "The official default reasoning effort needs verification. Unspecified omits the value and does not substitute another model's default."
+    },
+    "temperature_is_supported_only_with_reasoning_effort_none": {
+      "ko": "temperature는 추론 수준 none일 때만 지원합니다.",
+      "en": "Temperature is supported only with reasoning effort none."
+    },
+    "temperature_is_not_supported": {
+      "ko": "temperature는 지원하지 않습니다.",
+      "en": "Temperature is not supported."
+    },
+    "the_enabled_manual_budget_is_deprecated_budget_must_be_at_least_1024_and_below_the_maximum_output_to": {
+      "ko": "enabled 수동 budget은 deprecated입니다. budget은 최대 출력 토큰보다 작고 1024 이상이어야 합니다. thinking 사용 시 temperature는 1만 허용합니다.",
+      "en": "The enabled manual budget is deprecated. Budget must be at least 1024 and below the maximum output tokens. Thinking permits temperature 1 only."
+    },
+    "temperature_permits_the_default_1_only_manual_thinking_budgets_are_unsupported": {
+      "ko": "temperature는 기본값 1만 허용합니다. 수동 thinking budget은 지원하지 않습니다.",
+      "en": "Temperature permits the default 1 only. Manual thinking budgets are unsupported."
+    },
+    "between_tools_supports_low_medium_and_high_effort_only_disabled_is_unsupported": {
+      "ko": "between_tools는 low·medium·high effort에서만 지원합니다. disabled는 지원하지 않습니다.",
+      "en": "between_tools supports low, medium and high effort only. disabled is unsupported."
+    },
+    "disabled_supports_low_medium_and_high_effort_only": {
+      "ko": "disabled는 low·medium·high effort에서만 지원합니다.",
+      "en": "disabled supports low, medium and high effort only."
+    },
+    "adaptive_thinking_is_always_enabled_disabled_is_unsupported": {
+      "ko": "adaptive thinking은 항상 활성입니다. disabled는 지원하지 않습니다.",
+      "en": "Adaptive thinking is always enabled. disabled is unsupported."
+    },
+    "claude_thinking_mode": {
+      "ko": "Claude thinking 방식",
+      "en": "Claude thinking mode"
+    },
+    "claude_thinking_token_budget": {
+      "ko": "Claude thinking 토큰 예산",
+      "en": "Claude thinking token budget"
+    },
+    "claude_effort": {
+      "ko": "Claude effort",
+      "en": "Claude effort"
+    },
+    "thinking_token_budget_1_auto_0_off": {
+      "ko": "사고 토큰 예산 (-1 자동, 0 끄기)",
+      "en": "Thinking token budget (-1 auto, 0 off)"
+    },
+    "thinking_level": {
+      "ko": "사고 수준",
+      "en": "Thinking level"
+    },
+    "unspecified_uses_dynamic_thinking_1_is_automatic_0_is_off_and_1_24576_is_a_numeric_budget_level_is_u": {
+      "ko": "지정하지 않음은 동적 thinking입니다. -1 자동, 0 끄기, 1–24576 숫자 budget을 구분합니다. level은 지원하지 않습니다.",
+      "en": "Unspecified uses dynamic thinking. -1 is automatic, 0 is off and 1–24576 is a numeric budget. level is unsupported."
+    },
+    "unspecified_uses_the_provider_default_level_level_and_budget_cannot_be_combined_this_app_edits_gemin": {
+      "ko": "지정하지 않음은 제공자 기본 level을 사용합니다. level과 budget은 함께 지정할 수 없습니다. 이 앱의 Gemini 3 옵션 편집은 level을 사용합니다. 기존 budget 저장 값은 보존하며 명시적 수정이 필요합니다.",
+      "en": "Unspecified uses the provider default level. level and budget cannot be combined. This app edits Gemini 3 options using level. Existing saved budgets are preserved and require explicit editing."
+    },
+    "minimal_does_not_guarantee_that_thinking_is_fully_disabled": {
+      "ko": "minimal은 사고의 완전한 비활성화를 보장하지 않습니다.",
+      "en": "minimal does not guarantee that thinking is fully disabled."
+    },
+    "minimal_is_unsupported": {
+      "ko": "minimal은 지원하지 않습니다.",
+      "en": "minimal is unsupported."
+    },
+    "active_calls_v0": {
+      "ko": "활성 호출: {v0}건",
+      "en": "Active calls: {v0}"
+    },
+    "invalid_date": {
+      "ko": "{field} 날짜 형식이 유효하지 않습니다: '{value}'",
+      "en": "Invalid {field} format: '{value}'"
+    },
+    "configuration": {
+      "ko": "실행 설정",
+      "en": "Configuration"
+    },
+    "rubric_id": {
+      "ko": "ID",
+      "en": "ID"
+    },
+    "rubric_field": {
+      "ko": "분류 {index} {label}",
+      "en": "Classification {index} {label}"
+    },
+    "role_model": {
+      "ko": "{role} 모델",
+      "en": "{role} model"
+    },
+    "review_input": {
+      "ko": "{field} 입력값을 확인하세요.",
+      "en": "Check input for {field}."
+    },
+    "review_invalid_source": {
+      "ko": "{field} 원문을 확인하세요.",
+      "en": "Check the original value for {field}."
+    },
+    "review_privacy": {
+      "ko": "공개 학생 소개는 비워 두었습니다. 내부 원문과 공개 범위를 검토하세요.",
+      "en": "The public student profile was left empty. Review the internal original and public visibility."
+    },
+    "review_missing_template": {
+      "ko": "참조 템플릿이 없습니다. 역할 지시를 보완하세요.",
+      "en": "Referenced template missing. Complete the role instructions."
+    },
+    "review_unsupported_template": {
+      "ko": "알 수 없거나 손상된 템플릿을 원문 archive와 비교하여 보완하세요.",
+      "en": "Repair the unknown or damaged template using the original archive."
+    },
+    "review_rolling": {
+      "ko": "기존 고정 주기 제한에서 최근 완료 10턴의 rolling 제한으로 바뀝니다.",
+      "en": "The fixed-bucket limit changes to a rolling window of the last 10 completed turns."
+    },
+    "review_sensitivity": {
+      "ko": "기존 민감도는 실행에서 제거됩니다. 자동 개입 조건을 직접 작성하세요.",
+      "en": "Legacy sensitivity is removed from execution. Write the automatic intervention condition explicitly."
+    },
+    "review_temperature": {
+      "ko": "기존 chat_temperature는 적용되지 않았으므로 새 옵션에 넣지 않았습니다.",
+      "en": "Legacy chat_temperature was not applied and was not added to the new options."
+    },
+    "review_missing_rubric": {
+      "ko": "이전 분석 틀이 없습니다. 분류 기준을 보완하세요.",
+      "en": "Legacy analysis framework missing. Complete the rubric."
+    },
+    "review_model": {
+      "ko": "{field}의 유효 모델·연결·역할 검증과 옵션을 확인하세요.",
+      "en": "Check the available model, connection, role verification and options for {field}."
+    },
+    "review_subcall": {
+      "ko": "이전 하위 호출과 제안 역할의 모델·옵션이 다릅니다. 하나의 역할 설정으로 통합됩니다.",
+      "en": "Legacy subcalls and the proposed role use different models or options. They are consolidated into one role configuration."
+    },
+    "review_oversize": {
+      "ko": "변환 설정이 UTF-8 입력 한도를 넘었습니다. 전체 원문 archive를 확인하여 초안을 보완하세요.",
+      "en": "Converted settings exceed the UTF-8 input limit. Complete the draft using the full original archive."
+    },
+    "review_rubric_id": {
+      "ko": "{field} ID 형식을 확인하세요.",
+      "en": "Check the rubric ID format for {field}."
+    },
+    "review_duplicate_id": {
+      "ko": "분류 ID는 중복 없이 작성하세요.",
+      "en": "Use unique rubric IDs."
+    },
+    "review_duplicate_name": {
+      "ko": "분류 이름은 중복 없이 작성하세요.",
+      "en": "Use unique rubric names."
+    },
+    "review_common_model": {
+      "ko": "모든 활성 역할에 같은 모델을 선택하세요.",
+      "en": "Select the same model for all active roles."
+    },
+    "review_conversion": {
+      "ko": "기존 시나리오 변환이 필요합니다.",
+      "en": "Legacy scenario conversion is required."
+    },
+    "review_groups": {
+      "ko": "배정 그룹을 확인하세요.",
+      "en": "Check the assigned groups."
+    },
+    "review_acknowledgement": {
+      "ko": "변환 경고 검토 확인이 필요합니다.",
+      "en": "Acknowledge the conversion warnings."
+    },
+    "comparison_input_error": {
+      "ko": "공통 입력과 선택 모델 옵션을 확인하세요.",
+      "en": "Check the common input and selected model options."
+    },
+    "input_format": {
+      "ko": "입력 형식과 한도를 확인하세요.",
+      "en": "Check the input format and limits."
+    },
+    "request_size": {
+      "ko": "요청은 1 MiB 이하여야 합니다.",
+      "en": "Requests must not exceed 1 MiB."
+    },
+    "authentication_required": {
+      "ko": "로그인이 필요합니다.",
+      "en": "Authentication required"
+    },
+    "access_required": {
+      "ko": "관리자 권한이 필요합니다.",
+      "en": "Admin access required"
+    },
+    "trigger_auto": {
+      "ko": "자동",
+      "en": "Automatic"
+    },
+    "trigger_manual": {
+      "ko": "수동",
+      "en": "Manual"
+    },
+    "decision_admitted": {
+      "ko": "실행 승인",
+      "en": "Admitted"
+    },
+    "decision_before_start": {
+      "ko": "검사 시작 전",
+      "en": "Before check start"
+    },
+    "decision_interval": {
+      "ko": "검사 간격 대기",
+      "en": "Waiting for check interval"
+    },
+    "decision_cap": {
+      "ko": "개입 상한 도달",
+      "en": "Intervention cap reached"
+    },
+    "selected_count": {
+      "ko": "{count}개 선택됨",
+      "en": "{count} selected"
+    },
+    "sessions_loading": {
+      "ko": "분석 결과 로딩 중...",
+      "en": "Loading analysis results..."
+    },
+    "analysis_load_failed": {
+      "ko": "분석 결과를 불러올 수 없습니다.",
+      "en": "Could not load analysis results."
+    },
+    "downloading": {
+      "ko": "다운로드 중...",
+      "en": "Downloading..."
+    },
+    "download_failed": {
+      "ko": "다운로드 실패",
+      "en": "Download failed"
+    },
+    "selected_download_failed": {
+      "ko": "선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.",
+      "en": "Could not download the selected sessions. Check permissions and session status, then try again."
+    },
+    "session_action_unknown": {
+      "ko": "작업 결과를 확인할 수 없습니다. 목록을 새로 확인하세요.",
+      "en": "Could not confirm the task result. Check the list again."
+    },
+    "session_action_failed": {
+      "ko": "세션 작업을 완료하지 못했습니다. 권한과 세션 상태를 확인하세요.",
+      "en": "Could not complete the session action. Check permissions and session status."
+    },
+    "review_field_required": {
+      "ko": "{field} 보완 필요",
+      "en": "Complete {field}."
+    }
+  }
 }

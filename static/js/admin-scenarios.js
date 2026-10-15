@@ -17,13 +17,13 @@ filterPublication.addEventListener('change', filterScenarios);
 filterStatus.addEventListener('change', filterScenarios);
 document.querySelectorAll('.delete-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
-    if (!window.confirm(`"${btn.dataset.title}" 시나리오를 삭제하시겠습니까?\n관련 세션 ${btn.dataset.sessionCount}개도 함께 숨겨집니다.`)) return;
+    if (!window.confirm(uiLanguage.t('admin.scenario_delete_confirm', {title:btn.dataset.title, count:btn.dataset.sessionCount}))) return;
     btn.disabled = true;
     try {
       const token = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
       const response = await fetch(`/admin/scenarios/${btn.dataset.id}/delete`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', 'x-csrf-token': token ? token[1] : ''},
+        headers: uiLanguage.headers(`/admin/scenarios/${btn.dataset.id}/delete`, {'Content-Type': 'application/json', 'x-csrf-token': token ? token[1] : ''}),
         body: JSON.stringify({expected_version: Number(btn.dataset.version)})
       });
       if (response.ok) {
@@ -31,11 +31,13 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
         if (previous && document.querySelectorAll('.scenario-card').length === 1) {
           window.location.assign(previous.href);
         } else window.location.reload();
-      } else window.alert(response.status === 409 ? '다른 관리자가 변경했습니다. 새로고침 후 확인하세요.' : '삭제에 실패했습니다.');
+      } else window.alert(response.status === 409 ? uiLanguage.t('admin.another_administrator_made_changes_reload_and_check_again') : uiLanguage.t('admin.deletion_failed'));
     } catch {
-      window.alert('삭제에 실패했습니다.');
+      window.alert(uiLanguage.t('admin.deletion_failed'));
     } finally {
       btn.disabled = false;
     }
   });
 });
+
+uiLanguage.registerGuard(() => ({dirty:Boolean(searchInput.value || filterPublication.value || filterStatus.value), busy:[...document.querySelectorAll('.delete-btn')].some(button => button.disabled)}));

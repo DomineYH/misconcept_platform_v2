@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from src.i18n import translate
+
 LEVELS = {
     "gemini-3.8-flash": (["low", "medium", "high"], "medium"),
     "gemini-3.6-flash": (["minimal", "low", "medium", "high"], "medium"),
@@ -62,9 +64,39 @@ DEFINITION = dict(
 )
 
 
-def capabilities(model_id):
+def capabilities(model_id, language="ko"):
+    def localized(definition):
+        labels = {
+            "max_output_tokens": "maximum_output_tokens",
+            "temperature": "temperature",
+            "thinking.budget": "thinking_token_budget_1_auto_0_off",
+            "thinking.level": "thinking_level",
+        }
+        for field in definition["fields"]:
+            field["label"] = translate(
+                "admin." + labels[field["name"]], language
+            )
+        notes = (
+            [
+                "unspecified_uses_dynamic_thinking_1_is_automatic_0_is_off_and_1_24576_is_a_numeric_budget_level_is_u"
+            ]
+            if model_id == "gemini-2.5-flash"
+            else [
+                "unspecified_uses_the_provider_default_level_level_and_budget_cannot_be_combined_this_app_edits_gemin",
+                (
+                    "minimal_does_not_guarantee_that_thinking_is_fully_disabled"
+                    if "minimal" in definition["thinking_levels"]
+                    else "minimal_is_unsupported"
+                ),
+            ]
+        )
+        definition["option_notes"] = [
+            translate("admin." + key, language) for key in notes
+        ]
+        return definition
+
     if model_id == "gemini-2.5-flash":
-        return deepcopy(DEFINITION)
+        return localized(deepcopy(DEFINITION))
     if model_id not in LEVELS:
         return None
     levels, default = LEVELS[model_id]
@@ -100,7 +132,7 @@ def capabilities(model_id):
             else "minimal은 지원하지 않습니다."
         ),
     ]
-    return definition
+    return localized(definition)
 
 
 def validate_model_and_options(model_id, options):

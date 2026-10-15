@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from src.i18n import translate
+
 MODEL = "claude-sonnet-4-6"
 VERSION = "anthropic-2026-10-13-v4"
 DEFINITIONS = {
@@ -39,7 +41,7 @@ SOURCES = [
 ]
 
 
-def capabilities(model_id):
+def capabilities(model_id, language="ko"):
     if model_id not in DEFINITIONS:
         return None
     modes, default_thinking, efforts, default_effort = DEFINITIONS[model_id]
@@ -70,31 +72,35 @@ def capabilities(model_id):
         fields=[
             dict(
                 name="max_output_tokens",
-                label="최대 출력 토큰",
+                label=translate("admin.maximum_output_tokens", language),
                 type="integer",
                 min=1,
                 max=128000,
             ),
             dict(
-                name="temperature", label="다양성", type="number", min=0, max=1
+                name="temperature",
+                label=translate("admin.temperature", language),
+                type="number",
+                min=0,
+                max=1,
             ),
             dict(
                 name="thinking.type",
-                label="Claude thinking 방식",
+                label=translate("admin.claude_thinking_mode", language),
                 type="string",
                 choices=modes,
                 default=default_thinking,
             ),
             dict(
                 name="thinking.budget_tokens",
-                label="Claude thinking 토큰 예산",
+                label=translate("admin.claude_thinking_token_budget", language),
                 type="integer",
                 min=1024,
                 max=127999,
             ),
             dict(
                 name="output_config.effort",
-                label="Claude effort",
+                label=translate("admin.claude_effort", language),
                 type="string",
                 choices=efforts,
                 default=default_effort,
@@ -109,24 +115,39 @@ def capabilities(model_id):
         ]
         definition["fields"][1]["min"] = 1
     definition["option_notes"] = [
-        "지정하지 않음은 제공자 기본값을 사용합니다.",
+        translate("admin.unspecified_uses_the_provider_default", language),
         (
-            "enabled 수동 budget은 deprecated입니다. budget은 최대 출력 토큰보다 작고 1024 이상이어야 합니다. thinking 사용 시 temperature는 1만 허용합니다."
+            translate(
+                "admin.the_enabled_manual_budget_is_deprecated_budget_must_be_at_least_1024_and_below_the_maximum_output_to",
+                language,
+            )
             if legacy
-            else "temperature는 기본값 1만 허용합니다. 수동 thinking budget은 지원하지 않습니다."
+            else translate(
+                "admin.temperature_permits_the_default_1_only_manual_thinking_budgets_are_unsupported",
+                language,
+            )
         ),
     ]
     if "between_tools" in modes:
         definition["option_notes"].append(
-            "between_tools는 low·medium·high effort에서만 지원합니다. disabled는 지원하지 않습니다."
+            translate(
+                "admin.between_tools_supports_low_medium_and_high_effort_only_disabled_is_unsupported",
+                language,
+            )
         )
     elif "disabled" in modes and not legacy:
         definition["option_notes"].append(
-            "disabled는 low·medium·high effort에서만 지원합니다."
+            translate(
+                "admin.disabled_supports_low_medium_and_high_effort_only",
+                language,
+            )
         )
     elif not legacy:
         definition["option_notes"].append(
-            "adaptive thinking은 항상 활성입니다. disabled는 지원하지 않습니다."
+            translate(
+                "admin.adaptive_thinking_is_always_enabled_disabled_is_unsupported",
+                language,
+            )
         )
     return deepcopy(definition)
 

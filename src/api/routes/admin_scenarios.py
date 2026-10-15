@@ -23,6 +23,8 @@ from src.api.schemas.scenario_config import (
     RevisionInput,
     ScenarioConfig,
 )
+from src.i18n import display_language
+from src.i18n.admin import scenario_view
 from src.models.scenario import Scenario
 from src.models.scenario_group import ScenarioGroup
 from src.models.session import Session
@@ -116,10 +118,13 @@ async def create_scenario(
     scenario_data: DraftCreate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/scenarios - Create new scenario (T078)."""
 
-    return await save_scenario(db, scenario_data, user.id)
+    return scenario_view(
+        await save_scenario(db, scenario_data, user.id), request
+    )
 
 
 @router.post(
@@ -131,10 +136,13 @@ async def update_scenario(
     scenario_data: DraftUpdate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/scenarios/{id}/update - Update scenario (T079, T080)."""
 
-    return await save_scenario(db, scenario_data, user.id, scenario_id)
+    return scenario_view(
+        await save_scenario(db, scenario_data, user.id, scenario_id), request
+    )
 
 
 @router.get("/admin/scenarios/new", response_class=HTMLResponse)
@@ -189,8 +197,11 @@ async def get_scenario_draft(
     scenario_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
-    return await draft_view(db, await native_scenario(db, scenario_id))
+    return scenario_view(
+        await draft_view(db, await native_scenario(db, scenario_id)), request
+    )
 
 
 @router.get("/admin/scenarios/{scenario_id}/edit", response_class=HTMLResponse)
@@ -222,7 +233,8 @@ async def edit_scenario_draft(
 
 
 async def render_editor(request, user, db, editor):
-    state, choices = await editor_models(db)
+    editor = scenario_view(editor, request)
+    state, choices = await editor_models(db, display_language(request))
     editor["model_choices"] = choices
     editor["role_defaults"] = (
         state["settings"]["defaults"] if state["settings"] else {}
@@ -258,7 +270,7 @@ async def delete_scenario(
     )
 
 
-async def editor_models(db):
+async def editor_models(db, language="ko"):
     from src.models.provider_connection import ProviderConnection
     from src.services.model_configuration import configuration_state
     from src.services.model_verification import connection_ready
@@ -267,7 +279,7 @@ async def editor_models(db):
         c.provider: c
         for c in (await db.scalars(select(ProviderConnection))).all()
     }
-    state = await configuration_state(db, connections)
+    state = await configuration_state(db, connections, language)
     choices = [
         dict(
             model,

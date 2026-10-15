@@ -14,6 +14,7 @@ from src.api.schemas.contributor import (
     ContributorResponse,
     ContributorUpdate,
 )
+from src.i18n import display_language, translate
 from src.models.contributor import Contributor
 from src.models.user import User
 
@@ -72,13 +73,16 @@ async def update_contributor(
     data: ContributorUpdate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/about/{id}/update - Update contributor entry."""
     target = await db.get(Contributor, contributor_id)
     if not target:
         raise HTTPException(
             status_code=404,
-            detail="등록자를 찾을 수 없습니다.",
+            detail=translate(
+                "admin.contributor_not_found", display_language(request)
+            ),
         )
 
     if data.name is not None:
@@ -107,13 +111,16 @@ async def delete_contributor(
     contributor_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/about/{id}/delete - Delete contributor entry."""
     target = await db.get(Contributor, contributor_id)
     if not target:
         raise HTTPException(
             status_code=404,
-            detail="등록자를 찾을 수 없습니다.",
+            detail=translate(
+                "admin.contributor_not_found", display_language(request)
+            ),
         )
 
     await db.delete(target)

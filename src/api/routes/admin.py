@@ -20,6 +20,7 @@ from src.api.routes.admin_providers import router as providers_router
 from src.api.routes.admin_scenarios import router as scenarios_router
 from src.api.routes.admin_sessions import router as sessions_router
 from src.api.routes.admin_users import router as users_router
+from src.i18n import display_language, translate
 from src.models.user import User
 
 router = APIRouter(tags=["Admin"])
@@ -55,7 +56,7 @@ async def admin_dashboard(
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=translate("admin.admin_required", display_language(request)),
         )
 
     return templates.TemplateResponse(

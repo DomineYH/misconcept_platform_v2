@@ -8,6 +8,7 @@ from fastapi import (
     Depends,
     Form,
     HTTPException,
+    Request,
     status,
 )
 from fastapi.responses import Response
@@ -19,6 +20,7 @@ from src.api.routes.admin_sessions import (
     parse_date_filter,
     safe_int,
 )
+from src.i18n import display_language, translate
 from src.models.message import Message
 from src.models.session import Session
 from src.models.user import User
@@ -37,12 +39,13 @@ async def export_sessions(
     date_to: Optional[str] = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """Export filtered sessions as CSV (ended only)."""
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=translate("admin.admin_required", display_language(request)),
         )
 
     scenario_id_val = safe_int(scenario_id)
@@ -60,7 +63,9 @@ async def export_sessions(
     if teacher_id_val:
         query = query.where(Session.teacher_id == teacher_id_val)
     if date_from:
-        dt, err = parse_date_filter(date_from, "date_from")
+        dt, err = parse_date_filter(
+            date_from, "date_from", display_language(request)
+        )
         if err:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -69,7 +74,9 @@ async def export_sessions(
         if dt:
             query = query.where(Session.started_at >= dt)
     if date_to:
-        dt, err = parse_date_filter(date_to, "date_to")
+        dt, err = parse_date_filter(
+            date_to, "date_to", display_language(request)
+        )
         if err:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -83,7 +90,9 @@ async def export_sessions(
 
     if not session_ids:
         return Response(
-            content="No sessions found",
+            content=translate(
+                "admin.sessions_missing", display_language(request)
+            ),
             media_type="text/plain",
         )
 
@@ -106,18 +115,21 @@ async def export_selected_sessions(
     session_ids: List[int] = Form(...),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """Export selected sessions as CSV."""
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=translate("admin.admin_required", display_language(request)),
         )
 
     if not session_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No session_ids provided",
+            detail=translate(
+                "admin.session_selection_required", display_language(request)
+            ),
         )
 
     result = await db.execute(
@@ -130,14 +142,20 @@ async def export_selected_sessions(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    f"Session {s.id} is still active." " Only ended allowed."
+                    translate(
+                        "admin.active_session",
+                        display_language(request),
+                        v0=s.id,
+                    )
                 ),
             )
 
     valid_ids = [s.id for s in sessions if s.deleted_at is None]
     if not valid_ids:
         return Response(
-            content="No valid sessions",
+            content=translate(
+                "admin.valid_sessions_missing", display_language(request)
+            ),
             media_type="text/plain",
         )
 
@@ -160,19 +178,20 @@ async def export_user_conversations(
     user_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """Download all conversations for a user as CSV."""
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=translate("admin.admin_required", display_language(request)),
         )
 
     target_user = await db.get(User, user_id)
     if not target_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            detail=translate("admin.user_missing", display_language(request)),
         )
 
     query = (
@@ -189,7 +208,9 @@ async def export_user_conversations(
 
     if not session_ids:
         return Response(
-            content="No completed sessions found",
+            content=translate(
+                "admin.completed_sessions_missing", display_language(request)
+            ),
             media_type="text/plain",
         )
 
@@ -211,19 +232,20 @@ async def list_user_sessions(
     user_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """List completed sessions for individual download."""
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=translate("admin.admin_required", display_language(request)),
         )
 
     target_user = await db.get(User, user_id)
     if not target_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            detail=translate("admin.user_missing", display_language(request)),
         )
 
     query = (
@@ -262,25 +284,30 @@ async def download_session(
     session_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """Download a single session as CSV."""
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=translate("admin.admin_required", display_language(request)),
         )
 
     session = await db.get(Session, session_id)
     if not session or session.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail=translate(
+                "admin.session_missing", display_language(request)
+            ),
         )
 
     if session.ended_at is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot download active session",
+            detail=translate(
+                "admin.active_download", display_language(request)
+            ),
         )
 
     exporter = CSVExporter()

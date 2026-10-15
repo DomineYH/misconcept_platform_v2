@@ -1,16 +1,17 @@
 {% extends "layout.html" %}
-{% block title %}AI 연결·모델 - 관리자{% endblock %}
+{% set i18n_areas = ['admin'] %}
+{% block title %}{{ t('admin.ai_connections_and_models_admin') }}{% endblock %}
 {% block content %}
 <div class="container" id="ai-page">
   <header class="page-header">
-    <h1>AI 연결·모델</h1>
-    <p>제공자 연결 → 모델 등록 → 역할 시험 → 작성 기본값·호출 설정</p>
+    <h1>{{ t('admin.ai_connections_and_models') }}</h1>
+    <p>{{ t('admin.provider_connection_model_registration_role_tests_authoring_defaults_and_call_settings') }}</p>
   </header>
-  <p id="ai-status" role="status" aria-live="polite">설정을 불러오는 중입니다.</p>
+  <p id="ai-status" role="status" aria-live="polite">{{ t('admin.loading_settings') }}</p>
   <p id="ai-error" role="alert" tabindex="-1" hidden></p>
-  <button type="button" id="ai-refresh">설정 다시 불러오기</button>
+  <button type="button" id="ai-refresh">{{ t('admin.reload_settings') }}</button>
   <div id="ai-content"></div>
-  <section id="ai-editor" aria-label="선택한 작업" hidden></section>
+  <section id="ai-editor" aria-label="{{ t('admin.selected_action') }}" hidden></section>
 </div>
 <script type="module" src="/static/js/ai-connections.js"></script>
 {% endblock %}

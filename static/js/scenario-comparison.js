@@ -6,7 +6,11 @@ import {identity, mountScenarioModel} from './scenario-models.js';
 
 export function mountComparison(data, draft) {
   let pendingRequests = 0, uncertain = false, unacknowledgedStart = false, comparisonBaseline = null;
-  const comparisonInput = (role, history, message, selections) => JSON.stringify([role, history.map(({role,content}) => ({role,content})), message ?? '', selections]);
+  const inputSnapshot = value => JSON.stringify(value, (_key, item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    return Object.fromEntries(Object.entries(item).sort(([left], [right]) => left.localeCompare(right)));
+  });
+  const comparisonInput = (role, history, message, selections) => inputSnapshot([role, history.map(({role,content}) => ({role,content})), message ?? '', selections]);
   const comparisonValues = () => comparisonInput(target.value, commonHistory(), question.value, panels.map(panel => panel.control.selection));
   const open = document.getElementById('open-comparison');
   const root = document.getElementById('scenario-comparison');
@@ -33,7 +37,7 @@ export function mountComparison(data, draft) {
   function savedComparison() {
     const selections = run.panels.map(panel => panel.model_config);
     comparisonBaseline = comparisonInput(run.target_role, run.canonical_context, run.current_message, selections);
-    roleBaselines.set(run.target_role, JSON.stringify(selections));
+    roleBaselines.set(run.target_role, inputSnapshot(selections));
   }
   let recovery = null, streamToken = null;
   function remember(id) {
@@ -157,7 +161,7 @@ export function mountComparison(data, draft) {
       addModel(model === preferred ? selected : identity(model));
     }
     syncPanels();
-    roleBaselines.set(target.value, JSON.stringify(panels.map(panel => panel.control.selection)));
+    roleBaselines.set(target.value, inputSnapshot(panels.map(panel => panel.control.selection)));
   }
   function roleNote() {
     question.hidden = questionLabel.hidden = target.value === 'mentor';
@@ -496,7 +500,7 @@ export function mountComparison(data, draft) {
   }});
   sync();
   let initialized = false;
-  uiLanguage.registerGuard(() => ({busy:Boolean(locked() || recovery || pendingRequests || uncertain || unacknowledgedStart), dirty:initialized && (comparisonValues() !== comparisonBaseline || [...rolePanels].some(([role,selections]) => role !== target.value && JSON.stringify(selections) !== roleBaselines.get(role)))}));
+  uiLanguage.registerGuard(() => ({busy:Boolean(locked() || recovery || pendingRequests || uncertain || unacknowledgedStart), dirty:initialized && (comparisonValues() !== comparisonBaseline || [...rolePanels].some(([role,selections]) => role !== target.value && inputSnapshot(selections) !== roleBaselines.get(role)))}));
   open.addEventListener('click', () => {
     source.textContent = `${draft().title || uiLanguage.t('admin.untitled_draft')} · ${uiLanguage.t('admin.unsaved_draft')} · ${data.id == null ? uiLanguage.t('admin.new_draft_no_source') : `${uiLanguage.t('admin.source_2')} #${data.id} · ${uiLanguage.t('admin.version')} ${data.config_version}`}`;
     if (!initialized) { defaults(); initialized = true; comparisonBaseline = comparisonValues(); }

@@ -48,16 +48,16 @@
     <div class="chart-total">
         <div class="chart-total-row">
             <div class="chart-total-label">
-                총계
+                {{ t('teacher.total') }}
             </div>
             <div class="chart-total-value">
-                {{ distribution.values()|sum }}개 질문
+                {{ t('teacher.question_count', count=distribution.values()|sum) }}
             </div>
         </div>
         {% if grade_counts is defined and (grade_counts.get('우수', 0) > 0 or grade_counts.get('개선', 0) > 0) %}
         <div class="chart-grade-summary">
-            <span class="chart-grade-item grade-excellent">우수 {{ grade_counts.get('우수', 0) }}개</span>
-            <span class="chart-grade-item grade-improve">개선 {{ grade_counts.get('개선', 0) }}개</span>
+            <span class="chart-grade-item grade-excellent">{{ t('teacher.excellent_count', count=grade_counts.get('우수', 0)) }}</span>
+            <span class="chart-grade-item grade-improve">{{ t('teacher.improve_count', count=grade_counts.get('개선', 0)) }}</span>
         </div>
         {% endif %}
     </div>

@@ -2,13 +2,13 @@ import {readSSE} from './student-sse.js';
 
 function failureText(code) {
   if (['timeout_connect', 'timeout_first_output', 'timeout_total'].includes(code)) {
-    return '멘토 응답 대기 시간이 초과되었습니다. 멘토를 다시 요청해주세요.';
+    return uiLanguage.t('teacher.mentor_timeout');
   }
   return {
-    invalid_output:'멘토 응답 형식이 올바르지 않습니다. 멘토를 다시 요청하거나 관리자에게 설정 확인을 요청해주세요.',
-    refused:'멘토 응답이 거절되었습니다. 멘토를 다시 요청하거나 관리자에게 설정 확인을 요청해주세요.',
-    context_limit:'입력이 너무 큽니다. 질문을 줄이거나 관리자에게 수업 설정 확인을 요청해주세요.'
-  }[code] || '멘토 코칭 생성에 실패했습니다.';
+    invalid_output:uiLanguage.t('teacher.mentor_invalid'),
+    refused:uiLanguage.t('teacher.mentor_refused'),
+    context_limit:uiLanguage.t('teacher.context_limit')
+  }[code] || uiLanguage.t('teacher.mentor_failed');
 }
 
 export function mountMentorStream(ui) {
@@ -16,6 +16,9 @@ export function mountMentorStream(ui) {
   if (container.dataset.mentorStream) return;
   container.dataset.mentorStream = 'true';
   const turns = new Map();
+  uiLanguage.registerGuard(() => ({
+    busy: Array.from(turns.values()).some(turn => turn.running || turn.lookupBusy || turn.state === 'unknown')
+  }));
   const help = document.getElementById('request-mentor');
   const helpStatus = document.getElementById('mentor-help-status');
   const storageKey = `chat-mentor-${ui.sessionId}`;
@@ -42,12 +45,12 @@ export function mountMentorStream(ui) {
     slot.className = 'message message-mentor mentor-slot';
     slot.dataset.turnId = turnId;
     slot.setAttribute('role', 'group');
-    slot.setAttribute('aria-label', `${ui.mentorName || '멘토'} · 대상 턴 ${row.dataset.turnIndex || turnId}`);
+    slot.setAttribute('aria-label', uiLanguage.t('teacher.mentor_target_turn', {name:ui.mentorName || uiLanguage.t('teacher.mentor'), turn:row.dataset.turnIndex || turnId}));
     const wrapper = document.createElement('div');
     wrapper.className = 'message-content-wrapper';
     const sender = document.createElement('div');
     sender.className = 'message-sender';
-    sender.textContent = ui.mentorName || '멘토';
+    sender.textContent = ui.mentorName || uiLanguage.t('teacher.mentor');
     const status = document.createElement('div');
     status.className = 'message-meta mentor-run-status';
     status.setAttribute('role', 'status');
@@ -58,16 +61,16 @@ export function mountMentorStream(ui) {
     const retry = document.createElement('button');
     retry.type = 'button';
     retry.className = 'btn-secondary';
-    retry.textContent = '멘토 다시 요청';
+    retry.textContent = uiLanguage.t('teacher.mentor_retry');
     retry.hidden = true;
     const check = document.createElement('button');
     check.type = 'button';
     check.className = 'btn-secondary';
-    check.textContent = '상태 다시 확인';
+    check.textContent = uiLanguage.t('teacher.check_status');
     check.hidden = true;
     const note = document.createElement('p');
     note.className = 'message-meta';
-    note.textContent = '자동 검사 완료 · 코칭 없음';
+    note.textContent = uiLanguage.t('teacher.mentor_no_coaching');
     note.hidden = true;
     wrapper.append(sender, bubble, status, note, retry, check);
     slot.append(wrapper);
@@ -98,7 +101,7 @@ export function mountMentorStream(ui) {
   function apply(turn, data) {
     if (data.status === 'completed') {
       turn.result = data;
-      finish(turn, 'completed', data.result_kind === 'no_intervention' ? '멘토 미개입' : '멘토 코칭 완료');
+      finish(turn, 'completed', data.result_kind === 'no_intervention' ? uiLanguage.t('teacher.mentor_no_intervention') : uiLanguage.t('teacher.mentor_completed'));
       turn.note.hidden = data.result_kind !== 'no_intervention';
       if (data.message) {
         container.querySelectorAll('[data-message-id]').forEach(other => {
@@ -110,7 +113,7 @@ export function mountMentorStream(ui) {
       }
     } else if (['failed', 'interrupted', 'cancelled'].includes(data.status)) {
       finish(turn, data.status, data.status === 'cancelled' ?
-        '대화가 종료되어 멘토를 다시 요청할 수 없습니다.' : failureText(data.code || data.error_code), data.retryable);
+        uiLanguage.t('teacher.mentor_session_ended') : failureText(data.code || data.error_code), data.retryable);
       if (data.status === 'cancelled') ui.end();
     } else {
       turn.runId = data.run_id;
@@ -131,7 +134,7 @@ export function mountMentorStream(ui) {
     turn.running = true;
     turn.retry.hidden = true;
     turn.check.hidden = true;
-    turn.status.textContent = '멘토 저장 상태 확인 중';
+    turn.status.textContent = uiLanguage.t('teacher.mentor_checking');
     const requestId = turn.requestId;
     turn.controller = new AbortController();
     try {
@@ -140,11 +143,11 @@ export function mountMentorStream(ui) {
       const response = await ui.fetch(url, {signal:turn.controller.signal});
       if (turn.requestId !== requestId || leftPage || ui.isLocked()) return;
       if (response.status === 401) ui.expire();
-      else if (response.status === 403) finish(turn, 'forbidden', '이 멘토 실행을 조회할 권한이 없습니다.');
+      else if (response.status === 403) finish(turn, 'forbidden', uiLanguage.t('teacher.mentor_forbidden'));
       else if (response.status === 404) {
         turn.resend = true;
-        turn.retry.textContent = '같은 요청 다시 전송';
-        finish(turn, 'unknown', '멘토 요청 수락 여부를 확인할 수 없습니다.', true);
+        turn.retry.textContent = uiLanguage.t('teacher.resend_request');
+        finish(turn, 'unknown', uiLanguage.t('teacher.mentor_unknown_request'), true);
         turn.check.hidden = false;
       } else if (response.ok) {
         apply(turn, await response.json());
@@ -164,7 +167,7 @@ export function mountMentorStream(ui) {
   }
 
   function unknown(turn) {
-    finish(turn, 'unknown', '멘토 저장 상태가 아직 불명확합니다. 상태 다시 확인을 눌러주세요.');
+    finish(turn, 'unknown', uiLanguage.t('teacher.mentor_unknown_saved'));
     turn.check.hidden = false;
   }
 
@@ -175,14 +178,14 @@ export function mountMentorStream(ui) {
       if (turn.state) turn.trigger = 'manual';
     }
     turn.resend = false;
-    turn.retry.textContent = '멘토 다시 요청';
+    turn.retry.textContent = uiLanguage.t('teacher.mentor_retry');
     const requestId = turn.requestId;
     turn.runId = null;
     turn.running = true;
     turn.state = turn.slot.dataset.status = 'running';
     turn.retry.hidden = turn.check.hidden = true;
     turn.note.hidden = true;
-    turn.status.textContent = '멘토 처리 중';
+    turn.status.textContent = uiLanguage.t('teacher.mentor_processing');
     turn.controller = new AbortController();
     persist();
     refreshHelp();
@@ -198,28 +201,28 @@ export function mountMentorStream(ui) {
         const payload = await response.json();
         const data = payload.detail || payload;
         if (data.code === 'mentor_busy') {
-          finish(turn, 'busy', '이전 코칭 처리 중 — 이후 다시 요청 가능', true);
+          finish(turn, 'busy', uiLanguage.t('teacher.mentor_busy'), true);
         } else if (data.code === 'mentor_limit') {
-          finish(turn, 'limit', '최근 완료 턴의 개입 상한에 도달했습니다.');
+          finish(turn, 'limit', uiLanguage.t('teacher.mentor_limit'));
         } else if (['mentor_start_turn', 'mentor_interval'].includes(data.code)) {
-          finish(turn, 'ready', '자동 검사 간격 대기 중 — 도움 버튼으로 요청할 수 있습니다.');
+          finish(turn, 'ready', uiLanguage.t('teacher.mentor_interval'));
         } else if (data.code === 'mentor_disabled' || data.code === 'mentor_auto_disabled') {
-          finish(turn, 'unavailable', '현재 멘토 도움을 사용할 수 없습니다.');
+          finish(turn, 'unavailable', uiLanguage.t('teacher.mentor_unavailable'));
         } else if (data.code === 'mentor_turn_obsolete') {
-          finish(turn, 'obsolete', '더 최신 학생 턴이 완료되어 이 턴은 더 이상 재요청할 수 없습니다.');
+          finish(turn, 'obsolete', uiLanguage.t('teacher.mentor_obsolete'));
         } else if (data.code === 'session_ended') {
-          finish(turn, 'cancelled', '대화가 종료되어 멘토를 다시 요청할 수 없습니다.');
+          finish(turn, 'cancelled', uiLanguage.t('teacher.mentor_session_ended'));
           ui.end();
         } else if (response.status === 401) {
           ui.expire();
         } else if (response.status === 503 && data.code === 'configuration_unavailable') {
-          finish(turn, 'failed', '관리자에게 AI 연결과 멘토 모델 검증을 요청해주세요.', true);
+          finish(turn, 'failed', uiLanguage.t('teacher.mentor_configuration'), true);
         } else if (response.status === 429 && data.code === 'call_limit_reached') {
-          finish(turn, 'failed', 'AI 호출이 많습니다. 잠시 후 멘토를 다시 요청해주세요.', true);
+          finish(turn, 'failed', uiLanguage.t('teacher.mentor_capacity'), true);
         } else if (response.status === 422 && data.code === 'context_limit') {
           finish(turn, 'failed', failureText(data.code));
         } else {
-          finish(turn, 'failed', '멘토 요청을 처리하지 못했습니다.', ![400, 401, 403, 404, 422].includes(response.status));
+          finish(turn, 'failed', uiLanguage.t('teacher.mentor_request_failed'), ![400, 401, 403, 404, 422].includes(response.status));
         }
         return;
       }
@@ -269,7 +272,7 @@ export function mountMentorStream(ui) {
     const busy = Array.from(turns.values()).some(item => item.running);
     help.disabled = ui.isLocked() || !row || busy || coached ||
       (turn && (turn.result?.result_kind === 'message' || ['limit', 'unavailable', 'obsolete'].includes(turn.state)));
-    helpStatus.textContent = turn?.status.textContent || (coached ? '멘토 코칭 완료' : '완료된 학생 턴에 도움을 요청할 수 있습니다.');
+    helpStatus.textContent = turn?.status.textContent || (coached ? uiLanguage.t('teacher.mentor_completed') : uiLanguage.t('teacher.mentor_help_available'));
     for (const [id, old] of turns) {
       if (id !== row?.dataset.turnId && !old.running) old.retry.hidden = true;
     }
@@ -297,9 +300,9 @@ export function mountMentorStream(ui) {
   });
   refreshHelp();
   document.addEventListener('chat:locked', e => stop('cancelled', e.detail.authExpired ?
-    '로그인이 만료되어 멘토를 다시 요청할 수 없습니다.' : '대화가 종료되어 멘토를 다시 요청할 수 없습니다.'));
+    uiLanguage.t('teacher.mentor_auth_expired') : uiLanguage.t('teacher.mentor_session_ended')));
   window.addEventListener('pagehide', () => {
     leftPage = true;
-    stop('interrupted', '페이지 이동으로 멘토 코칭이 중단되었습니다.');
+    stop('interrupted', uiLanguage.t('teacher.mentor_page_left'));
   });
 }

@@ -152,7 +152,13 @@ async def _reserve_student(factory, session_id, user, request):
         else:
             teacher = None
         if session.ended_at:
-            raise HTTPException(400, detail="Session already ended")
+            raise HTTPException(
+                400,
+                detail={
+                    "code": "session_ended",
+                    "message": "대화가 종료되었습니다.",
+                },
+            )
         await validate_scenario_access(scenario.id, user, db)
         if not scenario.is_active:
             raise HTTPException(404, detail="Scenario not found")

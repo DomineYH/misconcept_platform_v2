@@ -1,21 +1,22 @@
 {% extends "layout.html" %}
-{% block title %}{{ scenario_title }} - 과거 기록{% endblock %}
+{% set i18n_areas = ['teacher'] %}
+{% block title %}{{ scenario_title }} - {{ t('teacher.history_title') }}{% endblock %}
 {% block content %}
 <div class="container session-history">
-  <h1>{{ scenario_title }} · 대화 기록</h1>
+  <h1>{{ scenario_title }} · {{ t('teacher.chat_history') }}</h1>
   {% if snapshot_provenance and snapshot_provenance.snapshot_origin == 'native' %}
-  <p class="history-provenance">수업 시작 시 확정한 설정 · 원래 대화 기록</p>
+  <p class="history-provenance">{{ t('teacher.native_provenance') }}</p>
   {% endif %}
   {% include "partials/snapshot_provenance.html" %}
-  <p>시작: {{ session.started_at }} · 종료: {{ session.ended_at or '종료 기록 없음' }}</p>
-  <a href="/sessions/{{ session.id }}/export.csv" class="btn btn-primary">CSV 다운로드</a>
-  {% if session.ended_at %}<a href="/sessions/{{ session.id }}/analysis_page" class="btn btn-secondary">기존 분석 보기</a>{% endif %}
-  <a href="/scenarios" class="btn btn-secondary">새 연습 선택</a>
+  <p>{{ t('teacher.started') }} {{ session.started_at }} · {{ t('teacher.ended') }} {{ session.ended_at or t('teacher.no_end_record') }}</p>
+  <a href="/sessions/{{ session.id }}/export.csv" class="btn btn-primary">{{ t('teacher.download_csv') }}</a>
+  {% if session.ended_at %}<a href="/sessions/{{ session.id }}/analysis_page" class="btn btn-secondary">{{ t('teacher.view_existing_analysis') }}</a>{% endif %}
+  <a href="/scenarios" class="btn btn-secondary">{{ t('teacher.choose_new_practice') }}</a>
   {% if analysis_result_url is defined %}
   {% set analysis_transcript_open = true %}
   {% include "partials/analysis_result.html" %}
   {% else %}
-  <section aria-label="원래 대화">
+  <section aria-label="{{ t('teacher.original_conversation') }}">
     {% for message in messages %}{% include "partials/message.html" %}{% endfor %}
   </section>
   {% endif %}

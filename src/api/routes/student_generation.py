@@ -12,14 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.api.dependencies import get_current_user, get_db_session
 from src.api.routes.session_helpers import load_session
 from src.api.routes.session_messages import limiter
+from src.api.routes.teacher_language import TeacherLanguageRoute
 from src.api.schemas import GenerationRequest
+from src.i18n import display_language
 from src.models import GenerationRun, User
 from src.services.generation_runs import reserve_student, snapshot
 from src.services.mentor_generation import reserve_mentor
 from src.services.mentor_stream import mentor_response
 from src.services.student_stream import StudentStreamingResponse
 
-router = APIRouter(tags=["Sessions"])
+router = APIRouter(route_class=TeacherLanguageRoute, tags=["Sessions"])
 
 
 class MentorRequest(GenerationRequest):
@@ -55,6 +57,7 @@ async def mentor_turn(
     )
     if execution is None:
         return JSONResponse(accepted)
+    execution["display_language"] = display_language(request)
     return mentor_response(factory, accepted, execution)
 
 
@@ -75,6 +78,7 @@ async def student_turn(
     accepted, kwargs = await reserve_student(factory, session_id, user, body)
     if kwargs is None:
         return JSONResponse(accepted)
+    kwargs["display_language"] = display_language(request)
     return StudentStreamingResponse(factory, accepted, kwargs)
 
 

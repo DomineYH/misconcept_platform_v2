@@ -1,12 +1,13 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['teacher'] %}
 
-{% block title %}시나리오 - 오개념 교정 대화 시뮬레이터{% endblock %}
+{% block title %}{{ t('teacher.scenarios_title') }}{% endblock %}
 
 {% block content %}
 <div class="scenarios-container">
   <header class="page-header">
-    <h1>시나리오 선택</h1>
-    <p>공개 문제와 학생 소개를 확인하고 대화를 시작하세요.</p>
+    <h1>{{ t('teacher.choose_scenario') }}</h1>
+    <p>{{ t('teacher.scenario_intro') }}</p>
   </header>
 
   <div class="scenarios-grid">
@@ -18,27 +19,27 @@
         {% if (scenario.problem_situation or '')|trim %}
         {{ scenario.problem_situation[:100] }}{% if scenario.problem_situation|length > 100 %}...{% endif %}
         {% else %}
-        <span class="text-muted">문제 상황 보완 필요</span>
+        <span class="text-muted">{{ t('teacher.problem_needed') }}</span>
         {% endif %}
       </p>
       {% if scenario.student_profile %}
-      <p class="scenario-description"><strong>공개 학생 소개</strong><br>{{ scenario.student_profile }}</p>
+      <p class="scenario-description"><strong>{{ t('teacher.public_profile') }}</strong><br>{{ scenario.student_profile }}</p>
       {% endif %}
       {% if (scenario.problem_situation or '')|trim %}
       <a href="/scenarios/{{ scenario.id }}" class="btn-primary">
-        대화 시작
+        {{ t('teacher.start_chat') }}
       </a>
       {% else %}
-      <p class="scenario-description">공개 문제 상황이 설정되지 않아 시작할 수 없습니다. 관리자에게 문의하세요.</p>
-      <button type="button" class="btn-primary" disabled>대화 시작</button>
+      <p class="scenario-description">{{ t('teacher.problem_unavailable') }}</p>
+      <button type="button" class="btn-primary" disabled>{{ t('teacher.start_chat') }}</button>
       {% endif %}
     </div>
     {% endfor %}
     {% else %}
     <div class="empty-state">
-      <h3 class="empty-state-title">시나리오가 없습니다</h3>
-      <p>현재 사용할 수 있는 배정된 시나리오가 없습니다.</p>
-      <p>시나리오 배정과 게시 상태를 관리자에게 문의하세요.</p>
+      <h3 class="empty-state-title">{{ t('teacher.no_scenarios') }}</h3>
+      <p>{{ t('teacher.no_assigned_scenarios') }}</p>
+      <p>{{ t('teacher.check_assignment') }}</p>
     </div>
     {% endif %}
   </div>

@@ -8,6 +8,7 @@ from contextlib import suppress
 
 import anyio
 
+from src.i18n import translate
 from src.models import GenerationRun
 from src.services.generation_lifecycle import active_runs
 from src.services.generation_runs import snapshot
@@ -35,6 +36,7 @@ def mentor_response(factory, accepted, execution):
 
 
 async def stream_mentor(factory, accepted, execution, started, cancelled):
+    language = execution.get("display_language", "ko")
     seq = 0
     last_sent = started
     bot = task = None
@@ -69,9 +71,9 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
             code=result["error_code"],
             retryable=result["retryable"],
             message=(
-                "대화가 종료되었습니다."
+                translate("teacher.conversation_ended", language)
                 if result["status"] == "cancelled"
-                else "멘토 코칭 생성에 실패했습니다."
+                else translate("teacher.mentor_failed", language)
             ),
         )
 
@@ -164,7 +166,7 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                 "run.interrupted",
                 status="interrupted",
                 code="storage_error",
-                message="멘토 실행 상태를 확인해주세요.",
+                message=translate("teacher.mentor_check_execution", language),
                 retryable=False,
             )
     finally:

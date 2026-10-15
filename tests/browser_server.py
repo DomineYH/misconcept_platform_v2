@@ -208,6 +208,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("session_history.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Teacher", role="teacher"),
                     scenario_title="긴 과거 대화 제목 " * 12,
                     session=SimpleNamespace(
@@ -225,6 +226,14 @@ class Handler(BaseHTTPRequestHandler):
                             "2026-10-02 10:00"
                             if reconstructed
                             else "2026-10-01 09:00"
+                        ),
+                        unknown_fields=(
+                            [
+                                "config.student.resolved_model_config",
+                                "config.mentor.intervention_instruction",
+                            ]
+                            if reconstructed
+                            else []
                         ),
                         unknown_field_names=(
                             ["당시 모델", "내부 설정"] if reconstructed else []
@@ -264,6 +273,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("partials/analysis_modal.html")
                 .render(
+                    request=self.display_request(),
                     is_admin=True,
                     session_id=1,
                     analysis_result_url=f"/fixtures/s4/result?{path.query}",
@@ -275,6 +285,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("analysis.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(
                         nickname="Admin" if "admin" in query else "Teacher",
                         role="admin" if "admin" in query else "teacher",
@@ -329,6 +340,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("analysis.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Teacher", role="teacher"),
                     session_id=1,
                     feedback="Narrative feedback",

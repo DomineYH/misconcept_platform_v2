@@ -1,12 +1,13 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['teacher'] %}
 
-{% block title %}{{ scenario.title }} - 대화{% endblock %}
+{% block title %}{{ scenario.title }} - {{ t('teacher.chat') }}{% endblock %}
 
 {% block content %}
 <!-- Mobile Tab Navigation -->
-<div class="mobile-tabs" role="tablist" aria-label="대화 화면">
-  <button class="mobile-tab" data-panel="scenario" role="tab" id="mobile-tab-scenario" aria-controls="scenario-panel" aria-selected="false" tabindex="-1">상황 정보</button>
-  <button class="mobile-tab active" data-panel="chat" role="tab" id="mobile-tab-chat" aria-controls="chat-panel" aria-selected="true" tabindex="0">대화</button>
+<div class="mobile-tabs" role="tablist" aria-label="{{ t('teacher.chat_screen') }}">
+  <button class="mobile-tab" data-panel="scenario" role="tab" id="mobile-tab-scenario" aria-controls="scenario-panel" aria-selected="false" tabindex="-1">{{ t('teacher.situation_info') }}</button>
+  <button class="mobile-tab active" data-panel="chat" role="tab" id="mobile-tab-chat" aria-controls="chat-panel" aria-selected="true" tabindex="0">{{ t('teacher.chat') }}</button>
 </div>
 
 <div class="split-layout">
@@ -17,8 +18,8 @@
             id="scenario-panel-toggle"
             aria-expanded="true"
             aria-controls="scenario-panel"
-            aria-label="정보 패널 접기/펼치기"
-            title="정보 패널 접기/펼치기 (Ctrl+B)">
+            aria-label="{{ t('teacher.panel_toggle') }}"
+            title="{{ t('teacher.panel_toggle_shortcut') }}">
       <svg class="panel-toggle-icon" xmlns="http://www.w3.org/2000/svg"
            width="18" height="18" viewBox="0 0 24 24"
            fill="none" stroke="currentColor" stroke-width="2.5"
@@ -30,19 +31,19 @@
       <h1>{{ scenario.title }}</h1>
       <div class="header-actions">
         <button id="end-session-btn" class="btn-primary" data-state="active" aria-busy="false">
-          대화 종료 후 분석 보기
+          {{ t('teacher.end_and_analyze') }}
         </button>
         <button id="return-to-scenarios-btn" class="btn-secondary" disabled>
-          나가기
+          {{ t('teacher.leave') }}
         </button>
       </div>
     </div>
 
     <!-- Tab Navigation -->
-    <div class="info-tabs" role="tablist" aria-label="상황 정보">
-      <button class="info-tab active" data-tab="guide" role="tab" id="info-tab-guide" aria-controls="tab-guide" aria-selected="true" tabindex="0">챗봇 활용<br>방법</button>
-      <button class="info-tab" data-tab="profile" role="tab" id="info-tab-profile" aria-controls="tab-profile" aria-selected="false" tabindex="-1">학생 정보</button>
-      <button class="info-tab" data-tab="situation" role="tab" id="info-tab-situation" aria-controls="tab-situation" aria-selected="false" tabindex="-1">문제 상황</button>
+    <div class="info-tabs" role="tablist" aria-label="{{ t('teacher.situation_info') }}">
+      <button class="info-tab active" data-tab="guide" role="tab" id="info-tab-guide" aria-controls="tab-guide" aria-selected="true" tabindex="0">{{ t('teacher.usage_guide') }}</button>
+      <button class="info-tab" data-tab="profile" role="tab" id="info-tab-profile" aria-controls="tab-profile" aria-selected="false" tabindex="-1">{{ t('teacher.student_info') }}</button>
+      <button class="info-tab" data-tab="situation" role="tab" id="info-tab-situation" aria-controls="tab-situation" aria-selected="false" tabindex="-1">{{ t('teacher.problem') }}</button>
     </div>
 
     <!-- Tab Content Container -->
@@ -51,24 +52,9 @@
       <div class="tab-pane active" id="tab-guide" role="tabpanel" aria-labelledby="info-tab-guide" tabindex="0">
         <section class="info-section">
           <div class="guide-content">
-            <p>
-              문제 상황을 확인한 후
-              <strong>{{ scenario.student_name or '학생' }}</strong>의
-              오개념을 해결해 봅시다.
-            </p>
-            {% if scenario.subject %}
-            <p>
-              대화가 끝나면 <strong>대화 종료 후 분석 보기</strong>를 클릭해 보세요.
-              대화가 학생의 <strong>{{ scenario.subject }}</strong>적 사고를
-              이끌어내기에 적절했는지 피드백을 받아봅시다.
-            </p>
-            {% else %}
-            <p>
-              대화가 끝나면 <strong>대화 종료 후 분석 보기</strong>를 클릭해 보세요.
-              대화가 학생의 사고를 이끌어내기에 적절했는지
-              피드백을 받아봅시다.
-            </p>
-            {% endif %}
+            <p>{{ t('teacher.guide_problem', student=scenario.student_name or t('teacher.student')) }}</p>
+            <p>{{ t('teacher.guide_analysis', action=t('teacher.end_and_analyze')) }}</p>
+            <p>{{ t('teacher.guide_feedback_subject', subject=scenario.subject) if scenario.subject else t('teacher.guide_feedback') }}</p>
           </div>
         </section>
       </div>
@@ -81,7 +67,7 @@
         </section>
         {% else %}
         <section class="info-section">
-          <p class="text-muted">학생 정보가 없습니다.</p>
+          <p class="text-muted">{{ t('teacher.no_student_info') }}</p>
         </section>
         {% endif %}
       </div>
@@ -93,14 +79,14 @@
             {% if (scenario.problem_situation or '')|trim %}
             {{ scenario.problem_situation }}
             {% else %}
-            <span class="text-muted">문제 상황 보완 필요 — 관리자에게 문의하세요.</span>
+            <span class="text-muted">{{ t('teacher.problem_contact') }}</span>
             {% endif %}
           </div>
           {% if scenario.learning_objective %}
-          <p>학습목표: {{ scenario.learning_objective }}</p>
+          <p>{{ t('teacher.learning_objective') }} {{ scenario.learning_objective }}</p>
           {% endif %}
           {% if scenario.target_grade %}
-          <p>대상 학년: {{ scenario.target_grade }}</p>
+          <p>{{ t('teacher.target_grade') }} {{ scenario.target_grade }}</p>
           {% endif %}
         </section>
       </div>
@@ -112,10 +98,10 @@
   <section class="chat-panel" id="chat-panel" aria-labelledby="mobile-tab-chat">
     <!-- Session status banner (hidden by default) -->
     <div id="session-status" role="status" style="display: none;">
-      <span id="session-status-text">이 대화는 종료되었습니다.</span>
+      <span id="session-status-text">{{ t('teacher.chat_ended') }}</span>
       <button id="session-login-btn" class="btn-secondary"
         style="display:none; margin-left: 0.75rem;">
-        로그인으로 이동
+        {{ t('teacher.go_login') }}
       </button>
     </div>
 
@@ -129,9 +115,9 @@
       <div id="messages-container" class="messages-container">
         {% if scenario.mentor_mode != 'off' and scenario.greeting_message %}
         <div class="message message-mentor greeting-message">
-          <div class="avatar mentor">멘</div>
+          <div class="avatar mentor">{{ t('teacher.mentor_avatar') }}</div>
           <div class="message-content-wrapper">
-            <div class="message-sender">{{ scenario.mentor_name|default('멘토') }}</div>
+            <div class="message-sender">{{ scenario.mentor_name|default(t('teacher.mentor')) }}</div>
             <div class="message-bubble">{{ scenario.greeting_message }}</div>
           </div>
         </div>
@@ -142,9 +128,9 @@
       </div>
 
       {% if scenario.mentor_mode != 'off' %}
-      <div class="lesson-controls" aria-label="멘토 도움">
-        <p id="mentor-help-status">완료된 학생 턴에 도움을 요청할 수 있습니다.</p>
-        <button type="button" class="btn-secondary" id="request-mentor" disabled>멘토 도움 요청</button>
+      <div class="lesson-controls" aria-label="{{ t('teacher.mentor_help') }}">
+        <p id="mentor-help-status">{{ t('teacher.mentor_help_available') }}</p>
+        <button type="button" class="btn-secondary" id="request-mentor" disabled>{{ t('teacher.request_mentor') }}</button>
       </div>
       {% endif %}
 
@@ -152,10 +138,10 @@
       <form id="teacher-form" class="teacher-form">
         <div class="input-group">
           <textarea name="content" id="teacher-input" rows="1"
-            aria-label="교사 메시지" placeholder="메시지를 입력하세요..." required maxlength="5000"
+            aria-label="{{ t('teacher.teacher_message') }}" placeholder="{{ t('teacher.message_placeholder') }}" required maxlength="5000"
             oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
           <button type="submit" class="btn-icon-primary"
-            hx-disable-element="self" title="전송" aria-label="메시지 전송">
+            hx-disable-element="self" title="{{ t('teacher.send') }}" aria-label="{{ t('teacher.send_message') }}">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
               viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -172,7 +158,7 @@
 </div>
 
 <!-- Analysis Modal Overlay -->
-<div id="analysis-modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="세션 분석 결과" tabindex="-1">
+<div id="analysis-modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="{{ t('teacher.analysis_results') }}" tabindex="-1">
   <div id="analysis-modal-container" class="modal-container modal-xl">
     <!-- Modal content loaded via HTMX -->
   </div>
@@ -183,7 +169,7 @@
   'studentName': student_name or 'S',
   'mentorEnabled': scenario.mentor_mode|default('off') != 'off',
   'mentorMode': scenario.mentor_mode|default('off'),
-  'mentorName': scenario.mentor_name|default('멘토'),
+  'mentorName': scenario.mentor_name|default(t('teacher.mentor')),
   'ended': session_ended|default(false)
 }|tojson }}</script>
 <script src="/static/js/chat.js"></script>

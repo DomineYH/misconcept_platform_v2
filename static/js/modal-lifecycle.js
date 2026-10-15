@@ -47,7 +47,7 @@ window.modalLifecycle = (() => {
       (root.querySelector('.modal-body, .panel-body, form') || root).prepend(notice);
     }
     notice.textContent = Array.isArray(message)
-      ? message.map(item => item.msg || '입력을 확인하세요.').join(' ')
+      ? message.map(item => item.msg || uiLanguage.t('common.check_input')).join(' ')
       : String(message);
     notice.focus();
   }

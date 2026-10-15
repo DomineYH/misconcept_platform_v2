@@ -1,4 +1,4 @@
-import {node, button, field} from './ai-render.js';
+import {node, button, field, roles} from './ai-render.js';
 import {mountComparison} from './scenario-comparison.js';
 import {mountScenarioModels} from './scenario-models.js';
 
@@ -26,7 +26,7 @@ function renderRubric() {
     const container = node('fieldset');
     container.append(node('legend', `${uiLanguage.t('admin.classification')} ${index + 1}`));
     for (const [key, label, limit] of [['id', 'ID', 64], ['name', uiLanguage.t('admin.name'), 100], ['criteria', uiLanguage.t('admin.criteria'), 50000], ['level', uiLanguage.t('admin.level')]]) {
-      const input = field(container, `rubric-${index}-${key}`, `${uiLanguage.t('admin.classification')} ${index + 1} ${label}`, row[key], key === 'level' ? {} : {maxlength:limit}, key === 'level' ? [['', uiLanguage.t('admin.unspecified')], ['high', 'high'], ['low', 'low']] : null);
+      const input = field(container, `rubric-${index}-${key}`, `${uiLanguage.t('admin.classification')} ${index + 1} ${label}`, row[key], key === 'level' ? {} : {maxlength:limit}, key === 'level' ? [['', uiLanguage.t('admin.unspecified')], ['high', uiLanguage.t('admin.high_level')], ['low', uiLanguage.t('admin.low_level')]] : null);
       input.dataset.field = `analysis.rubric.${index}.${key}`;
       input.addEventListener('input', () => { row[key] = input.value || (key === 'level' ? null : ''); });
       const errorId = `${input.dataset.field}-error`;
@@ -83,7 +83,7 @@ function preview() {
     el.textContent = hidden ? '' : document.getElementById(path).value;
     el.hidden = hidden;
   });
-  document.getElementById('execution-summary').textContent = `${Object.entries(models).map(([role, model]) => `${role}: ${model ? `${model.provider} / ${model.model_id}` : uiLanguage.t('admin.selection_required')}`).join('\n')}\n${uiLanguage.t('admin.mentor')} ${mode} · ${uiLanguage.t('admin.classification')} ${classification ? uiLanguage.t('admin.item_count', {count:rubric.length}) : uiLanguage.t('admin.disabled')}`;
+  document.getElementById('execution-summary').textContent = `${Object.entries(models).map(([role, model]) => `${roles[role]}: ${model ? `${model.provider} / ${model.model_id}` : uiLanguage.t('admin.selection_required')}`).join('\n')}\n${uiLanguage.t('admin.mentor')} ${document.getElementById('mentor.mode').selectedOptions[0].textContent} · ${uiLanguage.t('admin.classification')} ${classification ? uiLanguage.t('admin.item_count', {count:rubric.length}) : uiLanguage.t('admin.disabled')}`;
 }
 form.addEventListener('input', markDirty);
 form.addEventListener('change', markDirty);

@@ -29,7 +29,8 @@ export default async function checkHiddenScenarioValues(page) {
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', {name:'분류 1 삭제', exact:true}).click();
   assert.equal(await page.getByLabel('분류 1 이름', {exact:true}).inputValue(), '보존할 기준');
-  assert.equal(await page.getByLabel('분류 1 수준', {exact:true}).locator('option').allTextContents().then(a => a.join(',')), '지정하지 않음,high,low');
+  assert.equal(await page.getByLabel('분류 1 수준', {exact:true}).locator('option').allTextContents().then(a => a.join(',')), '지정하지 않음,높음,낮음');
+  assert.deepEqual(await page.getByLabel('분류 1 수준', {exact:true}).locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'high', 'low']);
   await page.getByLabel('발화 분류 사용').uncheck();
   await page.getByRole('button', {name:'4. 멘토', exact:true}).click();
   await mode.selectOption('off');

@@ -86,3 +86,30 @@ def test_review_badge_is_distinct_from_required_field_notice(language, label):
     )
     assert f'<span class="meta-tag">{label}</span>' in html
     assert "원문 제목" in html
+
+
+@pytest.mark.parametrize(
+    "language,label", [("ko", "원문 보관본 SHA-256"), ("en", "Archive SHA-256")]
+)
+def test_archive_label_translates_while_historical_provenance_stays_verbatim(
+    language, label
+):
+    from tests.s2_screen_fixtures import editor_fixture
+
+    editor = editor_fixture(legacy=True, language=language)
+    editor["conversion_provenance"][0].update(
+        archive_ref="private/archive.json",
+        archive_hash="archive-hash",
+        source_hash="source-hash",
+        target_hash="target-hash",
+    )
+    html = templates.env.get_template("admin/scenario_editor.html").render(
+        request=request(language),
+        user=SimpleNamespace(role="admin", nickname="원문 사용자"),
+        editor=editor,
+    )
+    assert f"<dt>{label}</dt>" in html
+    assert "학생 프로필" in html
+    assert "내부 학생 프로필로 보존 · 공개 학생 소개는 비어 있음" in html
+    assert "private/archive.json" in html
+    assert "archive-hash" in html

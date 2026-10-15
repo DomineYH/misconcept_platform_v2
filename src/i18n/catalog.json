@@ -1,5 +1,9 @@
 {
   "common": {
+    "check_input": {
+      "ko": "입력을 확인하세요.",
+      "en": "Check your input."
+    },
     "product": {
       "ko": "오개념 교정 대화 시뮬레이터",
       "en": "Misconception Dialogue Simulator"
@@ -1456,6 +1460,18 @@
     }
   },
   "admin": {
+    "archive_sha_256": {
+      "ko": "원문 보관본 SHA-256",
+      "en": "Archive SHA-256"
+    },
+    "high_level": {
+      "ko": "높음",
+      "en": "High"
+    },
+    "low_level": {
+      "ko": "낮음",
+      "en": "Low"
+    },
     "admin_dashboard_misconception_dialogue_simulator": {
       "ko": "관리자 대시보드 - 오개념 교정 대화 시뮬레이터",
       "en": "Admin dashboard - Misconception Dialogue Simulator"

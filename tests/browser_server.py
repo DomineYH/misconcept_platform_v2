@@ -475,7 +475,11 @@ class Handler(BaseHTTPRequestHandler):
                     session_id=1,
                     student_name="Student",
                     user=SimpleNamespace(
-                        nickname="Tester",
+                        nickname=(
+                            "긴한글별명" * 20
+                            if "long_nickname" in query
+                            else "Tester"
+                        ),
                         role=(
                             "admin"
                             if path.path.startswith("/admin")

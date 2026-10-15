@@ -1,42 +1,43 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['admin'] %}
 
-{% block title %}관리자 대시보드 - 오개념 교정 대화 시뮬레이터{% endblock %}
+{% block title %}{{ t('admin.admin_dashboard_misconception_dialogue_simulator') }}{% endblock %}
 
 {% block content %}
 <div class="container">
   <header class="page-header">
-    <h1>관리자 대시보드</h1>
+    <h1>{{ t('admin.dashboard') }}</h1>
   </header>
 
   <section class="quick-actions">
     <div class="action-buttons-grid">
       <a href="/admin/ai" class="action-card">
-        <span class="action-title">AI 연결·모델</span>
-        <span class="action-desc">제공자 연결, 역할 시험 및 작성 기본값</span>
+        <span class="action-title">{{ t('admin.ai_connections_and_models') }}</span>
+        <span class="action-desc">{{ t('admin.provider_connections_role_tests_and_authoring_defaults') }}</span>
       </a>
       <a href="/admin/scenarios" class="action-card">
-        <span class="action-title">시나리오 관리</span>
-        <span class="action-desc">대화 시나리오 생성 및 편집</span>
+        <span class="action-title">{{ t('admin.scenario_management') }}</span>
+        <span class="action-desc">{{ t('admin.create_and_edit_dialogue_scenarios') }}</span>
       </a>
       <a href="/admin/scenarios?compare=1" class="action-card">
-        <span class="action-title">모델 비교</span>
-        <span class="action-desc">동일 맥락으로 모델·옵션 시험</span>
+        <span class="action-title">{{ t('admin.model_comparison') }}</span>
+        <span class="action-desc">{{ t('admin.test_models_and_options_with_common_context') }}</span>
       </a>
       <a href="/admin/user-conversations" class="action-card">
-        <span class="action-title">사용자 대화 관리</span>
-        <span class="action-desc">사용자별 대화 다운로드</span>
+        <span class="action-title">{{ t('admin.user_conversations') }}</span>
+        <span class="action-desc">{{ t('admin.download_conversations_by_user') }}</span>
       </a>
       <a href="/admin/users" class="action-card">
-        <span class="action-title">사용자 관리</span>
-        <span class="action-desc">사용자 생성, 수정 및 삭제</span>
+        <span class="action-title">{{ t('admin.user_management') }}</span>
+        <span class="action-desc">{{ t('admin.create_edit_and_delete_users') }}</span>
       </a>
       <a href="/admin/groups" class="action-card">
-        <span class="action-title">그룹 관리</span>
-        <span class="action-desc">사용자 그룹 및 시나리오 접근 관리</span>
+        <span class="action-title">{{ t('admin.group_management') }}</span>
+        <span class="action-desc">{{ t('admin.manage_user_groups_and_scenario_access') }}</span>
       </a>
       <a href="/admin/about" class="action-card">
-        <span class="action-title">소개 관리</span>
-        <span class="action-desc">개발자 및 관리자 정보 등록·수정</span>
+        <span class="action-title">{{ t('admin.about_management') }}</span>
+        <span class="action-desc">{{ t('admin.add_and_edit_developer_and_administrator_information') }}</span>
       </a>
     </div>
   </section>

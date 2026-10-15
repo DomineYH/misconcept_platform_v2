@@ -1,72 +1,73 @@
 {% extends "layout.html" %}
-{% block title %}시나리오 관리 - 관리자{% endblock %}
+{% set i18n_areas = ['admin'] %}
+{% block title %}{{ t('admin.scenario_management_admin') }}{% endblock %}
 {% block content %}
 <div class="container scenarios-admin">
   <header class="page-header-admin">
-    <div class="header-content"><h1>{{ '비교할 저장 시나리오 선택' if request is defined and request.query_params.get('compare') else '시나리오 관리' }}</h1><p class="subtitle">통합 설정 작성, 게시 및 관리</p></div>
-    <a href="/admin/scenarios?compare=1" class="btn btn-secondary">전체 모델 비교</a>
-    <a href="/admin/model-comparison" class="btn btn-secondary">비교 이력</a>
-    <a href="/admin/scenarios/new" class="btn btn-primary">통합 초안 작성</a>
+    <div class="header-content"><h1>{{ t('admin.choose_a_saved_scenario_to_compare') if request is defined and request.query_params.get('compare') else t('admin.scenario_management') }}</h1><p class="subtitle">{{ t('admin.write_publish_and_manage_scenario_settings') }}</p></div>
+    <a href="/admin/scenarios?compare=1" class="btn btn-secondary">{{ t('admin.whole_model_comparison') }}</a>
+    <a href="/admin/model-comparison" class="btn btn-secondary">{{ t('admin.comparison_history') }}</a>
+    <a href="/admin/scenarios/new" class="btn btn-primary">{{ t('admin.create_scenario_draft') }}</a>
   </header>
-  <section class="filter-bar" aria-label="시나리오 검색">
-    <div class="search-box"><input type="search" id="search-input" aria-label="시나리오 검색" placeholder="현재 페이지에서 검색..." aria-describedby="scenario-filter-help" class="search-input"></div>
+  <section class="filter-bar" aria-label="{{ t('admin.search_scenarios') }}">
+    <div class="search-box"><input type="search" id="search-input" aria-label="{{ t('admin.search_scenarios') }}" placeholder="{{ t('admin.search_this_page') }}" aria-describedby="scenario-filter-help" class="search-input"></div>
     <div class="filter-group">
-      <select id="filter-publication" class="filter-select" aria-label="게시 상태">
-        <option value="">모든 게시 상태</option><option value="draft">초안</option><option value="published">게시</option>
+      <select id="filter-publication" class="filter-select" aria-label="{{ t('admin.publication_status') }}">
+        <option value="">{{ t('admin.all_publication_states') }}</option><option value="draft">{{ t('admin.draft') }}</option><option value="published">{{ t('admin.publish') }}</option>
       </select>
-      <select id="filter-status" class="filter-select" aria-label="활성 상태">
-        <option value="">모든 활성 상태</option><option value="active">활성</option><option value="inactive">비활성</option>
+      <select id="filter-status" class="filter-select" aria-label="{{ t('admin.activation_status') }}">
+        <option value="">{{ t('admin.all_activation_states') }}</option><option value="active">{{ t('admin.active') }}</option><option value="inactive">{{ t('admin.inactive') }}</option>
       </select>
     </div>
   </section>
-  <p id="scenario-filter-help">검색과 필터는 현재 페이지의 시나리오에만 적용됩니다.</p>
-  <p id="scenario-filter-empty" role="status" hidden>현재 페이지에서 검색·필터에 맞는 시나리오가 없습니다.</p>
+  <p id="scenario-filter-help">{{ t('admin.search_and_filters_apply_only_to_scenarios_on_this_page') }}</p>
+  <p id="scenario-filter-empty" role="status" hidden>{{ t('admin.no_scenarios_on_this_page_match_your_search_and_filters') }}</p>
   <section class="scenarios-grid-container">
-    <h2 class="section-title">시나리오 목록 <span class="count-badge">{{ scenarios|length }}개</span></h2>
+    <h2 class="section-title">{{ t('admin.scenarios') }} <span class="count-badge">{{ t('admin.item_count', count=scenarios|length) }}</span></h2>
     {% if scenarios %}
     <div class="scenarios-grid" id="scenarios-grid">
       {% for scenario in scenarios %}
       <div class="scenario-card {% if scenario.is_active != 1 %}inactive{% endif %}" data-scenario-id="{{ scenario.id }}" data-title="{{ scenario.title }}" data-publication="{{ scenario.status if scenario.config_json else 'draft' }}">
-        <div class="card-status"><span class="status-badge {% if scenario.is_active == 1 %}active{% endif %}">{{ '활성' if scenario.is_active == 1 else '비활성' }}</span></div>
+        <div class="card-status"><span class="status-badge {% if scenario.is_active == 1 %}active{% endif %}">{{ t('admin.active') if scenario.is_active == 1 else t('admin.inactive') }}</span></div>
         <div class="card-body">
           <h3 class="card-title">{{ scenario.title }}</h3>
           <div class="card-meta">
-            <span class="meta-tag">{{ '게시' if scenario.status == 'published' and scenario.config_json else '초안' }}</span>
-            {% if scenario.review_required %}<span class="meta-tag">검토 필요</span>{% endif %}
-            {% if not scenario.config_json %}<span class="meta-tag">변환 필요</span>{% endif %}
+            <span class="meta-tag">{{ t('admin.publish') if scenario.status == 'published' and scenario.config_json else t('admin.draft') }}</span>
+            {% if scenario.review_required %}<span class="meta-tag">{{ t('admin.review_required') }}</span>{% endif %}
+            {% if not scenario.config_json %}<span class="meta-tag">{{ t('admin.conversion_required') }}</span>{% endif %}
             {% if scenario.subject %}<span class="meta-tag">{{ scenario.subject }}</span>{% endif %}
             {% for gid in scenario_group_map.get(scenario.id, []) %}{% for g in groups if g.id == gid %}<span class="meta-tag">{{ g.name }}</span>{% endfor %}{% endfor %}
           </div>
           {% if scenario.config_json %}<p class="card-description">{{ scenario.config_json.problem.public_text[:120] }}</p>{% endif %}
-          <p class="card-description">세션 {{ session_counts.get(scenario.id, 0) }}개</p>
+          <p class="card-description">{{ t('admin.session') }} {{ t('admin.item_count', count=session_counts.get(scenario.id, 0)) }}</p>
         </div>
         <div class="card-actions">
-          <a href="/admin/sessions-page?scenario_id={{ scenario.id }}" class="btn btn-sm btn-outline">대화목록</a>
+          <a href="/admin/sessions-page?scenario_id={{ scenario.id }}" class="btn btn-sm btn-outline">{{ t('admin.conversations') }}</a>
           {% if scenario.config_json %}
-          <a href="/admin/model-comparison?scenario_id={{ scenario.id }}" class="btn btn-sm btn-outline">모델 비교</a>
-          <a href="/admin/scenarios/{{ scenario.id }}/edit" class="btn btn-sm btn-secondary">수정</a>
-          <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="{{ scenario.id }}" data-title="{{ scenario.title }}" data-session-count="{{ session_counts.get(scenario.id, 0) }}" data-version="{{ scenario.config_version }}">삭제</button>
+          <a href="/admin/model-comparison?scenario_id={{ scenario.id }}" class="btn btn-sm btn-outline">{{ t('admin.model_comparison') }}</a>
+          <a href="/admin/scenarios/{{ scenario.id }}/edit" class="btn btn-sm btn-secondary">{{ t('admin.edit') }}</a>
+          <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="{{ scenario.id }}" data-title="{{ scenario.title }}" data-session-count="{{ session_counts.get(scenario.id, 0) }}" data-version="{{ scenario.config_version }}">{{ t('admin.delete') }}</button>
           {% endif %}
         </div>
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="empty-state"><h3>{% if current_page is defined and current_page > 1 %}이 페이지에 결과가 없습니다.{% else %}시나리오가 없습니다{% endif %}</h3><a href="/admin/scenarios/new" class="btn btn-primary">통합 초안 작성</a></div>{% endif %}
+    {% else %}<div class="empty-state"><h3>{% if current_page is defined and current_page > 1 %}{{ t('admin.no_results_on_this_page') }}{% else %}{{ t('admin.no_scenarios') }}{% endif %}</h3><a href="/admin/scenarios/new" class="btn btn-primary">{{ t('admin.create_scenario_draft') }}</a></div>{% endif %}
   </section>
 
   {% if current_page is defined %}
-  <nav class="pagination" id="scenarios-pagination" aria-label="목록 페이지">
-    <span class="pagination-info" aria-current="page">현재 {{ current_page }} 페이지 · 20개씩 · 총 {{ total_count }}개</span>
+  <nav class="pagination" id="scenarios-pagination" aria-label="{{ t('admin.list_pages') }}">
+    <span class="pagination-info" aria-current="page">{{ t('admin.list_page', page=current_page, total=total_count) }}</span>
     <div class="pagination-buttons">
       {% if current_page > 1 %}
-      <a href="/admin/scenarios?page={{ [current_page - 1, total_pages]|min }}" rel="prev" class="btn btn-sm btn-secondary">이전</a>
+      <a href="/admin/scenarios?page={{ [current_page - 1, total_pages]|min }}" rel="prev" class="btn btn-sm btn-secondary">{{ t('admin.previous') }}</a>
       {% else %}
-      <button type="button" class="btn btn-sm btn-secondary" disabled>이전</button>
+      <button type="button" class="btn btn-sm btn-secondary" disabled>{{ t('admin.previous') }}</button>
       {% endif %}
       {% if current_page < total_pages %}
-      <a href="/admin/scenarios?page={{ current_page + 1 }}" rel="next" class="btn btn-sm btn-secondary">다음</a>
+      <a href="/admin/scenarios?page={{ current_page + 1 }}" rel="next" class="btn btn-sm btn-secondary">{{ t('admin.next') }}</a>
       {% else %}
-      <button type="button" class="btn btn-sm btn-secondary" disabled>다음</button>
+      <button type="button" class="btn btn-sm btn-secondary" disabled>{{ t('admin.next') }}</button>
       {% endif %}
     </div>
   </nav>

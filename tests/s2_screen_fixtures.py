@@ -9,7 +9,7 @@ from src.services.model_capabilities import (
 )
 
 
-def model_choices():
+def model_choices(language="ko"):
     models = []
     for pk, provider, model_id, options in [
         (
@@ -40,7 +40,7 @@ def model_choices():
                 display_name=model_id,
                 enabled=True,
                 connection_available=True,
-                capabilities=capabilities(provider, model_id),
+                capabilities=capabilities(provider, model_id, language),
                 default_options=validate_model_and_options(
                     provider, model_id, options
                 ),
@@ -97,8 +97,8 @@ def selection(model, options=None):
     )
 
 
-def editor_fixture(*, new=False, published=False, legacy=False):
-    models = model_choices()
+def editor_fixture(*, new=False, published=False, legacy=False, language="ko"):
+    models = model_choices(language)
     data = dict(
         id=1,
         public_lesson_fields=PUBLIC_LESSON_FIELDS,

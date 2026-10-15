@@ -23,6 +23,7 @@ from src.api.routes.session_helpers import (
 )
 from src.api.schemas import AnalysisRequest
 from src.config import config
+from src.i18n import display_language, translate
 from src.models.session import Session
 from src.models.user import User
 from src.services.analysis_results import (
@@ -66,7 +67,9 @@ async def end_session(
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail=translate(
+                "admin.session_missing", display_language(request)
+            ),
         )
 
     require_native_session(session)
@@ -110,19 +113,24 @@ async def delete_session(
     session_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """Soft delete a session (set deleted_at)."""
     session = await db.get(Session, session_id)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail=translate(
+                "admin.session_missing", display_language(request)
+            ),
         )
 
     if session.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session already deleted",
+            detail=translate(
+                "admin.session_deleted", display_language(request)
+            ),
         )
 
     session.mark_deleted()
@@ -157,7 +165,9 @@ async def session_detail(
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail=translate(
+                "admin.session_missing", display_language(request)
+            ),
         )
 
     return templates.TemplateResponse(
@@ -201,20 +211,28 @@ async def analysis_modal(
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
+            detail=translate(
+                "admin.session_missing", display_language(request)
+            ),
         )
 
     if not session.ended_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=("Session must be ended before viewing analysis"),
+            detail=(
+                translate(
+                    "admin.end_before_analysis", display_language(request)
+                )
+            ),
         )
 
     analysis_data = await _load_analysis_response(session_id, db, admin=True)
     if analysis_data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Analysis not found",
+            detail=translate(
+                "admin.analysis_missing", display_language(request)
+            ),
         )
 
     return templates.TemplateResponse(
@@ -241,17 +259,31 @@ async def get_admin_analysis(
     session_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     session = await db.get(Session, session_id)
     if session is None:
-        raise HTTPException(404, detail="Session not found")
+        raise HTTPException(
+            404,
+            detail=translate(
+                "admin.session_missing", display_language(request)
+            ),
+        )
     if not session.ended_at:
         raise HTTPException(
-            400, detail="Session must be ended before viewing analysis"
+            400,
+            detail=translate(
+                "admin.end_before_analysis", display_language(request)
+            ),
         )
     result = await _load_analysis_response(session_id, db, admin=True)
     if result is None:
-        raise HTTPException(404, detail="Analysis not found")
+        raise HTTPException(
+            404,
+            detail=translate(
+                "admin.analysis_missing", display_language(request)
+            ),
+        )
     return result
 
 
@@ -281,11 +313,17 @@ async def get_admin_analysis_run(
     run_id: str,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     run = await get_run(db, session_id, run_id)
     session = await db.get(Session, session_id)
     if session is None or session.deleted_at is not None:
-        raise HTTPException(404, detail="Session not found")
+        raise HTTPException(
+            404,
+            detail=translate(
+                "admin.session_missing", display_language(request)
+            ),
+        )
     return await run_response(db, run, admin=True)
 
 
@@ -298,9 +336,15 @@ async def cancel_admin_analysis_run(
     run_id: str,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     await get_run(db, session_id, run_id)
     session = await db.get(Session, session_id)
     if session is None or session.deleted_at is not None:
-        raise HTTPException(404, detail="Session not found")
+        raise HTTPException(
+            404,
+            detail=translate(
+                "admin.session_missing", display_language(request)
+            ),
+        )
     return await cancel_analysis(db, session_id, run_id, user.id, admin=True)

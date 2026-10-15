@@ -1,23 +1,24 @@
 {% extends "layout.html" %}
-{% block title %}시나리오 모델 비교 - 관리자{% endblock %}
+{% set i18n_areas = ['admin', 'teacher'] %}
+{% block title %}{{ t('admin.scenario_model_comparison_admin') }}{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="/static/css/scenario-comparison.css">
 <div class="container comparison-page">
-  <h1>시나리오 모델 비교</h1>
-  <p><a href="/admin/scenarios?compare=1" class="btn btn-secondary">저장된 시나리오 선택</a></p>
-  <p>모든 패널이 같은 질문과 채택된 대화를 사용합니다. 결과는 생성 후 30일 동안 보존합니다.</p>
-  <p>학생 응답 채택은 기준 대화 이력을 갱신합니다. 모델 적용은 작성기로 이동하며 별도 저장 또는 게시가 필요합니다. 비교 자료는 수업 기록과 분리됩니다.</p>
+  <h1>{{ t('admin.scenario_model_comparison') }}</h1>
+  <p><a href="/admin/scenarios?compare=1" class="btn btn-secondary">{{ t('admin.choose_a_saved_scenario') }}</a></p>
+  <p>{{ t('admin.all_panels_use_the_same_question_and_adopted_dialogue_results_are_retained_for_30_days_after_creatio') }}</p>
+  <p>{{ t('admin.adopting_a_student_response_updates_the_canonical_conversation_history_applying_a_model_opens_the_ed') }}</p>
   <p id="conversation-status" role="status" aria-live="polite"></p>
   <div id="conversation-setup"></div>
-  <section id="conversation-dialogue" aria-label="기준 대화"></section>
-  <section id="conversation-actions" aria-label="비교 대화 조작" hidden>
-    <label for="conversation-question">공통 교사 질문</label>
+  <section id="conversation-dialogue" aria-label="{{ t('admin.canonical_dialogue') }}"></section>
+  <section id="conversation-actions" aria-label="{{ t('admin.comparison_conversation_controls') }}" hidden>
+    <label for="conversation-question">{{ t('admin.common_teacher_question') }}</label>
     <textarea id="conversation-question" maxlength="50000" rows="3"></textarea>
     <div id="conversation-controls"></div>
   </section>
-  <section id="conversation-rounds" aria-label="모델별 결과"></section>
-  <section id="conversation-history" aria-label="전체 비교 이력"></section>
-  <details><summary>이전 역할별 비교 이력</summary><div id="legacy-comparison-history"></div></details>
+  <section id="conversation-rounds" aria-label="{{ t('admin.results_by_model') }}"></section>
+  <section id="conversation-history" aria-label="{{ t('admin.conversation_comparison_history') }}"></section>
+  <details><summary>{{ t('admin.legacy_role_comparison_history') }}</summary><div id="legacy-comparison-history"></div></details>
 </div>
 <script id="comparison-conversation-data" type="application/json">{{ comparison|tojson }}</script>
 <script src="/static/js/analysis-result.js"></script>

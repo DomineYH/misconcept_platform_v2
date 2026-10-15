@@ -271,10 +271,20 @@ async def test_sessions_filters_apply_to_total_and_page(
 
 
 @pytest.mark.parametrize("field", ["date_from", "date_to"])
-async def test_sessions_invalid_dates_keep_error_contract(listing, field):
-    response = await listing.client.get(f"/admin/sessions?{field}=invalid")
+@pytest.mark.parametrize("language", ["ko", "en"])
+async def test_sessions_invalid_dates_keep_error_contract(
+    listing, field, language
+):
+    response = await listing.client.get(
+        f"/admin/sessions?{field}=invalid", headers={"X-UI-Language": language}
+    )
     assert response.status_code == 400
-    assert f"Invalid {field} format" in response.json()["detail"]
+    expected = (
+        f"Invalid {field} format: 'invalid'"
+        if language == "en"
+        else f"{field} 날짜 형식이 유효하지 않습니다: 'invalid'"
+    )
+    assert response.json() == {"detail": expected}
 
 
 async def test_paginated_lists_require_admin(listing):

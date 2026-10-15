@@ -19,6 +19,7 @@ from src.api.schemas.comparison_conversation import (
     ConversationStop,
     ConversationTurn,
 )
+from src.i18n import display_language
 from src.models import User
 from src.services.comparison_conversations import (
     conversation_snapshot,
@@ -217,7 +218,7 @@ async def page(
         if scenario_id is not None
         else None
     )
-    _, choices = await editor_models(db)
+    _, choices = await editor_models(db, display_language(request))
     response = templates.TemplateResponse(
         "admin/comparison_conversation.html",
         dict(

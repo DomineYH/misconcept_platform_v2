@@ -1,10 +1,13 @@
 """Bound and safely report scenario input at the existing HTTP boundary."""
 
+from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from src.api.dependencies import AuthenticationRequired
+from src.i18n import display_language, translate
+from src.i18n.admin import review_notice
 
 REQUEST_LIMIT = 1024 * 1024
 
@@ -25,7 +28,10 @@ class ScenarioRoute(APIRoute):
                                     {
                                         "path": "",
                                         "code": "request_too_large",
-                                        "message": "요청은 1 MiB 이하여야 합니다.",
+                                        "message": translate(
+                                            "admin.request_size",
+                                            display_language(request),
+                                        ),
                                     }
                                 ]
                             },
@@ -39,8 +45,25 @@ class ScenarioRoute(APIRoute):
                 if request.method != "POST":
                     raise
                 return JSONResponse(
-                    {"detail": "Authentication required"}, status_code=401
+                    {
+                        "detail": translate(
+                            "admin.authentication_required",
+                            display_language(request),
+                        )
+                    },
+                    status_code=401,
                 )
+            except HTTPException as exc:
+                if isinstance(exc.detail, list):
+                    exc.detail = [
+                        review_notice(item, display_language(request))
+                        for item in exc.detail
+                    ]
+                elif exc.status_code == 404 and isinstance(exc.detail, str):
+                    exc.detail = translate(
+                        "admin.scenario_not_found", display_language(request)
+                    )
+                raise
             except RequestValidationError as exc:
                 return JSONResponse(
                     {
@@ -52,7 +75,10 @@ class ScenarioRoute(APIRoute):
                                     if part not in ("body", "draft", "legacy")
                                 ),
                                 "code": error["type"],
-                                "message": error["msg"],
+                                "message": translate(
+                                    "admin.input_format",
+                                    display_language(request),
+                                ),
                             }
                             for error in exc.errors()
                         ]

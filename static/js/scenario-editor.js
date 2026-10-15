@@ -9,6 +9,7 @@ const form = document.getElementById('scenario-form');
 const status = document.getElementById('editor-status');
 const publish = document.getElementById('publish-scenario');
 let dirty = Boolean(data.comparison_draft_id), busy = false, edits = 0;
+uiLanguage.registerGuard(() => ({dirty, busy}));
 function markDirty() { dirty = true; edits++; preview(); }
 for (const input of fields) {
   if (input.type === 'checkbox') input.checked = get(input.dataset.field);
@@ -23,17 +24,17 @@ function renderRubric() {
   root.replaceChildren();
   rubric.forEach((row, index) => {
     const container = node('fieldset');
-    container.append(node('legend', `분류 ${index + 1}`));
-    for (const [key, label, limit] of [['id', 'ID', 64], ['name', '이름', 100], ['criteria', '판정 기준', 50000], ['level', '수준']]) {
-      const input = field(container, `rubric-${index}-${key}`, `분류 ${index + 1} ${label}`, row[key], key === 'level' ? {} : {maxlength:limit}, key === 'level' ? [['', '지정하지 않음'], ['high', 'high'], ['low', 'low']] : null);
+    container.append(node('legend', `${uiLanguage.t('admin.classification')} ${index + 1}`));
+    for (const [key, label, limit] of [['id', 'ID', 64], ['name', uiLanguage.t('admin.name'), 100], ['criteria', uiLanguage.t('admin.criteria'), 50000], ['level', uiLanguage.t('admin.level')]]) {
+      const input = field(container, `rubric-${index}-${key}`, `${uiLanguage.t('admin.classification')} ${index + 1} ${label}`, row[key], key === 'level' ? {} : {maxlength:limit}, key === 'level' ? [['', uiLanguage.t('admin.unspecified')], ['high', 'high'], ['low', 'low']] : null);
       input.dataset.field = `analysis.rubric.${index}.${key}`;
       input.addEventListener('input', () => { row[key] = input.value || (key === 'level' ? null : ''); });
       const errorId = `${input.dataset.field}-error`;
       input.setAttribute('aria-describedby', errorId);
       container.append(node('p', null, {id:errorId, class:'scenario-error', hidden:''}));
     }
-    container.append(button(`분류 ${index + 1} 삭제`, () => {
-      if ((row.id || row.name || row.criteria) && !window.confirm('이 분류 기준을 삭제하시겠습니까?')) return;
+    container.append(button(`${uiLanguage.t('admin.classification')} ${index + 1} ${uiLanguage.t('admin.delete')}`, () => {
+      if ((row.id || row.name || row.criteria) && !window.confirm(uiLanguage.t('admin.delete_this_rubric_item'))) return;
       rubric.splice(index, 1);
       renderRubric();
       document.getElementById('add-rubric').focus();
@@ -75,14 +76,14 @@ function preview() {
   document.getElementById('mentor-settings').hidden = mode === 'off';
   document.getElementById('mentor-auto-settings').hidden = mode !== 'auto';
   document.getElementById('rubric-settings').hidden = !classification;
-  document.getElementById('mentor-mode-note').textContent = {off:'멘토를 사용하지 않습니다. 숨긴 입력은 보존합니다.', manual:'완료된 학생 턴에서 도움 버튼으로 요청합니다. 수동 총횟수 상한은 없습니다.', auto:'완료 턴 뒤 조건을 검사합니다. 도움 버튼으로도 요청할 수 있습니다.'}[mode];
+  document.getElementById('mentor-mode-note').textContent = {off:uiLanguage.t('admin.mentor_disabled_hidden_input_is_preserved'), manual:uiLanguage.t('admin.request_help_after_a_completed_student_turn_manual_requests_have_no_total_count_cap'), auto:uiLanguage.t('admin.check_conditions_after_completed_turns_the_help_button_is_also_available')}[mode];
   document.querySelectorAll('[data-preview]').forEach(el => {
     const path = data.public_lesson_fields[el.dataset.preview];
     const hidden = ['mentor_name', 'greeting_message'].includes(el.dataset.preview) && mode === 'off';
     el.textContent = hidden ? '' : document.getElementById(path).value;
     el.hidden = hidden;
   });
-  document.getElementById('execution-summary').textContent = `${Object.entries(models).map(([role, model]) => `${role}: ${model ? `${model.provider} / ${model.model_id}` : '선택 필요'}`).join('\n')}\n멘토 ${mode} · 분류 ${classification ? `${rubric.length}개` : '미사용'}`;
+  document.getElementById('execution-summary').textContent = `${Object.entries(models).map(([role, model]) => `${role}: ${model ? `${model.provider} / ${model.model_id}` : uiLanguage.t('admin.selection_required')}`).join('\n')}\n${uiLanguage.t('admin.mentor')} ${mode} · ${uiLanguage.t('admin.classification')} ${classification ? uiLanguage.t('admin.item_count', {count:rubric.length}) : uiLanguage.t('admin.disabled')}`;
 }
 form.addEventListener('input', markDirty);
 form.addEventListener('change', markDirty);
@@ -92,8 +93,8 @@ showStep(0);
 preview();
 
 function publicationStatus() {
-  status.textContent = `현재 상태: ${data.status === 'published' ? '게시됨' : '초안'} · 버전 ${data.config_version}`;
-  publish.textContent = data.status === 'published' ? '수정 후 게시' : '게시';
+  status.textContent = `${uiLanguage.t('admin.current_status')} ${data.status === 'published' ? uiLanguage.t('admin.published') : uiLanguage.t('admin.draft')} · ${uiLanguage.t('admin.version')} ${data.config_version}`;
+  publish.textContent = data.status === 'published' ? uiLanguage.t('admin.publish_changes') : uiLanguage.t('admin.publish');
 }
 publicationStatus();
 
@@ -129,7 +130,7 @@ function showErrors(errors) {
     const path = error.path.replace(/^config\./, '');
     const input = document.getElementById(path) || [...document.querySelectorAll('[data-field]')].find(el => el.dataset.field === path) || (path === 'analysis.rubric' ? document.getElementById('add-rubric') : null);
     const panel = input?.closest('[data-panel]');
-    const message = typeof error.message === 'string' ? error.message : '입력값을 확인하세요.';
+    const message = typeof error.message === 'string' ? error.message : uiLanguage.t('admin.check_your_input');
     if (panel) counts[Number(panel.dataset.panel)]++;
     if (input) input.setAttribute('aria-invalid', 'true');
     if (path.endsWith('resolved_model_config')) document.getElementById('common-model').setAttribute('aria-invalid', 'true');
@@ -150,17 +151,18 @@ function showErrors(errors) {
   document.querySelectorAll('[data-errors]').forEach(badge => {
     const count = counts[Number(badge.dataset.errors)];
     badge.textContent = count;
-    badge.setAttribute('aria-label', `보완 항목 ${count}개`);
+    badge.setAttribute('aria-label', `${uiLanguage.t('admin.items_to_complete')} ${uiLanguage.t('admin.item_count', {count})}`);
     badge.hidden = count === 0;
   });
-  document.getElementById('validation-summary').textContent = `보완 항목 ${errors.length}개`;
+  document.getElementById('validation-summary').textContent = `${uiLanguage.t('admin.items_to_complete')} ${uiLanguage.t('admin.item_count', {count:errors.length})}`;
   summary.hidden = errors.length === 0;
   if (errors.length) summary.focus();
 }
 
 async function save(action) {
   if (busy) return;
-  if (action === 'save_draft' && data.status === 'published' && !window.confirm('초안으로 전환하면 교사의 새 세션 시작이 중단됩니다. 초안으로 저장하시겠습니까?')) return;
+  if (action === 'save_draft' && data.status === 'published' && !window.confirm(uiLanguage.t('admin.changing_to_a_draft_prevents_teachers_from_starting_new_sessions_save_as_a_draft'))) return;
+  dirty = true;
   busy = true;
   publicationStatus();
   delete status.dataset.state;
@@ -171,7 +173,7 @@ async function save(action) {
   const submittedEdits = edits;
   try {
     const response = await fetch(data.id == null ? '/admin/scenarios' : `/admin/scenarios/${data.id}/update`, {
-      method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json', 'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}, body:JSON.stringify(payload(action))
+      method:'POST', credentials:'same-origin', headers:uiLanguage.headers('/admin/scenarios', {'Content-Type':'application/json', 'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}), body:JSON.stringify(payload(action))
     });
     if (response.status === 422) {
       const result = await response.json();
@@ -179,7 +181,7 @@ async function save(action) {
     } else if (response.status === 409) {
       const result = await response.json();
       const conflict = document.getElementById('editor-conflict');
-      document.getElementById('editor-conflict-message').textContent = `다른 관리자가 변경했습니다. 현재 화면의 입력은 유지됩니다. 최신 버전: ${result.detail.current_version}`;
+      document.getElementById('editor-conflict-message').textContent = `${uiLanguage.t('admin.another_administrator_made_changes_your_input_is_preserved_latest_version')} ${result.detail.current_version}`;
       conflict.hidden = false;
       conflict.focus();
     } else if (response.ok) {
@@ -199,14 +201,14 @@ async function save(action) {
       }
       publicationStatus();
       status.dataset.state = 'success';
-      status.textContent = action === 'save_draft' ? '초안을 저장했습니다.' : '게시했습니다.';
+      status.textContent = action === 'save_draft' ? uiLanguage.t('admin.draft_saved') : uiLanguage.t('admin.published_2');
     } else {
-      const messages = {401:'로그인이 필요합니다.', 403:'권한 또는 보안 토큰을 확인하세요.', 404:'시나리오를 찾을 수 없습니다.'};
-      status.textContent = messages[response.status] || '저장하지 못했습니다. 입력을 보존했습니다.';
+      const messages = {401:uiLanguage.t('admin.please_log_in'), 403:uiLanguage.t('admin.check_your_permissions_or_security_token'), 404:uiLanguage.t('admin.scenario_not_found')};
+      status.textContent = messages[response.status] || uiLanguage.t('admin.could_not_save_your_input_is_preserved');
     }
   } catch {
     status.dataset.state = 'uncertain';
-    status.textContent = '저장 결과를 확인할 수 없습니다. 현재 화면의 입력은 유지됩니다.';
+    status.textContent = uiLanguage.t('admin.could_not_confirm_the_save_result_your_input_is_preserved');
   } finally {
     busy = false;
     reviewState();
@@ -216,7 +218,7 @@ async function save(action) {
 form.addEventListener('submit', event => { event.preventDefault(); save('publish'); });
 document.getElementById('save-draft').addEventListener('click', () => save('save_draft'));
 document.getElementById('editor-reload').addEventListener('click', () => {
-  if (!window.confirm('최신 내용을 불러오면 저장하지 않은 입력을 잃습니다. 다시 불러오시겠습니까?')) return;
+  if (!window.confirm(uiLanguage.t('admin.reloading_the_latest_version_discards_unsaved_input_reload'))) return;
   dirty = false;
   window.location.reload();
 });
@@ -231,7 +233,7 @@ function reviewState() {
   const acknowledged = !data.review_required || document.getElementById('acknowledge-review').checked;
   publish.disabled = busy || data.publication_available === false || blocked || !acknowledged;
   const note = document.getElementById('review-publication-status');
-  if (note) note.textContent = blocked ? '게시 불가 · 필수 내용을 보완하고 서버에서 다시 검증해야 합니다.' : acknowledged ? '검토 확인됨 · 게시 시 필수 내용과 모델을 다시 검증합니다.' : '게시 불가 · 변환 경고 검토 확인이 필요합니다.';
+  if (note) note.textContent = blocked ? uiLanguage.t('admin.cannot_publish_complete_required_fields_and_validate_again_on_the_server') : acknowledged ? uiLanguage.t('admin.review_acknowledged_required_content_and_models_will_be_validated_again_on_publication') : uiLanguage.t('admin.cannot_publish_acknowledge_the_conversion_warnings_first');
 }
 if (data.review_required) {
   showErrors(data.review_reasons);
@@ -240,7 +242,7 @@ if (data.review_required) {
 reviewState();
 if (data.model_handoff) {
   document.getElementById('common-model').dispatchEvent(new CustomEvent('model:apply', {detail:data.model_handoff}));
-  status.textContent = '비교 모델과 역할별 옵션을 적용했습니다. 별도 저장 또는 게시가 필요합니다.';
+  status.textContent = uiLanguage.t('admin.comparison_model_and_per_role_options_applied_save_or_publish_separately');
 }
 
 mountComparison(data, () => payload('compare'));

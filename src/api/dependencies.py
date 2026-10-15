@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.connection import AsyncSessionLocal
-from src.i18n import display_language, t, ui_strings
+from src.i18n import display_language, t, translate, ui_strings
 
 # Shared Jinja2Templates instance
 templates = Jinja2Templates(directory="src/templates")
@@ -126,6 +126,8 @@ async def get_admin_user(
     if not user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail=translate(
+                "admin.access_required", display_language(request)
+            ),
         )
     return user

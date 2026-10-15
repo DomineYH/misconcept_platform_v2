@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
+from src.i18n import display_language, translate
 from src.models.generation_run import GenerationRun
 from src.models.session import Session
 from src.models.user import User
@@ -38,7 +39,7 @@ def safe_int(value: Optional[str]) -> Optional[int]:
 
 
 def parse_date_filter(
-    date_str: Optional[str], field_name: str
+    date_str: Optional[str], field_name: str, language="ko"
 ) -> Tuple[Optional[datetime], Optional[str]]:
     """Parse date filter string to datetime.
 
@@ -59,7 +60,9 @@ def parse_date_filter(
     except ValueError:
         return (
             None,
-            f"Invalid {field_name} format: '{date_str}'",
+            translate(
+                "admin.invalid_date", language, field=field_name, value=date_str
+            ),
         )
 
 
@@ -87,13 +90,17 @@ async def sessions_page(
     # Parse date filters with validation
     date_errors = []
     if date_from:
-        dt_from, err = parse_date_filter(date_from, "date_from")
+        dt_from, err = parse_date_filter(
+            date_from, "date_from", display_language(request)
+        )
         if err:
             date_errors.append(err)
         elif dt_from:
             base_query = base_query.where(Session.started_at >= dt_from)
     if date_to:
-        dt_to, err = parse_date_filter(date_to, "date_to")
+        dt_to, err = parse_date_filter(
+            date_to, "date_to", display_language(request)
+        )
         if err:
             date_errors.append(err)
         elif dt_to:
@@ -164,6 +171,7 @@ async def list_sessions_api(
     date_to: Optional[str] = None,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ) -> Dict[str, Any]:
     """List one page of sessions with optional filtering (API)."""
     scenario_id_val = safe_int(scenario_id)
@@ -186,7 +194,9 @@ async def list_sessions_api(
         query = query.where(Session.teacher_id == teacher_id_val)
 
     if date_from:
-        dt, err = parse_date_filter(date_from, "date_from")
+        dt, err = parse_date_filter(
+            date_from, "date_from", display_language(request)
+        )
         if err:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -196,7 +206,9 @@ async def list_sessions_api(
             query = query.where(Session.started_at >= dt)
 
     if date_to:
-        dt, err = parse_date_filter(date_to, "date_to")
+        dt, err = parse_date_filter(
+            date_to, "date_to", display_language(request)
+        )
         if err:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

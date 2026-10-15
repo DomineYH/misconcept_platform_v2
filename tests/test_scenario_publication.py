@@ -419,7 +419,12 @@ async def test_review_is_server_managed_and_acknowledgement_is_revision_bound(
     publishable["action"] = "save_draft"
     saved = await post(api, path + "/update", publishable)
     assert saved.status_code == 200
-    assert saved.json()["review_reasons"] == [warning]
+    assert saved.json()["review_reasons"] == [
+        {
+            **warning,
+            "message": "공개 학생 소개는 비워 두었습니다. 내부 원문과 공개 범위를 검토하세요.",
+        }
+    ]
     assert saved.json()["review_required"] is True
     publishable.update(action="publish", acknowledge_review=True)
     conflict = await post(api, path + "/update", publishable)

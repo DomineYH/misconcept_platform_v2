@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
 from src.api.routes.admin_sessions import safe_int
+from src.i18n import display_language, translate
 from src.models.message import Message
 from src.models.question_analysis import QuestionAnalysis
 from src.models.scenario import Scenario
@@ -194,7 +195,12 @@ async def analysis_detail_modal(
     row = result.first()
 
     if not row:
-        raise HTTPException(status_code=404, detail="분석을 찾을 수 없습니다")
+        raise HTTPException(
+            status_code=404,
+            detail=translate(
+                "admin.analysis_not_found", display_language(request)
+            ),
+        )
 
     analysis, message, session = row
     result = await load_analysis_response(session.id, db, admin=True)

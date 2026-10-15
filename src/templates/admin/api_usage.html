@@ -1,13 +1,14 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['admin'] %}
 
-{% block title %}API 사용량 - 관리자{% endblock %}
+{% block title %}{{ t('admin.api_usage_admin') }}{% endblock %}
 
 {% macro observed(value) -%}
-  {{ value if value is defined and value is not none else '알 수 없음' }}
+  {{ value if value is defined and value is not none else t('admin.unknown') }}
 {%- endmacro %}
 
 {% macro cost(value) -%}
-  {% if value is defined and value is not none %}${{ "%.6f"|format(value) }}{% else %}산정 불가{% endif %}
+  {% if value is defined and value is not none %}${{ "%.6f"|format(value) }}{% else %}{{ t('admin.not_available') }}{% endif %}
 {%- endmacro %}
 
 {% macro usage_table(rows, name, caption) %}
@@ -16,7 +17,7 @@
     <caption id="{{ name }}-caption">{{ caption }}</caption>
     <thead>
       <tr>
-        {% for heading in ['기록', '제공자', '모델', '역할', '목적', '상태', '시도', '시간 (UTC)', '입력 토큰', '출력 토큰', '캐시 읽기 토큰', '캐시 쓰기 토큰', '추론 토큰', '총 토큰', '추정 비용 (USD)', '단가 기준일·근거'] %}
+        {% for heading in [t('admin.record'), t('admin.provider'), t('admin.model'), t('admin.role'), t('admin.purpose'), t('admin.status'), t('admin.attempt'), t('admin.time_utc'), t('admin.input_tokens'), t('admin.output_tokens'), t('admin.cache_read_tokens'), t('admin.cache_write_tokens'), t('admin.reasoning_tokens'), t('admin.total_tokens'), t('admin.estimated_cost_usd'), t('admin.pricing_date_and_source')] %}
         <th scope="col">{{ heading }}</th>
         {% endfor %}
       </tr>
@@ -27,22 +28,22 @@
       {% set role = log.bot_type|default(none) if legacy else log.role|default(none) %}
       {% set status = log.status|default(none) %}
       <tr id="usage-row-{{ log.id }}">
-        <td>{{ '기존 기록' if legacy else '호출 시도' }}</td>
+        <td>{{ t('admin.legacy_record') if legacy else t('admin.call_attempt') }}</td>
         <td>{{ 'openai' if legacy else observed(log.provider) }}</td>
         <td>{{ observed(log.model) }}</td>
-        <td>{{ {'student': '학생봇', 'tutor': '멘토', 'mentor': '멘토', 'analysis': '사후 분석'}.get(role, observed(role)) }}{% if role %} ({{ role }}){% endif %}</td>
-        <td>{{ observed(log.operation) }}{% if log.usage_scope|default(none) == "comparison" %}<div>관리자 비교 (comparison)</div>{% endif %}</td>
+        <td>{{ {'student': t('admin.student'), 'tutor': t('admin.mentor'), 'mentor': t('admin.mentor'), 'analysis': t('admin.post_session_analysis')}.get(role, observed(role)) }}{% if role %} ({{ role }}){% endif %}</td>
+        <td>{{ observed(log.operation) }}{% if log.usage_scope|default(none) == "comparison" %}<div>{{ t('admin.admin_comparison_comparison') }}</div>{% endif %}</td>
         <td>
-          {{ {'succeeded': '성공', 'completed': '성공', 'failed': '실패', 'refused': '거절', 'cancelled': '취소', 'timed_out': '시간 초과', 'interrupted': '중단', 'running': '진행 중'}.get(status, observed(status)) }}
-          {% if log.error_code is defined and log.error_code %}<div>오류: {{ log.error_code }}</div>{% endif %}
-          <div>사용량: {% if log.usage_complete is not defined or log.usage_complete is none %}알 수 없음{% elif log.usage_complete %}완전{% else %}일부 / 알 수 없음{% endif %}</div>
+          {{ {'succeeded': t('admin.succeeded'), 'completed': t('admin.succeeded'), 'failed': t('admin.failed'), 'refused': t('admin.refused'), 'cancelled': t('admin.cancel'), 'timed_out': t('admin.timed_out'), 'interrupted': t('admin.interrupted'), 'running': t('admin.in_progress_2')}.get(status, observed(status)) }}
+          {% if log.error_code is defined and log.error_code %}<div>{{ t('admin.error') }} {{ log.error_code }}</div>{% endif %}
+          <div>{{ t('admin.usage') }} {% if log.usage_complete is not defined or log.usage_complete is none %}{{ t('admin.unknown') }}{% elif log.usage_complete %}{{ t('admin.complete') }}{% else %}{{ t('admin.partial_unknown') }}{% endif %}</div>
         </td>
         <td>{{ observed(log.attempt_no) }}</td>
         <td>
-          <div>시작: {{ observed(log.timestamp if legacy else log.started_at) }}</div>
-          <div>첫 출력: {{ observed(log.first_output_at) }}</div>
-          <div>종료: {{ observed(log.finished_at) }}</div>
-          <div>재시도 대기 (ms): {{ observed(log.retry_wait_ms) }}</div>
+          <div>{{ t('admin.started') }} {{ observed(log.timestamp if legacy else log.started_at) }}</div>
+          <div>{{ t('admin.first_output') }} {{ observed(log.first_output_at) }}</div>
+          <div>{{ t('admin.ended') }} {{ observed(log.finished_at) }}</div>
+          <div>{{ t('admin.retry_delay_ms') }} {{ observed(log.retry_wait_ms) }}</div>
         </td>
         <td>{{ observed(log.prompt_tokens if legacy else log.input_tokens) }}</td>
         <td>{{ observed(log.completion_tokens if legacy else log.output_tokens) }}</td>
@@ -51,10 +52,10 @@
         <td>{{ observed(log.reasoning_tokens) }}</td>
         <td>{{ observed(log.total_tokens) }}</td>
         <td>{{ cost(log.estimated_cost_usd) }}</td>
-        <td>{{ observed(log.pricing_as_of) }}{% if log.pricing_source is defined and log.pricing_source %}<div>근거: {{ log.pricing_source }}</div>{% endif %}</td>
+        <td>{{ observed(log.pricing_as_of) }}{% if log.pricing_source is defined and log.pricing_source %}<div>{{ t('admin.source') }} {{ log.pricing_source }}</div>{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="16">기록이 없습니다.</td></tr>
+      <tr><td colspan="16">{{ t('admin.no_records') }}</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -64,29 +65,29 @@
 {% block content %}
 <div class="container api-usage">
   <div class="page-header">
-    <h1>API 사용량</h1>
-    <p class="subtitle">제공자별 호출 시도·토큰 사용량·알려진 추정 비용</p>
+    <h1>{{ t('admin.api_usage') }}</h1>
+    <p class="subtitle">{{ t('admin.call_attempts_token_usage_and_known_estimated_costs_by_provider') }}</p>
   </div>
 
-  <section class="summary-card" aria-label="사용량 요약">
+  <section class="summary-card" aria-label="{{ t('admin.usage_summary') }}">
     <dl>
-      <div><dt>알려진 추정 비용 합계</dt><dd id="known-cost">{{ cost(total_cost) }}</dd></div>
-      <div><dt>미산정 생성 시도 수</dt><dd id="unpriced-attempts">{{ observed(unpriced_generation_attempts) }}</dd></div>
-      <div><dt>비생성 목록 호출 수</dt><dd id="model-list-calls">{{ observed(model_list_calls) }}</dd></div>
+      <div><dt>{{ t('admin.known_estimated_cost_total') }}</dt><dd id="known-cost">{{ cost(total_cost) }}</dd></div>
+      <div><dt>{{ t('admin.generation_attempts_with_unknown_cost') }}</dt><dd id="unpriced-attempts">{{ observed(unpriced_generation_attempts) }}</dd></div>
+      <div><dt>{{ t('admin.non_generation_catalog_calls') }}</dt><dd id="model-list-calls">{{ observed(model_list_calls) }}</dd></div>
     </dl>
-    <p>생성 호출의 알려진 추정 비용만 더한 부분 합계이며, 전체 과금액이 아닙니다. 미산정 비용과 비생성 목록 호출은 합계에서 제외합니다.</p>
-    <p>새 추정 비용은 확인된 공시 유료 단가 기준입니다. 무료 이용·크레딧·개별 할인·세금에 따른 실제 청구액은 다를 수 있습니다.</p>
+    <p>{{ t('admin.this_subtotal_covers_known_generation_cost_estimates_only_it_excludes_unknown_costs_and_catalog_call') }}</p>
+    <p>{{ t('admin.new_estimates_use_verified_published_paid_rates_actual_charges_may_differ_with_free_usage_credits_di') }}</p>
     {% if has_legacy_records|default(false) or unpriced_generation_attempts is not defined or unpriced_generation_attempts is none %}
-    <p>기존 기록의 비용을 보존합니다. 기존 기록만으로는 실패·재시도를 포함한 전체 시도 수와 미산정 건수를 확인할 수 없습니다.</p>
+    <p>{{ t('admin.legacy_costs_are_preserved_legacy_records_cannot_establish_total_attempts_failures_retries_or_unknow') }}</p>
     {% endif %}
-    <p>미산정 생성 시도 수는 호출 원장에 기록된 시도만 셉니다. 시도 정보가 없는 기존 기록은 이 건수에 포함하지 않습니다.</p>
+    <p>{{ t('admin.unknown_cost_counts_include_only_recorded_generation_attempts_legacy_records_without_attempt_data_ar') }}</p>
   </section>
 
-  <p>합계·건수는 전체 기록 기준이며, 아래 표는 최근 100건입니다. 관측되지 않은 값은 ‘알 수 없음’으로 표시하며 0으로 대체하지 않습니다.</p>
-  <p>캐시·추론 토큰은 상세 항목이며 총량에 다시 더하지 않습니다. 취소·중단은 제공자의 과금 중단을 보장하지 않습니다.</p>
-  <p id="usage-scroll-help">표에 초점을 두고 좌우 방향키로 모든 열을 확인할 수 있습니다.</p>
-  {{ usage_table(logs|rejectattr('operation', 'equalto', 'model_list'), 'generation-usage', '생성 호출 및 기존 기록') }}
-  {{ usage_table(logs|selectattr('operation', 'equalto', 'model_list'), 'model-list-usage', '비생성 목록 호출 — 생성 비용 집계에서 제외') }}
+  <p>{{ t('admin.totals_cover_all_records_the_tables_show_the_latest_100_unobserved_values_appear_as_unknown_rather_t') }}</p>
+  <p>{{ t('admin.cache_and_reasoning_tokens_are_breakdowns_not_added_to_totals_again_cancellation_or_interruption_doe') }}</p>
+  <p id="usage-scroll-help">{{ t('admin.focus_the_table_and_use_the_left_and_right_arrow_keys_to_view_all_columns') }}</p>
+  {{ usage_table(logs|rejectattr('operation', 'equalto', 'model_list'), 'generation-usage', t('admin.generation_calls_and_legacy_records')) }}
+  {{ usage_table(logs|selectattr('operation', 'equalto', 'model_list'), 'model-list-usage', t('admin.non_generation_catalog_calls_excluded_from_generation_costs')) }}
 </div>
 
 <style>

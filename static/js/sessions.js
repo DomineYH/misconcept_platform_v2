@@ -1,4 +1,6 @@
 /* Sessions page: filters, modals, bulk download */
+var sessionPendingRequests = 0;
+uiLanguage.registerGuard(function () { return {busy:sessionPendingRequests > 0}; });
 
 function submitFilters() {
   var form = document.getElementById('filter-form');
@@ -16,7 +18,7 @@ function submitFilters() {
 
 function fetchWithRetry(url, retries) {
   if (retries === undefined) retries = 1;
-  return fetch(url, { credentials: 'same-origin' })
+  return fetch(url, { credentials: 'same-origin', headers:uiLanguage.headers(url) })
     .then(function (response) {
       if (response.redirected ||
           response.url.includes('/login')) {
@@ -58,14 +60,12 @@ var analysisModalRequest = 0;
 
 function showAnalysisModal(sessionId) {
   var requestId = ++analysisModalRequest;
-  analysisModalBody.innerHTML =
-    '<div class="modal-header"><h2>세션 분석 결과</h2><button class="close-modal-btn" aria-label="닫기" onclick="closeAnalysisModal()">×</button></div><div class="modal-body" role="status" style="text-align:center;padding:2rem;">' +
-    '<span class="spinner spinner-md"></span>' +
-    ' 분석 결과 로딩 중...</div>';
+  analysisModalBody.replaceChildren(document.getElementById('admin-session-loading').content.cloneNode(true));
   analysisModal.classList.remove('hidden');
   analysisModal.classList.add('flex');
   modalLifecycle.open(analysisModal, closeAnalysisModal);
 
+  sessionPendingRequests++;
   fetchWithRetry(
     '/admin/sessions/' + sessionId + '/analysis_modal'
   )
@@ -80,8 +80,8 @@ function showAnalysisModal(sessionId) {
       if (requestId !== analysisModalRequest) return;
       var loading = analysisModalBody.querySelector('[role="status"]');
       if (loading) { loading.replaceChildren(); loading.removeAttribute('role'); }
-      modalLifecycle.error(analysisModal, '분석 결과를 불러올 수 없습니다.');
-    });
+      modalLifecycle.error(analysisModal, uiLanguage.t('admin.analysis_load_failed'));
+    }).finally(function () { sessionPendingRequests--; });
 }
 
 function closeAnalysisModal() {
@@ -149,7 +149,7 @@ function getCheckedIds() {
 function updateSelectedUI() {
   var checked = getCheckedIds();
   var count = checked.length;
-  selectedCountEl.textContent = count + '개 선택됨';
+  selectedCountEl.textContent = uiLanguage.t('admin.selected_count', {count:count});
   btnDownloadSelected.disabled = count === 0;
 
   var boxes = getCheckboxes();
@@ -182,24 +182,25 @@ btnDownloadSelected.addEventListener('click', function () {
 
   var originalText = btnDownloadSelected.textContent;
   btnDownloadSelected.disabled = true;
-  btnDownloadSelected.textContent = '다운로드 중...';
+  btnDownloadSelected.textContent = uiLanguage.t('admin.downloading');
 
   var body = new URLSearchParams();
   ids.forEach(function (id) { body.append('session_ids', id); });
 
+  sessionPendingRequests++;
   fetch('/admin/sessions/export-selected', {
     method: 'POST',
-    headers: {
+    headers: uiLanguage.headers('/admin/sessions/export-selected', {
       'Content-Type': 'application/x-www-form-urlencoded',
       'x-csrf-token': getCsrfToken(),
-    },
+    }),
     credentials: 'same-origin',
     body: body,
   })
     .then(function (response) {
       if (!response.ok) {
         return response.text().then(function (t) {
-          throw new Error(t || '다운로드 실패');
+          throw new Error(t || uiLanguage.t('admin.download_failed'));
         });
       }
       return response.blob().then(function (blob) {
@@ -219,9 +220,10 @@ btnDownloadSelected.addEventListener('click', function () {
     })
     .catch(function () {
       modalLifecycle.error(document.querySelector('.table-container'),
-        '선택한 세션을 다운로드하지 못했습니다. 권한과 세션 상태를 확인한 뒤 다시 시도하세요.');
+        uiLanguage.t('admin.selected_download_failed'));
     })
     .finally(function () {
+      sessionPendingRequests--;
       btnDownloadSelected.textContent = originalText;
       updateSelectedUI();
     });
@@ -239,7 +241,7 @@ for (var eventName of ['htmx:responseError', 'htmx:sendError']) {
     if (!event.detail.elt.closest('#sessions-tbody')) return;
     modalLifecycle.error(document.querySelector('.table-container'),
       event.type === 'htmx:sendError'
-        ? '작업 결과를 확인할 수 없습니다. 목록을 새로 확인하세요.'
-        : '세션 작업을 완료하지 못했습니다. 권한과 세션 상태를 확인하세요.');
+        ? uiLanguage.t('admin.session_action_unknown')
+        : uiLanguage.t('admin.session_action_failed'));
   });
 }

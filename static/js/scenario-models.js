@@ -1,13 +1,13 @@
 import {node, field, providers, roles, optionNotes} from './ai-render.js';
 
-const states = {unverified:'미검증', verifying:'검증 중', succeeded:'성공', failed:'실패', stale:'재검증 필요'};
+const states = {unverified:uiLanguage.t('admin.unverified'), verifying:uiLanguage.t('admin.verifying'), succeeded:uiLanguage.t('admin.succeeded'), failed:uiLanguage.t('admin.failed'), stale:uiLanguage.t('admin.reverification_required')};
 
 export function commonModelReason(model, activeRoles) {
-  if (!model.enabled) return '비활성';
-  if (!model.connection_available) return '연결 사용 불가';
-  if (!model.capabilities || model.capabilities.metadata_conflict) return '기능 정의 필요';
+  if (!model.enabled) return uiLanguage.t('admin.inactive');
+  if (!model.connection_available) return uiLanguage.t('admin.connection_unavailable');
+  if (!model.capabilities || model.capabilities.metadata_conflict) return uiLanguage.t('admin.capability_definition_required');
   const unavailable = activeRoles.filter(role => model.verification_state?.[role]?.status !== 'succeeded');
-  return unavailable.map(role => `${roles[role]} ${states[model.verification_state?.[role]?.status] || '미검증'}`).join(' · ');
+  return unavailable.map(role => `${roles[role]} ${states[model.verification_state?.[role]?.status] || uiLanguage.t('admin.unverified')}`).join(' · ');
 }
 
 export function mountScenarioModels(data, onChange) {
@@ -24,7 +24,7 @@ export function mountScenarioModels(data, onChange) {
     const active = activeRoles();
     const values = active.map(role => identityKey(selections[role]));
     const mixed = !values[0] || values.some(value => value !== values[0]);
-    common.replaceChildren(node('option', '공통 모델 선택 필요', {value:''}));
+    common.replaceChildren(node('option', uiLanguage.t('admin.select_a_common_model'), {value:''}));
     for (const model of data.model_choices) {
       const reason = commonModelReason(model, active);
       const option = node('option', `${providers[model.provider]} / ${model.display_name}${reason ? ` · ${reason}` : ''}`, {value:model.id});
@@ -32,7 +32,7 @@ export function mountScenarioModels(data, onChange) {
       common.append(option);
     }
     common.value = mixed ? '' : selections.student.model_config_id;
-    note.textContent = mixed ? '기존 역할별 모델을 보존했습니다. 공통 모델을 명시적으로 선택해야 저장할 수 있습니다.' : '모든 활성 역할에 같은 모델을 사용합니다. 옵션은 역할별로 보존합니다.';
+    note.textContent = mixed ? uiLanguage.t('admin.existing_per_role_models_are_preserved_explicitly_select_a_common_model_before_saving') : uiLanguage.t('admin.all_active_roles_use_the_same_model_options_are_preserved_per_role');
     for (const role of active) {
       for (const input of document.getElementById(`${role}-model-options`).querySelectorAll('input,select,button')) input.disabled = mixed;
     }
@@ -81,25 +81,25 @@ export function mountScenarioModels(data, onChange) {
 
 export function mountScenarioModel(data, role, label, {select, options, status}, saved, onChange, defaultModel = null) {
   let current = structuredClone(saved);
-  select.append(node('option', '모델 선택 필요', {value:''}));
+  select.append(node('option', uiLanguage.t('admin.select_a_model'), {value:''}));
   for (const model of data.model_choices) select.append(node('option', `${providers[model.provider]} / ${model.display_name}`, {value:model.id}));
-  if (saved && !data.model_choices.some(m => m.id === saved.model_config_id)) select.append(node('option', `사용 불가 · ${saved.model_id}`, {value:saved.model_config_id}));
+  if (saved && !data.model_choices.some(m => m.id === saved.model_config_id)) select.append(node('option', `${uiLanguage.t('admin.unavailable')} · ${saved.model_id}`, {value:saved.model_config_id}));
   select.value = saved?.model_config_id ?? '';
   function render(changed = false) {
     const selection = current;
     const model = data.model_choices.find(m => m.id === selection?.model_config_id);
     options.replaceChildren();
     const reasons = [];
-    if (!selection) reasons.push(defaultModel && !defaultModel.available ? '기본 모델 사용 불가 · 모델 선택 필요' : '모델 선택 필요');
-    else if (!model) reasons.push('등록 모델 사용 불가');
+    if (!selection) reasons.push(defaultModel && !defaultModel.available ? uiLanguage.t('admin.default_model_unavailable_select_a_model') : uiLanguage.t('admin.select_a_model'));
+    else if (!model) reasons.push(uiLanguage.t('admin.registered_model_unavailable'));
     else {
-      reasons.push(states[model.verification_state[role].status] || '미검증');
-      if (!model.enabled) reasons.push('비활성');
-      if (!model.connection_available) reasons.push('연결 사용 불가');
-      if (!model.capabilities) reasons.push('기능 정의 필요');
-      if (model.capabilities?.metadata_conflict) reasons.push('기능 정의·제공자 목록 불일치');
+      reasons.push(states[model.verification_state[role].status] || uiLanguage.t('admin.unverified'));
+      if (!model.enabled) reasons.push(uiLanguage.t('admin.inactive'));
+      if (!model.connection_available) reasons.push(uiLanguage.t('admin.connection_unavailable'));
+      if (!model.capabilities) reasons.push(uiLanguage.t('admin.capability_definition_required'));
+      if (model.capabilities?.metadata_conflict) reasons.push(uiLanguage.t('admin.capability_definition_and_provider_catalog_mismatch'));
     }
-    status.textContent = `${selection ? `${providers[selection.provider]} / ${selection.model_id} · ` : ''}${reasons.join(' · ')}${changed ? ' · 모델 변경: 새 기본 옵션을 표시했습니다.' : ''}`;
+    status.textContent = `${selection ? `${providers[selection.provider]} / ${selection.model_id} · ` : ''}${reasons.join(' · ')}${changed ? ` · ${uiLanguage.t('admin.model_changed_new_default_options_displayed')}` : ''}`;
     if (!selection) return;
     if (!model?.capabilities) {
       options.append(node('pre', JSON.stringify(selection.options, null, 2)));
@@ -116,7 +116,7 @@ export function mountScenarioModel(data, role, label, {select, options, status},
       if (definition.min != null) attrs.min = definition.min;
       if (definition.max != null) attrs.max = definition.max;
       if (numeric) attrs.step = definition.type === 'integer' ? '1' : 'any';
-      const input = field(options, `${select.id}-${definition.name}`, `${label} ${definition.label}`, value, attrs, definition.choices ? [['','지정하지 않음'], ...definition.choices.map(v => [v,v])] : null);
+      const input = field(options, `${select.id}-${definition.name}`, `${label} ${definition.label}`, value, attrs, definition.choices ? [['',uiLanguage.t('admin.unspecified')], ...definition.choices.map(v => [v,v])] : null);
       input.dataset.field = `${select.id}.options.${definition.name}`;
       const errorId = `${input.dataset.field}-error`;
       input.setAttribute('aria-describedby', errorId);

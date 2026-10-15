@@ -36,8 +36,8 @@ export default async function checkComparisonStreamAndMentor(page) {
   assert(!(await p1.innerText()).includes('중복은 표시 금지'));
   assert(!(await p2.innerText()).includes('이전 시도는 표시 금지'));
   assert.match(await p1.innerText(), /공통 입력 hash: shared-hash/);
-  assert.match(await p1.innerText(), /시작 unknown · 종료 unknown/);
-  assert.match(await p1.innerText(), /첫 본문 unknown/);
+  assert.match(await p1.innerText(), /시작 알 수 없음 · 종료 알 수 없음/);
+  assert.match(await p1.innerText(), /첫 본문 알 수 없음/);
   assert.equal(starts,1);
   await page.unroute('**/admin/comparisons');
   // Restore the fixture after removing the one-shot stream override.

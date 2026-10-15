@@ -1,0 +1,54 @@
+import assert from 'node:assert/strict';
+
+export default async function check(page) {
+  const base = new URL(page.url()).origin;
+  await page.context().addCookies([{name:'ui_lang',value:'en',url:base}]);
+  await page.goto(`${base}/admin/scenarios`);
+  await page.getByRole('searchbox', {name:'Search scenarios'}).waitFor({timeout:3000});
+  await page.locator('#search-input').fill('unsubmitted filter');
+  await page.locator('[data-ui-language="ko"]').click();
+  assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+  assert.match(await page.locator('#language-notice').innerText(), /Save or clear/);
+  await page.locator('#search-input').fill('');
+  await Promise.all([page.waitForEvent('load'),page.locator('[data-ui-language="ko"]').click()]);
+  assert.equal(await page.locator('html').getAttribute('lang'), 'ko');
+  await page.context().addCookies([{name:'ui_lang',value:'en',url:base}]);
+  let finishSave;
+  await page.route('**/admin/scenarios/1/update', async route => {
+    assert.equal(route.request().headers()['x-ui-language'], 'en');
+    await new Promise(resolve => { finishSave = () => route.fulfill({status:200,json:{version:2,status:'published'}}).then(resolve); });
+  });
+  await page.goto(`${base}/fixtures/s2/editor?published=1`);
+  await page.getByRole('button', {name:'Publish changes',exact:true}).waitFor({timeout:3000});
+  await page.locator('#title').fill('원문 title');
+  await page.locator('[data-ui-language="ko"]').click();
+  assert.match(await page.locator('#language-notice').innerText(), /Save or clear/);
+  await page.locator('#publish-scenario').click();
+  await page.waitForFunction(() => document.querySelector('#publish-scenario').disabled);
+  await page.locator('#title').fill('Edited during save');
+  await page.locator('[data-ui-language="ko"]').click();
+  assert.match(await page.locator('#language-notice').innerText(), /Wait until/);
+  await finishSave();
+  await page.getByText('Published.',{exact:true}).waitFor();
+  await page.locator('[data-ui-language="ko"]').click();
+  assert.equal(await page.locator('#title').inputValue(), 'Edited during save');
+  assert.match(await page.locator('#language-notice').innerText(), /Save or clear/);
+  await page.unroute('**/admin/scenarios/1/update');
+  await page.route('**/admin/scenarios/1/update', route => route.fulfill({status:409,json:{detail:{code:'version_conflict',current_version:3}}}));
+  await page.locator('#publish-scenario').click();
+  await page.locator('#editor-conflict').waitFor();
+  assert.match(await page.locator('#editor-conflict-message').innerText(), /Another administrator/);
+  await page.locator('[data-ui-language="ko"]').click();
+  assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+  await page.goto(`${base}/admin/users`);
+  await page.getByRole('heading',{name:'User management',exact:true}).waitFor({timeout:3000});
+  await page.locator('#open-create-modal').click();
+  await page.locator('#new-username').fill('failed_user');
+  await page.locator('[data-ui-language="ko"]').evaluate(button => button.click());
+  assert.equal(await page.locator('html').getAttribute('lang'),'en');
+  assert.match(await page.locator('#language-notice').innerText(),/Save or clear/);
+  await page.locator('#create-modal [data-modal="create-modal"]').first().click();
+  await Promise.all([page.waitForEvent('load'),page.locator('[data-ui-language="ko"]').click()]);
+  assert.equal(await page.locator('html').getAttribute('lang'),'ko');
+  return {pageErrors:[]};
+}

@@ -1,18 +1,19 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['admin', 'teacher'] %}
 
-{% block title %}대화 세션 관리 - 관리자{% endblock %}
+{% block title %}{{ t('admin.dialogue_sessions_admin') }}{% endblock %}
 
 {% block content %}
 <div class="container">
   <header class="page-header">
-    <h1>대화 세션 관리</h1>
-    <p class="subtitle">세션 조회, 종료, 삭제</p>
+    <h1>{{ t('admin.dialogue_sessions') }}</h1>
+    <p class="subtitle">{{ t('admin.view_end_and_delete_sessions') }}</p>
   </header>
 
   <div class="filters" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;">
     <form method="get" class="filter-form" id="filter-form" style="display:flex;align-items:center;gap:0.5rem;margin:0;">
-      <select name="teacher_id" aria-label="교사 필터" onchange="submitFilters()">
-        <option value="">모든 교사</option>
+      <select name="teacher_id" aria-label="{{ t('admin.teacher_filter') }}" onchange="submitFilters()">
+        <option value="">{{ t('admin.all_teachers') }}</option>
         {% for teacher in teachers %}
         <option value="{{ teacher.id }}"
           {% if current_teacher_id == teacher.id %}selected{% endif %}>
@@ -22,41 +23,41 @@
       </select>
 
       <div class="date-range-box">
-        <input type="date" name="date_from" aria-label="시작일" value="{{ current_date_from }}"
+        <input type="date" name="date_from" aria-label="{{ t('admin.start_date') }}" value="{{ current_date_from }}"
           onchange="submitFilters()" />
         <span class="date-range-sep">~</span>
-        <input type="date" name="date_to" aria-label="종료일" value="{{ current_date_to }}"
+        <input type="date" name="date_to" aria-label="{{ t('admin.end_date') }}" value="{{ current_date_to }}"
           onchange="submitFilters()" />
       </div>
     </form>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem;margin-left:auto;">
       <a id="btn-download-all" class="btn btn-sm btn-success"
          href="/admin/sessions/export{% if current_teacher_id or current_date_from or current_date_to %}?{% endif %}{% if current_teacher_id %}teacher_id={{ current_teacher_id }}&{% endif %}{% if current_date_from %}date_from={{ current_date_from }}&{% endif %}{% if current_date_to %}date_to={{ current_date_to }}{% endif %}"
-         style="text-decoration:none;">전체 다운로드</a>
+         style="text-decoration:none;">{{ t('admin.download_all') }}</a>
       <button id="btn-download-selected" class="btn btn-sm btn-primary"
-         disabled>선택 다운로드</button>
+         disabled>{{ t('admin.download_selected') }}</button>
       <span id="selected-count" aria-live="polite"
-         style="font-size:0.85rem;color:var(--color-text-muted,#888);">0개 선택됨</span>
+         style="font-size:0.85rem;color:var(--color-text-muted,#888);">{{ t('admin.0_selected') }}</span>
     </div>
   </div>
 
   <link rel="stylesheet" href="/static/css/sessions.css">
 
-  <div class="table-container" role="region" tabindex="0" aria-label="세션 목록">
+  <div class="table-container" role="region" tabindex="0" aria-label="{{ t('admin.sessions') }}">
     <table class="data-table">
       <thead>
         <tr>
           <th style="width:2.5rem;text-align:center;">
             <input type="checkbox" id="select-all"
-                   aria-label="모든 세션 선택">
+                   aria-label="{{ t('admin.select_all_sessions') }}">
           </th>
           <th>ID</th>
-          <th>시나리오</th>
-          <th>교사</th>
-          <th>시작 시간</th>
-          <th>종료 시간</th>
-          <th>상태</th>
-          <th>작업</th>
+          <th>{{ t('admin.scenario') }}</th>
+          <th>{{ t('admin.teacher') }}</th>
+          <th>{{ t('admin.start_time') }}</th>
+          <th>{{ t('admin.end_time') }}</th>
+          <th>{{ t('admin.status') }}</th>
+          <th>{{ t('admin.actions') }}</th>
         </tr>
       </thead>
       <tbody id="sessions-tbody">
@@ -66,15 +67,15 @@
             {% if session.ended_at %}
             <input type="checkbox" class="session-checkbox"
                    value="{{ session.id }}"
-                   aria-label="세션 {{ session.id }} 선택">
+                   aria-label="{{ t('admin.select_session', id=session.id) }}">
             {% else %}
             <input type="checkbox" disabled
-                   aria-label="진행중 세션 다운로드 불가">
+                   aria-label="{{ t('admin.active_sessions_cannot_be_downloaded') }}">
             {% endif %}
           </td>
           <td>{{ session.id }}</td>
           {% set display = session_display(session) %}
-          <td>{{ display.scenario_title }}{% if display.snapshot_provenance.snapshot_origin != 'native' %} · 과거 자료 · 읽기 전용{% endif %}</td>
+          <td>{{ display.scenario_title }}{% if display.snapshot_provenance.snapshot_origin != 'native' %} {{ t('admin.historical_data_read_only') }}{% endif %}</td>
           <td>
             {% if session.teacher %}
             {{ session.teacher.nickname }}
@@ -93,22 +94,22 @@
           </td>
           <td>
             {% if session.ended_at %}
-              <span class="badge badge-success">완료</span>
+              <span class="badge badge-success">{{ t('admin.completed') }}</span>
             {% else %}
-              <span class="badge badge-warning">진행중</span>
+              <span class="badge badge-warning">{{ t('admin.in_progress') }}</span>
             {% endif %}
           </td>
           <td class="action-cell">
             {% if not session.ended_at and session.snapshot_origin == 'native' %}
             <button type="button"
               hx-post="/admin/sessions/{{ session.id }}/end"
-              hx-confirm="세션을 종료하고 분석하시겠습니까?"
+              hx-confirm="{{ t('admin.end_and_analyze_this_session') }}"
               hx-target="closest tr"
               hx-swap="outerHTML"
               hx-indicator="#loading-{{ session.id }}"
               class="btn btn-sm btn-warning">
               <span class="htmx-indicator" id="loading-{{ session.id }}"><span class="spinner spinner-sm"></span></span>
-              <span class="btn-text">종료</span>
+              <span class="btn-text">{{ t('admin.end') }}</span>
             </button>
             {% else %}
             <a href="/admin/sessions/{{ session.id }}/download"
@@ -116,21 +117,21 @@
             {% if session.summary or session.id in analysis_session_ids %}
             <button type="button"
               class="btn btn-sm btn-info view-analysis-btn"
-              data-session-id="{{ session.id }}">분석결과</button>
+              data-session-id="{{ session.id }}">{{ t('admin.analysis_results') }}</button>
             {% endif %}
             {% endif %}
             <button type="button"
               hx-post="/admin/sessions/{{ session.id }}/delete"
-              hx-confirm="세션을 삭제하시겠습니까? (복구 불가)"
+              hx-confirm="{{ t('admin.delete_this_session_this_cannot_be_undone') }}"
               hx-target="closest tr"
               hx-swap="delete"
-              class="btn btn-sm btn-danger">삭제</button>
+              class="btn btn-sm btn-danger">{{ t('admin.delete') }}</button>
           </td>
         </tr>
         {% else %}
         <tr>
           <td colspan="8" style="text-align: center; padding: 2rem;">
-            {% if current_teacher_id or current_date_from or current_date_to or current_page > 1 %}현재 필터 또는 페이지에 결과가 없습니다.{% else %}세션이 없습니다.{% endif %}
+            {% if current_teacher_id or current_date_from or current_date_to or current_page > 1 %}{{ t('admin.no_results_for_the_current_filters_or_page') }}{% else %}{{ t('admin.no_sessions') }}{% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -140,13 +141,13 @@
 
   {% if total_pages > 1 %}
   <div class="pagination">
-    <span class="pagination-info">총 {{ total_count }}개 중 {{ current_page }}/{{ total_pages }} 페이지</span>
+    <span class="pagination-info">{{ t('admin.session_page', total=total_count, page=current_page, pages=total_pages) }}</span>
     <div class="pagination-buttons">
       {% if current_page > 1 %}
       <a href="?page=1{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
-         class="btn btn-sm btn-secondary">처음</a>
+         class="btn btn-sm btn-secondary">{{ t('admin.first') }}</a>
       <a href="?page={{ current_page - 1 }}{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
-         class="btn btn-sm btn-secondary">이전</a>
+         class="btn btn-sm btn-secondary">{{ t('admin.previous') }}</a>
       {% endif %}
 
       {% for p in range(1, total_pages + 1) %}
@@ -160,9 +161,9 @@
 
       {% if current_page < total_pages %}
       <a href="?page={{ current_page + 1 }}{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
-         class="btn btn-sm btn-secondary">다음</a>
+         class="btn btn-sm btn-secondary">{{ t('admin.next') }}</a>
       <a href="?page={{ total_pages }}{% if current_teacher_id %}&teacher_id={{ current_teacher_id }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}"
-         class="btn btn-sm btn-secondary">마지막</a>
+         class="btn btn-sm btn-secondary">{{ t('admin.last') }}</a>
       {% endif %}
     </div>
   </div>
@@ -171,12 +172,25 @@
 
 <!-- Analysis Modal -->
 <div id="analysis-modal" class="modal-overlay hidden"
-     role="dialog" aria-modal="true" aria-label="세션 분석 결과">
+     role="dialog" aria-modal="true" aria-label="{{ t('admin.session_analysis_results') }}">
   <div class="modal-container modal-lg">
     <div id="analysis-modal-body" class="modal-form">
     </div>
   </div>
 </div>
 
+<template id="admin-session-loading"><div class="modal-header"><h2>{{ t('admin.session_analysis_results') }}</h2><button class="close-modal-btn" aria-label="{{ t('admin.close') }}" onclick="closeAnalysisModal()">×</button></div><div class="modal-body" role="status" style="text-align:center;padding:2rem;"><span class="spinner spinner-md"></span> {{ t('admin.sessions_loading') }}</div></template>
 <script src="/static/js/sessions.js"></script>
+
+<script>
+{
+  const tasks = new Set();
+  const filters = document.getElementById('filter-form');
+  const values = () => JSON.stringify([...new FormData(filters)]);
+  const baseline = values();
+  uiLanguage.registerGuard(() => ({dirty:values() !== baseline || Boolean(document.querySelector('.session-checkbox:checked')), busy:tasks.size > 0}));
+  document.addEventListener('htmx:beforeRequest', event => tasks.add(event.detail.xhr));
+  document.addEventListener('htmx:afterRequest', event => tasks.delete(event.detail.xhr));
+}
+</script>
 {% endblock %}

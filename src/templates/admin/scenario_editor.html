@@ -42,7 +42,7 @@
     <h3>{{ entry.field }}</h3><dl><dt>{{ t('admin.original') }}</dt><dd><pre>{{ entry.source }}</pre></dd><dt>{{ t('admin.converted_value') }}</dt><dd><pre>{{ entry.target }}</pre></dd></dl>
     {% if entry.archive_ref is defined %}
     <dl><dt>{{ t('admin.admin_only_original_archive_reference') }}</dt><dd><code>{{ entry.archive_ref }}</code></dd>
-      <dt>archive SHA-256</dt><dd><code>{{ entry.archive_hash }}</code></dd>
+      <dt>{{ t('admin.archive_sha_256') }}</dt><dd><code>{{ entry.archive_hash }}</code></dd>
       <dt>{{ t('admin.original_sha_256') }}</dt><dd><code>{{ entry.source_hash }}</code></dd>
       <dt>{{ t('admin.converted_value_sha_256') }}</dt><dd><code>{{ entry.target_hash }}</code></dd>
       <dt>{{ t('admin.deployment_settings_source_capture_time') }}</dt><dd>{{ entry.settings_source }} / {{ entry.captured_at }}</dd></dl>

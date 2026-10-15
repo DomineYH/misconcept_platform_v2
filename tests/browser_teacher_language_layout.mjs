@@ -3,7 +3,7 @@ import {colorMath} from './uiux_color_math.mjs';
 
 export default async function check(page) {
   const base = new URL(page.url()).origin;
-  const screens = ['/scenarios?many=1&long=1&missing_problem=1', '/scenarios?empty=1',
+  const screens = ['/login', '/scenarios?many=1&long=1&missing_problem=1', '/scenarios?empty=1',
     '/chat?long=1&mentor_manual=1', '/fixtures/uiux122/history?reconstructed=1',
     '/fixtures/s4/analysis?state=preserved', '/fixtures/s4/analysis?state=partial',
     '/fixtures/s4/analysis?state=plan', '/fixtures/s4/analysis?state=running'];

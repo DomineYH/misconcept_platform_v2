@@ -122,3 +122,36 @@ async def test_admin_permission_denial_is_localized(data):
         )
         assert response.status_code == 403
         assert response.json() == {"detail": "관리자 권한이 필요합니다."}
+
+
+@pytest.mark.parametrize(
+    "language,message",
+    [("ko", "사용자를 찾을 수 없습니다."), ("en", "User not found")],
+)
+async def test_stale_login_error_on_admin_route_follows_document_language(
+    data, language, message
+):
+    app = FastAPI()
+    app.include_router(admin_about.router)
+
+    @app.middleware("http")
+    async def stale_session(request, call_next):
+        request.scope["session"] = {"user_id": -1}
+        return await call_next(request)
+
+    async def database():
+        yield data.db
+
+    app.dependency_overrides[get_db_session] = database
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as api:
+        response = await api.get(
+            "/admin/about",
+            headers={
+                "X-UI-Language": language,
+                "Cookie": "ui_lang=" + ("en" if language == "ko" else "ko"),
+            },
+        )
+    assert response.status_code == 401
+    assert response.json() == {"detail": message}

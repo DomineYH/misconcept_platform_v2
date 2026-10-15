@@ -56,5 +56,11 @@ window.uiLanguage = (() => {
     const button = event.target.closest('[data-ui-language]');
     if (button) switchLanguage(button.dataset.uiLanguage);
   });
+  document.addEventListener('DOMContentLoaded', () => {
+    const notices = document.querySelector('.nav-notices');
+    new ResizeObserver(() => {
+      document.body.style.setProperty('--nav-notice-height', `${notices.getBoundingClientRect().height}px`);
+    }).observe(notices);
+  });
   return {t, headers, registerGuard};
 })();

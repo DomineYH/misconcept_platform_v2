@@ -16,6 +16,7 @@ os.environ.update(
     OPENAI_API_KEY="test",
 )
 from src.api.dependencies import templates  # noqa: E402
+from src.i18n import display_language, translate  # noqa: E402
 from tests.s2_screen_fixtures import editor_fixture  # noqa: E402
 from tests.s4_screen_fixtures import analysis_fixture  # noqa: E402
 from tests.s5_terminal_fixtures import terminal_fixtures  # noqa: E402
@@ -23,6 +24,24 @@ from tests.s6_screen_fixtures import list_fixture  # noqa: E402
 
 
 class Handler(BaseHTTPRequestHandler):
+    def display_request(self):
+        from starlette.requests import Request
+
+        path = urlparse(self.path)
+        return Request(
+            {
+                "type": "http",
+                "path": path.path,
+                "query_string": path.query.encode(),
+                "scheme": "http",
+                "server": self.server.server_address,
+                "headers": [
+                    (key.lower().encode(), value.encode())
+                    for key, value in self.headers.items()
+                ],
+            }
+        )
+
     def do_GET(self):
         path = urlparse(self.path)
         query = parse_qs(path.query)
@@ -89,7 +108,10 @@ class Handler(BaseHTTPRequestHandler):
 
             body = (
                 templates.get_template("about_fragment.html")
-                .render(contributors=[] if "empty" in query else contributors())
+                .render(
+                    request=self.display_request(),
+                    contributors=[] if "empty" in query else contributors(),
+                )
                 .encode()
             )
             mime = "text/html; charset=utf-8"
@@ -98,16 +120,14 @@ class Handler(BaseHTTPRequestHandler):
                 templates.get_template("login.html")
                 .render(
                     error=(
-                        "사용자 ID 또는 비밀번호가 올바르지 않습니다."
+                        translate(
+                            "login.invalid_credentials",
+                            display_language(self.display_request()),
+                        )
                         if "error" in query
                         else None
                     ),
-                    request=SimpleNamespace(
-                        url=SimpleNamespace(path=path.path),
-                        query_params={
-                            key: values[0] for key, values in query.items()
-                        },
-                    ),
+                    request=self.display_request(),
                 )
                 .encode()
             )
@@ -466,12 +486,7 @@ class Handler(BaseHTTPRequestHandler):
                             for index in range(1, 4 if "many" in query else 2)
                         ]
                     ),
-                    request=SimpleNamespace(
-                        url=SimpleNamespace(path=path.path),
-                        query_params={
-                            key: values[0] for key, values in query.items()
-                        },
-                    ),
+                    request=self.display_request(),
                     session_id=1,
                     student_name="Student",
                     user=SimpleNamespace(

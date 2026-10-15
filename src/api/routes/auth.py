@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_db_session, templates
 from src.config import config
+from src.i18n import display_language, translate
 from src.models import User
 
 router = APIRouter(tags=["Authentication"])
@@ -40,7 +41,9 @@ async def post_login(
     if not username.replace("_", "").isalnum():
         raise HTTPException(
             status_code=400,
-            detail="사용자 ID는 영문, 숫자, 언더스코어만 " "사용 가능합니다.",
+            detail=translate(
+                "login.invalid_username", display_language(request)
+            ),
         )
 
     # Find user by username
@@ -52,7 +55,10 @@ async def post_login(
             "login.html",
             {
                 "request": request,
-                "error": "사용자 ID 또는 비밀번호가 " "올바르지 않습니다.",
+                "error": translate(
+                    "login.invalid_credentials", display_language(request)
+                ),
+                "username": username,
             },
             status_code=401,
         )

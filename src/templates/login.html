@@ -1,12 +1,13 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ["login"] %}
 
-{% block title %}로그인 - 오개념 교정 대화 시뮬레이터{% endblock %}
+{% block title %}{{ t('login.title') }} - {{ t('common.product') }}{% endblock %}
 
 {% block content %}
 <div class="login-container">
   <div class="login-card">
-    <h1>오개념 교정 대화 시뮬레이터</h1>
-    <p class="subtitle">교사 연수 플랫폼</p>
+    <h1>{{ t('common.product') }}</h1>
+    <p class="subtitle">{{ t('login.subtitle') }}</p>
 
     {% if error %}
     <div class="alert alert-danger" id="login-error" role="alert" tabindex="-1" autofocus>
@@ -16,30 +17,31 @@
 
     <form method="POST" action="/login" class="login-form">
       <div class="form-group">
-        <label for="username">사용자 ID <span class="required">(필수)</span></label>
+        <label for="username">{{ t('login.username') }} <span class="required">{{ t('login.required') }}</span></label>
         <input
           type="text"
           id="username"
           name="username"
-          placeholder="사용자 ID 입력"
+          placeholder="{{ t('login.username_placeholder') }}"
           required
           minlength="3"
           maxlength="50"
           pattern="[a-zA-Z0-9_]+"
-          title="영문, 숫자, 언더스코어만 사용 가능"
+          title="{{ t('login.username_format') }}"
           aria-describedby="username-help{% if error %} login-error{% endif %}"
+          value="{{ username|default('') }}"
           autocomplete="username"
         />
-        <small id="username-help">3-50자, 영문/숫자/언더스코어만 사용</small>
+        <small id="username-help">{{ t('login.username_help') }}</small>
       </div>
 
       <div class="form-group">
-        <label for="password">비밀번호 <span class="required">(필수)</span></label>
+        <label for="password">{{ t('login.password') }} <span class="required">{{ t('login.required') }}</span></label>
         <input
           type="password"
           id="password"
           name="password"
-          placeholder="비밀번호 입력"
+          placeholder="{{ t('login.password_placeholder') }}"
           required
           minlength="8"
           maxlength="128"
@@ -48,15 +50,19 @@
         />
       </div>
 
-      <button type="submit" class="btn-primary">로그인</button>
+      <button type="submit" class="btn-primary">{{ t('login.title') }}</button>
     </form>
 
     <div class="info-box">
       <p>
-        <strong>참고:</strong> 관리자가 발급한 ID와 비밀번호로
-        로그인하세요. 계정이 없는 경우 관리자에게 문의하세요.
+        <strong>{{ t('login.note') }}</strong> {{ t('login.help') }}
       </p>
     </div>
   </div>
 </div>
+<script>
+  uiLanguage.registerGuard(() => ({
+    dirty: Boolean(document.getElementById('username').value || document.getElementById('password').value)
+  }));
+</script>
 {% endblock %}

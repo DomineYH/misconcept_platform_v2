@@ -1,0 +1,146 @@
+{
+  "common": {
+    "product": {
+      "ko": "오개념 교정 대화 시뮬레이터",
+      "en": "Misconception Dialogue Simulator"
+    },
+    "skip": {
+      "ko": "본문으로 건너뛰기",
+      "en": "Skip to main content"
+    },
+    "navigation": {
+      "ko": "주 탐색",
+      "en": "Main navigation"
+    },
+    "menu": {
+      "ko": "메뉴",
+      "en": "Menu"
+    },
+    "scenarios": {
+      "ko": "시나리오",
+      "en": "Scenarios"
+    },
+    "admin": {
+      "ko": "관리자",
+      "en": "Administration"
+    },
+    "account": {
+      "ko": "계정",
+      "en": "Account"
+    },
+    "logout": {
+      "ko": "로그아웃",
+      "en": "Log out"
+    },
+    "footer": {
+      "ko": "교육 연구 도구",
+      "en": "Educational research tool"
+    },
+    "close": {
+      "ko": "닫기",
+      "en": "Close"
+    },
+    "language": {
+      "ko": "표시 언어",
+      "en": "Display language"
+    },
+    "guard_input": {
+      "ko": "저장하거나 입력을 비운 뒤 전환하세요",
+      "en": "Save or clear your input before switching languages."
+    },
+    "guard_busy": {
+      "ko": "작업이 끝난 뒤 전환하세요",
+      "en": "Wait until the task finishes before switching languages."
+    },
+    "cookie_failed": {
+      "ko": "언어 설정을 저장할 수 없습니다. 쿠키를 허용한 뒤 다시 시도하세요.",
+      "en": "Could not save your language. Allow cookies and try again."
+    }
+  },
+  "login": {
+    "title": {
+      "ko": "로그인",
+      "en": "Log in"
+    },
+    "subtitle": {
+      "ko": "교사 연수 플랫폼",
+      "en": "Teacher training platform"
+    },
+    "username": {
+      "ko": "사용자 ID",
+      "en": "User ID"
+    },
+    "password": {
+      "ko": "비밀번호",
+      "en": "Password"
+    },
+    "required": {
+      "ko": "(필수)",
+      "en": "(required)"
+    },
+    "username_placeholder": {
+      "ko": "사용자 ID 입력",
+      "en": "Enter user ID"
+    },
+    "password_placeholder": {
+      "ko": "비밀번호 입력",
+      "en": "Enter password"
+    },
+    "username_format": {
+      "ko": "영문, 숫자, 언더스코어만 사용 가능",
+      "en": "Use letters, numbers and underscores only"
+    },
+    "username_help": {
+      "ko": "3-50자, 영문/숫자/언더스코어만 사용",
+      "en": "3–50 characters: letters, numbers and underscores only"
+    },
+    "note": {
+      "ko": "참고:",
+      "en": "Note:"
+    },
+    "help": {
+      "ko": "관리자가 발급한 ID와 비밀번호로 로그인하세요. 계정이 없는 경우 관리자에게 문의하세요.",
+      "en": "Log in with the ID and password issued by your administrator. Contact your administrator if you do not have an account."
+    },
+    "invalid_credentials": {
+      "ko": "사용자 ID 또는 비밀번호가 올바르지 않습니다.",
+      "en": "The user ID or password is incorrect."
+    },
+    "invalid_username": {
+      "ko": "사용자 ID는 영문, 숫자, 언더스코어만 사용 가능합니다.",
+      "en": "User IDs may contain only letters, numbers and underscores."
+    }
+  },
+  "about": {
+    "title": {
+      "ko": "about",
+      "en": "About"
+    },
+    "heading": {
+      "ko": "About",
+      "en": "About"
+    },
+    "phone": {
+      "ko": "전화",
+      "en": "Phone"
+    },
+    "email": {
+      "ko": "이메일",
+      "en": "Email"
+    },
+    "empty": {
+      "ko": "등록된 정보가 없습니다.",
+      "en": "No information has been added."
+    },
+    "loading": {
+      "ko": "소개를 불러오는 중...",
+      "en": "Loading About…"
+    },
+    "load_error": {
+      "ko": "소개를 불러올 수 없습니다. About을 다시 눌러 주세요.",
+      "en": "Could not load About. Select About to try again."
+    }
+  },
+  "teacher": {},
+  "admin": {}
+}

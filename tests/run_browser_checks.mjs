@@ -51,9 +51,10 @@ try {
   assert(ready, `Browser server did not serve /chat within 30s: ${serverLog}`);
   browser = await chromium.launch({headless: true});
   for (const file of files) {
-    let page;
+    let context, page;
     try {
-      page = await browser.newPage();
+      context = await browser.newContext();
+      page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(url);
@@ -66,7 +67,7 @@ try {
       console.error(`FAIL ${file}: ${String(error.message ?? error).replace(/\s+/g, ' ')}`);
       process.exitCode = 1;
     } finally {
-      await page?.close();
+      await context?.close();
     }
   }
 } catch (error) {

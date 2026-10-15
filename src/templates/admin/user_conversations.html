@@ -1,24 +1,25 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['admin', 'teacher'] %}
 
-{% block title %}사용자 대화 관리 - 관리자{% endblock %}
+{% block title %}{{ t('admin.user_conversations_admin') }}{% endblock %}
 
 {% block content %}
 <div class="container">
   <header class="page-header">
-    <h1>사용자 대화 관리</h1>
-    <p class="subtitle">사용자별 대화 내역 다운로드</p>
+    <h1>{{ t('admin.user_conversations') }}</h1>
+    <p class="subtitle">{{ t('admin.download_conversation_history_by_user') }}</p>
   </header>
 
-  <div class="table-container user-list-container" role="region" tabindex="0" aria-label="사용자 대화 목록">
+  <div class="table-container user-list-container" role="region" tabindex="0" aria-label="{{ t('admin.user_conversations_table') }}">
     <table class="data-table">
       <thead>
         <tr>
           <th>ID</th>
-          <th>닉네임</th>
-          <th>학번</th>
-          <th>세션 수</th>
-          <th>마지막 세션</th>
-          <th>작업</th>
+          <th>{{ t('admin.nickname') }}</th>
+          <th>{{ t('admin.student_number') }}</th>
+          <th>{{ t('admin.session_count') }}</th>
+          <th>{{ t('admin.last_session') }}</th>
+          <th>{{ t('admin.actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -40,25 +41,25 @@
             <div class="btn-group">
               <a href="/admin/user-conversations/{{ item.user.id }}/export"
                  class="btn btn-sm btn-primary"
-                 title="전체 CSV 다운로드">
-                전체
+                 title="{{ t('admin.download_all_as_csv') }}">
+                {{ t('admin.all') }}
               </a>
               <button type="button"
                  class="btn btn-sm btn-success"
                  onclick="showSessionList({{ item.user.id }})"
-                 title="개별 세션 다운로드">
-                개별
+                 title="{{ t('admin.download_individual_sessions') }}">
+                {{ t('admin.individual') }}
               </button>
             </div>
             {% else %}
-            <span class="badge badge-warning">완료된 세션 없음</span>
+            <span class="badge badge-warning">{{ t('admin.no_completed_sessions') }}</span>
             {% endif %}
           </td>
         </tr>
         {% else %}
         <tr>
           <td colspan="6" style="text-align: center; padding: 2rem;">
-            대화 기록이 있는 사용자가 없습니다.
+            {{ t('admin.no_users_have_conversation_history') }}
           </td>
         </tr>
         {% endfor %}
@@ -71,19 +72,19 @@
 <div id="sessionModal" class="modal-overlay">
   <div class="modal-container modal-lg">
     <div class="modal-header">
-      <h2>개별 세션 다운로드</h2>
-      <button class="close-modal-btn" aria-label="닫기"
+      <h2>{{ t('admin.download_individual_sessions') }}</h2>
+      <button class="close-modal-btn" aria-label="{{ t('admin.close') }}"
               onclick="closeModal('sessionModal')">
         &times;
       </button>
     </div>
     <div class="modal-body" id="sessionListContent">
-      <p>로딩 중...</p>
+      <p>{{ t('admin.loading') }}</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary"
               onclick="closeModal('sessionModal')">
-        닫기
+        {{ t('admin.close') }}
       </button>
     </div>
   </div>
@@ -91,65 +92,65 @@
 
 <script>
 let sessionListRequest = 0;
-
-function escapeHtml(text) {
-  var div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+let pendingRequests = 0;
+uiLanguage.registerGuard(() => ({busy:pendingRequests > 0}));
 
 function showSessionList(userId) {
   const requestId = ++sessionListRequest;
   const content = document.getElementById(
     'sessionListContent'
   );
-  content.innerHTML = '<p>로딩 중...</p>';
+  const loading = document.createElement('p');
+  loading.textContent = uiLanguage.t('admin.loading');
+  content.replaceChildren(loading);
   document.getElementById('sessionModal')
     .classList.add('active');
   modalLifecycle.open(document.getElementById('sessionModal'), () => closeModal('sessionModal'));
 
-  fetch(
-    '/admin/user-conversations/' +
-    userId + '/sessions'
-  )
+  pendingRequests++;
+  const url = '/admin/user-conversations/' + userId + '/sessions';
+  fetch(url, {headers:uiLanguage.headers(url)})
   .then(function(r) {
-    if (!r.ok) throw new Error('조회 실패');
+    if (!r.ok) throw new Error(uiLanguage.t('admin.lookup_failed'));
     return r.json();
   })
   .then(function(sessions) {
     if (requestId !== sessionListRequest) return;
     if (!sessions.length) {
-      content.innerHTML =
-        '<p>완료된 세션이 없습니다.</p>';
+      content.textContent = uiLanguage.t('admin.no_completed_sessions_message');
       return;
     }
-    var html = '<table class="data-table">';
-    html += '<thead><tr>';
-    html += '<th>일시</th>';
-    html += '<th>시나리오</th>';
-    html += '<th>메시지</th>';
-    html += '<th>다운로드</th>';
-    html += '</tr></thead><tbody>';
-    sessions.forEach(function(s) {
-      html += '<tr>';
-      html += '<td>' + escapeHtml(s.started_at) + '</td>';
-      html += '<td>' + escapeHtml(s.scenario_title) + '</td>';
-      html += '<td>' + escapeHtml(String(s.message_count)) + '</td>';
-      html += '<td>';
-      html += '<a href="/admin/sessions/' +
-        encodeURIComponent(s.id) + '/download" ';
-      html += 'class="btn btn-sm btn-primary">';
-      html += 'CSV</a>';
-      html += '</td></tr>';
-    });
-    html += '</tbody></table>';
-    content.innerHTML = '<div class="table-container" role="region" tabindex="0" aria-label="개별 세션 목록">' + html + '</div>';
+    const container = document.createElement('div');
+    container.className = 'table-container';
+    container.setAttribute('role', 'region');
+    container.tabIndex = 0;
+    container.setAttribute('aria-label', uiLanguage.t('admin.individual_sessions'));
+    const table = document.createElement('table');
+    table.className = 'data-table';
+    const heading = table.createTHead().insertRow();
+    for (const key of ['date_and_time', 'scenario', 'messages', 'download']) {
+      const cell = document.createElement('th');
+      cell.textContent = uiLanguage.t('admin.' + key);
+      heading.append(cell);
+    }
+    const body = table.createTBody();
+    for (const session of sessions) {
+      const row = body.insertRow();
+      for (const value of [session.started_at, session.scenario_title, session.message_count]) row.insertCell().textContent = value;
+      const link = document.createElement('a');
+      link.href = '/admin/sessions/' + encodeURIComponent(session.id) + '/download';
+      link.className = 'btn btn-sm btn-primary';
+      link.textContent = 'CSV';
+      row.insertCell().append(link);
+    }
+    container.append(table);
+    content.replaceChildren(container);
   })
   .catch(function() {
     if (requestId !== sessionListRequest) return;
     content.replaceChildren();
-    modalLifecycle.error(document.getElementById('sessionModal'), '세션 목록을 불러올 수 없습니다.');
-  });
+    modalLifecycle.error(document.getElementById('sessionModal'), uiLanguage.t('admin.could_not_load_the_session_list'));
+  }).finally(() => { pendingRequests--; });
 }
 
 function closeModal(modalId) {

@@ -30,7 +30,7 @@ export default async function checkMentorStream(page) {
       }
       if (url.endsWith('/mentor/stream')) {
         const turn = url.split('/').at(-3);
-        fixture.mentors.push({turn, body:JSON.parse(options.body), headers:options.headers});
+        fixture.mentors.push({turn, body:JSON.parse(options.body), headers:Object.fromEntries(new Headers(options.headers))});
         if (fixture.reply) {
           const reply = fixture.reply;
           fixture.reply = null;

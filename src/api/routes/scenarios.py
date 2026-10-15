@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
+from src.i18n import display_language
 from src.models import Scenario, User
 from src.models.scenario_group import ScenarioGroup
 from src.services.lesson_snapshots import (
@@ -23,7 +24,9 @@ router = APIRouter(tags=["Scenarios"])
 
 
 @router.get("/", response_class=HTMLResponse)
-async def home():
+async def home(
+    request: Request,
+):
     """Redirect home to scenarios list."""
     from fastapi.responses import RedirectResponse
 
@@ -85,8 +88,10 @@ async def get_scenario_detail(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Display scenario and dialogue interface."""
-    session = await start_lesson(db, scenario_id, user, reuse=True)
-    snapshot = read_lesson_snapshot(session)
+    session = await start_lesson(
+        db, scenario_id, user, reuse=True, language=display_language(request)
+    )
+    snapshot = read_lesson_snapshot(session, language=display_language(request))
     scenario = public_lesson(snapshot.scenario_context, snapshot.config)
 
     # Load existing messages for the session

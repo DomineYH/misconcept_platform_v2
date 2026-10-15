@@ -1,33 +1,34 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['admin'] %}
 
-{% block title %}소개 관리 - 관리자{% endblock %}
+{% block title %}{{ t('admin.about_management_admin') }}{% endblock %}
 
 {% block content %}
 <div class="container">
   <header class="page-header-admin">
     <div class="header-content">
-      <h1>소개 관리</h1>
-      <p class="subtitle">개발자 및 관리자 정보 등록·수정</p>
+      <h1>{{ t('admin.about_management') }}</h1>
+      <p class="subtitle">{{ t('admin.add_and_edit_developer_and_administrator_information') }}</p>
     </div>
     <div class="header-actions">
       <button type="button" class="btn btn-primary"
               id="open-create-modal">
-        + 새 등록
+        {{ t('admin.add_contributor') }}
       </button>
     </div>
   </header>
 
   <!-- Contributors Table -->
-  <div class="table-container" role="region" tabindex="0" aria-label="소개 목록">
+  <div class="table-container" role="region" tabindex="0" aria-label="{{ t('admin.contributors') }}">
     <table class="data-table" id="contributors-table">
       <thead>
         <tr>
-          <th>순서</th>
-          <th>이름</th>
-          <th>소속</th>
-          <th>연락처</th>
-          <th>이력</th>
-          <th>작업</th>
+          <th>{{ t('admin.order') }}</th>
+          <th>{{ t('admin.name') }}</th>
+          <th>{{ t('admin.affiliation') }}</th>
+          <th>{{ t('admin.contact') }}</th>
+          <th>{{ t('admin.history') }}</th>
+          <th>{{ t('admin.actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -58,19 +59,19 @@
             <button type="button"
                     class="btn btn-sm btn-secondary edit-btn"
                     data-id="{{ c.id }}">
-              수정
+              {{ t('admin.edit') }}
             </button>
             <button type="button" class="btn btn-sm btn-danger delete-btn"
                     data-id="{{ c.id }}"
                     data-name="{{ c.name }}">
-              삭제
+              {{ t('admin.delete') }}
             </button>
           </td>
         </tr>
         {% else %}
         <tr>
           <td colspan="6" class="empty-state">
-            등록된 정보가 없습니다.
+            {{ t('admin.no_contributors_have_been_added') }}
           </td>
         </tr>
         {% endfor %}
@@ -85,15 +86,15 @@
   <div class="modal-backdrop" id="create-modal-backdrop"></div>
   <div class="modal-container">
     <div class="modal-header">
-      <h2 id="create-modal-title">새 등록자 추가</h2>
+      <h2 id="create-modal-title">{{ t('admin.add_contributor_heading') }}</h2>
       <button type="button" class="modal-close"
-              aria-label="닫기" id="close-create-modal">×</button>
+              aria-label="{{ t('admin.close') }}" id="close-create-modal">×</button>
     </div>
     <form id="create-form" class="modal-form">
       <div class="modal-body">
       <div class="form-group">
         <label for="create-name">
-          이름 <span class="required">*</span>
+          {{ t('admin.name') }} <span class="required">*</span>
         </label>
         <input type="text" id="create-name" name="name"
                required maxlength="100"
@@ -101,7 +102,7 @@
       </div>
       <div class="form-group">
         <label for="create-affiliation">
-          소속 <span class="required">*</span>
+          {{ t('admin.affiliation') }} <span class="required">*</span>
         </label>
         <input type="text" id="create-affiliation"
                name="affiliation" required maxlength="200"
@@ -109,24 +110,24 @@
       </div>
       <div class="form-group">
         <label for="create-bio">
-          이력 <span class="required">*</span>
+          {{ t('admin.history') }} <span class="required">*</span>
         </label>
         <textarea id="create-bio" name="bio"
                   required maxlength="2000" rows="5"
                   class="form-input"></textarea>
       </div>
       <div class="form-group">
-        <label for="create-phone">전화번호 (선택)</label>
+        <label for="create-phone">{{ t('admin.phone_number_optional') }}</label>
         <input type="tel" id="create-phone" name="phone"
                maxlength="50" class="form-input" />
       </div>
       <div class="form-group">
-        <label for="create-email">이메일 (선택)</label>
+        <label for="create-email">{{ t('admin.email_optional') }}</label>
         <input type="email" id="create-email" name="email"
                maxlength="200" class="form-input" />
       </div>
       <div class="form-group">
-        <label for="create-sort-order">표시 순서</label>
+        <label for="create-sort-order">{{ t('admin.display_order') }}</label>
         <input type="number" id="create-sort-order"
                name="sort_order" value="0" min="0"
                class="form-input" />
@@ -134,8 +135,8 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary"
-                id="cancel-create">취소</button>
-        <button type="submit" class="btn btn-primary">저장</button>
+                id="cancel-create">{{ t('admin.cancel') }}</button>
+        <button type="submit" class="btn btn-primary">{{ t('admin.save') }}</button>
       </div>
     </form>
   </div>
@@ -147,23 +148,23 @@
   <div class="modal-backdrop" id="edit-modal-backdrop"></div>
   <div class="modal-container">
     <div class="modal-header">
-      <h2 id="edit-modal-title">등록자 수정</h2>
+      <h2 id="edit-modal-title">{{ t('admin.edit_contributor') }}</h2>
       <button type="button" class="modal-close"
-              aria-label="닫기" id="close-edit-modal">×</button>
+              aria-label="{{ t('admin.close') }}" id="close-edit-modal">×</button>
     </div>
     <form id="edit-form" class="modal-form">
       <input type="hidden" id="edit-id" />
       <div class="modal-body">
       <div class="form-group">
         <label for="edit-name">
-          이름 <span class="required">*</span>
+          {{ t('admin.name') }} <span class="required">*</span>
         </label>
         <input type="text" id="edit-name" name="name"
                required maxlength="100" class="form-input" />
       </div>
       <div class="form-group">
         <label for="edit-affiliation">
-          소속 <span class="required">*</span>
+          {{ t('admin.affiliation') }} <span class="required">*</span>
         </label>
         <input type="text" id="edit-affiliation"
                name="affiliation" required maxlength="200"
@@ -171,32 +172,32 @@
       </div>
       <div class="form-group">
         <label for="edit-bio">
-          이력 <span class="required">*</span>
+          {{ t('admin.history') }} <span class="required">*</span>
         </label>
         <textarea id="edit-bio" name="bio"
                   required maxlength="2000" rows="5"
                   class="form-input"></textarea>
       </div>
       <div class="form-group">
-        <label for="edit-phone">전화번호 (선택)</label>
+        <label for="edit-phone">{{ t('admin.phone_number_optional') }}</label>
         <input type="tel" id="edit-phone" name="phone"
                maxlength="50" class="form-input" />
       </div>
       <div class="form-group">
-        <label for="edit-email">이메일 (선택)</label>
+        <label for="edit-email">{{ t('admin.email_optional') }}</label>
         <input type="email" id="edit-email" name="email"
                maxlength="200" class="form-input" />
       </div>
       <div class="form-group">
-        <label for="edit-sort-order">표시 순서</label>
+        <label for="edit-sort-order">{{ t('admin.display_order') }}</label>
         <input type="number" id="edit-sort-order"
                name="sort_order" min="0" class="form-input" />
       </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary"
-                id="cancel-edit">취소</button>
-        <button type="submit" class="btn btn-primary">저장</button>
+                id="cancel-edit">{{ t('admin.cancel') }}</button>
+        <button type="submit" class="btn btn-primary">{{ t('admin.save') }}</button>
       </div>
     </form>
   </div>
@@ -208,23 +209,27 @@
   <div class="modal-backdrop" id="delete-modal-backdrop"></div>
   <div class="modal-container modal-sm">
     <div class="modal-header">
-      <h2 id="delete-modal-title">삭제 확인</h2>
+      <h2 id="delete-modal-title">{{ t('admin.confirm_deletion') }}</h2>
       <button type="button" class="modal-close"
-              aria-label="닫기" id="close-delete-modal">×</button>
+              aria-label="{{ t('admin.close') }}" id="close-delete-modal">×</button>
     </div>
     <div class="modal-body">
       <p id="delete-confirm-msg"></p>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-secondary"
-              id="cancel-delete">취소</button>
+              id="cancel-delete">{{ t('admin.cancel') }}</button>
       <button type="button" class="btn btn-danger"
-              id="confirm-delete">삭제</button>
+              id="confirm-delete">{{ t('admin.delete') }}</button>
     </div>
   </div>
 </div>
 
 <script>
+let pendingRequests = 0;
+const formValues = form => JSON.stringify([...form.elements].filter(el => el.name && el.type !== 'password').map(el => [el.name, el.type === 'checkbox' ? el.checked : el.value]));
+const createBaseline = formValues(document.getElementById('create-form'));
+let editBaseline;
 (function () {
   'use strict';
 
@@ -275,24 +280,25 @@
         email: fd.get('email') || null,
         sort_order: parseInt(fd.get('sort_order') || '0', 10)
       };
+      pendingRequests++;
       fetch('/admin/about', {
         method: 'POST',
-        headers: {
+        headers: uiLanguage.headers('/admin/about', {
           'Content-Type': 'application/json',
           'x-csrf-token': getCsrf()
-        },
+        }),
         body: JSON.stringify(payload)
       }).then(function (r) {
         if (!r.ok) {
           return r.json().then(function (j) {
-            modalLifecycle.error(e.target, j.detail || '저장 실패');
+            modalLifecycle.error(e.target, j.detail || uiLanguage.t('admin.save_failed'));
           });
         }
-        showToast('등록되었습니다.', 'success');
+        showToast(uiLanguage.t('admin.added'), 'success');
         reloadPage();
       }).catch(function () {
-        modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.');
-      });
+        modalLifecycle.error(e.target, uiLanguage.t('admin.save_result_unknown_input_preserved'));
+      }).finally(function () { pendingRequests--; });
     }
   );
 
@@ -322,6 +328,7 @@
         c.email || '';
       document.getElementById('edit-sort-order').value =
         c.sort_order;
+      editBaseline = formValues(document.getElementById('edit-form'));
       editModal.classList.add('active');
       modalLifecycle.open(editModal, closeEdit);
     });
@@ -340,24 +347,25 @@
         email: fd.get('email') || '',
         sort_order: parseInt(fd.get('sort_order') || '0', 10)
       };
+      pendingRequests++;
       fetch('/admin/about/' + id + '/update', {
         method: 'POST',
-        headers: {
+        headers: uiLanguage.headers('/admin/about/' + id + '/update', {
           'Content-Type': 'application/json',
           'x-csrf-token': getCsrf()
-        },
+        }),
         body: JSON.stringify(payload)
       }).then(function (r) {
         if (!r.ok) {
           return r.json().then(function (j) {
-            modalLifecycle.error(e.target, j.detail || '저장 실패');
+            modalLifecycle.error(e.target, j.detail || uiLanguage.t('admin.save_failed'));
           });
         }
-        showToast('수정되었습니다.', 'success');
+        showToast(uiLanguage.t('admin.updated'), 'success');
         reloadPage();
       }).catch(function () {
-        modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.');
-      });
+        modalLifecycle.error(e.target, uiLanguage.t('admin.save_result_unknown_input_preserved'));
+      }).finally(function () { pendingRequests--; });
     }
   );
 
@@ -382,7 +390,7 @@
       pendingDeleteId = btn.dataset.id;
       var msg = document.getElementById('delete-confirm-msg');
       msg.textContent =
-        '"' + btn.dataset.name + '" 항목을 삭제하시겠습니까?';
+        '"' + btn.dataset.name + `" ${uiLanguage.t('admin.delete_this_item')}`;
       deleteModal.classList.add('active');
       modalLifecycle.open(deleteModal, closeDelete);
     });
@@ -391,24 +399,27 @@
   document.getElementById('confirm-delete').addEventListener(
     'click', function () {
       if (!pendingDeleteId) return;
+      pendingRequests++;
       fetch('/admin/about/' + pendingDeleteId + '/delete', {
         method: 'POST',
-        headers: { 'x-csrf-token': getCsrf() }
+        headers: uiLanguage.headers('/admin/about/' + pendingDeleteId + '/delete', { 'x-csrf-token': getCsrf() })
       }).then(function (r) {
         if (!r.ok) {
           return r.json().then(function (j) {
-            modalLifecycle.error(deleteModal, j.detail || '삭제 실패');
+            modalLifecycle.error(deleteModal, j.detail || uiLanguage.t('admin.contributor_deletion_failed'));
           });
         }
         closeDelete();
-        showToast('삭제되었습니다.', 'success');
+        showToast(uiLanguage.t('admin.deleted'), 'success');
         reloadPage();
       }).catch(function () {
-        modalLifecycle.error(deleteModal, '삭제 결과를 확인할 수 없습니다. 목록을 새로 확인하세요.');
-      });
+        modalLifecycle.error(deleteModal, uiLanguage.t('admin.could_not_confirm_deletion_check_the_list_again'));
+      }).finally(function () { pendingRequests--; });
     }
   );
 }());
+
+uiLanguage.registerGuard(() => ({busy:pendingRequests > 0, dirty:Boolean((document.getElementById('create-modal').classList.contains('active') && (formValues(document.getElementById('create-form')) !== createBaseline)) || (document.getElementById('edit-modal').classList.contains('active') && (formValues(document.getElementById('edit-form')) !== editBaseline)))}));
 </script>
 
 <style>

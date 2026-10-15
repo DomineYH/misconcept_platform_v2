@@ -64,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
                     rows[1].config_json = None
             body = (
                 templates.get_template(f"admin/{kind}.html")
-                .render(**fixture)
+                .render(request=self.display_request(), **fixture)
                 .encode()
             )
             mime = "text/html; charset=utf-8"
@@ -72,6 +72,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("admin/groups.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Admin", role="admin"),
                     groups_data=(
                         []
@@ -101,7 +102,11 @@ class Handler(BaseHTTPRequestHandler):
             template, context = admin_fixture(
                 name, empty="empty" in query, active="active" in query
             )
-            body = templates.get_template(template).render(**context).encode()
+            body = (
+                templates.get_template(template)
+                .render(request=self.display_request(), **context)
+                .encode()
+            )
             mime = "text/html; charset=utf-8"
         elif path.path == "/about/content":
             from tests.uiux_admin_fixtures import contributors
@@ -137,6 +142,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("admin/comparison_conversation.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Admin", role="admin"),
                     comparison=dict(
                         snapshot=dict(
@@ -202,6 +208,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("session_history.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Teacher", role="teacher"),
                     scenario_title="긴 과거 대화 제목 " * 12,
                     session=SimpleNamespace(
@@ -220,6 +227,14 @@ class Handler(BaseHTTPRequestHandler):
                             if reconstructed
                             else "2026-10-01 09:00"
                         ),
+                        unknown_fields=(
+                            [
+                                "config.student.resolved_model_config",
+                                "config.mentor.intervention_instruction",
+                            ]
+                            if reconstructed
+                            else []
+                        ),
                         unknown_field_names=(
                             ["당시 모델", "내부 설정"] if reconstructed else []
                         ),
@@ -233,6 +248,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("admin/sessions.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Admin", role="admin"),
                     sessions=[
                         SimpleNamespace(
@@ -257,6 +273,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("partials/analysis_modal.html")
                 .render(
+                    request=self.display_request(),
                     is_admin=True,
                     session_id=1,
                     analysis_result_url=f"/fixtures/s4/result?{path.query}",
@@ -268,6 +285,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("analysis.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(
                         nickname="Admin" if "admin" in query else "Teacher",
                         role="admin" if "admin" in query else "teacher",
@@ -283,7 +301,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path.path == "/fixtures/s5/menu":
             body = (
                 templates.get_template("admin/dashboard.html")
-                .render(user=SimpleNamespace(nickname="Admin", role="admin"))
+                .render(
+                    request=self.display_request(),
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                )
                 .encode()
             )
             mime = "text/html; charset=utf-8"
@@ -293,6 +314,7 @@ class Handler(BaseHTTPRequestHandler):
             "/admin/scenarios/1/edit",
         }:
             editor = editor_fixture(
+                language=display_language(self.display_request()),
                 new="new" in query or path.path == "/admin/scenarios/new",
                 published="published" in query,
                 legacy=query.get("legacy", [""])[0],
@@ -306,6 +328,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("admin/scenario_editor.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Admin", role="admin"),
                     editor=editor,
                 )
@@ -317,6 +340,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("analysis.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Teacher", role="teacher"),
                     session_id=1,
                     feedback="Narrative feedback",
@@ -568,6 +592,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("admin/api_usage.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Admin", role="admin"),
                     **fixture,
                 )
@@ -577,7 +602,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path.path == "/admin/ai":
             body = (
                 templates.get_template("admin/ai.html")
-                .render(user=SimpleNamespace(nickname="Admin", role="admin"))
+                .render(
+                    request=self.display_request(),
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                )
                 .encode()
             )
             mime = "text/html; charset=utf-8"
@@ -585,6 +613,7 @@ class Handler(BaseHTTPRequestHandler):
             body = (
                 templates.get_template("admin/users.html")
                 .render(
+                    request=self.display_request(),
                     user=SimpleNamespace(nickname="Admin", role="admin"),
                     users=[],
                     groups=[],

@@ -5,11 +5,19 @@ const error = document.getElementById('ai-error');
 const editor = document.getElementById('ai-editor');
 let state, busy = false, returnFocus;
 
+let pendingRequests = 0, editorBaseline = '', catalogBaseline = '[]', editorOptions = null;
+const editorValues = () => JSON.stringify({fields:[...editor.querySelectorAll('input:not([type=password]), select')].map(el => [el.name,el.value]), options:editorOptions?.() ?? null});
+const catalogValues = () => JSON.stringify([...document.querySelectorAll('#ai-content select')].map(el => el.value));
+uiLanguage.registerGuard(() => ({
+  busy:busy || pendingRequests > 0 || Boolean(state?.models.some(model => Object.values(model.verification_state).some(role => role.status === 'verifying'))),
+  dirty:(!editor.hidden && (editorValues() !== editorBaseline || [...editor.querySelectorAll('input[type=password]')].some(el => el.value))) || catalogValues() !== catalogBaseline
+}));
+
 function showError(code, location = document.activeElement.closest('#ai-editor, #ai-content article, #ai-content section')) {
-  const messages = {401:'로그인이 필요합니다.', 403:'권한 또는 보안 토큰을 확인하세요.',
-    409:'다른 변경 또는 진행 중 작업과 충돌했습니다. 설정을 다시 불러오세요.',
-    422:'입력값 또는 현재 비밀번호를 확인하세요.', 429:'작업 한도에 도달했습니다. 잠시 후 다시 시도하세요.'};
-  error.textContent = messages[code] || '작업을 완료할 수 없습니다. 연결 설정과 서비스 상태를 확인하세요.';
+  const messages = {401:uiLanguage.t('admin.please_log_in'), 403:uiLanguage.t('admin.check_your_permissions_or_security_token'),
+    409:uiLanguage.t('admin.a_change_or_running_task_caused_a_conflict_reload_the_settings'),
+    422:uiLanguage.t('admin.check_your_input_or_current_password'), 429:uiLanguage.t('admin.the_task_limit_has_been_reached_try_again_shortly')};
+  error.textContent = messages[code] || uiLanguage.t('admin.could_not_complete_the_task_check_connection_settings_and_service_status');
   if (location) location.append(error);
   error.hidden = false;
   error.focus();
@@ -22,46 +30,49 @@ async function request(path, body) {
     headers['x-csrf-token'] = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || '';
   }
   const response = await fetch(`/admin/ai/${path}`, {method:body === undefined ? 'GET' : 'POST',
-    credentials:'same-origin', headers, ...(body === undefined ? {} : {body:JSON.stringify(body)})});
+    credentials:'same-origin', headers:uiLanguage.headers(`/admin/ai/${path}`, headers), ...(body === undefined ? {} : {body:JSON.stringify(body)})});
   // Never display raw server detail, validation input, or exception text.
   if (!response.ok) throw response.status;
   return response.status === 204 ? null : response.json();
 }
 
 async function load() {
-  status.textContent = '설정을 불러오는 중입니다.';
-  try {
+  status.textContent = uiLanguage.t('admin.loading_settings');
+  pendingRequests++; try {
     const next = await request('state');
     state = next;
     status.after(error);
     render(state, actions);
+    catalogBaseline = catalogValues();
     error.hidden = true;
-    status.textContent = '설정을 불러왔습니다. 화면 진입은 제공자를 호출하지 않습니다.';
+    status.textContent = uiLanguage.t('admin.settings_loaded_opening_this_page_does_not_call_providers');
     return true;
   } catch (code) {
     status.after(error);
     showError(code, null);
-    status.textContent = 'AI 연결 설정을 불러올 수 없습니다. 관리자 연결 기능이 준비되었는지 확인하세요.';
+    status.textContent = uiLanguage.t('admin.could_not_load_ai_connection_settings_check_that_administrator_connection_management_is_available');
     return false;
-  }
+  } finally { pendingRequests--; }
 }
 
-async function submit(path, body, message = '작업을 완료했습니다.') {
+async function submit(path, body, message = uiLanguage.t('admin.task_completed')) {
   if (busy) return;
+  const submittedValues = editorValues();
   busy = true;
   error.hidden = true;
-  status.textContent = '작업 중입니다.';
+  status.textContent = uiLanguage.t('admin.working');
   const submitButton = editor.querySelector('button[type=submit]');
   if (submitButton) submitButton.disabled = true;
-  try {
+  pendingRequests++; try {
     const result = await request(path, body);
     const refreshed = await load();
-    status.textContent = refreshed ? message : `${message} 최신 상태를 다시 불러오세요.`;
+    editorBaseline = submittedValues;
+    status.textContent = refreshed ? message : `${message} ${uiLanguage.t('admin.reload_the_latest_state')}`;
     return result;
   } catch (code) {
     showError(code);
-    status.textContent = '작업에 실패했습니다.';
-  } finally {
+    status.textContent = uiLanguage.t('admin.task_failed');
+  } finally { pendingRequests--;
     editor.querySelectorAll('input[type=password]').forEach(input => { input.value = ''; });
     if (submitButton) submitButton.disabled = false;
     busy = false;
@@ -83,6 +94,7 @@ function closeEditor() {
 }
 
 function form(title, onSubmit) {
+  editorOptions = null;
   returnFocus = document.activeElement;
   editor.replaceChildren(node('h2', title));
   editor.hidden = false;
@@ -95,7 +107,8 @@ function form(title, onSubmit) {
 }
 
 function finish(form, label) {
-  form.append(node('button', label, {type:'submit'}), button('닫기', closeEditor));
+  editorBaseline = editorValues();
+  form.append(node('button', label, {type:'submit'}), button(uiLanguage.t('admin.close'), closeEditor));
   (form.querySelector('input, select') || form.querySelector('button')).focus();
   editor.scrollIntoView({block:'nearest'});
 }
@@ -103,37 +116,37 @@ function finish(form, label) {
 const actions = {
   connection(p, operation) {
     if (busy) return;
-    const f = form(`${providers[p.provider]} 연결 변경`, f => {
+    const f = form(`${providers[p.provider]} ${uiLanguage.t('admin.change_connection')}`, f => {
       const payload = {expected_version:p.connection_version, current_password:f.elements.current_password.value};
       if (operation === 'key') payload.api_key = f.elements.api_key.value;
       if (operation === 'enabled') payload.enabled = !p.enabled;
       f.querySelectorAll('input[type=password]').forEach(input => { input.value = ''; });
       submit(`providers/${p.provider}/${operation}`, payload);
     });
-    f.append(node('p', '키 교체·재활성화 후에는 역할 재검증이 필요합니다. 교체 전에 시작한 호출은 기존 키로 완료할 수 있습니다. 비활성화·삭제는 새 호출을 즉시 차단하고 이전 키로 시작한 호출에도 중단을 요청합니다. 제공자 처리 및 이미 발생한 비용은 취소되지 않을 수 있습니다. 모델 설정과 과거 기록은 보존합니다.'));
+    f.append(node('p', uiLanguage.t('admin.replacing_a_key_or_re_enabling_a_connection_requires_role_reverification_calls_started_before_replac')));
     const impact = node('ul');
     for (const item of p.impact) impact.append(node('li', item));
-    f.append(node('p', '영향 범위'), impact);
-    if (operation === 'key') field(f, 'api_key', '새 API 키', '', {type:'password', required:'', autocomplete:'off'});
-    field(f, 'current_password', '현재 비밀번호', '', {type:'password', required:'', autocomplete:'off'});
-    finish(f, '변경 제출');
+    f.append(node('p', uiLanguage.t('admin.affected_items')), impact);
+    if (operation === 'key') field(f, 'api_key', uiLanguage.t('admin.new_api_key'), '', {type:'password', required:'', autocomplete:'off'});
+    field(f, 'current_password', uiLanguage.t('admin.current_password'), '', {type:'password', required:'', autocomplete:'off'});
+    finish(f, uiLanguage.t('admin.submit_change'));
   },
-  catalog(p) { submit(`providers/${p.provider}/catalog`, {expected_version:p.connection_version}, '비생성 확인·목록 갱신을 완료했습니다.'); },
+  catalog(p) { submit(`providers/${p.provider}/catalog`, {expected_version:p.connection_version}, uiLanguage.t('admin.non_generation_verification_and_catalog_refresh_completed')); },
   register(p, modelId) {
     if (busy) return;
-    const f = form(`${providers[p.provider]} 모델 등록`, f => {
+    const f = form(`${providers[p.provider]} ${uiLanguage.t('admin.register_model')}`, f => {
       submit('models', {provider:p.provider, model_id:f.elements.model_id.value.trim(),
-        display_name:f.elements.display_name.value.trim()}, '모델 등록을 완료했습니다. 역할 시험 전에는 실행할 수 없습니다.');
+        display_name:f.elements.display_name.value.trim()}, uiLanguage.t('admin.model_registered_role_testing_is_required_before_execution'));
     });
-    f.append(node('p', '새 모델은 비활성·미검증으로 등록합니다. 목록에 있어도 역할 시험은 별도로 필요합니다. 직접 입력 모델은 기능 정의가 필요할 수 있습니다.'));
-    field(f, 'model_id', '모델 ID', modelId, {type:'text', required:''});
-    field(f, 'display_name', '표시명', modelId, {type:'text', required:''});
-    finish(f, '모델 등록');
+    f.append(node('p', uiLanguage.t('admin.new_models_are_registered_as_disabled_and_unverified_catalog_listing_does_not_replace_role_testing_m')));
+    field(f, 'model_id', uiLanguage.t('admin.model_id'), modelId, {type:'text', required:''});
+    field(f, 'display_name', uiLanguage.t('admin.display_name'), modelId, {type:'text', required:''});
+    finish(f, uiLanguage.t('admin.register_model'));
   },
   model(m) {
     if (busy) return;
     let savedOptions = structuredClone(m.default_options);
-    const f = form(`${m.model_id} 모델 설정`, f => {
+    const f = form(`${m.model_id} ${uiLanguage.t('admin.model_settings')}`, f => {
       const options = structuredClone(savedOptions);
       for (const definition of m.capabilities?.fields || []) {
         const value = f.elements[definition.name].value;
@@ -149,12 +162,13 @@ const actions = {
         display_name:f.elements.display_name.value, enabled:f.elements.enabled.value === 'true',
         default_options:options});
     });
-    field(f, 'display_name', '표시명', m.display_name, {type:'text', required:''});
-    const enabled = field(f, 'enabled', '모델 활성', String(m.enabled), {}, [['false','비활성'],['true','활성']]);
+    field(f, 'display_name', uiLanguage.t('admin.display_name'), m.display_name, {type:'text', required:''});
+    const enabled = field(f, 'enabled', uiLanguage.t('admin.model_enabled'), String(m.enabled), {}, [['false',uiLanguage.t('admin.inactive')],['true',uiLanguage.t('admin.active')]]);
     enabled.disabled = !m.enabled && (!m.capabilities || m.capabilities.metadata_conflict || !Object.values(m.verification_state).some(v => v.status === 'succeeded'));
-    if (enabled.disabled) f.append(node('p', '모델 활성화에는 기능 정의·목록 일치와 현재 역할 검증 성공이 필요합니다.'));
-    f.append(node('p', '모델 ID는 등록 후 변경할 수 없습니다. 모델 비활성화는 신규 호출만 막습니다. 지원 옵션 변경은 서버에서 조합과 범위를 검증합니다.'));
-    if (!m.capabilities) f.append(node('p', '기능 정의 필요: 옵션 편집과 역할 시험을 사용할 수 없습니다.'));
+    if (enabled.disabled) f.append(node('p', uiLanguage.t('admin.enabling_requires_a_matching_capability_definition_and_catalog_plus_successful_current_role_verifica')));
+    f.append(node('p', uiLanguage.t('admin.model_ids_cannot_change_after_registration_disabling_blocks_new_calls_only_the_server_validates_supp')));
+    if (!m.capabilities) f.append(node('p', uiLanguage.t('admin.capability_definition_required_option_editing_and_role_tests_are_unavailable')));
+    editorOptions = () => savedOptions;
     if (m.capabilities) optionNotes(f, m.capabilities, savedOptions, options => { savedOptions = options; });
     else f.append(node('pre', JSON.stringify(m.default_options, null, 2)));
     for (const definition of m.capabilities?.fields || []) {
@@ -165,40 +179,40 @@ const actions = {
       if (definition.type === 'integer') attrs.step = '1';
       if (definition.type === 'number') attrs.step = 'any';
       field(f, definition.name, definition.label, value, attrs,
-        definition.choices ? [['','지정하지 않음'], ...definition.choices.map(v => [v,v])] : null);
+        definition.choices ? [['',uiLanguage.t('admin.unspecified')], ...definition.choices.map(v => [v,v])] : null);
     }
-    finish(f, '모델 설정 저장');
+    finish(f, uiLanguage.t('admin.save_model_settings'));
   },
   probe(m, role) {
     if (busy) return;
     const requestId = crypto.randomUUID();
-    const f = form(`${roles[role]} 역할 시험`, async f => {
+    const f = form(`${roles[role]} ${uiLanguage.t('admin.role_test')}`, async f => {
       const result = await submit(`models/${m.id}/probes`, {role, request_id:requestId,
-        expected_version:m.config_version}, '역할 시험을 시작했습니다. 진행 조회 또는 명시적 취소를 사용할 수 있습니다.');
+        expected_version:m.config_version}, uiLanguage.t('admin.role_test_started_check_progress_or_cancel_explicitly'));
       if (result) f.querySelector('button[type=submit]').disabled = true;
     });
-    const contracts = {student:'일반 텍스트와 스트리밍', mentor:'수동 코칭과 자동 미개입을 각각 단일 구조화 응답으로 확인', analysis:'v2 단일 분석과 근거 부분집합 종합 JSON'};
-    f.append(node('p', `${roles[role]} · ${contracts[role]} · 최대 2회 생성 호출 · 각 호출 최대 출력 ${m.probe_budgets[role]} 토큰 · 자동 재시도 0회`),
-      node('p', '유료 비용이 발생할 수 있습니다. 고정 합성 입력을 사용하며 시험 성공은 교육적 품질 보증이 아닙니다. 첫 단계 실패 시 다음 호출은 하지 않습니다.'),
-      node('p', '관리자당 시험은 한 묶음만 진행할 수 있습니다. 한도 부족 시 대기하지 않으므로 잠시 후 다시 시도하세요. 페이지를 닫아도 시험은 재시작하거나 중단되지 않습니다. 진행 조회와 시험 취소를 사용하세요.'));
-    finish(f, '시험 시작');
+    const contracts = {student:uiLanguage.t('admin.plain_text_and_streaming'), mentor:uiLanguage.t('admin.verify_manual_coaching_and_automatic_no_intervention_as_separate_structured_responses'), analysis:uiLanguage.t('admin.v2_single_analysis_and_evidence_subset_synthesis_json')};
+    f.append(node('p', `${roles[role]} · ${contracts[role]} · ${uiLanguage.t('admin.up_to_2_generation_calls_maximum_output_per_call')} ${m.probe_budgets[role]} ${uiLanguage.t('admin.tokens_no_automatic_retries')}`),
+      node('p', uiLanguage.t('admin.charges_may_apply_tests_use_fixed_synthetic_inputs_success_does_not_guarantee_educational_quality_a_')),
+      node('p', uiLanguage.t('admin.each_administrator_can_run_one_test_batch_at_a_time_tests_do_not_queue_when_capacity_is_unavailable_')));
+    finish(f, uiLanguage.t('admin.start_test'));
   },
   async poll(requestId) {
     if (busy) return;
-    try {
+    pendingRequests++; try {
       const result = await request(`probes/${encodeURIComponent(requestId)}`);
       await load();
-      const labels = {verifying:'검증 중', succeeded:'성공', failed:'실패', stale:'재검증 필요'};
-      status.textContent = `시험 상태: ${labels[result.status] || '중단됨'}`;
-    } catch (code) { showError(code); }
+      const labels = {verifying:uiLanguage.t('admin.verifying'), succeeded:uiLanguage.t('admin.succeeded'), failed:uiLanguage.t('admin.failed'), stale:uiLanguage.t('admin.reverification_required')};
+      status.textContent = `${uiLanguage.t('admin.test_status')} ${labels[result.status] || uiLanguage.t('admin.stopped')}`;
+    } catch (code) { showError(code); } finally { pendingRequests--; }
   },
   cancel(requestId) {
-    submit(`probes/${encodeURIComponent(requestId)}/cancel`, {}, '중단을 요청했습니다. 제공자 처리 및 이미 발생한 비용은 취소되지 않을 수 있습니다.');
+    submit(`probes/${encodeURIComponent(requestId)}/cancel`, {}, uiLanguage.t('admin.cancellation_requested_provider_processing_and_incurred_costs_may_not_be_cancelled'));
   },
   settings(state) {
     if (busy) return;
     const settings = state.settings;
-    const f = form('작성 기본값·호출 설정', f => {
+    const f = form(uiLanguage.t('admin.authoring_defaults_and_call_settings'), f => {
       const defaults = {}, limits = {}, timeouts = {};
       for (const role of Object.keys(roles)) defaults[role] = f.elements[`default_${role}`].value === '' ? null : Number(f.elements[`default_${role}`].value);
       for (const key of Object.keys(settings.limits)) limits[key] = Number(f.elements[`limit_${key}`].value);
@@ -206,37 +220,37 @@ const actions = {
       if (limits.admin >= limits.total || timeouts.student_first_output > timeouts.student_total || timeouts.mentor_first_output > timeouts.mentor_total) {
         editor.append(error);
         error.hidden = false;
-        error.textContent = '관리자 한도는 전체 한도보다 작아야 하고 첫 본문 제한은 전체 시간 제한 이하여야 합니다.';
+        error.textContent = uiLanguage.t('admin.the_admin_limit_must_be_below_the_total_limit_and_first_output_timeouts_must_not_exceed_total_timeou');
         error.focus();
         return;
       }
       submit('settings/update', {expected_version:settings.settings_version, defaults, limits, timeouts});
     });
-    f.append(node('p', '새 시나리오 작성용 기본값입니다. 기존 시나리오·세션은 변경하지 않습니다. 사용 불가 기본값을 자동으로 대체하지 않습니다. 한도·시간 변경은 이후 시작 호출에 적용합니다.'));
+    f.append(node('p', uiLanguage.t('admin.defaults_apply_to_new_scenarios_only_existing_scenarios_and_sessions_remain_unchanged_unavailable_de')));
     for (const [role, label] of Object.entries(roles)) {
       const current = settings.defaults[role];
-      const choices = [['', '기본값 없음']];
+      const choices = [['', uiLanguage.t('admin.no_default')]];
       for (const m of state.models) {
         if (m.id === current?.model_config_id && !current.available) continue;
         const p = state.providers.find(p => p.provider === m.provider);
         if (p.enabled && p.status === 'ready' && state.master_key_available && m.enabled && m.capabilities && !m.capabilities.metadata_conflict && m.verification_state[role].status === 'succeeded') choices.push([m.id, `${providers[m.provider]} / ${m.display_name}`]);
       }
       const unavailable = current && !choices.some(([id]) => id === current.model_config_id);
-      if (unavailable) choices.push([current.model_config_id, `기본 모델 사용 불가 (${current.model_config_id})`]);
-      const select = field(f, `default_${role}`, `${label} 작성 기본 모델`, current?.model_config_id, {}, choices);
+      if (unavailable) choices.push([current.model_config_id, `${uiLanguage.t('admin.default_model_unavailable')} (${current.model_config_id})`]);
+      const select = field(f, `default_${role}`, `${label} ${uiLanguage.t('admin.default_authoring_model')}`, current?.model_config_id, {}, choices);
       if (unavailable) select.lastElementChild.disabled = true;
     }
-    const limitLabels = {total:'전체 호출 한도', openai:'OpenAI 호출 한도', anthropic:'Claude 호출 한도', google:'Gemini 호출 한도', admin:'관리자 작업 한도'};
+    const limitLabels = {total:uiLanguage.t('admin.total_call_limit'), openai:uiLanguage.t('admin.openai_call_limit'), anthropic:uiLanguage.t('admin.claude_call_limit'), google:uiLanguage.t('admin.gemini_call_limit'), admin:uiLanguage.t('admin.admin_task_limit')};
     const limitGroup = node('fieldset');
-    limitGroup.append(node('legend', '동시 호출 한도'));
+    limitGroup.append(node('legend', uiLanguage.t('admin.concurrent_call_limits')));
     for (const [key, label] of Object.entries(limitLabels)) field(limitGroup, `limit_${key}`, label, settings.limits[key], {type:'number', required:'', min:key === 'admin' ? 1 : 2, ...(key === 'admin' ? {max:3} : {}), step:1});
     f.append(limitGroup);
-    const timeoutLabels = {connect:'연결 제한(초)', student_first_output:'학생봇 첫 본문 제한(초)', student_total:'학생봇 전체 제한(초)', mentor_first_output:'멘토 첫 본문 제한(초)', mentor_total:'멘토 전체 제한(초)', analysis_total:'사후 분석 전체 제한(초)', model_list_total:'목록 전체 제한(초)'};
+    const timeoutLabels = {connect:uiLanguage.t('admin.connection_timeout_seconds'), student_first_output:uiLanguage.t('admin.student_first_output_timeout_seconds'), student_total:uiLanguage.t('admin.student_total_timeout_seconds'), mentor_first_output:uiLanguage.t('admin.mentor_first_output_timeout_seconds'), mentor_total:uiLanguage.t('admin.mentor_total_timeout_seconds'), analysis_total:uiLanguage.t('admin.analysis_total_timeout_seconds'), model_list_total:uiLanguage.t('admin.catalog_total_timeout_seconds')};
     const timeoutGroup = node('fieldset');
-    timeoutGroup.append(node('legend', '시간 제한'));
+    timeoutGroup.append(node('legend', uiLanguage.t('admin.timeouts')));
     for (const [key, label] of Object.entries(timeoutLabels)) field(timeoutGroup, `timeout_${key}`, label, settings.timeouts[key], {type:'number', required:'', min:1, step:1});
     f.append(timeoutGroup);
-    finish(f, '설정 저장');
+    finish(f, uiLanguage.t('admin.save_settings'));
   }
 };
 document.getElementById('ai-refresh').addEventListener('click', () => { if (!busy) load(); });

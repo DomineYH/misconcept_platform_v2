@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import anyio
 from starlette.responses import StreamingResponse
 
+from src.i18n import translate
 from src.models import GenerationRun
 from src.services.call_execution import execute_call
 from src.services.generation_lifecycle import active_runs
@@ -77,6 +78,7 @@ class StudentStreamingResponse(StreamingResponse):
 
 
 async def stream_student(factory, accepted, kwargs, started, cancelled):
+    language = kwargs.get("display_language", "ko")
     seq = 0
     partial = ""
     first_output_at = None
@@ -124,12 +126,12 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
             code=result["error_code"],
             retryable=result["retryable"],
             message=(
-                "대화가 종료되었습니다."
+                translate("teacher.conversation_ended", language)
                 if result["status"] == "cancelled"
                 else (
-                    "관리자에게 AI 연결과 학생 모델 검증을 요청해주세요."
+                    translate("teacher.student_configuration_error", language)
                     if result["error_code"] == "configuration_unavailable"
-                    else "학생 응답 생성에 실패했습니다."
+                    else translate("teacher.student_failed", language)
                 )
             ),
         )
@@ -247,7 +249,7 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
                 "run.failed",
                 status="failed",
                 code="storage_error",
-                message="학생 응답 저장에 실패했습니다.",
+                message=translate("teacher.student_storage_failed", language),
                 retryable=True,
             )
     finally:

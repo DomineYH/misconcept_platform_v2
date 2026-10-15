@@ -25,6 +25,7 @@ from src.api.schemas import (
     UserCreate,
     UserUpdate,
 )
+from src.i18n import display_language, translate
 from src.models.generation_run import GenerationRun
 from src.models.model_probe import ModelProbe
 from src.models.session import Session
@@ -62,6 +63,7 @@ async def preview_bulk_upload(
     file: UploadFile = File(...),
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/users/bulk/preview — Parse and validate CSV."""
     from src.services.admin_user_bulk import (
@@ -72,11 +74,11 @@ async def preview_bulk_upload(
     content = await file.read()
 
     try:
-        rows = parse_csv(content)
+        rows = parse_csv(content, display_language(request))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    result = await validate_bulk_users(rows, db)
+    result = await validate_bulk_users(rows, db, display_language(request))
     return result
 
 
@@ -89,13 +91,16 @@ async def register_bulk_users_endpoint(
     response: Response,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/users/bulk/register — Create users."""
     from src.services.admin_user_bulk import (
         register_bulk_users,
     )
 
-    result = await register_bulk_users(data.users, db)
+    result = await register_bulk_users(
+        data.users, db, display_language(request)
+    )
     response.headers["Cache-Control"] = "no-store"
     return result
 
@@ -141,6 +146,7 @@ async def create_user(
     data: UserCreate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/users - Create new user."""
 
@@ -148,7 +154,10 @@ async def create_user(
     if not data.username.replace("_", "").isalnum():
         raise HTTPException(
             status_code=400,
-            detail="사용자 ID는 영문, 숫자, " "언더스코어만 사용 가능합니다.",
+            detail=translate(
+                "admin.user_ids_may_contain_only_letters_numbers_and_underscores",
+                display_language(request),
+            ),
         )
 
     # Check unique username
@@ -158,7 +167,9 @@ async def create_user(
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=400,
-            detail="이미 존재하는 사용자 ID입니다.",
+            detail=translate(
+                "admin.user_id_already_exists", display_language(request)
+            ),
         )
 
     # Verify group exists if provided
@@ -167,14 +178,16 @@ async def create_user(
         if not group:
             raise HTTPException(
                 status_code=400,
-                detail="그룹을 찾을 수 없습니다.",
+                detail=translate(
+                    "admin.group_not_found", display_language(request)
+                ),
             )
 
     # Validate role
     if data.role not in ("teacher", "admin"):
         raise HTTPException(
             status_code=400,
-            detail="유효하지 않은 역할입니다.",
+            detail=translate("admin.invalid_role", display_language(request)),
         )
 
     new_user = User(
@@ -211,6 +224,7 @@ async def update_user(
     data: UserUpdate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/users/{id}/update - Update user."""
 
@@ -218,7 +232,7 @@ async def update_user(
     if not target:
         raise HTTPException(
             status_code=404,
-            detail="사용자를 찾을 수 없습니다.",
+            detail=translate("admin.user_not_found", display_language(request)),
         )
 
     if data.nickname is not None:
@@ -227,7 +241,9 @@ async def update_user(
         if data.role not in ("teacher", "admin"):
             raise HTTPException(
                 status_code=400,
-                detail="유효하지 않은 역할입니다.",
+                detail=translate(
+                    "admin.invalid_role", display_language(request)
+                ),
             )
         target.role = data.role
     if data.group_id is not None:
@@ -238,7 +254,9 @@ async def update_user(
             if not group:
                 raise HTTPException(
                     status_code=400,
-                    detail="그룹을 찾을 수 없습니다.",
+                    detail=translate(
+                        "admin.group_not_found", display_language(request)
+                    ),
                 )
             target.group_id = data.group_id
     if data.password is not None:
@@ -268,20 +286,23 @@ async def delete_user(
     user_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/users/{id}/delete - Delete user."""
 
     if user_id == user.id:
         raise HTTPException(
             status_code=400,
-            detail="자기 자신은 삭제할 수 없습니다.",
+            detail=translate(
+                "admin.you_cannot_delete_yourself", display_language(request)
+            ),
         )
 
     target = await db.get(User, user_id)
     if not target:
         raise HTTPException(
             status_code=404,
-            detail="사용자를 찾을 수 없습니다.",
+            detail=translate("admin.user_not_found", display_language(request)),
         )
 
     # Check for active sessions
@@ -296,9 +317,10 @@ async def delete_user(
     if active_count and active_count > 0:
         raise HTTPException(
             status_code=400,
-            detail="활성 세션이 있는 사용자는 "
-            "삭제할 수 없습니다. "
-            "먼저 세션을 종료해주세요.",
+            detail=translate(
+                "admin.users_with_active_sessions_cannot_be_deleted_end_their_sessions_first",
+                display_language(request),
+            ),
         )
 
     if (
@@ -309,7 +331,10 @@ async def delete_user(
     ):
         raise HTTPException(
             status_code=400,
-            detail="모델 시험 기록이 있는 사용자는 삭제할 수 없습니다.",
+            detail=translate(
+                "admin.users_with_model_test_records_cannot_be_deleted",
+                display_language(request),
+            ),
         )
 
     # Nullify teacher_id on ended sessions

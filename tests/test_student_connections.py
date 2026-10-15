@@ -311,11 +311,18 @@ async def test_shared_capacity_rejects_before_reserving_a_student_turn(
         rejected = await client.post(
             f"/sessions/{sessions[2].id}/turns/stream",
             json={"request_id": str(uuid4()), "content": "Capacity refused"},
+            headers={"X-UI-Language": "en"},
         )
         assert (
             rejected.status_code == 429
             and rejected.json()["detail"]["code"] == "call_limit_reached"
         )
+        assert rejected.json() == {
+            "detail": {
+                "code": "call_limit_reached",
+                "message": "Ask an administrator to check the AI settings or try again later.",
+            }
+        }
         assert (
             await client.get(f"/sessions/{sessions[2].id}/messages/updates")
         ).status_code == 204

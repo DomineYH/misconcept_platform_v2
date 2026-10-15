@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from src.api.schemas.ai_settings import CallLimits, CallTimeouts
+from src.i18n import translate
 from src.models.model_config import ROLES, AppSetting, ModelConfig
 from src.services.model_capabilities import capabilities, metadata_conflict
 from src.services.model_verification import effective_roles, model_available
@@ -23,24 +24,51 @@ def settings_values(setting):
         ) from None
 
 
-def connection_impact(provider, models, settings, scenarios):
+def connection_impact(
+    provider,
+    models,
+    settings,
+    scenarios,
+    language="ko",
+):
     registered = [m for m in models if m["provider"] == provider]
     impact = [
-        f"등록 모델: {m['display_name']} ({m['model_id']})" for m in registered
+        translate(
+            "admin.registered_model_description",
+            language,
+            display_name=m["display_name"],
+            model_id=m["model_id"],
+        )
+        for m in registered
     ]
     by_id = {m["id"]: m for m in registered}
     if settings:
         for role, default in settings["defaults"].items():
             if default and default["model_config_id"] in by_id:
                 impact.append(
-                    f"{role} 작성 기본 모델: {by_id[default['model_config_id']]['display_name']}"
+                    translate(
+                        "admin.role_default_authoring_model",
+                        language,
+                        role=role,
+                        model_name=by_id[default["model_config_id"]][
+                            "display_name"
+                        ],
+                    )
                 )
     for scenario in scenarios:
         config = scenario.config_json
         if not config:
             continue
-        state = "게시" if scenario.status == "published" else "초안"
-        state += " · 활성" if scenario.is_active else " · 비활성"
+        state = (
+            translate("admin.publish", language)
+            if scenario.status == "published"
+            else translate("admin.draft", language)
+        )
+        state += (
+            " · " + translate("admin.active", language)
+            if scenario.is_active
+            else " · " + translate("admin.inactive", language)
+        )
         for role in ROLES:
             role_config = config[role]
             selection = role_config["resolved_model_config"]
@@ -48,23 +76,31 @@ def connection_impact(provider, models, settings, scenarios):
                 continue
             disabled = role == "mentor" and role_config["mode"] == "off"
             execution = (
-                "멘토 off · 실행 제외"
+                translate("admin.mentor_off_excluded_from_execution", language)
                 if disabled
                 else (
-                    "새 수업 실행 참조"
+                    translate("admin.used_for_new_lessons", language)
                     if scenario.status == "published" and scenario.is_active
-                    else "새 수업 실행 제외"
+                    else translate("admin.excluded_from_new_lessons", language)
                 )
             )
             impact.append(
-                f"시나리오 #{scenario.id} {scenario.title} · {role} "
-                f"({selection['model_id']}) · {state} · {execution}"
+                translate(
+                    "admin.scenario_model_usage",
+                    language,
+                    scenario_id=scenario.id,
+                    title=scenario.title,
+                    role=role,
+                    model_id=selection["model_id"],
+                    state=state,
+                    execution=execution,
+                )
             )
     return impact
 
 
-def public_model(model, connection):
-    definition = capabilities(connection.provider, model.model_id)
+def public_model(model, connection, language="ko"):
+    definition = capabilities(connection.provider, model.model_id, language)
     if definition:
         definition["metadata_conflict"] = metadata_conflict(
             model.model_id, connection
@@ -92,7 +128,7 @@ def public_model(model, connection):
     )
 
 
-async def configuration_state(db, connections):
+async def configuration_state(db, connections, language="ko"):
     by_id = {c.id: c for c in connections.values()}
     models = (
         await db.scalars(select(ModelConfig).order_by(ModelConfig.id))
@@ -127,7 +163,8 @@ async def configuration_state(db, connections):
         )
     return dict(
         models=[
-            public_model(m, by_id[m.provider_connection_id]) for m in models
+            public_model(m, by_id[m.provider_connection_id], language)
+            for m in models
         ],
         models_available=True,
         probes_available=True,

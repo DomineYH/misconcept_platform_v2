@@ -17,7 +17,7 @@ export default async function checkComparisonResults(page) {
   assert(await p2.getByText('실패',{exact:true}).isVisible());
   assert(await p3.getByText('중단',{exact:true}).isVisible());
   assert.match(await p1.innerText(), /첫 본문 120 ms/);
-  assert.match(await p2.innerText(), /비용 unknown/);
+  assert.match(await p2.innerText(), /비용 알 수 없음/);
   assert.match(await page.locator('#comparison-total').innerText(), /부분 합계.*0.01/);
   assert(!(await page.locator('#scenario-comparison').innerText()).includes(hidden));
   assert.equal(await page.evaluate(() => window.s5xss), undefined);

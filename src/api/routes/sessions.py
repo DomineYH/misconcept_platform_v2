@@ -24,6 +24,7 @@ from src.api.routes.session_helpers import (
 from src.api.routes.session_messages import router as messages_router
 from src.api.routes.student_generation import router as student_router
 from src.config import config
+from src.i18n import display_language
 from src.models import Message, User
 from src.services.analysis_results import load_analysis_response
 from src.services.lesson_snapshots import start_lesson
@@ -68,7 +69,9 @@ async def session_history(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    session = await load_session(session_id, user, db)
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
     messages = (
         await db.scalars(
             select(Message)
@@ -107,7 +110,9 @@ async def create_session(
     db: AsyncSession = Depends(get_db_session),
 ) -> SessionResponse:
     """Start new dialogue session."""
-    session = await start_lesson(db, data.scenario_id, user)
+    session = await start_lesson(
+        db, data.scenario_id, user, language=display_language(request)
+    )
 
     return SessionResponse(
         id=session.id,
@@ -133,9 +138,13 @@ async def close_session(
     Returns:
         CloseSessionResponse with ended_at timestamp and already_ended flag
     """
-    session = await load_session(session_id, user, db)
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
 
-    ended_at, already_ended = await mark_session_ended(session, db, force=True)
+    ended_at, already_ended = await mark_session_ended(
+        session, db, force=True, language=display_language(request)
+    )
 
     return CloseSessionResponse(
         status="ended",

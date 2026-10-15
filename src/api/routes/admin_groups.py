@@ -18,6 +18,7 @@ from src.api.schemas import (
     GroupCreate,
     GroupUpdate,
 )
+from src.i18n import display_language, translate
 from src.models.scenario_group import ScenarioGroup
 from src.models.user import User
 from src.models.user_group import UserGroup
@@ -72,6 +73,7 @@ async def create_group(
     data: GroupCreate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/groups - Create new group."""
 
@@ -82,7 +84,9 @@ async def create_group(
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=400,
-            detail="이미 존재하는 그룹 이름입니다.",
+            detail=translate(
+                "admin.group_name_already_exists", display_language(request)
+            ),
         )
 
     group = UserGroup(
@@ -109,6 +113,7 @@ async def update_group(
     data: GroupUpdate,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/groups/{id}/update - Update group."""
 
@@ -116,7 +121,9 @@ async def update_group(
     if not group:
         raise HTTPException(
             status_code=404,
-            detail="그룹을 찾을 수 없습니다.",
+            detail=translate(
+                "admin.group_not_found", display_language(request)
+            ),
         )
 
     if data.name is not None:
@@ -130,7 +137,9 @@ async def update_group(
         if existing.scalar_one_or_none():
             raise HTTPException(
                 status_code=400,
-                detail="이미 존재하는 그룹 이름입니다.",
+                detail=translate(
+                    "admin.group_name_already_exists", display_language(request)
+                ),
             )
         group.name = data.name
 
@@ -164,6 +173,7 @@ async def delete_group(
     group_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """POST /admin/groups/{id}/delete - Delete group."""
 
@@ -171,7 +181,9 @@ async def delete_group(
     if not group:
         raise HTTPException(
             status_code=404,
-            detail="그룹을 찾을 수 없습니다.",
+            detail=translate(
+                "admin.group_not_found", display_language(request)
+            ),
         )
 
     # Block if has members
@@ -181,9 +193,11 @@ async def delete_group(
     if member_count and member_count > 0:
         raise HTTPException(
             status_code=400,
-            detail=f"이 그룹에 {member_count}명의 "
-            "멤버가 있어 삭제할 수 없습니다. "
-            "먼저 멤버를 다른 그룹으로 이동하세요.",
+            detail=translate(
+                "admin.cannot_delete_group_with_members",
+                display_language(request),
+                member_count=member_count,
+            ),
         )
 
     await db.delete(group)

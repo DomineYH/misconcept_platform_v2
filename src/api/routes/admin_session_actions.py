@@ -23,6 +23,7 @@ from src.api.routes.session_helpers import (
 )
 from src.api.schemas import AnalysisRequest
 from src.config import config
+from src.i18n import display_language, translate
 from src.models.session import Session
 from src.models.user import User
 from src.services.analysis_results import (
@@ -38,6 +39,15 @@ from src.services.session_history import session_display
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
+
+
+def session_missing(request):
+    return HTTPException(
+        404,
+        detail=translate(
+            "teacher.session_not_found", display_language(request)
+        ),
+    )
 
 
 @router.post(
@@ -64,19 +74,19 @@ async def end_session(
     session = result.scalar_one_or_none()
 
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
+        raise session_missing(request)
 
-    require_native_session(session)
-    await mark_session_ended(session, db, force=True)
+    require_native_session(session, language=display_language(request))
+    await mark_session_ended(
+        session, db, force=True, language=display_language(request)
+    )
     accepted = await request_analysis(
         db,
         session_id,
         user.id,
         body.request_id if body else str(uuid4()),
         plan_hash=body.plan_hash if body else None,
+        language=display_language(request),
     )
     if body is not None:
         return accepted
@@ -110,19 +120,19 @@ async def delete_session(
     session_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """Soft delete a session (set deleted_at)."""
     session = await db.get(Session, session_id)
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
+        raise session_missing(request)
 
     if session.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session already deleted",
+            detail=translate(
+                "admin.session_deleted", display_language(request)
+            ),
         )
 
     session.mark_deleted()
@@ -155,10 +165,7 @@ async def session_detail(
     session = result.scalar_one_or_none()
 
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
+        raise session_missing(request)
 
     return templates.TemplateResponse(
         "partials/session_detail.html",
@@ -199,22 +206,25 @@ async def analysis_modal(
     session = result.scalar_one_or_none()
 
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
+        raise session_missing(request)
 
     if not session.ended_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=("Session must be ended before viewing analysis"),
+            detail=(
+                translate(
+                    "admin.end_before_analysis", display_language(request)
+                )
+            ),
         )
 
     analysis_data = await _load_analysis_response(session_id, db, admin=True)
     if analysis_data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Analysis not found",
+            detail=translate(
+                "teacher.analysis_not_found", display_language(request)
+            ),
         )
 
     return templates.TemplateResponse(
@@ -241,17 +251,26 @@ async def get_admin_analysis(
     session_id: int,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     session = await db.get(Session, session_id)
     if session is None:
-        raise HTTPException(404, detail="Session not found")
+        raise session_missing(request)
     if not session.ended_at:
         raise HTTPException(
-            400, detail="Session must be ended before viewing analysis"
+            400,
+            detail=translate(
+                "admin.end_before_analysis", display_language(request)
+            ),
         )
     result = await _load_analysis_response(session_id, db, admin=True)
     if result is None:
-        raise HTTPException(404, detail="Analysis not found")
+        raise HTTPException(
+            404,
+            detail=translate(
+                "teacher.analysis_not_found", display_language(request)
+            ),
+        )
     return result
 
 
@@ -272,6 +291,7 @@ async def regenerate_analysis(
         body.request_id,
         regenerate=True,
         plan_hash=body.plan_hash,
+        language=display_language(request),
     )
 
 
@@ -281,11 +301,14 @@ async def get_admin_analysis_run(
     run_id: str,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
-    run = await get_run(db, session_id, run_id)
+    run = await get_run(
+        db, session_id, run_id, language=display_language(request)
+    )
     session = await db.get(Session, session_id)
     if session is None or session.deleted_at is not None:
-        raise HTTPException(404, detail="Session not found")
+        raise session_missing(request)
     return await run_response(db, run, admin=True)
 
 
@@ -298,9 +321,17 @@ async def cancel_admin_analysis_run(
     run_id: str,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
-    await get_run(db, session_id, run_id)
+    await get_run(db, session_id, run_id, language=display_language(request))
     session = await db.get(Session, session_id)
     if session is None or session.deleted_at is not None:
-        raise HTTPException(404, detail="Session not found")
-    return await cancel_analysis(db, session_id, run_id, user.id, admin=True)
+        raise session_missing(request)
+    return await cancel_analysis(
+        db,
+        session_id,
+        run_id,
+        user.id,
+        admin=True,
+        language=display_language(request),
+    )

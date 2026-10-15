@@ -27,6 +27,7 @@ from src.api.dependencies import (
     get_db_session,
 )
 from src.config import config
+from src.i18n import display_language, translate
 from src.models.provider_connection import ProviderAuditLog, ProviderConnection
 from src.models.scenario import Scenario
 from src.models.user import User
@@ -163,12 +164,15 @@ def public_connection(provider, connection):
 async def provider_state(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     connections = {
         c.provider: c
         for c in (await db.scalars(select(ProviderConnection))).all()
     }
-    configuration = await configuration_state(db, connections)
+    configuration = await configuration_state(
+        db, connections, display_language(request)
+    )
     scenarios = (
         await db.execute(
             select(
@@ -194,8 +198,15 @@ async def provider_state(
                             configuration["models"],
                             configuration["settings"],
                             scenarios,
+                            display_language(request),
                         )
-                        + [f"활성 호출: {active_connection_count(p)}건"],
+                        + [
+                            translate(
+                                "admin.active_call_count",
+                                display_language(request),
+                                count=active_connection_count(p),
+                            )
+                        ],
                     }
                     for p in PROVIDERS
                 ],

@@ -1,19 +1,19 @@
 export const providers = {openai:'OpenAI', anthropic:'Claude', google:'Gemini'};
-export const roles = {student:'학생봇', mentor:'멘토', analysis:'사후 분석'};
-const states = {unconfigured:'미설정', ready:'사용 가능', decryption_failed:'복호화 실패',
-  unverified:'미검증', verifying:'검증 중', succeeded:'성공', failed:'실패', stale:'재검증 필요'};
+export const roles = {student:uiLanguage.t('admin.student'), mentor:uiLanguage.t('admin.mentor'), analysis:uiLanguage.t('admin.post_session_analysis')};
+const states = {unconfigured:uiLanguage.t('admin.unconfigured'), ready:uiLanguage.t('admin.available'), decryption_failed:uiLanguage.t('admin.decryption_failed'),
+  unverified:uiLanguage.t('admin.unverified'), verifying:uiLanguage.t('admin.verifying'), succeeded:uiLanguage.t('admin.succeeded'), failed:uiLanguage.t('admin.failed'), stale:uiLanguage.t('admin.reverification_required')};
 const roleErrors = {
-  refused:'응답이 거절되었습니다. 설정을 확인한 후 다시 시험하세요.',
-  output_limit:'출력 길이 상한에 도달했습니다. 설정을 확인한 후 다시 시험하세요.',
-  invalid_json:'완전한 JSON 응답이 아닙니다. 설정을 확인한 후 다시 시험하세요.',
-  invalid_reference:'레이블·발화 참조 또는 인용이 유효하지 않습니다. 설정을 확인한 후 다시 시험하세요.',
-  empty_response:'필요한 결과가 비어 있습니다. 설정을 확인한 후 다시 시험하세요.',
-  invalid_output:'응답 형식이 역할 계약과 일치하지 않습니다. 설정을 확인한 후 다시 시험하세요.',
-  transient:'제공자에 일시적인 문제가 발생했습니다. 잠시 후 다시 시험하세요.',
-  timeout_connect:'제공자 연결 시간이 초과되었습니다. 연결 상태를 확인하세요.',
-  timeout_first_output:'첫 응답 대기 시간이 초과되었습니다. 시간 제한을 확인하세요.',
-  timeout_total:'전체 호출 시간이 초과되었습니다. 시간 제한을 확인하세요.',
-  call_limit_reached:'동시 호출 한도에 도달했습니다. 진행 중인 호출이 끝난 후 다시 시험하세요.'
+  refused:uiLanguage.t('admin.the_response_was_refused_check_settings_and_test_again'),
+  output_limit:uiLanguage.t('admin.the_output_limit_was_reached_check_settings_and_test_again'),
+  invalid_json:uiLanguage.t('admin.the_response_is_not_complete_json_check_settings_and_test_again'),
+  invalid_reference:uiLanguage.t('admin.a_label_utterance_reference_or_quotation_is_invalid_check_settings_and_test_again'),
+  empty_response:uiLanguage.t('admin.required_results_are_empty_check_settings_and_test_again'),
+  invalid_output:uiLanguage.t('admin.the_response_format_does_not_match_the_role_contract_check_settings_and_test_again'),
+  transient:uiLanguage.t('admin.the_provider_encountered_a_temporary_problem_test_again_shortly'),
+  timeout_connect:uiLanguage.t('admin.the_provider_connection_timed_out_check_the_connection'),
+  timeout_first_output:uiLanguage.t('admin.the_first_response_timed_out_check_the_timeout_settings'),
+  timeout_total:uiLanguage.t('admin.the_total_call_timeout_was_reached_check_the_timeout_settings'),
+  call_limit_reached:uiLanguage.t('admin.the_concurrent_call_limit_was_reached_wait_for_active_calls_to_finish_before_testing_again')
 };
 
 export function node(tag, text, attrs = {}) {
@@ -36,7 +36,7 @@ export function field(form, name, label, value = '', attrs = {}, choices = null)
   const input = node(choices ? 'select' : 'input', null, {id, name, ...attrs});
   if (choices) for (const [key, text] of choices) input.append(node('option', text, {value:key}));
   if (choices && value != null && !choices.some(([key]) => String(key) === String(value))) {
-    input.append(node('option', `${value} · 지원하지 않는 저장 값`, {value}));
+    input.append(node('option', `${value} · ${uiLanguage.t('admin.unsupported_saved_value')}`, {value}));
   }
   input.value = value ?? '';
   group.append(node('label', label, {for:id}), input);
@@ -45,9 +45,9 @@ export function field(form, name, label, value = '', attrs = {}, choices = null)
 }
 
 export function optionNotes(container, capabilities, saved = {}, onRemove) {
-  if (capabilities.definition_version) container.append(node('p', `기능 정의: ${capabilities.definition_version} · 공식 확인 ${capabilities.checked_at}`));
+  if (capabilities.definition_version) container.append(node('p', `${uiLanguage.t('admin.capability_definition')} ${capabilities.definition_version} · ${uiLanguage.t('admin.official_verification')} ${capabilities.checked_at}`));
   for (const definition of capabilities.fields || []) {
-    if (definition.default != null) container.append(node('p', `${definition.label} 기본값: ${definition.default}`));
+    if (definition.default != null) container.append(node('p', `${definition.label} ${uiLanguage.t('admin.default')} ${definition.default}`));
   }
   for (const note of capabilities.option_notes || []) container.append(node('p', note));
   const unknown = structuredClone(saved);
@@ -61,8 +61,8 @@ export function optionNotes(container, capabilities, saved = {}, onRemove) {
   }
   if (Object.keys(unknown).length) {
     const notice = node('div');
-    notice.append(node('p', '기능 정의에 없는 저장 옵션입니다. 다른 필드 수정으로 삭제하지 않으며, 제거를 선택한 뒤 저장해야 삭제됩니다.'), node('pre', JSON.stringify(unknown, null, 2)));
-    notice.append(button('정의에 없는 저장 옵션 제거', () => {
+    notice.append(node('p', uiLanguage.t('admin.these_saved_options_are_absent_from_the_capability_definition_editing_other_fields_preserves_them_ch')), node('pre', JSON.stringify(unknown, null, 2)));
+    notice.append(button(uiLanguage.t('admin.remove_undefined_saved_options'), () => {
       const retained = {};
       for (const definition of capabilities.fields || []) {
         const path = definition.name.split('.');
@@ -83,92 +83,92 @@ export function optionNotes(container, capabilities, saved = {}, onRemove) {
 export function render(state, actions) {
   const root = document.getElementById('ai-content');
   root.replaceChildren();
-  if (!state.master_key_available) root.append(node('p', '마스터 키 설정 필요: 인프라의 원래 마스터 키와 버전을 복원하세요. 키 저장과 AI 호출은 사용할 수 없습니다.'));
-  const connections = node('section', null, {'aria-label':'제공자 연결'});
-  connections.append(node('h2', '1. 제공자 연결'), node('p', '비생성 확인과 모델 목록 갱신은 역할 검증·교육 품질 승인과 별개입니다.'));
+  if (!state.master_key_available) root.append(node('p', uiLanguage.t('admin.master_key_required_restore_the_original_infrastructure_master_key_and_version_saving_keys_and_ai_ca')));
+  const connections = node('section', null, {'aria-label':uiLanguage.t('admin.provider_connections')});
+  connections.append(node('h2', uiLanguage.t('admin.1_provider_connections')), node('p', uiLanguage.t('admin.non_generation_verification_and_catalog_refresh_are_separate_from_role_verification_and_educational_')));
   const cards = node('div', null, {class:'ai-grid'});
   for (const p of state.providers) {
     const card = node('article', null, {'data-provider':p.provider});
     card.append(node('h3', providers[p.provider]),
-      node('p', `키 ${p.key_registered ? '등록됨' : '미등록'} ${p.masked_hint || ''} · ${p.enabled ? '활성' : '비활성'} · ${states[p.status] || '사용 불가'}`),
-      node('p', `최근 비생성 확인: ${p.verified_at || '없음'}`));
-    if (p.status === 'decryption_failed') card.append(node('p', '원래 마스터 키·버전을 복원하세요. 복구할 수 없다면 현재 비밀번호로 키를 삭제한 후 재등록하세요.'));
-    if (p.error_code) card.append(node('p', '최근 비생성 확인 실패. 연결 설정과 접근 권한을 확인하세요.'));
+      node('p', `${uiLanguage.t('admin.key')} ${p.key_registered ? uiLanguage.t('admin.registered') : uiLanguage.t('admin.not_registered')} ${p.masked_hint || ''} · ${p.enabled ? uiLanguage.t('admin.active') : uiLanguage.t('admin.inactive')} · ${states[p.status] || uiLanguage.t('admin.unavailable')}`),
+      node('p', `${uiLanguage.t('admin.latest_non_generation_verification')} ${p.verified_at || uiLanguage.t('admin.none')}`));
+    if (p.status === 'decryption_failed') card.append(node('p', uiLanguage.t('admin.restore_the_original_master_key_and_version_if_recovery_is_impossible_delete_and_register_the_key_ag')));
+    if (p.error_code) card.append(node('p', uiLanguage.t('admin.latest_non_generation_verification_failed_check_connection_settings_and_access_permissions')));
     const row = node('div', null, {class:'ai-actions'});
-    row.append(button(p.key_registered ? '키 교체' : '키 저장', () => actions.connection(p, 'key'), !state.master_key_available || p.status === 'decryption_failed'),
-      button(p.enabled ? '비활성화' : '재활성화', () => actions.connection(p, 'enabled'), !p.key_registered || (!p.enabled && (!state.master_key_available || p.status === 'decryption_failed'))),
-      button('키 삭제', () => actions.connection(p, 'delete'), !p.key_registered),
-      button('비생성 확인·목록 갱신', () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available || p.catalog.available === false));
-    card.append(row, node('p', p.catalog.available === false ? '모델 목록은 아직 제공되지 않습니다.' : !p.catalog.fetched_at && !p.catalog.stale ? '모델 목록: 조회 기록 없음' : `모델 목록: ${p.catalog.stale ? '오래된 목록' : '최근 목록'} · 마지막 갱신 ${p.catalog.fetched_at || '없음'}`));
-    if (p.catalog.stale) card.append(node('p', '참고 목록입니다. 접근 가능 여부나 역할 검증 성공을 보장하지 않습니다.'));
-    const choices = [['', '모델 선택 필요'], ...p.catalog.models.map(model => [model.model_id,
-      `${model.model_id} · ${model.lifecycle || '수명주기 미확인'} · ${model.preview === true ? 'Preview' : model.preview === false ? '안정' : '릴리스 상태 미확인'}`])];
-    const select = field(card, `${p.provider}-catalog-model`, `${providers[p.provider]} 모델 ID 선택`, '', {}, choices);
-    const register = button('선택 모델 등록', () => actions.register(p, select.value), true);
+    row.append(button(p.key_registered ? uiLanguage.t('admin.replace_key') : uiLanguage.t('admin.save_key'), () => actions.connection(p, 'key'), !state.master_key_available || p.status === 'decryption_failed'),
+      button(p.enabled ? uiLanguage.t('admin.disable') : uiLanguage.t('admin.re_enable'), () => actions.connection(p, 'enabled'), !p.key_registered || (!p.enabled && (!state.master_key_available || p.status === 'decryption_failed'))),
+      button(uiLanguage.t('admin.delete_key'), () => actions.connection(p, 'delete'), !p.key_registered),
+      button(uiLanguage.t('admin.verify_without_generation_and_refresh_catalog'), () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available || p.catalog.available === false));
+    card.append(row, node('p', p.catalog.available === false ? uiLanguage.t('admin.the_model_catalog_is_not_available_yet') : !p.catalog.fetched_at && !p.catalog.stale ? uiLanguage.t('admin.model_catalog_no_lookup_recorded') : `${uiLanguage.t('admin.model_catalog')} ${p.catalog.stale ? uiLanguage.t('admin.stale_catalog') : uiLanguage.t('admin.recent_catalog')} · ${uiLanguage.t('admin.last_refreshed')} ${p.catalog.fetched_at || uiLanguage.t('admin.none')}`));
+    if (p.catalog.stale) card.append(node('p', uiLanguage.t('admin.this_catalog_is_for_reference_it_does_not_guarantee_access_or_successful_role_verification')));
+    const choices = [['', uiLanguage.t('admin.select_a_model')], ...p.catalog.models.map(model => [model.model_id,
+      `${model.model_id} · ${model.lifecycle || uiLanguage.t('admin.lifecycle_unknown')} · ${model.preview === true ? 'Preview' : model.preview === false ? uiLanguage.t('admin.stable') : uiLanguage.t('admin.release_status_unknown')}`])];
+    const select = field(card, `${p.provider}-catalog-model`, `${providers[p.provider]} ${uiLanguage.t('admin.choose_model_id')}`, '', {}, choices);
+    const register = button(uiLanguage.t('admin.register_selected_model'), () => actions.register(p, select.value), true);
     select.addEventListener('change', () => { register.disabled = !select.value || state.models_available === false; });
-    card.append(register, button('모델 ID 직접 입력', () => actions.register(p, ''), state.models_available === false));
+    card.append(register, button(uiLanguage.t('admin.enter_model_id_manually'), () => actions.register(p, ''), state.models_available === false));
     cards.append(card);
   }
   connections.append(cards);
   root.append(connections);
-  const models = node('section', null, {'aria-label':'모델 설정'});
-  models.append(node('h2', '2. 모델 설정·역할 검증'), node('p', '각 역할의 응답 형식 검증을 따로 확인하세요. 시험 성공은 교육적 품질 보증이 아닙니다.'));
-  if (!state.models.length && state.models_available !== false) models.append(node('p', '등록한 모델이 없습니다. 제공자 연결에서 목록을 선택하거나 모델 ID를 직접 입력해 등록하세요.'));
-  if (state.models_available === false) models.append(node('p', '모델 등록·역할 시험은 아직 제공되지 않습니다.'));
-  if (state.probes_available === false) models.append(node('p', '역할 시험은 아직 제공되지 않습니다.'));
+  const models = node('section', null, {'aria-label':uiLanguage.t('admin.model_settings')});
+  models.append(node('h2', uiLanguage.t('admin.2_model_settings_and_role_verification')), node('p', uiLanguage.t('admin.check_response_format_verification_separately_for_each_role_test_success_does_not_guarantee_educatio')));
+  if (!state.models.length && state.models_available !== false) models.append(node('p', uiLanguage.t('admin.no_registered_models_choose_a_catalog_entry_under_a_provider_connection_or_enter_a_model_id_manually')));
+  if (state.models_available === false) models.append(node('p', uiLanguage.t('admin.model_registration_and_role_tests_are_not_available_yet')));
+  if (state.probes_available === false) models.append(node('p', uiLanguage.t('admin.role_tests_are_not_available_yet')));
   for (const m of state.models) {
     const p = state.providers.find(p => p.provider === m.provider);
     const card = node('article', null, {'data-model':m.id, 'aria-labelledby':`ai-model-${m.id}`});
     card.append(node('h3', `${m.display_name} · ${providers[m.provider]} / ${m.model_id}`, {id:`ai-model-${m.id}`}),
-      node('p', `${m.capabilities?.preview ? 'Preview · ' : ''}${m.enabled ? '활성' : '비활성'} · ${m.capabilities ? '기능 정의 있음' : '기능 정의 필요'}`),
-      button('표시명·활성·옵션 수정', () => actions.model(m)));
-    if (m.capabilities?.metadata_conflict) card.append(node('p', '기능 정의·제공자 목록 불일치: 역할 시험과 실행을 사용할 수 없습니다.'));
+      node('p', `${m.capabilities?.preview ? 'Preview · ' : ''}${m.enabled ? uiLanguage.t('admin.active') : uiLanguage.t('admin.inactive')} · ${m.capabilities ? uiLanguage.t('admin.capability_definition_available') : uiLanguage.t('admin.capability_definition_required')}`),
+      button(uiLanguage.t('admin.edit_display_name_activation_and_options'), () => actions.model(m)));
+    if (m.capabilities?.metadata_conflict) card.append(node('p', uiLanguage.t('admin.capability_definition_and_provider_catalog_do_not_match_role_tests_and_execution_are_unavailable')));
     const roleGrid = node('div', null, {class:'ai-role-grid'});
     for (const [role, label] of Object.entries(roles)) {
       const verification = m.verification_state[role];
-      const row = node('div', null, {class:'ai-role', role:'group', 'aria-label':`${m.display_name} · ${label} 역할 검증`});
+      const row = node('div', null, {class:'ai-role', role:'group', 'aria-label':`${m.display_name} · ${label} ${uiLanguage.t('admin.role_verification')}`});
       const heading = node('p', `${label}: `);
-      heading.append(node('span', states[verification.status] || '미검증', {class:`ai-verification ai-verification-${verification.status}`}));
+      heading.append(node('span', states[verification.status] || uiLanguage.t('admin.unverified'), {class:`ai-verification ai-verification-${verification.status}`}));
       row.append(heading);
-      if (verification.verified_at) row.append(node('p', `최근 역할 검증: ${verification.verified_at}`));
-      if (verification.error_code) row.append(node('p', roleErrors[verification.error_code] || '역할 응답 형식 시험에 실패했습니다. 설정을 확인한 후 다시 시험하세요.'));
-      if (m.capabilities && !m.probe_budgets?.[role]) row.append(node('p', `${label} 시험 출력 상한 또는 저장 옵션 제약과 충돌합니다. 저장 옵션을 명시적으로 수정하세요.`));
-      const reason = state.probes_available === false || (state.probe_roles && !state.probe_roles.includes(role)) ? '이 역할 시험은 아직 제공되지 않습니다.'
-        : !m.capabilities ? '기능 정의가 없어 역할 시험을 사용할 수 없습니다.'
-        : m.capabilities.metadata_conflict ? '기능 정의·제공자 목록 불일치를 해결한 후 시험하세요.'
-        : !state.master_key_available ? '마스터 키를 복원한 후 시험하세요.'
-        : p.status === 'decryption_failed' ? '연결 키 복호화 실패를 해결한 후 시험하세요.'
-        : !p.key_registered ? '제공자 키를 등록한 후 시험하세요.'
-        : !p.enabled ? '제공자 연결을 재활성화한 후 시험하세요.'
-        : p.status !== 'ready' ? '제공자 연결 설정을 확인한 후 시험하세요.'
-        : !m.probe_budgets?.[role] ? '시험 출력 상한·저장 옵션을 수정한 후 시험하세요.'
-        : verification.status === 'verifying' ? '진행 중인 시험을 조회하거나 취소할 수 있습니다.' : '';
-      const trial = button(`${label} 시험`, () => actions.probe(m, role), !!reason);
+      if (verification.verified_at) row.append(node('p', `${uiLanguage.t('admin.latest_role_verification')} ${verification.verified_at}`));
+      if (verification.error_code) row.append(node('p', roleErrors[verification.error_code] || uiLanguage.t('admin.the_role_response_format_test_failed_check_settings_and_test_again')));
+      if (m.capabilities && !m.probe_budgets?.[role]) row.append(node('p', `${label} ${uiLanguage.t('admin.the_test_output_limit_conflicts_with_saved_options_explicitly_update_the_saved_options')}`));
+      const reason = state.probes_available === false || (state.probe_roles && !state.probe_roles.includes(role)) ? uiLanguage.t('admin.this_role_test_is_not_available_yet')
+        : !m.capabilities ? uiLanguage.t('admin.role_tests_require_a_capability_definition')
+        : m.capabilities.metadata_conflict ? uiLanguage.t('admin.resolve_the_capability_definition_and_provider_catalog_mismatch_before_testing')
+        : !state.master_key_available ? uiLanguage.t('admin.restore_the_master_key_before_testing')
+        : p.status === 'decryption_failed' ? uiLanguage.t('admin.resolve_the_connection_key_decryption_failure_before_testing')
+        : !p.key_registered ? uiLanguage.t('admin.register_a_provider_key_before_testing')
+        : !p.enabled ? uiLanguage.t('admin.re_enable_the_provider_connection_before_testing')
+        : p.status !== 'ready' ? uiLanguage.t('admin.check_provider_connection_settings_before_testing')
+        : !m.probe_budgets?.[role] ? uiLanguage.t('admin.update_the_test_output_limit_and_saved_options_before_testing')
+        : verification.status === 'verifying' ? uiLanguage.t('admin.you_can_check_or_cancel_the_running_test') : '';
+      const trial = button(`${label} ${uiLanguage.t('admin.test')}`, () => actions.probe(m, role), !!reason);
       if (reason) {
         const id = `ai-probe-reason-${m.id}-${role}`;
         row.append(node('p', reason, {id, class:'ai-help'}));
         trial.setAttribute('aria-describedby', id);
       }
       row.append(trial);
-      if (verification.status === 'verifying') row.append(button(`${label} 진행 조회`, () => actions.poll(verification.probe_request_id)), button(`${label} 시험 취소`, () => actions.cancel(verification.probe_request_id)));
+      if (verification.status === 'verifying') row.append(button(`${label} ${uiLanguage.t('admin.check_progress')}`, () => actions.poll(verification.probe_request_id)), button(`${label} ${uiLanguage.t('admin.cancel_test')}`, () => actions.cancel(verification.probe_request_id)));
       roleGrid.append(row);
     }
     card.append(roleGrid);
     models.append(card);
   }
   root.append(models);
-  const settings = node('section', null, {'aria-label':'작성 기본값·호출 설정'});
-  settings.append(node('h2', '3. 작성 기본값·호출 설정'), node('p', '작성 기본값은 새 시나리오 작성에만 사용합니다. 기존 시나리오와 세션은 변경하지 않습니다. 사용 불가 기본값을 다른 모델로 자동 대체하지 않습니다.'));
+  const settings = node('section', null, {'aria-label':uiLanguage.t('admin.authoring_defaults_and_call_settings')});
+  settings.append(node('h2', uiLanguage.t('admin.3_authoring_defaults_and_call_settings')), node('p', uiLanguage.t('admin.authoring_defaults_apply_only_to_new_scenarios_existing_scenarios_and_sessions_remain_unchanged_unav')));
   if (!state.settings) {
-    settings.append(node('p', '작성 기본값·호출 설정은 아직 제공되지 않습니다.'));
+    settings.append(node('p', uiLanguage.t('admin.authoring_defaults_and_call_settings_are_not_available_yet')));
     root.append(settings);
     return;
   }
   for (const [role, label] of Object.entries(roles)) {
     const d = state.settings.defaults[role];
     const m = state.models.find(m => m.id === d?.model_config_id);
-    settings.append(node('p', `${label}: ${d ? `${m?.display_name || d.model_config_id} · ${d.available ? '사용 가능' : '기본 모델 사용 불가'}` : '기본값 없음'}`));
+    settings.append(node('p', `${label}: ${d ? `${m?.display_name || d.model_config_id} · ${d.available ? uiLanguage.t('admin.available') : uiLanguage.t('admin.default_model_unavailable')}` : uiLanguage.t('admin.no_default')}`));
   }
-  settings.append(button('작성 기본값·호출 설정 수정', () => actions.settings(state)));
+  settings.append(button(uiLanguage.t('admin.edit_authoring_defaults_and_call_settings'), () => actions.settings(state)));
   root.append(settings);
 }

@@ -13,6 +13,7 @@ from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
 )
+from src.i18n import translate
 from src.models import (
     AppSetting,
     GenerationRun,
@@ -87,12 +88,16 @@ async def snapshot(db, run):
     }
 
 
-async def reserve_student(factory, session_id, user, request):
+async def reserve_student(factory, session_id, user, request, *, language="ko"):
     async with execution_lock():
-        return await _reserve_student(factory, session_id, user, request)
+        return await _reserve_student(
+            factory, session_id, user, request, language=language
+        )
 
 
-async def _reserve_student(factory, session_id, user, request):
+async def _reserve_student(
+    factory, session_id, user, request, *, language="ko"
+):
     input_hash = digest(
         {
             "owner": user.id,
@@ -104,7 +109,7 @@ async def _reserve_student(factory, session_id, user, request):
     )
     async with factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
-        session = await load_session(session_id, user, db)
+        session = await load_session(session_id, user, db, language=language)
         scenario = await db.get(Scenario, session.scenario_id)
         if not user.is_admin:
             access = await db.scalar(
@@ -114,8 +119,10 @@ async def _reserve_student(factory, session_id, user, request):
                 )
             )
             if access is None:
-                raise HTTPException(403, detail="Forbidden")
-        require_native_session(session)
+                raise HTTPException(
+                    403, detail=translate("teacher.forbidden", language)
+                )
+        require_native_session(session, language=language)
         existing = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.owner_id == user.id,
@@ -136,7 +143,9 @@ async def _reserve_student(factory, session_id, user, request):
                 )
             )
             if teacher is None:
-                raise HTTPException(404, detail="Turn not found")
+                raise HTTPException(
+                    404, detail=translate("teacher.turn_not_found", language)
+                )
             if teacher.content != request.content:
                 conflict("request_conflict")
             completed = await db.scalar(
@@ -152,10 +161,20 @@ async def _reserve_student(factory, session_id, user, request):
         else:
             teacher = None
         if session.ended_at:
-            raise HTTPException(400, detail="Session already ended")
-        await validate_scenario_access(scenario.id, user, db)
+            raise HTTPException(
+                400,
+                detail={
+                    "code": "session_ended",
+                    "message": translate(
+                        "teacher.conversation_ended", language
+                    ),
+                },
+            )
+        await validate_scenario_access(scenario.id, user, db, language=language)
         if not scenario.is_active:
-            raise HTTPException(404, detail="Scenario not found")
+            raise HTTPException(
+                404, detail=translate("teacher.scenario_not_found", language)
+            )
         busy = await db.scalar(
             select(GenerationRun).where(
                 GenerationRun.session_id == session_id,
@@ -166,7 +185,7 @@ async def _reserve_student(factory, session_id, user, request):
         if busy:
             conflict("student_busy", run_id=busy.id)
         try:
-            lesson = read_lesson_snapshot(session)
+            lesson = read_lesson_snapshot(session, language=language)
             connection, model, options = await resolve_frozen_model(
                 db, lesson.config.student.resolved_model_config, "student"
             )
@@ -175,7 +194,9 @@ async def _reserve_student(factory, session_id, user, request):
                 503,
                 detail={
                     "code": "configuration_unavailable",
-                    "message": "관리자에게 AI 연결과 학생 모델 검증을 요청해주세요.",
+                    "message": translate(
+                        "teacher.student_configuration_error", language
+                    ),
                 },
             ) from None
         if teacher is None:
@@ -229,7 +250,7 @@ async def _reserve_student(factory, session_id, user, request):
                 422 if error.code == "context_limit" else 503,
                 detail={
                     "code": error.code,
-                    "message": "질문을 짧게 수정하거나 관리자에게 AI 설정을 확인해주세요.",
+                    "message": translate("teacher.shorten_question", language),
                 },
             ) from None
         run = GenerationRun(
@@ -268,7 +289,7 @@ async def _reserve_student(factory, session_id, user, request):
                 429 if error.code == "call_limit_reached" else 503,
                 detail={
                     "code": error.code,
-                    "message": "관리자에게 AI 설정을 확인하거나 잠시 후 다시 시도해주세요.",
+                    "message": translate("teacher.check_ai_settings", language),
                 },
             ) from None
         permit.model_options = options

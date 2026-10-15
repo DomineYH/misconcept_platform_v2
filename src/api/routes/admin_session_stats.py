@@ -14,6 +14,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
+from src.i18n import display_language, translate
 from src.models.session import Session
 from src.models.user import User
 
@@ -25,12 +26,13 @@ router = APIRouter()
 async def get_stats(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    request: Request = None,
 ):
     """Get system statistics for dashboard charts."""
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=translate("admin.admin_required", display_language(request)),
         )
 
     total_teachers_query = select(
@@ -84,7 +86,7 @@ async def user_conversations_page(
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=translate("admin.admin_required", display_language(request)),
         )
 
     subq_total = (

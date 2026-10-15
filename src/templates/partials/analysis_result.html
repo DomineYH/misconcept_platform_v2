@@ -1,6 +1,12 @@
 {# The URL serves the public projection; providers and planning stay server-side. #}
-<section data-analysis-result data-result-url="{{ analysis_result_url }}"
+<section data-analysis-result data-session-id="{{ session_id if session_id is defined else session.id if session is defined else '' }}" data-result-url="{{ analysis_result_url }}"
          data-transcript-open="{{ analysis_transcript_open | default(false) | lower }}"
-         aria-label="사후 분석 결과">
-  {% if feedback is defined and feedback %}<p>{{ feedback }}</p>{% endif %}
+         aria-label="{{ t('teacher.post_analysis_result') }}">
+  {% if accepted_report is defined and accepted_report and accepted_report.status == 'degraded' and accepted_report.coverage and accepted_report.coverage.chunks and display_language(request) == 'en' %}
+  <p>{{ t('teacher.chunk_partial_notice', reviewed=accepted_report.coverage.reviewed_message_ids|length, total=accepted_report.coverage.input_message_ids|length) }}</p>
+  {% elif feedback_status is defined and feedback_status == 'failed' and display_language(request) == 'en' %}
+  <p>{{ t('teacher.feedback_failed') }}</p>
+  {% elif feedback_status is defined and feedback_status == 'no_dialogue' %}
+  <p>{{ t('teacher.no_dialogue_feedback') }}</p>
+  {% elif feedback is defined and feedback %}<p>{{ feedback }}</p>{% endif %}
 </section>

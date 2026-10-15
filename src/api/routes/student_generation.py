@@ -13,6 +13,7 @@ from src.api.dependencies import get_current_user, get_db_session
 from src.api.routes.session_helpers import load_session
 from src.api.routes.session_messages import limiter
 from src.api.schemas import GenerationRequest
+from src.i18n import display_language, translate
 from src.models import GenerationRun, User
 from src.services.generation_runs import reserve_student, snapshot
 from src.services.mentor_generation import reserve_mentor
@@ -51,10 +52,17 @@ async def mentor_turn(
     )
     await db.close()
     accepted, execution = await reserve_mentor(
-        factory, session_id, str(turn_id), user, body.request_id, body.trigger
+        factory,
+        session_id,
+        str(turn_id),
+        user,
+        body.request_id,
+        body.trigger,
+        language=display_language(request),
     )
     if execution is None:
         return JSONResponse(accepted)
+    execution["display_language"] = display_language(request)
     return mentor_response(factory, accepted, execution)
 
 
@@ -72,35 +80,50 @@ async def student_turn(
     )
     # Authentication's read session is released before reserving or streaming.
     await db.close()
-    accepted, kwargs = await reserve_student(factory, session_id, user, body)
+    accepted, kwargs = await reserve_student(
+        factory, session_id, user, body, language=display_language(request)
+    )
     if kwargs is None:
         return JSONResponse(accepted)
+    kwargs["display_language"] = display_language(request)
     return StudentStreamingResponse(factory, accepted, kwargs)
 
 
 @router.get("/runs/{run_id}")
 async def get_run(
+    request: Request,
     run_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     run = await db.get(GenerationRun, str(run_id))
     if run is None or run.comparison_run_id is not None:
-        raise HTTPException(404, detail="Run not found")
-    await load_session(run.session_id, user, db)
+        raise HTTPException(
+            404,
+            detail=translate(
+                "teacher.run_not_found", display_language(request)
+            ),
+        )
+    await load_session(
+        run.session_id, user, db, language=display_language(request)
+    )
     if run.owner_id != user.id:
-        raise HTTPException(403, detail="Forbidden")
+        raise HTTPException(
+            403,
+            detail=translate("teacher.forbidden", display_language(request)),
+        )
     return await snapshot(db, run)
 
 
 @router.get("/sessions/{session_id}/runs")
 async def get_request_run(
+    request: Request,
     session_id: int,
     request_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    await load_session(session_id, user, db)
+    await load_session(session_id, user, db, language=display_language(request))
     run = await db.scalar(
         select(GenerationRun).where(
             GenerationRun.session_id == session_id,
@@ -109,5 +132,10 @@ async def get_request_run(
         )
     )
     if run is None:
-        raise HTTPException(404, detail="Run not found")
+        raise HTTPException(
+            404,
+            detail=translate(
+                "teacher.run_not_found", display_language(request)
+            ),
+        )
     return await snapshot(db, run)

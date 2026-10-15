@@ -1,23 +1,24 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['admin'] %}
 
-{% block title %}사용자 관리 - 관리자{% endblock %}
+{% block title %}{{ t('admin.user_management_admin') }}{% endblock %}
 
 {% block content %}
 <div class="container">
   <header class="page-header-admin">
     <div class="header-content">
-      <h1>사용자 관리</h1>
-      <p class="subtitle">사용자 생성, 수정 및 삭제</p>
+      <h1>{{ t('admin.user_management') }}</h1>
+      <p class="subtitle">{{ t('admin.create_edit_and_delete_users') }}</p>
     </div>
     <div class="header-actions" style="display:flex;gap:8px;">
       <a href="/admin/users/bulk/template" class="btn btn-secondary" download>
-        CSV 양식 다운로드
+        {{ t('admin.download_csv_template') }}
       </a>
       <button type="button" class="btn btn-primary" id="open-bulk-modal">
-        일괄 추가
+        {{ t('admin.bulk_add') }}
       </button>
       <button type="button" class="btn btn-primary" id="open-create-modal">
-        + 새 사용자
+        {{ t('admin.new_user') }}
       </button>
     </div>
   </header>
@@ -25,16 +26,16 @@
   <!-- Filter Bar -->
   <section class="filter-bar">
     <div class="search-box">
-      <input type="text" id="search-input" placeholder="사용자 검색..." class="search-input" />
+      <input type="text" id="search-input" placeholder="{{ t('admin.search_users') }}" class="search-input" />
     </div>
     <div class="filter-group">
       <select id="filter-role" class="filter-select">
-        <option value="">모든 역할</option>
-        <option value="admin">관리자</option>
-        <option value="teacher">교사</option>
+        <option value="">{{ t('admin.all_roles') }}</option>
+        <option value="admin">{{ t('admin.admin') }}</option>
+        <option value="teacher">{{ t('admin.teacher') }}</option>
       </select>
       <select id="filter-group" class="filter-select">
-        <option value="">모든 그룹</option>
+        <option value="">{{ t('admin.all_groups') }}</option>
         {% for group in groups %}
         <option value="{{ group.id }}">{{ group.name }}</option>
         {% endfor %}
@@ -42,20 +43,20 @@
     </div>
   </section>
 
-  <p id="user-filter-empty" role="status" hidden>현재 페이지에서 검색·필터에 맞는 사용자가 없습니다.</p>
+  <p id="user-filter-empty" role="status" hidden>{{ t('admin.no_users_on_this_page_match_your_search_and_filters') }}</p>
 
   <!-- Users Table -->
-  <div class="table-container" role="region" tabindex="0" aria-label="사용자 목록">
+  <div class="table-container" role="region" tabindex="0" aria-label="{{ t('admin.users') }}">
     <table class="data-table" id="users-table">
       <thead>
         <tr>
           <th>ID</th>
-          <th>사용자 ID</th>
-          <th>닉네임</th>
-          <th>역할</th>
-          <th>그룹</th>
-          <th>생성일</th>
-          <th>작업</th>
+          <th>{{ t('admin.user_id') }}</th>
+          <th>{{ t('admin.nickname') }}</th>
+          <th>{{ t('admin.role') }}</th>
+          <th>{{ t('admin.group') }}</th>
+          <th>{{ t('admin.created') }}</th>
+          <th>{{ t('admin.actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -66,21 +67,21 @@
           <td>{{ u.nickname }}</td>
           <td>
             {% if u.role == 'admin' %}
-            <span class="badge badge-danger">관리자</span>
+            <span class="badge badge-danger">{{ t('admin.admin') }}</span>
             {% else %}
-            <span class="badge badge-info">교사</span>
+            <span class="badge badge-info">{{ t('admin.teacher') }}</span>
             {% endif %}
           </td>
           <td>{{ u.group.name if u.group else '-' }}</td>
           <td>{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '-' }}</td>
           <td>
-            <button type="button" class="btn btn-sm btn-secondary edit-btn" data-id="{{ u.id }}">수정</button>
-            <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="{{ u.id }}" data-username="{{ u.username }}">삭제</button>
+            <button type="button" class="btn btn-sm btn-secondary edit-btn" data-id="{{ u.id }}">{{ t('admin.edit') }}</button>
+            <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="{{ u.id }}" data-username="{{ u.username }}">{{ t('admin.delete') }}</button>
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" style="text-align:center;padding:2rem;">{% if current_page is defined and current_page > 1 %}이 페이지에 결과가 없습니다.{% else %}사용자가 없습니다.{% endif %}</td>
+          <td colspan="7" style="text-align:center;padding:2rem;">{% if current_page is defined and current_page > 1 %}{{ t('admin.no_results_on_this_page') }}{% else %}{{ t('admin.no_users') }}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -88,18 +89,18 @@
   </div>
 
   {% if current_page is defined %}
-  <nav class="pagination" id="users-pagination" aria-label="목록 페이지">
-    <span class="pagination-info" aria-current="page">현재 {{ current_page }} 페이지 · 20개씩 · 총 {{ total_count }}개</span>
+  <nav class="pagination" id="users-pagination" aria-label="{{ t('admin.list_pages') }}">
+    <span class="pagination-info" aria-current="page">{{ t('admin.list_page', page=current_page, total=total_count) }}</span>
     <div class="pagination-buttons">
       {% if current_page > 1 %}
-      <a href="/admin/users?page={{ [current_page - 1, total_pages]|min }}" rel="prev" class="btn btn-sm btn-secondary">이전</a>
+      <a href="/admin/users?page={{ [current_page - 1, total_pages]|min }}" rel="prev" class="btn btn-sm btn-secondary">{{ t('admin.previous') }}</a>
       {% else %}
-      <button type="button" class="btn btn-sm btn-secondary" disabled>이전</button>
+      <button type="button" class="btn btn-sm btn-secondary" disabled>{{ t('admin.previous') }}</button>
       {% endif %}
       {% if current_page < total_pages %}
-      <a href="/admin/users?page={{ current_page + 1 }}" rel="next" class="btn btn-sm btn-secondary">다음</a>
+      <a href="/admin/users?page={{ current_page + 1 }}" rel="next" class="btn btn-sm btn-secondary">{{ t('admin.next') }}</a>
       {% else %}
-      <button type="button" class="btn btn-sm btn-secondary" disabled>다음</button>
+      <button type="button" class="btn btn-sm btn-secondary" disabled>{{ t('admin.next') }}</button>
       {% endif %}
     </div>
   </nav>
@@ -110,54 +111,54 @@
 <div class="modal-overlay" id="bulk-modal">
   <div class="modal-container modal-xl">
     <div class="modal-header">
-      <h2 id="bulk-modal-title" tabindex="-1">일괄 사용자 추가</h2>
-      <button type="button" class="close-modal-btn" aria-label="닫기" onclick="closeBulkModal()">&times;</button>
+      <h2 id="bulk-modal-title" tabindex="-1">{{ t('admin.bulk_add_users') }}</h2>
+      <button type="button" class="close-modal-btn" aria-label="{{ t('admin.close') }}" onclick="closeBulkModal()">&times;</button>
     </div>
     <div class="modal-body" id="bulk-modal-body">
       <!-- Step 1: Upload -->
       <div id="bulk-step-upload">
         <div style="border:2px dashed var(--color-border-medium);border-radius:12px;padding:40px 20px;text-align:center;">
-          <p style="font-size:1.1rem;margin-bottom:8px;">CSV 파일을 선택하세요</p>
-          <p style="color:var(--color-text-secondary);font-size:0.85rem;margin-bottom:16px;">양식: username, nickname, role(선택), group(선택)</p>
+          <p style="font-size:1.1rem;margin-bottom:8px;">{{ t('admin.choose_a_csv_file') }}</p>
+          <p style="color:var(--color-text-secondary);font-size:0.85rem;margin-bottom:16px;">{{ t('admin.format_username_nickname_role_optional_group_optional') }}</p>
           <input type="file" id="bulk-file-input" accept=".csv" style="display:none;" />
-          <button type="button" class="btn btn-primary" onclick="document.getElementById('bulk-file-input').click()">파일 선택</button>
+          <button type="button" class="btn btn-primary" onclick="document.getElementById('bulk-file-input').click()">{{ t('admin.choose_file') }}</button>
           <p id="bulk-file-name" style="margin-top:12px;color:var(--color-text-secondary);font-size:0.85rem;"></p>
         </div>
-        <p style="color:var(--color-text-secondary);font-size:0.8rem;margin-top:12px;text-align:center;">사용자마다 무작위 초기 비밀번호를 발급합니다.</p>
+        <p style="color:var(--color-text-secondary);font-size:0.8rem;margin-top:12px;text-align:center;">{{ t('admin.a_random_initial_password_is_issued_for_each_user') }}</p>
         <p id="bulk-upload-error" role="alert" tabindex="-1" style="color:var(--color-danger-text);text-align:center;margin-top:8px;display:none;"></p>
       </div>
 
       <!-- Step 2: Preview -->
       <div id="bulk-step-preview" style="display:none;">
         <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:16px;padding:12px;background:var(--color-bg-secondary);border-radius:8px;">
-          <span style="color:var(--color-text-secondary);font-size:0.85rem;white-space:normal;">일괄 지정:</span>
+          <span style="color:var(--color-text-secondary);font-size:0.85rem;white-space:normal;">{{ t('admin.bulk_assignment') }}</span>
           <select id="bulk-assign-role" class="filter-select" style="min-width:100px;">
-            <option value="">역할 선택...</option>
-            <option value="teacher">교사</option>
-            <option value="admin">관리자</option>
+            <option value="">{{ t('admin.choose_role') }}</option>
+            <option value="teacher">{{ t('admin.teacher') }}</option>
+            <option value="admin">{{ t('admin.admin') }}</option>
           </select>
           <select id="bulk-assign-group" class="filter-select" style="min-width:140px;">
-            <option value="">그룹 선택...</option>
+            <option value="">{{ t('admin.choose_group') }}</option>
           </select>
-          <button type="button" class="btn btn-sm btn-primary" onclick="applyBulkAssign()">적용</button>
+          <button type="button" class="btn btn-sm btn-primary" onclick="applyBulkAssign()">{{ t('admin.apply') }}</button>
         </div>
-        <div class="table-container" style="max-height:400px;overflow-y:auto;" role="region" tabindex="0" aria-label="일괄 등록 미리보기">
+        <div class="table-container" style="max-height:400px;overflow-y:auto;" role="region" tabindex="0" aria-label="{{ t('admin.bulk_registration_preview') }}">
           <table class="data-table" id="bulk-preview-table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>사용자 ID</th>
-                <th>닉네임</th>
-                <th>역할</th>
-                <th>그룹</th>
-                <th>상태</th>
-                <th>작업</th>
+                <th>{{ t('admin.user_id') }}</th>
+                <th>{{ t('admin.nickname') }}</th>
+                <th>{{ t('admin.role') }}</th>
+                <th>{{ t('admin.group') }}</th>
+                <th>{{ t('admin.status') }}</th>
+                <th>{{ t('admin.actions') }}</th>
               </tr>
             </thead>
             <tbody id="bulk-preview-body"></tbody>
           </table>
         </div>
-        <button type="button" class="btn btn-sm btn-secondary" onclick="addBulkRow()" style="margin-top:8px;width:100%;border-style:dashed;">+ 사용자 추가</button>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="addBulkRow()" style="margin-top:8px;width:100%;border-style:dashed;">{{ t('admin.add_user') }}</button>
       </div>
 
       <!-- Step 3: Result -->
@@ -165,32 +166,32 @@
         <div style="display:flex;gap:16px;margin-bottom:20px;">
           <div style="flex:1;background:var(--color-success-bg);border:1px solid var(--color-success-text);border-radius:8px;padding:16px;text-align:center;">
             <div id="bulk-success-count" style="font-size:1.8rem;font-weight:bold;color:var(--color-success-text);">0</div>
-            <div style="font-size:0.85rem;color:var(--color-success-text);">성공</div>
+            <div style="font-size:0.85rem;color:var(--color-success-text);">{{ t('admin.succeeded') }}</div>
           </div>
           <div style="flex:1;background:var(--color-danger-bg);border:1px solid var(--color-danger-text);border-radius:8px;padding:16px;text-align:center;">
             <div id="bulk-fail-count" style="font-size:1.8rem;font-weight:bold;color:var(--color-danger-text);">0</div>
-            <div style="font-size:0.85rem;color:var(--color-danger-text);">실패</div>
+            <div style="font-size:0.85rem;color:var(--color-danger-text);">{{ t('admin.failed') }}</div>
           </div>
         </div>
         <div id="bulk-credential-list" style="display:none;">
-          <p>이 화면을 닫으면 다시 볼 수 없음</p>
-          <p>초기 비밀번호를 복사하거나 CSV로 저장해 사용자에게 전달하세요.</p>
-          <button type="button" class="btn btn-secondary" id="bulk-copy-credentials" onclick="copyBulkCredentials()">자격 증명 복사</button>
-          <button type="button" class="btn btn-secondary" id="bulk-download-credentials" onclick="downloadBulkCredentials()">자격 증명 CSV 다운로드</button>
+          <p>{{ t('admin.available_only_until_this_screen_is_closed') }}</p>
+          <p>{{ t('admin.copy_the_initial_passwords_or_save_them_as_csv_to_share_with_users') }}</p>
+          <button type="button" class="btn btn-secondary" id="bulk-copy-credentials" onclick="copyBulkCredentials()">{{ t('admin.copy_credentials') }}</button>
+          <button type="button" class="btn btn-secondary" id="bulk-download-credentials" onclick="downloadBulkCredentials()">{{ t('admin.download_credentials_csv') }}</button>
           <p id="bulk-credential-status" role="status" aria-live="polite"></p>
-          <div class="table-container" style="max-height:300px;overflow:auto;" role="region" tabindex="0" aria-label="일회 자격 증명">
+          <div class="table-container" style="max-height:300px;overflow:auto;" role="region" tabindex="0" aria-label="{{ t('admin.one_time_credentials') }}">
             <table class="data-table">
-              <thead><tr><th>사용자 ID</th><th>닉네임</th><th>초기 비밀번호</th></tr></thead>
+              <thead><tr><th>{{ t('admin.user_id') }}</th><th>{{ t('admin.nickname') }}</th><th>{{ t('admin.initial_password') }}</th></tr></thead>
               <tbody id="bulk-credentials-body"></tbody>
             </table>
           </div>
         </div>
         <div id="bulk-failure-list" style="display:none;">
-          <h4 style="color:var(--color-danger-text);font-size:0.85rem;margin-bottom:8px;">실패 목록</h4>
-          <div class="table-container" role="region" tabindex="0" aria-label="등록 실패 목록">
+          <h4 style="color:var(--color-danger-text);font-size:0.85rem;margin-bottom:8px;">{{ t('admin.failures') }}</h4>
+          <div class="table-container" role="region" tabindex="0" aria-label="{{ t('admin.registration_failures') }}">
           <table class="data-table">
             <thead>
-              <tr><th>사용자 ID</th><th>닉네임</th><th>실패 사유</th></tr>
+              <tr><th>{{ t('admin.user_id') }}</th><th>{{ t('admin.nickname') }}</th><th>{{ t('admin.failure_reason') }}</th></tr>
             </thead>
             <tbody id="bulk-failure-body"></tbody>
           </table>
@@ -201,9 +202,9 @@
     <div class="modal-footer" id="bulk-modal-footer">
       <div id="bulk-summary" style="font-size:0.85rem;"></div>
       <div style="display:flex;gap:8px;">
-        <button type="button" class="btn btn-secondary" onclick="closeBulkModal()">취소</button>
-        <button type="button" class="btn btn-primary" id="bulk-register-btn" style="display:none;" onclick="submitBulkRegister()">등록</button>
-        <button type="button" class="btn btn-primary" id="bulk-close-btn" style="display:none;" onclick="closeBulkModal();window.location.reload();">닫기</button>
+        <button type="button" class="btn btn-secondary" onclick="closeBulkModal()">{{ t('admin.cancel') }}</button>
+        <button type="button" class="btn btn-primary" id="bulk-register-btn" style="display:none;" onclick="submitBulkRegister()">{{ t('admin.register') }}</button>
+        <button type="button" class="btn btn-primary" id="bulk-close-btn" style="display:none;" onclick="closeBulkModal();window.location.reload();">{{ t('admin.close') }}</button>
       </div>
     </div>
   </div>
@@ -213,35 +214,35 @@
 <div class="modal-overlay" id="create-modal">
   <div class="modal-container">
     <div class="modal-header">
-      <h2>새 사용자 생성</h2>
-      <button type="button" class="close-modal-btn" aria-label="닫기" data-modal="create-modal">&times;</button>
+      <h2>{{ t('admin.create_user') }}</h2>
+      <button type="button" class="close-modal-btn" aria-label="{{ t('admin.close') }}" data-modal="create-modal">&times;</button>
     </div>
     <form id="create-form" class="modal-form">
       <div class="modal-body">
         <div class="form-group">
-          <label for="new-username">사용자 ID <span class="required">*</span></label>
-          <input type="text" id="new-username" name="username" required minlength="3" maxlength="50" pattern="[a-zA-Z0-9_]+" placeholder="영문/숫자/언더스코어" />
+          <label for="new-username">{{ t('admin.user_id') }} <span class="required">*</span></label>
+          <input type="text" id="new-username" name="username" required minlength="3" maxlength="50" pattern="[a-zA-Z0-9_]+" placeholder="{{ t('admin.letters_numbers_underscores') }}" />
         </div>
         <div class="form-group">
-          <label for="new-password">비밀번호 <span class="required">*</span></label>
+          <label for="new-password">{{ t('admin.password') }} <span class="required">*</span></label>
           <input type="password" id="new-password" name="password" required minlength="4" maxlength="128" />
         </div>
         <div class="form-group">
-          <label for="new-nickname">닉네임 <span class="required">*</span></label>
+          <label for="new-nickname">{{ t('admin.nickname') }} <span class="required">*</span></label>
           <input type="text" id="new-nickname" name="nickname" required minlength="2" maxlength="30" />
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="new-role">역할</label>
+            <label for="new-role">{{ t('admin.role') }}</label>
             <select id="new-role" name="role">
-              <option value="teacher">교사</option>
-              <option value="admin">관리자</option>
+              <option value="teacher">{{ t('admin.teacher') }}</option>
+              <option value="admin">{{ t('admin.admin') }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="new-group">그룹</label>
+            <label for="new-group">{{ t('admin.group') }}</label>
             <select id="new-group" name="group_id">
-              <option value="">그룹 없음</option>
+              <option value="">{{ t('admin.no_group') }}</option>
               {% for group in groups %}
               <option value="{{ group.id }}">{{ group.name }}</option>
               {% endfor %}
@@ -250,8 +251,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-modal="create-modal">취소</button>
-        <button type="submit" class="btn btn-primary">사용자 생성</button>
+        <button type="button" class="btn btn-secondary" data-modal="create-modal">{{ t('admin.cancel') }}</button>
+        <button type="submit" class="btn btn-primary">{{ t('admin.create_user_submit') }}</button>
       </div>
     </form>
   </div>
@@ -261,32 +262,32 @@
 <div class="slide-panel-overlay" id="edit-panel-overlay"></div>
 <aside class="slide-panel" id="edit-panel">
   <div class="panel-header">
-    <h2>사용자 수정</h2>
-    <button type="button" class="close-panel-btn" aria-label="닫기" id="close-edit-panel">&times;</button>
+    <h2>{{ t('admin.edit_user') }}</h2>
+    <button type="button" class="close-panel-btn" aria-label="{{ t('admin.close') }}" id="close-edit-panel">&times;</button>
   </div>
   <form id="edit-form" class="panel-form">
     <input type="hidden" id="edit-user-id" name="user_id" />
     <div class="panel-body">
       <div class="form-group">
-        <label>사용자 ID</label>
+        <label>{{ t('admin.user_id') }}</label>
         <input type="text" id="edit-username-display" disabled class="disabled-input" />
       </div>
       <div class="form-group">
-        <label for="edit-nickname">닉네임</label>
+        <label for="edit-nickname">{{ t('admin.nickname') }}</label>
         <input type="text" id="edit-nickname" name="nickname" minlength="2" maxlength="30" />
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label for="edit-role">역할</label>
+          <label for="edit-role">{{ t('admin.role') }}</label>
           <select id="edit-role" name="role">
-            <option value="teacher">교사</option>
-            <option value="admin">관리자</option>
+            <option value="teacher">{{ t('admin.teacher') }}</option>
+            <option value="admin">{{ t('admin.admin') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label for="edit-group">그룹</label>
+          <label for="edit-group">{{ t('admin.group') }}</label>
           <select id="edit-group" name="group_id">
-            <option value="0">그룹 없음</option>
+            <option value="0">{{ t('admin.no_group') }}</option>
             {% for group in groups %}
             <option value="{{ group.id }}">{{ group.name }}</option>
             {% endfor %}
@@ -294,23 +295,27 @@
         </div>
       </div>
       <details class="advanced-settings">
-        <summary>비밀번호 재설정</summary>
+        <summary>{{ t('admin.reset_password') }}</summary>
         <div class="settings-content">
           <div class="form-group">
-            <label for="edit-password">새 비밀번호</label>
-            <input type="password" id="edit-password" name="password" minlength="4" maxlength="128" placeholder="입력하면 비밀번호가 변경됩니다" />
+            <label for="edit-password">{{ t('admin.new_password') }}</label>
+            <input type="password" id="edit-password" name="password" minlength="4" maxlength="128" placeholder="{{ t('admin.enter_a_value_to_change_the_password') }}" />
           </div>
         </div>
       </details>
     </div>
     <div class="panel-footer">
-      <button type="button" class="btn btn-secondary" id="cancel-edit">취소</button>
-      <button type="submit" class="btn btn-primary">변경사항 저장</button>
+      <button type="button" class="btn btn-secondary" id="cancel-edit">{{ t('admin.cancel') }}</button>
+      <button type="submit" class="btn btn-primary">{{ t('admin.save_changes') }}</button>
     </div>
   </form>
 </aside>
 
 <script>
+let pendingRequests = 0;
+const formValues = form => JSON.stringify([...form.elements].filter(el => el.name && el.type !== 'password').map(el => [el.name, el.type === 'checkbox' ? el.checked : el.value]));
+const createBaseline = formValues(document.getElementById('create-form'));
+let editBaseline;
 // CSRF token helper
 function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
@@ -361,6 +366,7 @@ function openEditPanel(userId) {
   document.getElementById('edit-role').value = data.role;
   document.getElementById('edit-group').value = data.group_id || '0';
   document.getElementById('edit-password').value = '';
+  editBaseline = formValues(document.getElementById('edit-form'));
   editPanel.classList.add('active');
   editOverlay.classList.add('active');
   modalLifecycle.open(editPanel, closeEditPanel);
@@ -390,20 +396,20 @@ document.getElementById('create-form').addEventListener('submit', async e => {
     role: fd.get('role'),
     group_id: fd.get('group_id') ? parseInt(fd.get('group_id'), 10) : null
   };
-  try {
+  pendingRequests++; try {
     const res = await fetch('/admin/users', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()},
+      headers: uiLanguage.headers('/admin/users', {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()}),
       body: JSON.stringify(data)
     });
     if (res.ok) {
-      alert('사용자가 생성되었습니다!');
+      alert(uiLanguage.t('admin.user_created'));
       window.location.reload();
     } else {
       const err = await res.json();
       modalLifecycle.error(e.target, err.detail);
     }
-  } catch (err) { modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.'); }
+  } catch (err) { modalLifecycle.error(e.target, uiLanguage.t('admin.save_result_unknown_input_preserved')); } finally { pendingRequests--; }
 });
 
 // Edit
@@ -418,20 +424,20 @@ document.getElementById('edit-form').addEventListener('submit', async e => {
   };
   const pw = fd.get('password');
   if (pw) data.password = pw;
-  try {
+  pendingRequests++; try {
     const res = await fetch(`/admin/users/${id}/update`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()},
+      headers: uiLanguage.headers(`/admin/users/${id}/update`, {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()}),
       body: JSON.stringify(data)
     });
     if (res.ok) {
-      alert('사용자가 업데이트되었습니다!');
+      alert(uiLanguage.t('admin.user_updated'));
       window.location.reload();
     } else {
       const err = await res.json();
       modalLifecycle.error(e.target, err.detail);
     }
-  } catch (err) { modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.'); }
+  } catch (err) { modalLifecycle.error(e.target, uiLanguage.t('admin.save_result_unknown_input_preserved')); } finally { pendingRequests--; }
 });
 
 // Delete
@@ -439,15 +445,15 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const id = btn.dataset.id;
     const username = btn.dataset.username;
-    if (!confirm(`"${username}" 사용자를 삭제하시겠습니까?`)) return;
+    if (!confirm(`"${username}" ${uiLanguage.t('admin.delete_this_user')}`)) return;
     btn.disabled = true;
-    try {
+    pendingRequests++; try {
       const res = await fetch(`/admin/users/${id}/delete`, {
         method: 'POST',
-        headers: {'x-csrf-token': getCsrfToken()}
+        headers: uiLanguage.headers(`/admin/users/${id}/delete`, {'x-csrf-token': getCsrfToken()})
       });
       if (res.ok) {
-        alert('사용자가 삭제되었습니다!');
+        alert(uiLanguage.t('admin.user_deleted'));
         const previous = document.querySelector('#users-pagination [rel="prev"]');
         if (previous && document.querySelectorAll('#users-table tbody tr[data-user-id]').length === 1) {
           window.location.assign(previous.href);
@@ -458,9 +464,9 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
         btn.disabled = false;
       }
     } catch (err) {
-      modalLifecycle.error(btn.closest('td'), '삭제 결과를 확인할 수 없습니다. 목록을 새로 확인하세요.');
+      modalLifecycle.error(btn.closest('td'), uiLanguage.t('admin.could_not_confirm_deletion_check_the_list_again'));
       btn.disabled = false;
-    }
+    } finally { pendingRequests--; }
   });
 });
 
@@ -522,17 +528,17 @@ document.addEventListener('keydown', e => {
     const formData = new FormData();
     formData.append('file', file);
 
-    try {
+    pendingRequests++; try {
       const res = await fetch('/admin/users/bulk/preview', {
         method: 'POST',
-        headers: { 'x-csrf-token': getCsrfToken() },
+        headers: uiLanguage.headers('/admin/users/bulk/preview', { 'x-csrf-token': getCsrfToken() }),
         body: formData,
       });
       if (!res.ok) {
         const err = await res.json();
         if (requestId !== bulkRequestId) return;
         const errEl = document.getElementById('bulk-upload-error');
-        errEl.textContent = err.detail || '파일 처리 중 오류가 발생했습니다.';
+        errEl.textContent = err.detail || uiLanguage.t('admin.an_error_occurred_while_processing_the_file');
         errEl.style.display = 'block';
         errEl.focus();
         return;
@@ -545,10 +551,10 @@ document.addEventListener('keydown', e => {
     } catch (err) {
       if (requestId !== bulkRequestId) return;
       const errEl = document.getElementById('bulk-upload-error');
-      errEl.textContent = '서버 연결에 실패했습니다.';
+      errEl.textContent = uiLanguage.t('admin.could_not_connect_to_the_server');
       errEl.style.display = 'block';
       errEl.focus();
-    }
+    } finally { pendingRequests--; }
   });
 
   function resetBulkModal() {
@@ -571,7 +577,7 @@ document.addEventListener('keydown', e => {
     document.getElementById('bulk-register-btn').style.display = 'none';
     document.getElementById('bulk-close-btn').style.display = 'none';
     document.getElementById('bulk-summary').innerHTML = '';
-    document.getElementById('bulk-modal-title').textContent = '일괄 사용자 추가';
+    document.getElementById('bulk-modal-title').textContent = uiLanguage.t('admin.bulk_add_users');
   }
 
   window.addEventListener('pagehide', () => {
@@ -585,26 +591,15 @@ document.addEventListener('keydown', e => {
     resetBulkModal();
   }
 
-  function groupOptions(selectedId) {
-    let html = '<option value="">그룹 없음</option>';
-    bulkGroups.forEach(g => {
-      const sel = g.id === selectedId ? ' selected' : '';
-      html += `<option value="${g.id}"${sel}>${g.name}</option>`;
-    });
-    return html;
-  }
-
   function showBulkPreview() {
     document.getElementById('bulk-step-upload').style.display = 'none';
     document.getElementById('bulk-step-preview').style.display = '';
     document.getElementById('bulk-register-btn').style.display = '';
-    document.getElementById('bulk-modal-title').textContent = '일괄 사용자 추가 — 미리보기';
+    document.getElementById('bulk-modal-title').textContent = uiLanguage.t('admin.bulk_add_users_preview');
 
     const assignGroup = document.getElementById('bulk-assign-group');
-    assignGroup.innerHTML = '<option value="">그룹 선택...</option>';
-    bulkGroups.forEach(g => {
-      assignGroup.innerHTML += `<option value="${g.id}">${g.name}</option>`;
-    });
+    assignGroup.replaceChildren(new Option(uiLanguage.t('admin.choose_group'), ''));
+    for (const group of bulkGroups) assignGroup.append(new Option(group.name, group.id));
 
     renderPreviewTable();
   }
@@ -626,29 +621,40 @@ document.addEventListener('keydown', e => {
         <td><input type="text" value="${escHtml(row.nickname)}" class="bulk-input" data-idx="${idx}" data-field="nickname" style="width:100px;"></td>
         <td>
           <select class="filter-select bulk-select" data-idx="${idx}" data-field="role">
-            <option value="teacher"${row.role==='teacher'?' selected':''}>교사</option>
-            <option value="admin"${row.role==='admin'?' selected':''}>관리자</option>
           </select>
         </td>
         <td>
           <select class="filter-select bulk-select" data-idx="${idx}" data-field="group_id">
-            ${groupOptions(row.group_id)}
+
           </select>
         </td>
         <td>${hasErr
           ? '<span style="color:var(--color-danger-text);font-size:0.8rem;">⚠ ' + escHtml(row.errors.join(', ')) + '</span>'
-          : '<span style="color:var(--color-success-text);font-size:0.8rem;">✓ 정상</span>'
+          : '<span data-valid style="color:var(--color-success-text);font-size:0.8rem;"></span>'
         }</td>
         <td><button type="button" class="btn btn-sm btn-danger" onclick="removeBulkRow(${idx})">✕</button></td>
       `;
+      const roleSelect = tr.querySelector('[data-field="role"]');
+      for (const role of ['teacher','admin']) roleSelect.append(new Option(uiLanguage.t('admin.' + role), role, false, row.role === role));
+      const groupSelect = tr.querySelector('[data-field="group_id"]');
+      groupSelect.append(new Option(uiLanguage.t('admin.no_group'), '', false, !row.group_id));
+      for (const group of bulkGroups) groupSelect.append(new Option(group.name, group.id, false, group.id === row.group_id));
+      if (!hasErr) tr.querySelector('[data-valid]').textContent = '✓ ' + uiLanguage.t('admin.valid');
       tbody.appendChild(tr);
     });
 
-    document.getElementById('bulk-summary').innerHTML =
-      `<span style="color:var(--color-success-text);">정상 ${validCount}명</span> | ` +
-      `<span style="color:var(--color-danger-text);">에러 ${errorCount}명</span> | ` +
-      `<span>총 ${bulkPreviewData.length}명</span>`;
-    document.getElementById('bulk-register-btn').textContent = `등록 (${validCount}명)`;
+    const summary = document.getElementById('bulk-summary');
+    summary.replaceChildren();
+    for (const [index, [key, count, color]] of [
+      ['valid',validCount,'var(--color-success-text)'], ['errors',errorCount,'var(--color-danger-text)'], ['total',bulkPreviewData.length,'']
+    ].entries()) {
+      if (index) summary.append(' | ');
+      const span = document.createElement('span');
+      span.style.color = color;
+      span.textContent = uiLanguage.t('admin.' + key) + ' ' + uiLanguage.t('admin.people_count', {count});
+      summary.append(span);
+    }
+    document.getElementById('bulk-register-btn').textContent = `${uiLanguage.t('admin.register')} (${uiLanguage.t('admin.people_count',{count:validCount})})`;
 
     tbody.querySelectorAll('.bulk-input, .bulk-select').forEach(el => {
       el.addEventListener('change', (e) => {
@@ -713,20 +719,20 @@ document.addEventListener('keydown', e => {
       }));
 
     if (validUsers.length === 0) {
-      alert('등록할 유효한 사용자가 없습니다.');
+      alert(uiLanguage.t('admin.no_valid_users_to_register'));
       return;
     }
 
     document.getElementById('bulk-register-btn').disabled = true;
     const requestId = ++bulkRequestId;
 
-    try {
+    pendingRequests++; try {
       const res = await fetch('/admin/users/bulk/register', {
         method: 'POST',
-        headers: {
+        headers: uiLanguage.headers('/admin/users/bulk/register', {
           'Content-Type': 'application/json',
           'x-csrf-token': getCsrfToken(),
-        },
+        }),
         body: JSON.stringify({ users: validUsers }),
       });
 
@@ -736,9 +742,9 @@ document.addEventListener('keydown', e => {
       showBulkResult(data);
     } catch (err) {
       if (requestId !== bulkRequestId) return;
-      modalLifecycle.error(document.getElementById('bulk-modal'), '등록 결과를 확인할 수 없습니다. 사용자 목록을 확인한 뒤 다시 시도하세요.');
+      modalLifecycle.error(document.getElementById('bulk-modal'), uiLanguage.t('admin.could_not_confirm_registration_check_the_user_list_before_trying_again'));
       document.getElementById('bulk-register-btn').disabled = false;
-    }
+    } finally { pendingRequests--; }
   }
 
   function showBulkResult(data) {
@@ -747,7 +753,7 @@ document.addEventListener('keydown', e => {
     document.getElementById('bulk-register-btn').style.display = 'none';
     document.getElementById('bulk-close-btn').style.display = '';
     document.getElementById('bulk-summary').innerHTML = '';
-    document.getElementById('bulk-modal-title').textContent = '일괄 사용자 추가 — 결과';
+    document.getElementById('bulk-modal-title').textContent = uiLanguage.t('admin.bulk_add_users_results');
 
     document.getElementById('bulk-success-count').textContent = data.success_count;
     document.getElementById('bulk-fail-count').textContent = data.fail_count;
@@ -792,12 +798,12 @@ document.addEventListener('keydown', e => {
 
   async function copyBulkCredentials() {
     if (!bulkCredentials.length) return;
-    try {
+    pendingRequests++; try {
       await navigator.clipboard.writeText(bulkCredentialsCsv());
-      document.getElementById('bulk-credential-status').textContent = '복사했습니다.';
+      document.getElementById('bulk-credential-status').textContent = uiLanguage.t('admin.copied');
     } catch (err) {
-      document.getElementById('bulk-credential-status').textContent = '복사할 수 없습니다. CSV로 내려받으세요.';
-    }
+      document.getElementById('bulk-credential-status').textContent = uiLanguage.t('admin.could_not_copy_download_as_csv');
+    } finally { pendingRequests--; }
   }
 
   function downloadBulkCredentials() {
@@ -809,5 +815,7 @@ document.addEventListener('keydown', e => {
     link.click();
     URL.revokeObjectURL(link.href);
   }
+
+uiLanguage.registerGuard(() => ({busy:pendingRequests > 0, dirty:Boolean((document.getElementById('create-modal').classList.contains('active') && (formValues(document.getElementById('create-form')) !== createBaseline || [...document.querySelectorAll('#create-form input[type=password]')].some(el => el.value))) || (document.getElementById('edit-panel').classList.contains('active') && (formValues(document.getElementById('edit-form')) !== editBaseline || [...document.querySelectorAll('#edit-form input[type=password]')].some(el => el.value))) || Boolean(searchInput.value || filterRole.value || filterGroup.value) || Boolean(document.getElementById('bulk-file-input').files.length || bulkPreviewData.length || bulkCredentials.length))}));
 </script>
 {% endblock %}

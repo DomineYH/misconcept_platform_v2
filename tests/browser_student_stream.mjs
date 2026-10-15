@@ -20,7 +20,7 @@ export default async function checkStudentStream(page) {
     window.fetch = async (url, options = {}) => {
       const fixture = window.streamFixture;
       if (url.endsWith('/turns/stream')) {
-        fixture.posts.push({body:JSON.parse(options.body), headers:options.headers});
+        fixture.posts.push({body:JSON.parse(options.body), headers:Object.fromEntries(new Headers(options.headers))});
         if (fixture.mode === 'auth') {
           return new Response('{"code":"AUTH_EXPIRED"}', {status:401, headers:{'Content-Type':'application/json'}});
         }

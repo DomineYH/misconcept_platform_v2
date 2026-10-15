@@ -6,12 +6,13 @@ from fastapi import HTTPException
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.i18n import translate
 from src.models import GenerationRun, Scenario, Session, User
 from src.models.scenario_group import ScenarioGroup
 from src.services.generation_lifecycle import active_runs
 
 
-def require_native_session(session):
+def require_native_session(session, *, language="ko"):
     if session.snapshot_origin not in {
         None,
         "native",
@@ -26,15 +27,15 @@ def require_native_session(session):
             409,
             detail={
                 "code": "legacy_read_only",
-                "message": "과거 세션은 읽기 전용입니다. 게시된 시나리오로 새 연습을 시작해주세요.",
+                "message": translate(
+                    "teacher.legacy_read_only_error", language
+                ),
             },
         )
 
 
 async def load_session(
-    session_id: int,
-    user: User,
-    db: AsyncSession,
+    session_id: int, user: User, db: AsyncSession, *, language="ko"
 ) -> Session:
     """Load session and validate ownership.
 
@@ -57,19 +58,21 @@ async def load_session(
     session = result.scalar_one_or_none()
 
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(
+            status_code=404,
+            detail=translate("teacher.session_not_found", language),
+        )
 
     if session.teacher_id != user.id:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise HTTPException(
+            status_code=403, detail=translate("teacher.forbidden", language)
+        )
 
     return session
 
 
 async def mark_session_ended(
-    session: Session,
-    db: AsyncSession,
-    *,
-    force: bool = False,
+    session: Session, db: AsyncSession, *, force: bool = False, language="ko"
 ) -> tuple[datetime, bool]:
     """Mark session as ended by setting ended_at timestamp.
 
@@ -84,14 +87,22 @@ async def mark_session_ended(
     Raises:
         HTTPException: 400 if already ended and force=False
     """
-    require_native_session(session)
+    require_native_session(session, language=language)
     # Release auth reads, then serialize with reservation/finalization.
     await db.commit()
     await db.execute(text("BEGIN IMMEDIATE"))
     await db.refresh(session, ["ended_at"])
     if session.ended_at:
         if not force:
-            raise HTTPException(status_code=400, detail="Session already ended")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "session_ended",
+                    "message": translate(
+                        "teacher.conversation_ended", language
+                    ),
+                },
+            )
         await db.commit()
         return session.ended_at, True
 
@@ -120,9 +131,7 @@ async def mark_session_ended(
 
 
 async def validate_scenario_access(
-    scenario_id: int,
-    user: User,
-    db: AsyncSession,
+    scenario_id: int, user: User, db: AsyncSession, *, language="ko"
 ) -> Scenario:
     """Validate user can access the given scenario.
 
@@ -144,10 +153,16 @@ async def validate_scenario_access(
     scenario = result.scalar_one_or_none()
 
     if not scenario:
-        raise HTTPException(status_code=404, detail="Scenario not found")
+        raise HTTPException(
+            status_code=404,
+            detail=translate("teacher.scenario_not_found", language),
+        )
 
     if scenario.is_active != 1 and not user.is_admin:
-        raise HTTPException(status_code=404, detail="Scenario not found")
+        raise HTTPException(
+            status_code=404,
+            detail=translate("teacher.scenario_not_found", language),
+        )
 
     # Admin bypasses group check
     if user.is_admin:
@@ -156,7 +171,7 @@ async def validate_scenario_access(
     if not user.group_id:
         raise HTTPException(
             status_code=403,
-            detail="그룹이 배정되지 않았습니다.",
+            detail=translate("teacher.no_group", language),
         )
 
     sg = await db.execute(
@@ -168,7 +183,7 @@ async def validate_scenario_access(
     if not sg.scalar_one_or_none():
         raise HTTPException(
             status_code=403,
-            detail="이 시나리오에 대한 접근 권한이 " "없습니다.",
+            detail=translate("teacher.scenario_forbidden", language),
         )
 
     return scenario

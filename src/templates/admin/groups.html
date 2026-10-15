@@ -1,23 +1,24 @@
 {% extends "layout.html" %}
+{% set i18n_areas = ['admin'] %}
 
-{% block title %}그룹 관리 - 관리자{% endblock %}
+{% block title %}{{ t('admin.group_management_admin') }}{% endblock %}
 
 {% block content %}
 <div class="container">
   <header class="page-header-admin">
     <div class="header-content">
-      <h1>그룹 관리</h1>
-      <p class="subtitle">사용자 그룹 생성 및 관리</p>
+      <h1>{{ t('admin.group_management') }}</h1>
+      <p class="subtitle">{{ t('admin.create_and_manage_user_groups') }}</p>
     </div>
     <button type="button" class="btn btn-primary" id="open-create-modal">
-      + 새 그룹
+      {{ t('admin.new_group') }}
     </button>
   </header>
 
   <section class="frameworks-grid-container">
     <h2 class="section-title">
-      그룹 목록
-      <span class="count-badge">{{ groups_data|length }}개</span>
+      {{ t('admin.groups') }}
+      <span class="count-badge">{{ t('admin.item_count', count=groups_data|length) }}</span>
     </h2>
 
     {% if groups_data %}
@@ -27,25 +28,25 @@
         <div class="card-body">
           <h3 class="card-title">{{ item.group.name }}</h3>
           <div class="card-meta">
-            <span class="meta-tag">멤버 {{ item.member_count }}명</span>
-            <span class="meta-tag">시나리오 {{ item.scenario_count }}개</span>
+            <span class="meta-tag">{{ t('admin.members') }} {{ t('admin.people_count', count=item.member_count) }}</span>
+            <span class="meta-tag">{{ t('admin.scenario') }} {{ t('admin.item_count', count=item.scenario_count) }}</span>
           </div>
           {% if item.group.description %}
           <p class="card-description">{{ item.group.description }}</p>
           {% endif %}
         </div>
         <div class="card-actions">
-          <button type="button" class="btn btn-sm btn-secondary edit-btn" data-id="{{ item.group.id }}">수정</button>
-          <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="{{ item.group.id }}" data-name="{{ item.group.name }}" data-members="{{ item.member_count }}">삭제</button>
+          <button type="button" class="btn btn-sm btn-secondary edit-btn" data-id="{{ item.group.id }}">{{ t('admin.edit') }}</button>
+          <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="{{ item.group.id }}" data-name="{{ item.group.name }}" data-members="{{ item.member_count }}">{{ t('admin.delete') }}</button>
         </div>
       </div>
       {% endfor %}
     </div>
     {% else %}
     <div class="empty-state">
-      <h3 class="empty-state-title">그룹이 없습니다</h3>
-      <p>등록된 그룹이 없습니다.</p>
-      <button type="button" class="btn btn-primary" id="open-create-modal-empty">+ 첫 번째 그룹 만들기</button>
+      <h3 class="empty-state-title">{{ t('admin.no_groups') }}</h3>
+      <p>{{ t('admin.no_groups_have_been_added') }}</p>
+      <button type="button" class="btn btn-primary" id="open-create-modal-empty">{{ t('admin.create_the_first_group') }}</button>
     </div>
     {% endif %}
   </section>
@@ -55,23 +56,23 @@
 <div class="modal-overlay" id="create-modal">
   <div class="modal-container">
     <div class="modal-header">
-      <h2>새 그룹 생성</h2>
-      <button type="button" class="close-modal-btn" aria-label="닫기" data-modal="create-modal">&times;</button>
+      <h2>{{ t('admin.create_group') }}</h2>
+      <button type="button" class="close-modal-btn" aria-label="{{ t('admin.close') }}" data-modal="create-modal">&times;</button>
     </div>
     <form id="create-form" class="modal-form">
       <div class="modal-body">
         <div class="form-group">
-          <label for="new-name">그룹 이름 <span class="required">*</span></label>
-          <input type="text" id="new-name" name="name" required minlength="2" maxlength="100" placeholder="그룹 이름 입력" />
+          <label for="new-name">{{ t('admin.group_name') }} <span class="required">*</span></label>
+          <input type="text" id="new-name" name="name" required minlength="2" maxlength="100" placeholder="{{ t('admin.enter_group_name') }}" />
         </div>
         <div class="form-group">
-          <label for="new-description">설명</label>
-          <textarea id="new-description" name="description" rows="3" maxlength="500" placeholder="그룹 설명 (선택)"></textarea>
+          <label for="new-description">{{ t('admin.description') }}</label>
+          <textarea id="new-description" name="description" rows="3" maxlength="500" placeholder="{{ t('admin.group_description_optional') }}"></textarea>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-modal="create-modal">취소</button>
-        <button type="submit" class="btn btn-primary">그룹 생성</button>
+        <button type="button" class="btn btn-secondary" data-modal="create-modal">{{ t('admin.cancel') }}</button>
+        <button type="submit" class="btn btn-primary">{{ t('admin.create_group_submit') }}</button>
       </div>
     </form>
   </div>
@@ -81,30 +82,34 @@
 <div class="modal-overlay" id="edit-modal">
   <div class="modal-container">
     <div class="modal-header">
-      <h2>그룹 수정</h2>
-      <button type="button" class="close-modal-btn" aria-label="닫기" data-modal="edit-modal">&times;</button>
+      <h2>{{ t('admin.edit_group') }}</h2>
+      <button type="button" class="close-modal-btn" aria-label="{{ t('admin.close') }}" data-modal="edit-modal">&times;</button>
     </div>
     <form id="edit-form" class="modal-form">
       <input type="hidden" id="edit-group-id" />
       <div class="modal-body">
         <div class="form-group">
-          <label for="edit-name">그룹 이름 <span class="required">*</span></label>
+          <label for="edit-name">{{ t('admin.group_name') }} <span class="required">*</span></label>
           <input type="text" id="edit-name" name="name" required minlength="2" maxlength="100" />
         </div>
         <div class="form-group">
-          <label for="edit-description">설명</label>
+          <label for="edit-description">{{ t('admin.description') }}</label>
           <textarea id="edit-description" name="description" rows="3" maxlength="500"></textarea>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-modal="edit-modal">취소</button>
-        <button type="submit" class="btn btn-primary">변경사항 저장</button>
+        <button type="button" class="btn btn-secondary" data-modal="edit-modal">{{ t('admin.cancel') }}</button>
+        <button type="submit" class="btn btn-primary">{{ t('admin.save_changes') }}</button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
+let pendingRequests = 0;
+const formValues = form => JSON.stringify([...form.elements].filter(el => el.name && el.type !== 'password').map(el => [el.name, el.type === 'checkbox' ? el.checked : el.value]));
+const createBaseline = formValues(document.getElementById('create-form'));
+let editBaseline;
 // CSRF token helper
 function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
@@ -152,6 +157,7 @@ document.querySelectorAll('.edit-btn').forEach(btn => {
     document.getElementById('edit-group-id').value = data.id;
     document.getElementById('edit-name').value = data.name;
     document.getElementById('edit-description').value = data.description;
+    editBaseline = formValues(document.getElementById('edit-form'));
     openModal('edit-modal');
   });
 });
@@ -164,20 +170,20 @@ document.getElementById('create-form').addEventListener('submit', async e => {
     name: fd.get('name'),
     description: fd.get('description') || null
   };
-  try {
+  pendingRequests++; try {
     const res = await fetch('/admin/groups', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()},
+      headers: uiLanguage.headers('/admin/groups', {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()}),
       body: JSON.stringify(data)
     });
     if (res.ok) {
-      alert('그룹이 생성되었습니다!');
+      alert(uiLanguage.t('admin.group_created'));
       window.location.reload();
     } else {
       const err = await res.json();
       modalLifecycle.error(e.target, err.detail);
     }
-  } catch (err) { modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.'); }
+  } catch (err) { modalLifecycle.error(e.target, uiLanguage.t('admin.save_result_unknown_input_preserved')); } finally { pendingRequests--; }
 });
 
 // Edit submit
@@ -189,20 +195,20 @@ document.getElementById('edit-form').addEventListener('submit', async e => {
     name: fd.get('name'),
     description: fd.get('description') || null
   };
-  try {
+  pendingRequests++; try {
     const res = await fetch(`/admin/groups/${id}/update`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()},
+      headers: uiLanguage.headers(`/admin/groups/${id}/update`, {'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken()}),
       body: JSON.stringify(data)
     });
     if (res.ok) {
-      alert('그룹이 업데이트되었습니다!');
+      alert(uiLanguage.t('admin.group_updated'));
       window.location.reload();
     } else {
       const err = await res.json();
       modalLifecycle.error(e.target, err.detail);
     }
-  } catch (err) { modalLifecycle.error(e.target, '저장 결과를 확인할 수 없습니다. 현재 입력은 유지됩니다.'); }
+  } catch (err) { modalLifecycle.error(e.target, uiLanguage.t('admin.save_result_unknown_input_preserved')); } finally { pendingRequests--; }
 });
 
 // Delete
@@ -212,18 +218,18 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
     const name = btn.dataset.name;
     const members = parseInt(btn.dataset.members || '0');
     if (members > 0) {
-      modalLifecycle.error(btn.closest('[data-group-id]'), `"${name}" 그룹에 ${members}명의 멤버가 있어 삭제할 수 없습니다. 먼저 멤버를 다른 그룹으로 이동하세요.`);
+      modalLifecycle.error(btn.closest('[data-group-id]'), uiLanguage.t('admin.group_has_members', {name, count:members}));
       return;
     }
-    if (!confirm(`"${name}" 그룹을 삭제하시겠습니까?`)) return;
+    if (!confirm(`"${name}" ${uiLanguage.t('admin.delete_this_group')}`)) return;
     btn.disabled = true;
-    try {
+    pendingRequests++; try {
       const res = await fetch(`/admin/groups/${id}/delete`, {
         method: 'POST',
-        headers: {'x-csrf-token': getCsrfToken()}
+        headers: uiLanguage.headers(`/admin/groups/${id}/delete`, {'x-csrf-token': getCsrfToken()})
       });
       if (res.ok) {
-        alert('그룹이 삭제되었습니다!');
+        alert(uiLanguage.t('admin.group_deleted'));
         window.location.reload();
       } else {
         const err = await res.json();
@@ -231,14 +237,16 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
         btn.disabled = false;
       }
     } catch (err) {
-      modalLifecycle.error(btn.closest('[data-group-id]'), '삭제 결과를 확인할 수 없습니다. 목록을 새로 확인하세요.');
+      modalLifecycle.error(btn.closest('[data-group-id]'), uiLanguage.t('admin.could_not_confirm_deletion_check_the_list_again'));
       btn.disabled = false;
-    }
+    } finally { pendingRequests--; }
   });
 });
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeModal('create-modal'); closeModal('edit-modal'); }
 });
+
+uiLanguage.registerGuard(() => ({busy:pendingRequests > 0, dirty:Boolean((document.getElementById('create-modal').classList.contains('active') && (formValues(document.getElementById('create-form')) !== createBaseline)) || (document.getElementById('edit-modal').classList.contains('active') && (formValues(document.getElementById('edit-form')) !== editBaseline)))}));
 </script>
 {% endblock %}

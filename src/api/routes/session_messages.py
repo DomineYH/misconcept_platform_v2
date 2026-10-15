@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.dependencies import get_current_user, get_db_session, templates
 from src.api.routes.session_helpers import load_session, require_native_session
 from src.config import config
+from src.i18n import display_language, translate
 from src.models import Message, User
 from src.services.session_history import session_display
 
@@ -90,10 +91,17 @@ async def send_message(
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     """Old tabs must reload; all new writes use durable execution rights."""
-    session = await load_session(session_id, user, db)
-    require_native_session(session)
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
+    require_native_session(session, language=display_language(request))
     return JSONResponse(
-        {"code": "reload_required", "detail": "새로고침 후 다시 전송해주세요."},
+        {
+            "code": "reload_required",
+            "detail": translate(
+                "teacher.reload_required", display_language(request)
+            ),
+        },
         status_code=410,
     )
 
@@ -108,7 +116,9 @@ async def get_message_updates(
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
     """Get new messages since last message ID for HTMX polling."""
-    session = await load_session(session_id, user, db)
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
 
     student_name = session_display(session)["student_name"]
 

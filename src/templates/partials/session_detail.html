@@ -2,11 +2,11 @@
   {% include "partials/snapshot_provenance.html" %}
   <div class="session-info">
     <dl>
-      <dt>세션 ID</dt>
+      <dt>{{ t('teacher.session_id') }}</dt>
       <dd>{{ session.id }}</dd>
-      <dt>시나리오</dt>
+      <dt>{{ t('teacher.scenario') }}</dt>
       <dd>{{ scenario_title }} · {{ student_name }}</dd>
-      <dt>교사</dt>
+      <dt>{{ t('teacher.teacher_role') }}</dt>
       <dd>
         {% if session.teacher %}
           {{ session.teacher.nickname }} ({{ session.teacher.username }})
@@ -14,9 +14,9 @@
           -
         {% endif %}
       </dd>
-      <dt>시작 시간</dt>
+      <dt>{{ t('teacher.start_time') }}</dt>
       <dd>{{ session.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
-      <dt>종료 시간</dt>
+      <dt>{{ t('teacher.end_time') }}</dt>
       <dd>
         {% if session.ended_at %}
           {{ session.ended_at.strftime('%Y-%m-%d %H:%M:%S') }}
@@ -24,14 +24,14 @@
           -
         {% endif %}
       </dd>
-      <dt>상태</dt>
+      <dt>{{ t('teacher.status') }}</dt>
       <dd>
         {% if session.deleted_at %}
-          <span class="badge badge-danger">삭제됨</span>
+          <span class="badge badge-danger">{{ t('teacher.deleted') }}</span>
         {% elif session.ended_at %}
-          <span class="badge badge-success">완료</span>
+          <span class="badge badge-success">{{ t('teacher.completed') }}</span>
         {% else %}
-          <span class="badge badge-warning">진행중</span>
+          <span class="badge badge-warning">{{ t('teacher.in_progress') }}</span>
         {% endif %}
       </dd>
     </dl>
@@ -40,7 +40,7 @@
   {% set analysis_transcript_open = true %}
   {% include "partials/analysis_result.html" %}
   {% else %}
-  <section aria-label="원래 대화">
+  <section aria-label="{{ t('teacher.original_conversation') }}">
     {% for message in session.messages %}{% include "partials/message.html" %}{% endfor %}
   </section>
   {% endif %}

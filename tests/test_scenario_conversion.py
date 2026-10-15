@@ -701,3 +701,46 @@ async def test_exact_student_override_uses_captured_options_and_accurate_source_
             manifest["effective_settings"]["student"]["model_id"]
             == "gpt-5-mini"
         )
+
+
+async def test_review_display_language_preserves_historical_evidence(
+    data, api, legacy, effective
+):
+    from src.models.scenario import Scenario
+
+    async with data.factory() as db:
+        archive = await capture_archive(db)
+        manifest = await conversion_manifest(
+            db, archive, effective, "private/archive.json"
+        )
+        await apply_manifest(db, archive, manifest)
+        scenario = await db.get(Scenario, data.scenario.id)
+        scenario.review_reasons = [
+            dict(
+                path="title",
+                code="invalid_source",
+                message="UNREAD HISTORICAL MESSAGE",
+                blocking=True,
+            )
+        ]
+        await db.commit()
+    path = f"/admin/scenarios/{data.scenario.id}"
+    api.cookies.set("ui_lang", "ko")
+    english = await api.get(path, headers={"X-UI-Language": "en"})
+    assert english.status_code == 200
+    body = english.json()
+    assert body["review_reasons"] == [
+        dict(
+            path="title",
+            code="invalid_source",
+            message="Check the original value for Title.",
+            blocking=True,
+        )
+    ]
+    assert (
+        body["conversion_provenance"]
+        == manifest["scenarios"][0]["conversion_provenance"]
+    )
+    korean = (await api.get(path, headers={"X-UI-Language": "ko"})).json()
+    assert korean["review_reasons"][0]["message"] == "제목 원문을 확인하세요."
+    assert korean["conversion_provenance"] == body["conversion_provenance"]

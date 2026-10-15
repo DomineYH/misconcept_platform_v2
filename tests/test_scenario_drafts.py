@@ -602,3 +602,20 @@ async def test_inactive_mentor_options_remain_structurally_valid_without_live_ga
     assert created.status_code == 201, created.text
     saved = (await api.get(f"/admin/scenarios/{created.json()['id']}")).json()
     assert saved["config"]["mentor"]["resolved_model_config"] == selected
+
+
+async def test_validation_language_does_not_change_error_paths_or_codes(
+    api, draft
+):
+    draft["config"]["runtime"]["context_turn_limit"] = 0
+    korean = await post(api, "/admin/scenarios", draft)
+    api.headers["X-UI-Language"] = "en"
+    english = await post(api, "/admin/scenarios", draft)
+    assert english.status_code == korean.status_code == 422
+    assert [(e["path"], e["code"]) for e in english.json()["detail"]] == [
+        (e["path"], e["code"]) for e in korean.json()["detail"]
+    ]
+    assert all(
+        error["message"] == "Check the input format and limits."
+        for error in english.json()["detail"]
+    )

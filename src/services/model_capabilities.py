@@ -4,6 +4,7 @@ import unicodedata
 from copy import deepcopy
 from datetime import date
 
+from src.i18n import translate
 from src.services import anthropic_capabilities, google_capabilities
 
 PROVIDER_CAPABILITIES = {
@@ -124,10 +125,10 @@ def metadata_conflict(model_id, connection):
     return False
 
 
-def capabilities(provider, model_id):
+def capabilities(provider, model_id, language="ko"):
     adapter = PROVIDER_CAPABILITIES.get(provider)
     if adapter is not None:
-        return adapter.capabilities(model_id)
+        return adapter.capabilities(model_id, language)
     name = SNAPSHOTS.get(model_id, model_id)
     if provider != "openai" or name not in DEFINITIONS:
         return None
@@ -135,14 +136,14 @@ def capabilities(provider, model_id):
     fields = [
         dict(
             name="max_output_tokens",
-            label="최대 출력 토큰",
+            label=translate("admin.maximum_output_tokens", language),
             type="integer",
             min=1,
             max=128000,
         ),
         dict(
             name="reasoning.effort",
-            label="추론 수준",
+            label=translate("admin.reasoning_effort", language),
             type="string",
             choices=efforts,
             default=default,
@@ -151,7 +152,11 @@ def capabilities(provider, model_id):
     if sampling:
         fields.append(
             dict(
-                name="temperature", label="다양성", type="number", min=0, max=2
+                name="temperature",
+                label=translate("admin.temperature", language),
+                type="number",
+                min=0,
+                max=2,
             )
         )
     return deepcopy(
@@ -189,14 +194,24 @@ def capabilities(provider, model_id):
             input_token_limit=input_limit,
             option_notes=[
                 (
-                    "지정하지 않음은 제공자 기본값을 사용합니다."
+                    translate(
+                        "admin.unspecified_uses_the_provider_default", language
+                    )
                     if default is not None
-                    else "공식 기본 추론 수준은 확인 필요입니다. 지정하지 않음은 값을 보내지 않으며, 다른 모델의 기본값으로 대체하지 않습니다."
+                    else translate(
+                        "admin.the_official_default_reasoning_effort_needs_verification_unspecified_omits_the_value_and_does_not_su",
+                        language,
+                    )
                 ),
                 (
-                    "temperature는 추론 수준 none일 때만 지원합니다."
+                    translate(
+                        "admin.temperature_is_supported_only_with_reasoning_effort_none",
+                        language,
+                    )
                     if sampling
-                    else "temperature는 지원하지 않습니다."
+                    else translate(
+                        "admin.temperature_is_not_supported", language
+                    )
                 ),
             ],
             reasoning_efforts=efforts,

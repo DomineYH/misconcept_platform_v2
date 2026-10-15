@@ -5,18 +5,25 @@ import {active, renderComparisonResult} from './comparison-results.js';
 import {identity, mountScenarioModel} from './scenario-models.js';
 
 export function mountComparison(data, draft) {
+  let pendingRequests = 0, uncertain = false, unacknowledgedStart = false, comparisonBaseline = null;
+  const inputSnapshot = value => JSON.stringify(value, (_key, item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    return Object.fromEntries(Object.entries(item).sort(([left], [right]) => left.localeCompare(right)));
+  });
+  const comparisonInput = (role, history, message, selections) => inputSnapshot([role, history.map(({role,content}) => ({role,content})), message ?? '', selections]);
+  const comparisonValues = () => comparisonInput(target.value, commonHistory(), question.value, panels.map(panel => panel.control.selection));
   const open = document.getElementById('open-comparison');
   const root = document.getElementById('scenario-comparison');
-  const heading = node('h2', '동일 맥락 모델 비교', {tabindex:'-1'});
+  const heading = node('h2', uiLanguage.t('admin.model_comparison_with_common_context'), {tabindex:'-1'});
   const source = node('p');
-  const close = button('비교 닫기', () => {
+  const close = button(uiLanguage.t('admin.close_comparison'), () => {
     root.hidden = true;
     open.setAttribute('aria-expanded', 'false');
     open.focus();
   });
   const setup = node('fieldset');
-  setup.append(node('legend', '공통 입력'));
-  const target = field(setup, 'comparison-target', '비교 대상', 'student', {}, Object.entries(roles));
+  setup.append(node('legend', uiLanguage.t('admin.common_input')));
+  const target = field(setup, 'comparison-target', uiLanguage.t('admin.comparison_role'), 'student', {}, Object.entries(roles));
   const note = node('p');
   const history = node('div', null, {id:'comparison-history-input'});
   const pairs = [];
@@ -26,7 +33,12 @@ export function mountComparison(data, draft) {
   const total = node('p', null, {id:'comparison-total'});
   const editorLocks = new Map();
   let reset, previousRole = 'student', parentRunId = null;
-  const rolePanels = new Map();
+  const rolePanels = new Map(), roleBaselines = new Map();
+  function savedComparison() {
+    const selections = run.panels.map(panel => panel.model_config);
+    comparisonBaseline = comparisonInput(run.target_role, run.canonical_context, run.current_message, selections);
+    roleBaselines.set(run.target_role, inputSnapshot(selections));
+  }
   let recovery = null, streamToken = null;
   function remember(id) {
     const url = new URL(window.location.href);
@@ -42,14 +54,14 @@ export function mountComparison(data, draft) {
   function addPair(teacher = '', student = '') {
     const row = node('fieldset');
     const index = ++nextPair;
-    row.append(node('legend', `이력 ${index}`));
-    const t = textarea(row, `comparison-teacher-${index}`, `이력 ${index} 교사`);
-    const s = textarea(row, `comparison-student-${index}`, `이력 ${index} 학생`);
+    row.append(node('legend', `${uiLanguage.t('admin.history')} ${index}`));
+    const t = textarea(row, `comparison-teacher-${index}`, `${uiLanguage.t('admin.history')} ${index} ${uiLanguage.t('admin.teacher')}`);
+    const s = textarea(row, `comparison-student-${index}`, `${uiLanguage.t('admin.history')} ${index} ${uiLanguage.t('admin.student_label')}`);
     t.value = teacher;
     s.value = student;
     const pair = {row, teacher:t, student:s};
     pairs.push(pair);
-    row.append(button(`이력 ${index} 삭제`, () => {
+    row.append(button(`${uiLanguage.t('admin.history')} ${index} ${uiLanguage.t('admin.delete')}`, () => {
       pairs.splice(pairs.indexOf(pair), 1);
       row.remove();
       addHistory.focus();
@@ -57,20 +69,20 @@ export function mountComparison(data, draft) {
     history.append(row);
     t.focus();
   }
-  const addHistory = button('완료 쌍 추가', () => addPair());
-  const questionLabel = node('label', '학생 현재 질문', {for:'comparison-question'});
+  const addHistory = button(uiLanguage.t('admin.add_completed_pair'), () => addPair());
+  const questionLabel = node('label', uiLanguage.t('admin.current_student_question'), {for:'comparison-question'});
   const question = node('textarea', null, {id:'comparison-question', rows:3, maxlength:50000});
   setup.append(note, history, addHistory, questionLabel, question);
   const panelNote = node('p', null, {role:'status'});
-  const tabs = node('div', null, {class:'comparison-tabs', role:'tablist', 'aria-label':'비교 패널'});
+  const tabs = node('div', null, {class:'comparison-tabs', role:'tablist', 'aria-label':uiLanguage.t('admin.comparison_panels')});
   let selectedPanel = null;
-  const grid = node('div', null, {class:'comparison-grid', role:'region', 'aria-label':'비교 패널 결과', tabindex:'0'});
-  const addPanel = button('패널 추가', () => addModel(null));
+  const grid = node('div', null, {class:'comparison-grid', role:'region', 'aria-label':uiLanguage.t('admin.comparison_panel_results'), tabindex:'0'});
+  const addPanel = button(uiLanguage.t('admin.add_panel'), () => addModel(null));
   function available(model) {
     return model.enabled && model.connection_available && model.capabilities && !model.capabilities.metadata_conflict && model.verification_state[target.value]?.status === 'succeeded';
   }
   function syncPanels() {
-    panelNote.textContent = panels.length === 0 ? '미설정 · AI 연결·모델에서 대상 역할을 검증하세요.' : panels.length === 1 ? '단독 테스트' : `${panels.length}패널 · 동일 맥락 비교`;
+    panelNote.textContent = panels.length === 0 ? uiLanguage.t('admin.unconfigured_verify_the_target_role_in_ai_connections_and_models') : panels.length === 1 ? uiLanguage.t('admin.single_panel_test') : `${panels.length}${uiLanguage.t('admin.panels_common_context_comparison')}`;
     addPanel.disabled = panels.length >= 3;
     grid.style.setProperty('--comparison-panels', Math.max(1, panels.length));
     renderTabs();
@@ -89,7 +101,7 @@ export function mountComparison(data, draft) {
   function renderTabs() {
     tabs.replaceChildren();
     for (const panel of panels) {
-      const tab = button(`패널 ${panel.id}`, () => selectTab(panel.id));
+      const tab = button(`${uiLanguage.t('admin.panel')} ${panel.id}`, () => selectTab(panel.id));
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-controls', panel.card.id);
       tab.dataset.tab = panel.id;
@@ -108,18 +120,18 @@ export function mountComparison(data, draft) {
     if (panels.length >= 3) return;
     const id = panelId ?? ++nextPanel;
     nextPanel = Math.max(nextPanel, Number(id));
-    const card = node('article', null, {'aria-label':`패널 ${id}`, 'data-comparison-panel':id, id:`comparison-panel-${id}`});
+    const card = node('article', null, {'aria-label':`${uiLanguage.t('admin.panel')} ${id}`, 'data-comparison-panel':id, id:`comparison-panel-${id}`});
     const settings = node('fieldset');
-    settings.append(node('legend', `패널 ${id} 모델·옵션`));
+    settings.append(node('legend', `${uiLanguage.t('admin.panel')} ${id} ${uiLanguage.t('admin.model_and_options')}`));
     const select = node('select', null, {id:`comparison-model-${id}`});
     const options = node('div');
     const status = node('p', null, {role:'status'});
-    settings.append(node('label', `패널 ${id} 제공자 / 모델`, {for:select.id}), select, status, options);
+    settings.append(node('label', `${uiLanguage.t('admin.panel')} ${id} ${uiLanguage.t('admin.provider_model')}`, {for:select.id}), select, status, options);
     const output = node('div');
-    output.append(node('p', '대기', {role:'status'}));
+    output.append(node('p', uiLanguage.t('admin.waiting'), {role:'status'}));
     const panel = {id:String(id), card, settings, output};
-    panel.control = mountScenarioModel(data, target.value, `패널 ${id}`, {select, options, status}, saved, () => {});
-    settings.append(button(`패널 ${id} 제거`, () => {
+    panel.control = mountScenarioModel(data, target.value, `${uiLanguage.t('admin.panel')} ${id}`, {select, options, status}, saved, () => {});
+    settings.append(button(`${uiLanguage.t('admin.panel')} ${id} ${uiLanguage.t('admin.remove')}`, () => {
       panels = panels.filter(p => p !== panel);
       card.remove();
       syncPanels();
@@ -149,12 +161,13 @@ export function mountComparison(data, draft) {
       addModel(model === preferred ? selected : identity(model));
     }
     syncPanels();
+    roleBaselines.set(target.value, inputSnapshot(panels.map(panel => panel.control.selection)));
   }
   function roleNote() {
     question.hidden = questionLabel.hidden = target.value === 'mentor';
-    questionLabel.textContent = target.value === 'analysis' ? '마지막 교사 메시지 (분석, 선택)' : '학생 현재 질문';
+    questionLabel.textContent = target.value === 'analysis' ? uiLanguage.t('admin.last_teacher_message_analysis_optional') : uiLanguage.t('admin.current_student_question');
     const mode = draft().config.mentor.mode;
-    note.textContent = '기준 대화 이력 전체를 사용합니다. 수업의 최근 N턴 제한·자동 절삭·분할은 적용하지 않습니다. ' + (target.value === 'mentor' ? mode === 'off' ? '멘토 off · 편집 폼에서 켠 뒤 실행하세요.' : mode === 'auto' ? '개입 판단 시험: 수업의 시작 턴·간격·횟수 제한은 적용하지 않음' : '마지막 완료 쌍에 수동 코칭을 요청합니다.' : target.value === 'analysis' ? '대화 전체를 단일 호출로 분석합니다. 비교 결과는 교육 품질 승인을 대신하지 않습니다.' : '현재 질문에 대한 학생 응답을 비교합니다.');
+    note.textContent = uiLanguage.t('admin.the_full_canonical_conversation_history_is_used_classroom_recent_turn_limits_automatic_truncation_an') + (target.value === 'mentor' ? mode === 'off' ? uiLanguage.t('admin.mentor_off_enable_it_in_the_editor_before_running') : mode === 'auto' ? uiLanguage.t('admin.intervention_judgment_test_classroom_start_turn_interval_and_count_limits_do_not_apply') : uiLanguage.t('admin.request_manual_coaching_for_the_last_completed_pair') : target.value === 'analysis' ? uiLanguage.t('admin.analyze_the_full_dialogue_in_one_call_comparison_results_do_not_replace_educational_quality_approval') : uiLanguage.t('admin.compare_student_responses_to_the_current_question'));
   }
   target.addEventListener('change', () => {
     rolePanels.set(previousRole, panels.map(p => structuredClone(p.control.selection)));
@@ -167,9 +180,9 @@ export function mountComparison(data, draft) {
     defaults();
     roleNote();
   });
-  const start = button('비교 실행', () => execute());
-  const stop = button('전체 중지', () => stopRun());
-  const refresh = button('상태 새로고침', () => refreshRun());
+  const start = button(uiLanguage.t('admin.run_comparison'), () => execute());
+  const stop = button(uiLanguage.t('admin.stop_all'), () => stopRun());
+  const refresh = button(uiLanguage.t('admin.refresh_state'), () => refreshRun());
   root.append(heading, source, close, notice, errors, setup, panelNote, addPanel, start, stop, refresh, total, tabs, grid);
   function locked() { return submitting || run?.panels.some(p => active(p.status)); }
   function sync() {
@@ -203,9 +216,9 @@ export function mountComparison(data, draft) {
         stop:() => stopRun(state), retry:() => execute(state),
         adopt:() => adopt(state), apply:() => apply(state),
       }, running);
-      panel.output.append(node('p', `공통 입력 hash: ${run.context_hash || 'unknown'}`));
+      panel.output.append(node('p', `${uiLanguage.t('admin.common_input_hash')} ${run.context_hash || uiLanguage.t('admin.unknown')}`));
     }
-    total.textContent = `${unknown ? '부분 합계 (미확인 비용 포함)' : '비용 합계'}: ${cost}`;
+    total.textContent = `${unknown ? uiLanguage.t('admin.partial_subtotal_unknown_costs_present') : uiLanguage.t('admin.total_cost')}: ${cost}`;
   }
   function commonHistory() {
     return pairs.flatMap(pair => [{role:'teacher', content:pair.teacher.value}, {role:'student', content:pair.student.value}]);
@@ -218,22 +231,22 @@ export function mountComparison(data, draft) {
     for (let i = 0; i < run.canonical_context.length; i += 2) addPair(run.canonical_context[i].content, run.canonical_context[i+1].content);
     addPair(run.current_message, state.text);
     question.value = '';
-    notice.textContent = '다음 비교의 기준 대화 이력을 준비했습니다. 원본 비교는 유지됩니다.';
+    notice.textContent = uiLanguage.t('admin.canonical_history_is_ready_for_the_next_comparison_the_original_comparison_is_preserved');
   }
   async function apply(state, comparison = run) {
     if (locked()) return;
     if (comparison.source_snapshot?.scenario_id !== data.id && data.comparison_draft_id !== comparison.comparison_run_id) {
-      notice.textContent = '현재 원본 편집 폼 또는 이 조건의 새 초안을 열어 적용하세요.';
+      notice.textContent = uiLanguage.t('admin.open_the_source_editor_or_a_new_draft_with_these_conditions_to_apply_the_model');
       return;
     }
     const token = streamToken;
-    try {
+    pendingRequests++; try {
       const response = await request(`/admin/comparisons/${comparison.comparison_run_id}/panels/${state.panel_id}/model`);
       if (!response.ok) {
-        const messages = {409:'비교가 진행 중입니다. 종료 후 적용하세요.',
-          404:'비교 또는 패널을 찾거나 열 수 없습니다. 이력을 다시 확인하세요.',
-          422:'현재 역할 검증·연결·옵션을 확인한 뒤 적용하세요.'};
-        notice.textContent = messages[response.status] || '모델을 적용하지 못했습니다. 다시 확인하세요.';
+        const messages = {409:uiLanguage.t('admin.the_comparison_is_running_apply_after_it_ends'),
+          404:uiLanguage.t('admin.could_not_find_or_open_the_comparison_or_panel_check_the_history_again'),
+          422:uiLanguage.t('admin.check_current_role_verification_connection_and_options_before_applying')};
+        notice.textContent = messages[response.status] || uiLanguage.t('admin.could_not_apply_the_model_check_again');
         return;
       }
       const selection = await response.json();
@@ -243,18 +256,19 @@ export function mountComparison(data, draft) {
       document.querySelector(`[data-step="${{student:2,mentor:3,analysis:4}[selection.target_role]}"]`).click();
       document.getElementById('common-model').focus();
       if (selection.target_role === 'mentor' && document.activeElement !== document.getElementById('common-model')) document.getElementById('mentor.mode').focus();
-      notice.textContent = '대상 역할의 모델·옵션을 미저장 폼에 적용했습니다. 별도 저장 또는 게시가 필요합니다.';
+      notice.textContent = uiLanguage.t('admin.model_and_options_were_applied_to_the_unsaved_form_save_or_publish_separately');
     } catch {
-      notice.textContent = '현재 역할 검증·연결·옵션을 확인한 뒤 적용하세요.';
-    }
+      notice.textContent = uiLanguage.t('admin.check_current_role_verification_connection_and_options_before_applying');
+    } finally { pendingRequests--; }
   }
   async function request(url, method = 'GET', body, signal) {
-    return fetch(url, {method, signal, credentials:'same-origin', headers:{'Content-Type':'application/json',
-      'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}, body:body == null ? undefined : JSON.stringify(body)});
+    return fetch(url, {method, signal, credentials:'same-origin', headers:uiLanguage.headers(url, {'Content-Type':'application/json',
+      'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}), body:body == null ? undefined : JSON.stringify(body)});
   }
   function showError(response, result, missingId = run?.comparison_run_id) {
     errors.replaceChildren();
     const missingComparison = response.status === 404 && (!result || result.detail?.code === 'comparison_not_found');
+    if (missingComparison) uncertain = false;
     if (missingComparison && parentRunId === missingId) parentRunId = null;
     if ([401,403].includes(response.status) || missingComparison && run?.comparison_run_id === missingId) {
       recovery = streamToken = null;
@@ -264,15 +278,15 @@ export function mountComparison(data, draft) {
       total.textContent = '';
       sync();
     }
-    const messages = {404:'비교를 찾거나 열 수 없습니다. 보존기간은 생성 후 30일입니다.',
-      409:'진행 중 비교 또는 변경된 시도가 있습니다. 상태를 새로 확인하세요.', 429:'전체 패널 슬롯을 확보하지 못했습니다. 잠시 후 다시 실행하세요.',
-      503:'AI 연결·모델 설정을 확인하세요.', 422:'공통 입력·모델 옵션을 확인하세요.', 413:'입력이 너무 큽니다.', 401:'로그인이 필요합니다.', 403:'권한 또는 보안 토큰을 확인하세요.'};
-    errors.append(node('p', result?.detail?.code === 'scenario_not_found' ? '원본 시나리오를 찾을 수 없습니다. 새 초안에서 비교하세요.' : messages[response.status] || '비교 요청을 처리하지 못했습니다. 입력을 보존했습니다.'));
+    const messages = {404:uiLanguage.t('admin.could_not_find_or_open_the_comparison_records_are_retained_for_30_days_after_creation'),
+      409:uiLanguage.t('admin.a_comparison_is_running_or_an_attempt_changed_check_the_state_again'), 429:uiLanguage.t('admin.could_not_reserve_capacity_for_all_panels_try_again_shortly'),
+      503:uiLanguage.t('admin.check_ai_connection_and_model_settings'), 422:uiLanguage.t('admin.check_common_input_and_model_options'), 413:uiLanguage.t('admin.the_input_is_too_large'), 401:uiLanguage.t('admin.please_log_in'), 403:uiLanguage.t('admin.check_your_permissions_or_security_token')};
+    errors.append(node('p', result?.detail?.code === 'scenario_not_found' ? uiLanguage.t('admin.source_scenario_not_found_compare_from_a_new_draft') : messages[response.status] || uiLanguage.t('admin.could_not_process_the_comparison_request_your_input_is_preserved')));
     for (const error of result?.detail?.errors || []) {
       const panel = panels.find(p => p.id === error.panel_id);
       const input = error.field === 'current_message' ? question : error.field === 'history' ? addHistory : panel?.settings.querySelector('select');
       if (input) input.setAttribute('aria-invalid', 'true');
-      errors.append(button(error.message || '입력을 확인하세요.', () => input?.focus()));
+      errors.append(button(error.message || uiLanguage.t('common.check_input'), () => input?.focus()));
     }
     errors.focus();
   }
@@ -329,7 +343,7 @@ export function mountComparison(data, draft) {
     const sourceDraft = draft();
     roleNote();
     if (!retry && (target.value === 'student' && !question.value.trim() || target.value === 'mentor' && (pairs.length === 0 || sourceDraft.config.mentor.mode === 'off') || target.value === 'analysis' && pairs.length === 0 && !question.value.trim())) {
-      errors.replaceChildren(node('p', target.value === 'mentor' ? '멘토를 켜고 완료 쌍을 추가하세요.' : '교사 메시지를 입력하세요.'));
+      errors.replaceChildren(node('p', target.value === 'mentor' ? uiLanguage.t('admin.enable_the_mentor_and_add_a_completed_pair') : uiLanguage.t('admin.enter_a_teacher_message')));
       errors.focus();
       return;
     }
@@ -346,9 +360,9 @@ export function mountComparison(data, draft) {
     submitting = true;
     errors.replaceChildren();
     root.querySelectorAll('[aria-invalid]').forEach(input => input.removeAttribute('aria-invalid'));
-    notice.textContent = '전체 패널의 공통 입력을 확인 중입니다.';
+    notice.textContent = uiLanguage.t('admin.checking_common_input_for_all_panels');
     sync();
-    try {
+    pendingRequests++; try {
       const url = retry ? `/admin/comparisons/${run.comparison_run_id}/panels/${retry.panel_id}/retry` : '/admin/comparisons';
       const response = await request(url, 'POST', body);
       if (!response.ok) { showError(response, await response.json().catch(() => null), retry ? run.comparison_run_id : body.parent_run_id); return; }
@@ -359,23 +373,28 @@ export function mountComparison(data, draft) {
       submitting = false;
       sync();
       await consume(response, token);
+      if (!locked()) { uncertain = false; savedComparison(); }
       if (streamToken !== token) return;
-      notice.textContent = locked() ? '진행 중' : '비교가 종료되었습니다. 패널별 결과를 확인하세요.';
-      if (locked()) notice.textContent = '진행 중 · 상태 새로고침 또는 중지를 사용할 수 있습니다.';
+      notice.textContent = locked() ? uiLanguage.t('admin.operation_in_progress') : uiLanguage.t('admin.comparison_ended_check_each_panel_s_results');
+      if (locked()) notice.textContent = uiLanguage.t('admin.in_progress_refresh_the_state_or_stop');
     } catch {
       if (streamToken !== token) return;
+      uncertain = true;
+      // A lookup of the previous run cannot confirm an admission whose ID was lost.
+      if (!retry && (!run?.comparison_run_id || run === prior)) unacknowledgedStart = true;
       if (!run?.comparison_run_id) run = prior;
-      notice.textContent = '연결이 중단되었습니다. 상태 새로고침으로 저장된 결과를 확인하세요. 입력을 보존했습니다.';
-    } finally { if (streamToken === token || streamToken === null) { submitting = false; sync(); } }
+      notice.textContent = uiLanguage.t('admin.connection_interrupted_refresh_the_state_to_check_saved_results_your_input_is_preserved');
+    } finally { pendingRequests--; if (streamToken === token || streamToken === null) { submitting = false; sync(); } }
     if (streamToken === token && run?.comparison_run_id && locked()) recoverRun(run.comparison_run_id);
   }
   async function recoverRun(id, restore = false) {
     if (recovery?.id === id) return;
+    uncertain = true;
     const token = recovery = {id};
     const deadline = Date.now() + 10000;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
-    try {
+    pendingRequests++; try {
       while (recovery === token) {
         const response = await request(`/admin/comparisons/${id}`, 'GET', null, controller.signal);
         if (recovery !== token) return;
@@ -384,7 +403,7 @@ export function mountComparison(data, draft) {
         if (recovery !== token) return;
         if (restore) {
           target.value = previousRole = snapshot.target_role;
-          source.textContent = `${snapshot.source_snapshot?.title || '제목 없는 초안'} · 저장된 비교의 고정 조건`;
+          source.textContent = `${snapshot.source_snapshot?.title || uiLanguage.t('admin.untitled_draft')} · ${uiLanguage.t('admin.frozen_conditions_from_a_saved_comparison')}`;
           panels = [];
           nextPanel = nextPair = 0;
           grid.replaceChildren();
@@ -399,18 +418,20 @@ export function mountComparison(data, draft) {
           submitting = false;
         }
         applySnapshot(snapshot);
+        uncertain = false;
+        if (!snapshot.panels.some(p => active(p.status))) savedComparison();
         if (!snapshot.panels.some(p => active(p.status))) {
-          notice.textContent = '저장된 비교 결과를 복구했습니다.';
+          notice.textContent = uiLanguage.t('admin.saved_comparison_results_recovered');
           return;
         }
         const remaining = deadline - Date.now();
         if (remaining <= 1000) break;
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      if (recovery === token) notice.textContent = '복구 조회가 끝났습니다. 상태 새로고침 또는 중지를 사용하세요.';
+      if (recovery === token) notice.textContent = uiLanguage.t('admin.recovery_lookup_ended_refresh_the_state_or_stop');
     } catch {
-      if (recovery === token) notice.textContent = '복구 조회가 끝났습니다. 상태 새로고침 또는 중지를 사용하세요.';
-    } finally {
+      if (recovery === token) notice.textContent = uiLanguage.t('admin.recovery_lookup_ended_refresh_the_state_or_stop');
+    } finally { pendingRequests--;
       clearTimeout(timeout);
       if (recovery === token) recovery = null;
       if (restore) { submitting = false; sync(); }
@@ -419,33 +440,33 @@ export function mountComparison(data, draft) {
   async function refreshRun() {
     if (!run?.comparison_run_id || submitting) return;
     const comparison = run, token = streamToken;
-    try {
+    pendingRequests++; try {
       const response = await request(`/admin/comparisons/${run.comparison_run_id}`);
       if (run !== comparison || streamToken !== token) return;
       if (response.ok) {
         const snapshot = await response.json();
-        if (run === comparison && streamToken === token) applySnapshot(snapshot);
+        if (run === comparison && streamToken === token) { applySnapshot(snapshot); uncertain = false; if (!locked()) savedComparison(); }
       }
       else showError(response, null);
-    } catch { notice.textContent = '상태를 확인하지 못했습니다. 다시 확인하세요.'; }
+    } catch { notice.textContent = uiLanguage.t('admin.could_not_confirm_the_state_check_again'); } finally { pendingRequests--; }
   }
   async function stopRun(state = null) {
     if (!run?.comparison_run_id) return;
     const comparison = run, token = streamToken;
     recovery = null;
-    try {
+    pendingRequests++; try {
       const url = `/admin/comparisons/${run.comparison_run_id}${state ? `/panels/${state.panel_id}` : ''}/stop`;
       const body = state ? {generation_id:state.run_id} : {generations:run.panels.filter(p => active(p.status)).map(p => ({panel_id:p.panel_id,generation_id:p.run_id}))};
       const response = await request(url, 'POST', body);
       if (run !== comparison || streamToken !== token) return;
       if (response.ok) {
         const snapshot = await response.json();
-        if (run === comparison && streamToken === token) applySnapshot(snapshot);
+        if (run === comparison && streamToken === token) { applySnapshot(snapshot); uncertain = false; if (!locked()) savedComparison(); }
       }
       else showError(response, null);
-    } catch { notice.textContent = '중지 상태를 확인하지 못했습니다. 상태를 새로 확인하세요.'; }
+    } catch { notice.textContent = uiLanguage.t('admin.could_not_confirm_the_stop_state_refresh_the_state'); } finally { pendingRequests--; }
   }
-  reset = button('비교 입력 초기화', () => {
+  reset = button(uiLanguage.t('admin.reset_comparison_input'), () => {
     if (locked()) return;
     recovery = streamToken = null;
     remember(null);
@@ -456,12 +477,14 @@ export function mountComparison(data, draft) {
     nextPair = 0;
     question.value = '';
     rolePanels.clear();
+    roleBaselines.clear();
     target.value = previousRole = 'student';
     errors.replaceChildren();
     total.textContent = '';
     defaults();
     roleNote();
-    notice.textContent = '편집 중 비교 입력을 초기화했습니다. 저장된 비교 기록은 유지됩니다.';
+    comparisonBaseline = comparisonValues();
+    notice.textContent = uiLanguage.t('admin.comparison_input_reset_saved_comparison_records_are_preserved');
     target.focus();
   });
   root.append(reset);
@@ -477,9 +500,10 @@ export function mountComparison(data, draft) {
   }});
   sync();
   let initialized = false;
+  uiLanguage.registerGuard(() => ({busy:Boolean(locked() || recovery || pendingRequests || uncertain || unacknowledgedStart), dirty:initialized && (comparisonValues() !== comparisonBaseline || [...rolePanels].some(([role,selections]) => role !== target.value && inputSnapshot(selections) !== roleBaselines.get(role)))}));
   open.addEventListener('click', () => {
-    source.textContent = `${draft().title || '제목 없는 초안'} · 미저장 초안 · ${data.id == null ? '새 작성 · 원본 없음' : `원본 #${data.id} · 버전 ${data.config_version}`}`;
-    if (!initialized) { defaults(); initialized = true; }
+    source.textContent = `${draft().title || uiLanguage.t('admin.untitled_draft')} · ${uiLanguage.t('admin.unsaved_draft')} · ${data.id == null ? uiLanguage.t('admin.new_draft_no_source') : `${uiLanguage.t('admin.source_scenario')} #${data.id} · ${uiLanguage.t('admin.version')} ${data.config_version}`}`;
+    if (!initialized) { defaults(); initialized = true; comparisonBaseline = comparisonValues(); }
     roleNote();
     root.hidden = false;
     open.setAttribute('aria-expanded', 'true');

@@ -15,6 +15,7 @@ from src.api.routes.session_helpers import (
     validate_scenario_access,
 )
 from src.api.schemas.scenario_config import ConfigValue, ScenarioConfig
+from src.i18n import translate
 from src.models import Session, User
 from src.services.invocation_types import InvocationError
 from src.services.lesson_connections import resolve_frozen_model
@@ -49,9 +50,9 @@ def configuration_error():
     return HTTPException(400, detail={"code": "configuration_unavailable"})
 
 
-def read_lesson_snapshot(session):
+def read_lesson_snapshot(session, *, language="ko"):
     """Fail closed: never reconstruct missing/corrupt native lesson inputs."""
-    require_native_session(session)
+    require_native_session(session, language=language)
     try:
         snapshot = LessonSnapshot.model_validate(session.config_snapshot_json)
         if (
@@ -135,14 +136,18 @@ def public_scenario(scenario):
     )
 
 
-async def start_lesson(db, scenario_id, user, *, reuse=False):
+async def start_lesson(db, scenario_id, user, *, reuse=False, language="ko"):
     # Release auth reads before serializing against scenario edits/ACL changes.
     await db.rollback()
     await db.execute(text("BEGIN IMMEDIATE"))
     await db.refresh(user)
-    scenario = await validate_scenario_access(scenario_id, user, db)
+    scenario = await validate_scenario_access(
+        scenario_id, user, db, language=language
+    )
     if not scenario.is_active:
-        raise HTTPException(404, detail="Scenario not found")
+        raise HTTPException(
+            404, detail=translate("teacher.scenario_not_found", language)
+        )
     session = None
     if reuse:
         session = await db.scalar(
@@ -194,8 +199,8 @@ async def start_lesson(db, scenario_id, user, *, reuse=False):
             await db.rollback()
             raise HTTPException(
                 500,
-                detail="대화 세션을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.",
+                detail=translate("teacher.start_failed", language),
             ) from None
-    read_lesson_snapshot(session)
+    read_lesson_snapshot(session, language=language)
     await db.commit()
     return session

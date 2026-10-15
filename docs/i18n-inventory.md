@@ -83,6 +83,8 @@ candidate, including #131/#132 changes merged after this inventory.
 - Set `{% set i18n_areas = ['teacher'] %}` after `extends` in a full page (or pass
   the equivalent context). The common layout injects `#ui-strings` exactly once,
   containing common/About plus the requested sections in the request language.
+  An admin page consuming shared teacher analysis/detail JS requests both sections:
+  `{% set i18n_areas = ['admin', 'teacher'] %}`. Fragments reuse that page payload.
   JS uses `uiLanguage.t('teacher.save', {name: value})`; insert values with
   `textContent`, not `innerHTML`. Never render a second catalog in a fragment.
 - Register `const unregister = uiLanguage.registerGuard(() => ({dirty, busy}));`

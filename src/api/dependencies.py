@@ -11,9 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.connection import AsyncSessionLocal
+from src.i18n import display_language, t, ui_strings
 
 # Shared Jinja2Templates instance
 templates = Jinja2Templates(directory="src/templates")
+templates.env.globals.update(
+    t=t, display_language=display_language, ui_strings=ui_strings
+)
 
 
 def md_filter(text: str | None) -> Markup:

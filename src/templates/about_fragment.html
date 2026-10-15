@@ -1,7 +1,7 @@
 <div class="modal-header">
-  <h2>About</h2>
+  <h2>{{ t('about.heading') }}</h2>
   <button type="button" class="modal-close"
-          aria-label="닫기" onclick="closeAboutModal()">×</button>
+          aria-label="{{ t('common.close') }}" onclick="closeAboutModal()">×</button>
 </div>
 <div class="modal-body">
   {% if contributors %}
@@ -15,13 +15,13 @@
       <div class="contributor-contact">
         {% if c.phone %}
         <span class="contact-item">
-          <span class="contact-label">전화</span>
+          <span class="contact-label">{{ t('about.phone') }}</span>
           {{ c.phone }}
         </span>
         {% endif %}
         {% if c.email %}
         <span class="contact-item">
-          <span class="contact-label">이메일</span>
+          <span class="contact-label">{{ t('about.email') }}</span>
           <a href="mailto:{{ c.email }}">{{ c.email }}</a>
         </span>
         {% endif %}
@@ -34,7 +34,7 @@
   </div>
   {% else %}
   <div class="empty-state-page">
-    <p>등록된 정보가 없습니다.</p>
+    <p>{{ t('about.empty') }}</p>
   </div>
   {% endif %}
 </div>

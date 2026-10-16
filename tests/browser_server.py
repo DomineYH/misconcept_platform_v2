@@ -444,6 +444,15 @@ class Handler(BaseHTTPRequestHandler):
                 config_json={"problem": {"public_text": "Problem"}},
                 review_required=False,
             )
+            if path.path == "/chat":
+                if "chat_greeting" in query:
+                    value = query["chat_greeting"][0]
+                    scenario.greeting_message = (
+                        None if value == "none" else value
+                    )
+                if "chat_student" in query:
+                    value = query["chat_student"][0]
+                    scenario.student_name = None if value == "none" else value
             template = {
                 "/chat": "chat.html",
                 "/scenarios": "scenarios.html",

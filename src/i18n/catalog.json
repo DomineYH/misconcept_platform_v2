@@ -166,6 +166,18 @@
     }
   },
   "teacher": {
+    "conversation_title": {
+      "ko": "{student}와의 대화",
+      "en": "Conversation with {student}"
+    },
+    "student_bot": {
+      "ko": "학생봇",
+      "en": "Student bot"
+    },
+    "first_question_hint": {
+      "ko": "문제 상황을 확인하고 학생에게 첫 질문을 보내세요.",
+      "en": "Read the problem statement and send the student your first question."
+    },
     "scenarios_title": {
       "ko": "시나리오 - 오개념 교정 대화 시뮬레이터",
       "en": "Scenarios - Misconception Dialogue Simulator"

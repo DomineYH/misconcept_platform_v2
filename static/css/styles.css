@@ -1395,6 +1395,23 @@ main:has(.split-layout) {
   border-bottom: 1px solid var(--color-warning-border);
 }
 
+/* First-question guidance stays outside the conversation's live statuses. */
+#chat-panel > .panel-header {
+  padding: 1rem 1.5rem;
+}
+
+#chat-title {
+  min-width: 0;
+}
+
+#chat-empty-state {
+  margin: auto;
+  max-width: 32rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+  line-height: 1.65;
+}
+
 .panel-hidden {
   display: none !important;
 }

@@ -84,7 +84,7 @@ def test_review_badge_is_distinct_from_required_field_notice(language, label):
         scenario_group_map={},
         session_counts={1: 0},
     )
-    assert f'<span class="meta-tag">{label}</span>' in html
+    assert f'<span class="meta-tag badge-warning">{label}</span>' in html
     assert "원문 제목" in html
 
 

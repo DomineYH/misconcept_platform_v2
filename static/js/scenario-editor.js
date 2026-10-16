@@ -162,6 +162,7 @@ function showErrors(errors) {
 async function save(action) {
   if (busy) return;
   if (action === 'save_draft' && data.status === 'published' && !window.confirm(uiLanguage.t('admin.changing_to_a_draft_prevents_teachers_from_starting_new_sessions_save_as_a_draft'))) return;
+  const wasDirty = dirty;
   dirty = true;
   busy = true;
   publicationStatus();
@@ -206,6 +207,7 @@ async function save(action) {
       const messages = {401:uiLanguage.t('admin.please_log_in'), 403:uiLanguage.t('admin.check_your_permissions_or_security_token'), 404:uiLanguage.t('admin.scenario_not_found')};
       status.textContent = messages[response.status] || uiLanguage.t('admin.could_not_save_your_input_is_preserved');
     }
+    if (!response.ok) dirty = wasDirty || edits !== submittedEdits;
   } catch {
     status.dataset.state = 'uncertain';
     status.textContent = uiLanguage.t('admin.could_not_confirm_the_save_result_your_input_is_preserved');

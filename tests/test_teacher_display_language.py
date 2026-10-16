@@ -7,6 +7,51 @@ from test_display_language import request
 from src.api.dependencies import templates
 
 
+def test_chat_heading_and_first_question_hint_follow_display_language():
+    scenario = SimpleNamespace(
+        title="원본 제목",
+        student_name=None,
+        mentor_mode="off",
+        student_profile="원본 소개",
+        problem_situation="원본 문제",
+        greeting_message="Hidden welcome",
+        subject="수학",
+    )
+    for language, fallback, hint in (
+        (
+            "ko",
+            "학생봇와의 대화",
+            "문제 상황을 확인하고 학생에게 첫 질문을 보내세요.",
+        ),
+        (
+            "en",
+            "Conversation with Student bot",
+            "Read the problem statement and send the student your first question.",
+        ),
+    ):
+        for name in (None, " \t ", "공개 이름"):
+            scenario.student_name = name
+            html = templates.get_template("chat.html").render(
+                request=request(language),
+                scenario=scenario,
+                session_id=1,
+                student_name=name,
+                user=SimpleNamespace(nickname="교사", role="teacher"),
+                messages=[],
+            )
+            heading = fallback
+            if name == "공개 이름":
+                heading = (
+                    "공개 이름와의 대화"
+                    if language == "ko"
+                    else "Conversation with 공개 이름"
+                )
+            assert f'<h2 id="chat-title">{heading}</h2>' in html
+            assert f'<p id="chat-empty-state">{hint}</p>' in html
+            assert "원본 문제" in html
+            assert "Hidden welcome" not in html
+
+
 def test_scenario_selection_round_trip_preserves_public_content():
     scenario = SimpleNamespace(
         id=7,

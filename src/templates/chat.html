@@ -4,6 +4,7 @@
 {% block title %}{{ scenario.title }} - {{ t('teacher.chat') }}{% endblock %}
 
 {% block content %}
+{% set show_greeting = scenario.mentor_mode != 'off' and (scenario.greeting_message or '')|trim %}
 <!-- Mobile Tab Navigation -->
 <div class="mobile-tabs" role="tablist" aria-label="{{ t('teacher.chat_screen') }}">
   <button class="mobile-tab" data-panel="scenario" role="tab" id="mobile-tab-scenario" aria-controls="scenario-panel" aria-selected="false" tabindex="-1">{{ t('teacher.situation_info') }}</button>
@@ -41,15 +42,15 @@
 
     <!-- Tab Navigation -->
     <div class="info-tabs" role="tablist" aria-label="{{ t('teacher.situation_info') }}">
-      <button class="info-tab active" data-tab="guide" role="tab" id="info-tab-guide" aria-controls="tab-guide" aria-selected="true" tabindex="0">{{ t('teacher.usage_guide') }}</button>
+      <button class="info-tab" data-tab="guide" role="tab" id="info-tab-guide" aria-controls="tab-guide" aria-selected="false" tabindex="-1">{{ t('teacher.usage_guide') }}</button>
       <button class="info-tab" data-tab="profile" role="tab" id="info-tab-profile" aria-controls="tab-profile" aria-selected="false" tabindex="-1">{{ t('teacher.student_info') }}</button>
-      <button class="info-tab" data-tab="situation" role="tab" id="info-tab-situation" aria-controls="tab-situation" aria-selected="false" tabindex="-1">{{ t('teacher.problem') }}</button>
+      <button class="info-tab active" data-tab="situation" role="tab" id="info-tab-situation" aria-controls="tab-situation" aria-selected="true" tabindex="0">{{ t('teacher.problem') }}</button>
     </div>
 
     <!-- Tab Content Container -->
     <div class="tab-content">
       <!-- Chatbot Usage Guide Tab -->
-      <div class="tab-pane active" id="tab-guide" role="tabpanel" aria-labelledby="info-tab-guide" tabindex="0">
+      <div class="tab-pane" id="tab-guide" role="tabpanel" aria-labelledby="info-tab-guide" tabindex="0">
         <section class="info-section">
           <div class="guide-content">
             <p>{{ t('teacher.guide_problem', student=scenario.student_name or t('teacher.student')) }}</p>
@@ -73,7 +74,7 @@
       </div>
 
       <!-- Learning Situation Tab -->
-      <div class="tab-pane" id="tab-situation" role="tabpanel" aria-labelledby="info-tab-situation" tabindex="0">
+      <div class="tab-pane active" id="tab-situation" role="tabpanel" aria-labelledby="info-tab-situation" tabindex="0">
         <section class="info-section">
           <div class="scenario-prompt">
             {% if (scenario.problem_situation or '')|trim %}
@@ -95,7 +96,10 @@
   </aside>
 
   <!-- Right Panel: Chat Interface -->
-  <section class="chat-panel" id="chat-panel" aria-labelledby="mobile-tab-chat">
+  <section class="chat-panel" id="chat-panel" aria-labelledby="chat-title">
+    <div class="panel-header">
+      <h2 id="chat-title">{{ t('teacher.conversation_title', student=(scenario.student_name|default('') or '')|trim or t('teacher.student_bot')) }}</h2>
+    </div>
     <!-- Session status banner (hidden by default) -->
     <div id="session-status" role="status" style="display: none;">
       <span id="session-status-text">{{ t('teacher.chat_ended') }}</span>
@@ -113,7 +117,10 @@
 
       <!-- Messages container -->
       <div id="messages-container" class="messages-container">
-        {% if scenario.mentor_mode != 'off' and scenario.greeting_message %}
+        {% if not messages and not show_greeting and not session_ended|default(false) %}
+        <p id="chat-empty-state">{{ t('teacher.first_question_hint') }}</p>
+        {% endif %}
+        {% if show_greeting %}
         <div class="message message-mentor greeting-message">
           <div class="avatar mentor">{{ t('teacher.mentor_avatar') }}</div>
           <div class="message-content-wrapper">

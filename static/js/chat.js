@@ -89,6 +89,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // ========================================
   // Info Tab Switching (Scenario Panel)
   // ========================================
+  const infoTabKey = `chat-info-tab-${chatConfig.sessionId}`;
   document.querySelectorAll('.info-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       // Update active tab
@@ -111,8 +112,26 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       if (targetPane) {
         targetPane.classList.add('active');
       }
+      try { sessionStorage.setItem(infoTabKey, tabId); } catch {}
     });
   });
+  try {
+    const selected = sessionStorage.getItem(infoTabKey);
+    Array.from(document.querySelectorAll('.info-tab'))
+      .find(tab => tab.dataset.tab === selected)?.click();
+  } catch {}
+
+  const messagesContainer = document.getElementById('messages-container');
+  const emptyHint = document.getElementById('chat-empty-state');
+  function syncEmptyHint() {
+    if (emptyHint) emptyHint.hidden = chatClosed || Boolean(
+      messagesContainer.querySelector('.message, .student-run-status, .mentor-run-status')
+    );
+  }
+  if (emptyHint) {
+    new MutationObserver(syncEmptyHint).observe(messagesContainer, {childList:true});
+    syncEmptyHint();
+  }
 
   document.querySelectorAll('.mobile-tabs, .info-tabs').forEach(list => {
     list.addEventListener('keydown', event => {
@@ -284,6 +303,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     const showLoginButton = options.showLoginButton === true;
 
     chatClosed = true;
+    syncEmptyHint();
     syncComposer();
     document.dispatchEvent(new CustomEvent('chat:locked', {detail:{authExpired:showLoginButton}}));
 

@@ -19,7 +19,7 @@ export default async function check(page) {
     await page.getByRole('tab',{name:'상황 정보',exact:true}).click();
     for (const family of ['mobile','info']) {
       for (const selected of [true,false]) {
-        const tab = page.locator(family === 'mobile' ? (selected ? '#mobile-tab-scenario' : '#mobile-tab-chat') : (selected ? '#info-tab-guide' : '#info-tab-profile'));
+        const tab = page.locator(family === 'mobile' ? (selected ? '#mobile-tab-scenario' : '#mobile-tab-chat') : (selected ? '#info-tab-situation' : '#info-tab-profile'));
         for (const state of ['rest','focus','hover','hover-focus']) {
           await page.mouse.move(0,0);
           await tab.evaluate(el => el.blur());

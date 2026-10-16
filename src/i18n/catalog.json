@@ -1,5 +1,25 @@
 {
   "common": {
+    "error_not_found_title": {
+      "ko": "페이지를 찾을 수 없습니다",
+      "en": "Page not found"
+    },
+    "error_not_found_description": {
+      "ko": "요청한 페이지나 자료가 없거나 삭제되었을 수 있습니다.",
+      "en": "The requested page or resource could not be found or may have been deleted."
+    },
+    "error_forbidden_title": {
+      "ko": "접근 권한이 없습니다",
+      "en": "Access denied"
+    },
+    "error_forbidden_description": {
+      "ko": "이 페이지나 자료에 접근할 권한이 없습니다.",
+      "en": "You do not have permission to access this page or resource."
+    },
+    "error_back_to_scenarios": {
+      "ko": "시나리오 목록으로",
+      "en": "Back to scenarios"
+    },
     "check_input": {
       "ko": "입력을 확인하세요.",
       "en": "Check your input."

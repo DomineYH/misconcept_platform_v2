@@ -8,6 +8,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -15,14 +16,16 @@ from pythonjsonlogger import jsonlogger
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette_csrf import CSRFMiddleware
 
-from src.api.dependencies import AuthenticationRequired
+from src.api.dependencies import AuthenticationRequired, templates
 from src.config import config
-from src.db.connection import close_db, init_db
+from src.db.connection import AsyncSessionLocal, close_db, init_db
 from src.db.seed import ensure_default_admin_account
+from src.models import User
 
 # Configure structured JSON logging
 logger = logging.getLogger()
@@ -230,6 +233,35 @@ app = FastAPI(
 # Add rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(HTTPException)
+async def html_http_error_handler(
+    request: Request, exc: HTTPException
+) -> Response:
+    """Render safe document errors while preserving the default API contract."""
+    if (
+        exc.status_code not in (403, 404)
+        or request.method not in ("GET", "HEAD")
+        or "HX-Request" in request.headers
+        or not any(
+            value.partition(";")[0].strip().lower() == "text/html"
+            for value in request.headers.get("accept", "").split(",")
+        )
+    ):
+        return await http_exception_handler(request, exc)
+
+    user = None
+    user_id = request.session.get("user_id")
+    if user_id:
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, user_id)
+    return templates.TemplateResponse(
+        "error.html",
+        {"request": request, "user": user, "status_code": exc.status_code},
+        status_code=exc.status_code,
+        headers=exc.headers,
+    )
 
 
 # Add authentication redirect handler

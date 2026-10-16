@@ -298,3 +298,23 @@ def test_failure_and_no_dialogue_notices_use_status_without_rewriting_korean():
                     )
                     expected = english if language == "en" else stored
                     assert f"<p>{expected}</p>" in html
+
+
+def test_scenario_subject_chip_preserves_authored_language():
+    scenario = SimpleNamespace(
+        id=7,
+        title="원본 시나리오",
+        subject="수학 <공개 교과>",
+        problem_situation="원본 문제",
+        student_profile="원본 학생 소개",
+    )
+    for language in ("ko", "en", "ko"):
+        html = templates.get_template("scenarios.html").render(
+            request=request(language),
+            user=SimpleNamespace(nickname="교사", role="teacher"),
+            scenarios=[scenario],
+        )
+        assert (
+            '<span class="scenario-subject">수학 &lt;공개 교과&gt;</span>'
+            in html
+        )

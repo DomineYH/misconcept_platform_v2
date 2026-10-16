@@ -137,11 +137,11 @@
   },
   "about": {
     "title": {
-      "ko": "about",
+      "ko": "소개",
       "en": "About"
     },
     "heading": {
-      "ko": "About",
+      "ko": "소개",
       "en": "About"
     },
     "phone": {
@@ -161,7 +161,7 @@
       "en": "Loading About…"
     },
     "load_error": {
-      "ko": "소개를 불러올 수 없습니다. About을 다시 눌러 주세요.",
+      "ko": "소개를 불러올 수 없습니다. 소개를 다시 눌러 주세요.",
       "en": "Could not load About. Select About to try again."
     }
   },

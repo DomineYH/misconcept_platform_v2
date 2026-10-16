@@ -444,6 +444,15 @@ class Handler(BaseHTTPRequestHandler):
                 config_json={"problem": {"public_text": "Problem"}},
                 review_required=False,
             )
+            if path.path == "/scenarios":
+                scenario.internal_profile = "PRIVATE STUDENT PROFILE"
+                if "subject_missing" in query:
+                    scenario.subject = None
+                elif "subject_blank" in query:
+                    scenario.subject = " \n\t "
+                elif "subject_long" in query:
+                    scenario.subject = "긴교과이름" * 20
+
             if path.path == "/chat":
                 if "chat_greeting" in query:
                     value = query["chat_greeting"][0]

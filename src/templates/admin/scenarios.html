@@ -15,7 +15,7 @@
     <div class="search-box"><input type="search" id="search-input" aria-label="{{ t('admin.search_scenarios') }}" placeholder="{{ t('admin.search_this_page') }}" aria-describedby="scenario-filter-help" class="search-input"></div>
     <div class="filter-group">
       <select id="filter-publication" class="filter-select" aria-label="{{ t('admin.publication_status') }}">
-        <option value="">{{ t('admin.all_publication_states') }}</option><option value="draft">{{ t('admin.draft') }}</option><option value="published">{{ t('admin.publish') }}</option>
+        <option value="">{{ t('admin.all_publication_states') }}</option><option value="draft">{{ t('admin.draft') }}</option><option value="published">{{ t('admin.published') }}</option>
       </select>
       <select id="filter-status" class="filter-select" aria-label="{{ t('admin.activation_status') }}">
         <option value="">{{ t('admin.all_activation_states') }}</option><option value="active">{{ t('admin.active') }}</option><option value="inactive">{{ t('admin.inactive') }}</option>
@@ -34,10 +34,10 @@
           <div class="card-heading">
             <h3 class="card-title">{{ scenario.title }}</h3>
             <div class="card-status">
-              <span class="status-badge {% if scenario.is_active == 1 %}active{% endif %}">{{ t('admin.active') if scenario.is_active == 1 else t('admin.inactive') }}</span>
-              <span class="meta-tag">{{ t('admin.publish') if scenario.status == 'published' and scenario.config_json else t('admin.draft') }}</span>
-              {% if scenario.review_required %}<span class="meta-tag">{{ t('admin.review_required') }}</span>{% endif %}
-              {% if not scenario.config_json %}<span class="meta-tag">{{ t('admin.conversion_required') }}</span>{% endif %}
+              <span class="status-badge">{{ t('admin.active') if scenario.is_active == 1 else t('admin.inactive') }}</span>
+              <span class="meta-tag{% if scenario.status == 'published' and scenario.config_json %} badge-success{% endif %}">{{ t('admin.published') if scenario.status == 'published' and scenario.config_json else t('admin.draft') }}</span>
+              {% if scenario.review_required %}<span class="meta-tag badge-warning">{{ t('admin.review_required') }}</span>{% endif %}
+              {% if not scenario.config_json %}<span class="meta-tag badge-warning">{{ t('admin.conversion_required') }}</span>{% endif %}
             </div>
           </div>
           <div class="card-meta">

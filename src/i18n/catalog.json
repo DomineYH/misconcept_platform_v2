@@ -1913,16 +1913,16 @@
       "en": "Mentor mode"
     },
     "off_disabled": {
-      "ko": "off · 사용 안 함",
-      "en": "off · Disabled"
+      "ko": "사용 안 함",
+      "en": "Disabled"
     },
     "manual_help_button": {
-      "ko": "manual · 도움 버튼",
-      "en": "manual · Help button"
+      "ko": "도움 버튼으로 확인",
+      "en": "Use the help button"
     },
     "auto_check_after_completed_turns": {
-      "ko": "auto · 완료 턴 뒤 자동 검사",
-      "en": "auto · Check after completed turns"
+      "ko": "완료 턴 뒤 자동 검사",
+      "en": "Automatically check after completed turns"
     },
     "mentor_name": {
       "ko": "멘토 이름",

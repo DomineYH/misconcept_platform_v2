@@ -72,6 +72,7 @@ for (const [id, offset] of [['previous-step', -1], ['next-step', 1]]) {
 }
 function preview() {
   const mode = document.getElementById('mentor.mode').value;
+  const modeLabel = `${uiLanguage.t('admin.mentor_mode')}: ${document.getElementById('mentor.mode').selectedOptions[0].textContent}`;
   const classification = document.getElementById('analysis.classification_enabled').checked;
   document.getElementById('mentor-settings').hidden = mode === 'off';
   document.getElementById('mentor-auto-settings').hidden = mode !== 'auto';
@@ -80,10 +81,11 @@ function preview() {
   document.querySelectorAll('[data-preview]').forEach(el => {
     const path = data.public_lesson_fields[el.dataset.preview];
     const hidden = ['mentor_name', 'greeting_message'].includes(el.dataset.preview) && mode === 'off';
-    el.textContent = hidden ? '' : document.getElementById(path).value;
+    const value = document.getElementById(path).value;
+    el.textContent = hidden ? '' : el.dataset.preview === 'mentor_mode' ? modeLabel : el.dataset.preview === 'mentor_name' ? `${uiLanguage.t('admin.mentor')}: ${value}` : value;
     el.hidden = hidden;
   });
-  document.getElementById('execution-summary').textContent = `${Object.entries(models).map(([role, model]) => `${roles[role]}: ${model ? `${model.provider} / ${model.model_id}` : uiLanguage.t('admin.selection_required')}`).join('\n')}\n${uiLanguage.t('admin.mentor')} ${document.getElementById('mentor.mode').selectedOptions[0].textContent} · ${uiLanguage.t('admin.classification')} ${classification ? uiLanguage.t('admin.item_count', {count:rubric.length}) : uiLanguage.t('admin.disabled')}`;
+  document.getElementById('execution-summary').textContent = `${Object.entries(models).map(([role, model]) => `${roles[role]}: ${model ? `${model.provider} / ${model.model_id}` : uiLanguage.t('admin.selection_required')}`).join('\n')}\n${modeLabel} · ${uiLanguage.t('admin.classification')} ${classification ? uiLanguage.t('admin.item_count', {count:rubric.length}) : uiLanguage.t('admin.disabled')}`;
 }
 form.addEventListener('input', markDirty);
 form.addEventListener('change', markDirty);

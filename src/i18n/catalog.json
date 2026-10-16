@@ -1729,8 +1729,8 @@
       "en": "Write public content and internal instructions separately. Use pseudonyms and educational personas instead of identifying real students."
     },
     "items_to_complete_before_publication": {
-      "ko": "게시 전 보완 항목",
-      "en": "Items to complete before publication"
+      "ko": "저장·게시 전 보완 항목",
+      "en": "Items to complete before saving or publishing"
     },
     "reload_latest_version": {
       "ko": "최신 내용 다시 불러오기",

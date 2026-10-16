@@ -21,11 +21,11 @@
         <option value="">{{ t('admin.all_activation_states') }}</option><option value="active">{{ t('admin.active') }}</option><option value="inactive">{{ t('admin.inactive') }}</option>
       </select>
     </div>
+    <p id="scenario-filter-help">{{ t('admin.search_and_filters_apply_only_to_scenarios_on_this_page') }}</p>
   </section>
-  <p id="scenario-filter-help">{{ t('admin.search_and_filters_apply_only_to_scenarios_on_this_page') }}</p>
-  <p id="scenario-filter-empty" role="status" hidden>{{ t('admin.no_scenarios_on_this_page_match_your_search_and_filters') }}</p>
   <section class="scenarios-grid-container">
     <h2 class="section-title">{{ t('admin.scenarios') }} <span class="count-badge">{{ t('admin.item_count', count=scenarios|length) }}</span></h2>
+    <p id="scenario-filter-empty" role="status" hidden>{{ t('admin.no_scenarios_on_this_page_match_your_search_and_filters') }}</p>
     {% if scenarios %}
     <div class="scenarios-grid" id="scenarios-grid">
       {% for scenario in scenarios %}

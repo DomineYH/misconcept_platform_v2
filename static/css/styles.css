@@ -767,11 +767,18 @@ textarea {
 .scenarios-admin .card-body { min-width: 0; padding-right: 0; }
 .scenarios-admin .card-actions { flex-wrap: wrap; }
 .scenarios-admin .card-description { display: block; overflow: visible; overflow-wrap: anywhere; }
+.scenarios-admin .filter-bar { display: grid; grid-template-columns: minmax(0, 1fr) max-content; row-gap: var(--spacing-sm); }
+.scenarios-admin #scenario-filter-help { grid-column: 1 / -1; font-size: var(--font-size-sm); line-height: 1.5; color: var(--color-text-secondary); overflow-wrap: anywhere; }
 .scenarios-admin .filter-group { flex-wrap: wrap; min-width: 0; }
+.scenarios-admin .filter-select { width: auto; }
 .scenarios-admin .search-box { min-width: 0; }
 .scenarios-admin .btn, .scenarios-admin input, .scenarios-admin select { min-height: 44px; }
 .scenarios-admin .btn { min-width: 44px; }
 .scenarios-admin [hidden] { display: none; }
+
+@media (max-width: 768px) {
+  .scenarios-admin .filter-bar { grid-template-columns: minmax(0, 1fr); }
+}
 
 @media (min-width: 769px) {
   .scenarios-admin .scenario-card:only-child { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 20rem); gap: var(--spacing-lg); align-items: start; }

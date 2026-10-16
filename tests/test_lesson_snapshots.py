@@ -360,6 +360,7 @@ async def test_session_create_rejects_client_model_selection_and_requires_csrf(
 async def test_listing_uses_public_config_and_skips_unconverted_scenarios(
     data, api, publishable
 ):
+    publishable["config"]["student"]["internal_profile"] = "PRIVATE PROFILE"
     sid = (await post(api, "/admin/scenarios", publishable)).json()["id"]
     login(api, data.owner)
     response = await api.get("/scenarios")
@@ -370,7 +371,16 @@ async def test_listing_uses_public_config_and_skips_unconverted_scenarios(
         publishable["config"]["problem"]["public_text"].replace('"', "&#34;")
         in response.text
     )
-    for private in ("resolved_model_config", "misconception", "criteria"):
+    assert (
+        f'<span class="scenario-subject">{publishable["subject"]}</span>'
+        in response.text
+    )
+    for private in (
+        "PRIVATE PROFILE",
+        "resolved_model_config",
+        "misconception",
+        "criteria",
+    ):
         assert private not in response.text
 
 

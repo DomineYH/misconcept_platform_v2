@@ -102,3 +102,43 @@ def test_missing_public_problem_requests_completion_without_prompt(
         assert scenario.video_transcript not in html
     assert 'href="/scenarios/1"' not in listing
     assert "disabled" in listing
+
+
+@pytest.mark.parametrize(
+    "subject", ["Math", "긴교과이름" * 20, "<script>unsafe()</script>"]
+)
+def test_teacher_subject_chip_uses_only_escaped_public_content(
+    scenario, subject
+):
+    from markupsafe import escape
+
+    scenario.subject = subject
+    scenario.internal_profile = "PRIVATE STUDENT PROFILE"
+    html = templates.get_template("scenarios.html").render(
+        scenarios=[scenario],
+        user=SimpleNamespace(nickname="Teacher", role="teacher"),
+    )
+    assert f'<span class="scenario-subject">{escape(subject)}</span>' in html
+    assert html.index('class="scenario-subject"') < html.index(
+        'class="scenario-title"'
+    )
+    assert 'href="/scenarios/1" class="btn-primary"' in html
+    assert scenario.student_profile in html
+    for private in (
+        scenario.internal_profile,
+        scenario.prompt,
+        scenario.video_transcript,
+    ):
+        assert private not in html
+
+
+@pytest.mark.parametrize("subject", [None, "", " \n\t "])
+def test_teacher_subject_chip_omitted_when_blank(scenario, subject):
+    scenario.subject = subject
+    html = templates.get_template("scenarios.html").render(
+        scenarios=[scenario],
+        user=SimpleNamespace(nickname="Teacher", role="teacher"),
+    )
+    assert 'class="scenario-subject"' not in html
+    assert scenario.title in html
+    assert 'href="/scenarios/1" class="btn-primary"' in html

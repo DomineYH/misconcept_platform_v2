@@ -45,7 +45,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path)
         query = parse_qs(path.query)
-        if path.path in {"/fixtures/s6/users", "/fixtures/s6/scenarios"}:
+        status_code = 200
+        if path.path in {"/fixtures/errors/403", "/fixtures/errors/404"}:
+            status_code = int(path.path.rsplit("/", 1)[1])
+            body = (
+                templates.get_template("error.html")
+                .render(
+                    request=self.display_request(),
+                    user=SimpleNamespace(nickname="Admin", role="admin"),
+                    status_code=status_code,
+                )
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
+        elif path.path in {"/fixtures/s6/users", "/fixtures/s6/scenarios"}:
             kind = path.path.rsplit("/", 1)[1]
             fixture = list_fixture(
                 kind,
@@ -635,7 +648,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(204)
             self.end_headers()
             return
-        self.send_response(200)
+        self.send_response(status_code)
         self.send_header("Content-Type", mime)
         self.end_headers()
         self.wfile.write(body)

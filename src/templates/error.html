@@ -1,0 +1,14 @@
+{% extends "layout.html" %}
+{% set title_key = 'common.error_not_found_title' if status_code == 404 else 'common.error_forbidden_title' %}
+{% set description_key = 'common.error_not_found_description' if status_code == 404 else 'common.error_forbidden_description' %}
+
+{% block title %}{{ status_code }} · {{ t(title_key) }}{% endblock %}
+
+{% block content %}
+<section class="empty-state" aria-labelledby="error-title">
+  <p>{{ status_code }}</p>
+  <h2 class="empty-state-title" id="error-title">{{ t(title_key) }}</h2>
+  <p>{{ t(description_key) }}</p>
+  <a href="/scenarios" class="btn-primary">{{ t('common.error_back_to_scenarios') }}</a>
+</section>
+{% endblock %}

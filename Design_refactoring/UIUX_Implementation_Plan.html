@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>오개념 교정 대화 시뮬레이터 · UI/UX 적용 작업 계획서</title><style>
+:root{color-scheme:light;--ink:#16182d;--brand:#3b3fd8;--muted:#5b5f78;--line:#e6e3dc}*{box-sizing:border-box}body{margin:0;background:#fbfaf7;color:var(--ink);font:15px/1.8 system-ui,-apple-system,'Noto Sans KR',sans-serif}main{max-width:1100px;margin:auto;padding:54px 34px 80px}h1{font-size:34px;line-height:1.35;letter-spacing:-1px;max-width:820px}h2{margin-top:46px;padding-top:16px;border-top:1px solid var(--line);font-size:23px}h3{font-size:18px;margin:26px 0 8px}p{margin:10px 0}a{color:var(--brand)}.lead{color:var(--muted);font-size:17px}.tag{font-size:12px;border-radius:30px;padding:6px 12px;background:#ecedfd;color:var(--brand)}.note{padding:18px 22px;border-left:4px solid var(--brand);background:#ecedfd;border-radius:0 10px 10px 0}.wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;background:#fff;margin:18px 0;font-size:14px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:13px 15px}th{background:#f1f0eb}code{font:12px/1.6 ui-monospace,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f0efea;padding:18px;border-radius:10px}li{margin:6px 0}.swatch{display:inline-block;width:12px;height:12px;border:1px solid #aaa;border-radius:3px;margin-right:6px}footer{border-top:1px solid var(--line);margin-top:40px;padding-top:15px;color:var(--muted);font-size:12px}@media(max-width:600px){main{padding:28px 18px}h1{font-size:28px}th,td{padding:10px;min-width:120px}}@media print{body{background:white;font-size:10pt}main{padding:0;max-width:none}h2{break-after:avoid}tr,.note{break-inside:avoid}.wrap{overflow:visible}table{font-size:9pt}a{color:inherit}pre{font-size:9pt} @page{size:A4;margin:16mm}}
+</style></head><body><main>
+<span class="tag">디자인 승인 완료 · 구현 착수 전</span>
+<h1>오개념 교정 대화 시뮬레이터<br>UI/UX 적용 작업 계획서</h1>
+<p class="lead">PReMTA의 시각적 체계를 실제 수업 연습·분석·관리 흐름에 적용한다.</p>
+<p>버전 1.0 · 작성일 2026-10-14 · 승인: 2026-10-14 사용자 대화<br>대상: <a href="https://github.com/DomineYH/misconcept_platform_v2">DomineYH/misconcept_platform_v2</a> · 분석 기준: <code>main / ffa0046</code><br>디자인 참고: <a href="https://www.premta.org/">https://www.premta.org/</a></p>
+<div class="note"><strong>이번 승인과 산출물의 범위</strong><br>승인된 7개 화면 시안을 구현 가능한 작업 단위로 정리한다. 현재 단계는 계획서 작성이며, 저장소 수정·PR 생성·배포는 수행하지 않았다. 시안의 예시 대화·분석 수치·모델·연결 상태는 실제 서비스에 하드코딩하지 않는다.</div>
+<h2>1. 목표와 완료 상태</h2>
+<ul><li>따뜻한 배경, 인디고색 주요 행동, 학생·교사·멘토 구분, 넉넉한 여백을 전체 화면에 일관되게 적용한다.</li><li>교사는 시나리오 선택 → 대화 → 종료 → 분석·근거 확인 흐름을 명확하게 이해할 수 있어야 한다.</li><li>관리자는 시나리오 작성, 공통 모델 설정, 동일 맥락 비교, 제공자·모델 검증을 기존 기능 그대로 수행할 수 있어야 한다.</li><li>FastAPI·Jinja2·HTMX·기존 JavaScript 구조를 유지한다. React 전환, 데이터베이스 마이그레이션, AI 정책 변경은 이번 작업에 포함하지 않는다.</li><li>승인 시안의 화면 탐색 메뉴는 검토용이다. 실제 서비스에서는 진행 중인 세션이 있어야 대화에, 분석 대상이 있어야 결과에 접근하도록 기존 경로와 상태를 유지한다.</li></ul>
+<p><strong>현재 확인 수준:</strong>저장소 템플릿·스타일·브라우저 테스트 실행 구조와 참고 사이트 HTML/CSS를 확인했다. 승인 시안의 JavaScript 문법 검사는 통과했으나 Chromium 실행 파일 부재로 브라우저 동작·반응형 검증은 완료하지 못했다. 시각적 승인과 기능 검증 통과를 구분하며, 구현 전 브라우저 검증 환경부터 준비한다.</p>
+<h2>2. 승인된 디자인 규격</h2>
+<div class="wrap"><table><thead><tr><th>항목</th><th>적용 규격</th><th>적용 원칙</th></tr></thead><tbody>
+<tr><td>배경·표면</td><td><span class="swatch" style="background:#fbfaf7"></span>#FBFAF7 / #FFFFFF</td><td>본문 바탕과 카드·입력 영역을 구분한다.</td></tr>
+<tr><td>본문·보조 텍스트</td><td>#16182D / #5B5F78</td><td>본문은 16px 기준, 보조 정보는 12px 이상으로 읽기 쉽게 유지한다.</td></tr>
+<tr><td>주요 행동·학생</td><td>#3B3FD8 / #ECEDFD</td><td>주요 버튼과 학생 말풍선. 색만으로 역할을 구분하지 않는다.</td></tr>
+<tr><td>멘토·주황 강조</td><td>#E8743B / #FDEEE5</td><td>작은 글자에는 더 진한 #A84617을 사용하고 대비를 검증한다.</td></tr>
+<tr><td>정상 상태·청록</td><td>#0F9488 / #E2F5F2</td><td>작은 상태 글자에는 #08766D를 사용한다. 경고·오류 상태를 별도로 유지한다.</td></tr>
+<tr><td>테두리·모서리</td><td>#E6E3DC / 카드 16~18px, 입력 10px</td><td>섹션은 여백으로 구분하고 카드를 과도하게 중첩하지 않는다.</td></tr>
+<tr><td>서체</td><td>기존 Pretendard·시스템 한글 글꼴 우선</td><td>영문 참조의 세리프 분위기를 한글 제목에 맞게 조정한다. 새 웹폰트는 필수로 추가하지 않는다.</td></tr>
+<tr><td>레이아웃</td><td>목록 최대 폭 약 1152px, 비교 화면 최대 약 1440px</td><td>대화·비교 화면의 작업 공간을 확보한다. 768px 미만은 단일 열 중심으로 전환한다.</td></tr>
+<tr><td>다크 모드</td><td>배경 #0E0F1C, 표면 #161829, 본문 #ECEEF8, 주요색 #8B8FF7</td><td>시안처럼 시스템 설정을 따른다. 별도 테마 토글은 추가하지 않는다. 입력·상태 색의 대비도 확인한다.</td></tr>
+</tbody></table></div>
+<p>참고 사이트의 로고·연구비 표기·기관명·프로젝트 소개 문구를 복제하지 않는다. 기존 서비스 명칭과 교육 연구 도구의 정체성을 유지한다. 언어 전환은 이번 승인 시안에 없으므로 신규 국제화 기능은 범위에서 제외한다.</p>
+<h2>3. 화면별 변경 파일과 보존할 기능</h2>
+<p>아래 경로는 저장소 루트 기준이다. JavaScript 변경은 DOM 연결이나 접근성 동작 때문에 필요한 경우로 제한한다.</p>
+<div class="wrap"><table><thead><tr><th>화면</th><th>주요 파일</th><th>변경·보존 기준</th></tr></thead><tbody>
+<tr><td>공통 구조</td><td><code>src/templates/layout.html</code><br><code>static/css/styles.css</code></td><td>색상 토큰·헤더·모바일 메뉴·버튼·폼·알림·푸터 통일. 로그인 상태, 관리자 권한, CSRF 주입, 본문 건너뛰기 유지.</td></tr>
+<tr><td>시나리오 선택</td><td><code>src/templates/scenarios.html</code></td><td>짧은 소개와 카드형 선택. 목록은 실제 데이터로 렌더링. 문제 상황 미완성 시 시작 불가, 빈 목록 안내 유지.</td></tr>
+<tr><td>학생·멘토 대화</td><td><code>src/templates/chat.html</code><br><code>src/templates/partials/message.html</code><br><code>static/js/chat.js</code></td><td>상황 정보와 대화 영역 분리, 역할명·말풍선 구별, 입력·종료 행동 명료화. 기존 스트리밍·멘토 모드·복구·중복 전송 방지 유지.</td></tr>
+<tr><td>분석·대화 기록</td><td><code>src/templates/analysis.html</code><br><code>src/templates/session_history.html</code><br><code>src/templates/partials/analysis_*.html</code><br><code>static/js/analysis-result.js</code></td><td>피드백 → 근거 → 다음 연습 순으로 정돈. 실제 지표·분류·루브릭·증거 링크·CSV·이전 결과 유지. 분석 실행 상태와 채택된 결과를 구분.</td></tr>
+<tr><td>시나리오 관리</td><td><code>src/templates/admin/scenarios.html</code><br><code>static/js/admin-scenarios.js</code></td><td>게시·초안 상태, 편집·비교 행동 정리. 그룹 배정, 삭제 제한, 필터, 페이지 이동 기능 유지.</td></tr>
+<tr><td>시나리오 작성</td><td><code>src/templates/admin/scenario_editor.html</code><br><code>static/css/scenario-editor.css</code><br><code>static/js/scenario-editor.js</code><br><code>static/js/scenario-models.js</code></td><td>기존 5단계 작성과 공개 미리보기 정돈. 공통 모델, 역할별 옵션, 저장되지 않은 변경 경고, 버전 충돌, 변환 검토 유지.</td></tr>
+<tr><td>모델 비교</td><td><code>src/templates/admin/comparison_conversation.html</code><br><code>static/css/scenario-comparison.css</code><br><code>static/js/comparison-conversation.js</code><br><code>static/js/comparison-results.js</code></td><td>1~3개 패널, 공통 질문, 완료 상태·응답 채택 명확화. 저장 시나리오 선택, 공통 이력, 멘토·분석·재시도·중단·비교 기록과 적용 흐름 유지.</td></tr>
+<tr><td>AI 연결·모델</td><td><code>src/templates/admin/ai.html</code><br><code>static/js/ai-connections.js</code><br><code>static/js/ai-render.js</code></td><td>제공자 연결과 모델·역할 검증을 계층적으로 표시. 키 마스킹, 관리자 재인증, 사용 중지·삭제, 검증 만료, 기본값·제한 설정 유지.</td></tr>
+<tr><td>기타 기존 화면</td><td><code>src/templates/login.html</code><br><code>src/templates/admin/{dashboard,users,groups,sessions,analysis,user_conversations,api_usage,about}.html</code><br><code>src/templates/about_fragment.html</code><br><code>static/css/sessions.css</code></td><td>공통 디자인 적용과 레이아웃 회귀 점검. 기존 관리자 메뉴와 기능을 모두 유지. 시안의 축약 메뉴를 기능 삭제로 해석하지 않는다.</td></tr>
+</tbody></table></div>
+<h2>4. 단계별 작업 계획</h2>
+<h3>단계 0 · 기준 확정과 실행 환경</h3>
+<ul><li>구현 시작 시 원격 main의 최신 커밋을 확인하고 <code>ffa0046</code> 이후 변경을 대조한다. 변경된 템플릿·테스트가 있으면 이 계획의 대상 경로를 갱신한다.</li><li>작업 브랜치 <code>feat/premta-ui-refresh</code>를 만들고 현재 화면 및 역할별 메뉴를 기록한다.</li><li>README 기준으로 의존성과 Chromium을 설치한다. 임시 DB·합성 데이터·모의 제공자 응답으로 테스트한다.</li><li>CSS/DOM에 연결된 ID, <code>data-*</code>, <code>hx-*</code>, 폼 필드명, 이벤트 위임 선택자를 확인한다.</li></ul>
+<p><strong>완료 기준:</strong>기존 화면이 테스트 환경에서 실행되고, 기준 테스트 실패가 있다면 변경 전 문제로 구분해 기록한다.</p>
+<h3>단계 1 · 공통 디자인과 탐색 구조</h3>
+<ul><li>기존 CSS의 의미 기반 변수를 재사용하여 팔레트·간격·서체·역할·상태 토큰을 정리한다.</li><li>헤더, 메뉴, 입력 폼, 주요·보조 버튼, 오류 안내, 알림, 모달, 표에 공통 규칙을 적용한다.</li><li>로그인·관리자 권한에 따른 탐색 구조를 유지하고 현재 위치를 표시한다.</li><li>페이지 전용 CSS를 대조하여 흑백 값·고정 폭·전역 선택자 충돌을 순차적으로 제거한다. 임시 덮어쓰기 파일과 <code>!important</code>를 누적하지 않는다.</li></ul>
+<p><strong>완료 기준:</strong>로그인·교사·관리자 대표 화면의 공통 디자인과 모바일 메뉴가 정상 동작한다. 이후 단계는 이 토큰을 사용한다.</p>
+<h3>단계 2 · 교사 화면과 연습 흐름</h3>
+<ul><li>시나리오 카드와 소개 영역을 적용한다. 소개 영역이 실제 목록 접근을 과도하게 밀어내지 않도록 높이를 제한한다.</li><li>대화 화면의 상황 정보·학생 정보·입력·멘토 도움·종료 행동을 정돈한다. 모바일에서는 기존 정보/대화 전환 흐름을 유지한다.</li><li>분석 화면의 핵심 피드백과 발화 근거를 연결하고, 이력 화면과 CSV 행동을 동일한 디자인으로 정리한다.</li><li>긴 대화·줄바꿈·긴 제목과 로딩·빈 상태·오류·분석 부분 결과를 점검한다.</li></ul>
+<p><strong>완료 기준:</strong>모의 AI로 시나리오 선택 → 질문·응답 → 멘토 도움 → 종료 → 분석·근거 확인 → 기록 조회 흐름을 통과한다.</p>
+<h3>단계 3 · 관리자 작성·비교·연결 화면</h3>
+<ul><li>시나리오 목록·5단계 작성기를 적용한다. 입력값과 미리보기 연결, 초안 저장, 게시 전 오류 이동을 점검한다.</li><li>공통 모델과 역할별 옵션의 관계를 설명하고 검증되지 않은 모델의 실행 불가 상태를 유지한다.</li><li>비교 패널의 진행·완료·실패·중단·채택 상태를 구분한다. 모바일은 패널을 수직 배치하고 제공자·모델명을 반복 표시한다.</li><li>AI 연결 화면을 제공자 → 모델 → 역할 검증 순으로 정돈한다. 실제 키·저장·재인증 흐름은 기존 구현을 연결한다.</li><li>사용자·그룹·세션·분석·사용량·소개 화면의 표, 필터, 페이지 이동, 모달에도 공통 스타일을 적용한다.</li></ul>
+<p><strong>완료 기준:</strong>작성·저장·재열기·게시, 비교·채택·다음 질문·비교 종료, 제공자 설정과 역할 검증의 기존 동작이 유지된다.</p>
+<h3>단계 4 · 통합 검증·리뷰·PR</h3>
+<ul><li>승인 시안과 실제 화면의 차이를 비교한다. 실제 데이터와 기존 기능을 보존하기 위한 차이는 PR에 이유를 적는다.</li><li>영향 테스트와 관련 통합 테스트를 실행하고, 공통 CSS·레이아웃 전역 변경이므로 최종 전체 브라우저 검사와 전체 pytest를 한 번 수행한다.</li><li>문제를 수정한 뒤 실패·영향 범위만 재검증한다. 변경 없는 전체 검사를 반복하지 않는다.</li><li>리뷰용 PR에는 핵심 7화면의 전후 비교, 모바일·다크 모드 결과, 테스트 명령·결과·미검증 항목을 첨부한다.</li><li>PR 리뷰와 기존 저장소의 CI·머지 정책에 따라 완료한다. 운영 적용은 별도 실행 단계로 기록한다.</li></ul>
+<p><strong>진행 원칙:</strong>단계별 완료 기준을 충족한 뒤 다음 단계로 이동한다. 기본은 한 브랜치·한 PR 안에서 단계별 커밋으로 구분한다. 별도 프레임워크나 중복된 테스트 체계를 도입하지 않는다.</p>
+<h2>5. 기능 보존 계약</h2>
+<ol><li><strong>데이터·보안:</strong>기존 엔드포인트, CSRF, 권한 검사, 세션 소유권, 관리자 재인증, 암호화된 키 저장을 유지한다. 공개 화면에 내부 프롬프트·멘토 판단 이유·비밀키를 노출하지 않는다.</li><li><strong>대화:</strong>학생 스트리밍과 멘토 개입을 독립적으로 표시한다. 실패·중단·새로고침 복구, 전송 잠금, 사용자의 명시적 재시도 정책을 보존한다.</li><li><strong>시나리오:</strong>공통 모델과 역할별 옵션을 유지한다. 과거 혼합 모델 설정을 임의로 통일하거나 과거 세션의 고정 설정을 바꾸지 않는다.</li><li><strong>비교:</strong>각 패널은 동일한 공통 대화를 사용한다. 완료된 응답 채택과 이후 공통 이력 반영, 패널별 오류·재시도·중단 정책을 보존한다. 일반 수업 기록에 비교 데이터를 섞지 않는다.</li><li><strong>분석:</strong>새 실행 상태와 기존 채택 결과를 구분한다. 부분 결과·실패 결과가 기존 정상 결과를 덮어쓰지 않게 한다. 근거·분류·통계는 서버 검증 결과를 그대로 사용한다.</li><li><strong>폼:</strong>입력 내용, 숨겨진 옵션, 미저장 경고, <code>expected_version</code> 충돌, 오류 요약·필드 이동을 유지한다. 탭 변경으로 입력값이 지워지지 않아야 한다.</li></ol>
+<h2>6. 검증 계획과 실행 명령</h2>
+<p>명령은 현재 README와 <code>tests/run_browser_checks.mjs</code>의 파일명 필터 방식에 근거한다. 아래 명령은 구현 시 실행할 계획이며, 이번 문서 작성 단계에서 실행 완료를 의미하지 않는다.</p>
+<h3>환경 준비 · 최초 1회</h3>
+<pre><code>uv sync --frozen --extra dev --python 3.12
+npm ci
+npx playwright install --with-deps chromium</code></pre>
+<div class="wrap"><table><thead><tr><th>시점</th><th>확인 대상</th><th>실행 범위</th></tr></thead><tbody>
+<tr><td>공통·교사 화면 수정</td><td>메뉴·시나리오·대화·복구·멘토·분석</td><td><code>npm run test:browser -- browser_chat browser_scenarios student_ mentor_ s4_ native_analysis</code></td></tr>
+<tr><td>관리자 화면 수정</td><td>작성·공통 모델·비교·AI 연결·페이지 이동</td><td><code>npm run test:browser -- s2_ conversation ai_ s6_ api_usage</code><br>기존 역할별 비교 UI도 바꾸면 <code>s5_</code> 추가</td></tr>
+<tr><td>JS 상태·폼 연동 변경</td><td>해당 동작의 서버 계약·통합</td><td><code>test_student_sse.py</code>, <code>test_mentor_lifecycle.py</code>, <code>test_scenario_drafts.py</code>, <code>test_comparison_conversations.py</code>, <code>test_model_management.py</code>, <code>test_analysis_concurrency.py</code> 중 영향 파일 선택</td></tr>
+<tr><td>PR 직전</td><td>전역 레이아웃 회귀·전체 기능·검사 게이트</td><td>아래 전체 명령을 한 차례 실행하고 결과를 기록</td></tr>
+</tbody></table></div>
+<pre><code>uv run --frozen python -m pytest -q
+uv run --frozen ruff check .
+uv run --frozen black --check .
+npm run test:browser
+uv run --frozen python tests/check_student_live.py</code></pre>
+<p>단순 색상·간격 수정에 전체 TDD를 강제하지 않는다. 기존 검사를 재사용하고, 새 탭 동작·반응형 탐색·상태 변경에 새 실패 가능성이 생겼을 때만 해당 동작을 검증하는 테스트를 보강한다. 오류가 발견되면 재현 가능한 실패 사례를 먼저 확보한다.</p>
+<h3>시각·접근성 검증</h3>
+<ul><li>320·390·768·1024·1440px에서 핵심 화면을 확인한다. 문서 전체의 가로 넘침은 없어야 하며, 꼭 필요한 관리자 데이터 표만 자체 스크롤을 허용한다.</li><li>일반 글자 대비 4.5:1, 큰 글자·필수 UI 경계 대비 3:1을 기준으로 확인한다. 다크 모드도 별도로 확인한다.</li><li>키보드로 메뉴·탭·입력·모달·주요 행동에 접근할 수 있어야 한다. 포커스 표시·모달 닫기 후 복귀·오류 필드 안내를 유지한다.</li><li>터치 행동 영역은 약 44px 이상, 입력 폰트는 16px 기준으로 유지한다. 200% 확대에서도 주요 기능이 가려지지 않아야 한다.</li><li>역할과 상태는 색상뿐 아니라 텍스트로도 구분한다. 스트리밍 알림이 매 토큰마다 과도하게 읽히지 않게 한다.</li></ul>
+<h2>7. 위험 요인과 대응</h2>
+<div class="wrap"><table><thead><tr><th>위험</th><th>대응</th></tr></thead><tbody>
+<tr><td>공통 CSS가 관리자·모달까지 영향을 줌</td><td>전역 토큰과 페이지별 선택자를 구분하고, 공통 단계부터 전체 템플릿 목록으로 회귀 확인한다.</td></tr>
+<tr><td>레이아웃 재구성이 JS 선택자·HTMX 연결을 끊음</td><td>ID·폼명·이벤트 연결을 먼저 목록화하고 유지한다. 변경이 필요한 경우 연결 코드와 테스트를 같은 커밋에서 수정한다.</td></tr>
+<tr><td>시안처럼 정상 상태만 구현</td><td>비어 있음·로딩·실패·중단·부분 결과·권한 제한·충돌·검증 만료 상태를 완료 기준에 포함한다.</td></tr>
+<tr><td>긴 대화·비교 응답이 모바일을 밀어냄</td><td>줄바꿈·고정 폭 제거·수직 배치·입력 영역 접근성을 긴 합성 데이터로 확인한다.</td></tr>
+<tr><td>브라우저 검증 환경 부재</td><td>단계 0에서 환경을 준비한다. 실패하면 원인과 미검증 항목을 기록하고 시각·기능 검증을 통과했다고 보고하지 않는다.</td></tr>
+<tr><td>최신 main과 계획 기준 간 차이</td><td>착수 시 차이를 재확인하고 기존 변경을 덮어쓰지 않는다. 변경된 계약에 맞게 작업 범위를 조정한다.</td></tr>
+</tbody></table></div>
+<h2>8. 완료 체크리스트와 인수</h2>
+<ul><li>□ 승인된 7개 핵심 화면의 디자인과 역할별 흐름을 적용했다.</li><li>□ 로그인·기타 관리자 화면에서도 디자인이 일관되며 기존 메뉴가 유지된다.</li><li>□ 실제 데이터와 기존 API를 연결했고, 예시 수치·응답·연결 상태를 제거했다.</li><li>□ 교사와 관리자 권한, 공개·내부 정보의 경계가 유지된다.</li><li>□ 모바일·다크 모드·긴 콘텐츠·키보드·오류 상태를 확인했다.</li><li>□ 영향 검사와 최종 회귀 검사 결과를 PR에 기록했다.</li><li>□ 핵심 화면 전후 비교와 시안 대비 합리적인 차이를 설명했다.</li><li>□ 데이터·AI 실행 정책·인증 동작에 의도하지 않은 변경이 없다.</li><li>□ 배포 대상과 이전 정상 커밋을 기록했다. 문제 발생 시 변경 커밋 되돌리기 또는 이전 버전 재배포로 복구할 수 있다.</li></ul>
+<p><strong>예상 산출물:</strong>단계별 커밋, 변경된 템플릿·CSS·필요 최소 JS, 필요한 회귀 테스트, 검증 기록, 리뷰용 PR. 구현 완료 보고에는 변경 사항·검증 결과·남은 제한을 구분한다.</p>
+<footer>근거: 저장소 AGENTS.md, README.md, src/templates, static/css, 관련 JavaScript 및 tests/run_browser_checks.mjs · 실제 구현 시간은 환경 준비와 발견되는 회귀 범위에 따라 산정한다.</footer>
+</main></body></html>

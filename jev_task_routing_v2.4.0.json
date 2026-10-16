@@ -64,8 +64,8 @@
   "roles": {
     "planner": {
       "harness": "codex",
-      "model": "gpt-6.1-sol",
-      "effort": "xhigh",
+      "model": "gpt-6-astra",
+      "effort": "medium",
       "responsibility": "Under a coordinator work order, produce or revise the executable implementation plan: approach, contracts, dependencies, failure handling, verification and relevant rollout/recovery. Resolve ordinary design work inside that one plan. Return a proposal, not an approval, another task/risk/TDD classification or instructions to implementer. If a material decision remains disputed or unsupported, report it to the coordinator rather than invoking advisor.",
       "when": "Only when the coordinator issues a planning assignment for high-risk delivery, a concrete needs_design signal, or substantive replanning. A routine brief plan may be handled by the host. needs_specialist alone neither assigns planner nor requests advisor.",
       "authority": "Read only the permitted inputs. Write only named planning/report artifacts when explicitly authorized; no product-code/configuration changes, worker dispatch, scope expansion or final acceptance. The coordinator approves the executable plan through the existing work order."
@@ -80,8 +80,8 @@
     },
     "task-verifier": {
       "harness": "opencode",
-      "model": "opencode/muse-spark-1.3-contributor-free",
-      "effort": "xhigh",
+      "model": "zai-coding-plan/glm-5.3",
+      "effort": "max",
       "responsibility": "Under a coordinator review order, independently inspect the fixed current diff and verification evidence against requirements, design and risk conditions. Report PASS, FAIL or BLOCKED findings with evidence to the coordinator; these are review verdicts, not task acceptance or commands to implementer. Run an authorized focused diagnostic only for a concrete unresolved concern. Recheck invalidated scope, not the same full review mechanically.",
       "when": "The coordinator must arrange the existing required independent review for standard/high delivery, emergency, repository rules and high-risk live-system experiments. Use a separate review context; the same model is permitted. Do not allocate a separate final-verifier.",
       "authority": "Read-only on the reviewed product artifact and authoritative configuration. Reports and authorized disposable diagnostic outputs are allowed only in named locations. No code fixes, test weakening, peer repair orders or final acceptance. Reporting to the coordinator never requires agreement with it."

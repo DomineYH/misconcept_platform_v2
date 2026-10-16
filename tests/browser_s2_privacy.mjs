@@ -23,7 +23,8 @@ print(json.dumps(expected))
   for (const mode of ['manual', 'auto', 'off']) {
     await page.getByLabel('멘토 사용 모드').selectOption(mode);
     const rendered = await page.locator('#public-preview [data-preview]').evaluateAll(elements => Object.fromEntries(elements.map(el => [el.dataset.preview, el.textContent])));
-    assert.deepEqual(rendered, expected[mode], `${mode}: editor preview has exactly the public_lesson fields and values`);
+    const modeLabels = {off:'사용 안 함', manual:'도움 버튼으로 확인', auto:'완료 턴 뒤 자동 검사'};
+    assert.deepEqual(rendered, {...expected[mode], mentor_mode:`멘토 사용 모드: ${modeLabels[mode]}`, mentor_name:mode === 'off' ? '' : `멘토: ${expected[mode].mentor_name}`}, `${mode}: editor preview has exactly the public_lesson fields with labelled mentor display text`);
   }
   await page.getByLabel('멘토 사용 모드').selectOption('manual');
   await page.getByRole('button', {name:'2. 문제 상황', exact:true}).click();

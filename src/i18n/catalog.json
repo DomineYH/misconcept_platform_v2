@@ -1741,8 +1741,8 @@
       "en": "Write public content and internal instructions separately. Use pseudonyms and educational personas instead of identifying real students."
     },
     "items_to_complete_before_publication": {
-      "ko": "게시 전 보완 항목",
-      "en": "Items to complete before publication"
+      "ko": "저장·게시 전 보완 항목",
+      "en": "Items to complete before saving or publishing"
     },
     "reload_latest_version": {
       "ko": "최신 내용 다시 불러오기",
@@ -1925,16 +1925,16 @@
       "en": "Mentor mode"
     },
     "off_disabled": {
-      "ko": "off · 사용 안 함",
-      "en": "off · Disabled"
+      "ko": "사용 안 함",
+      "en": "Disabled"
     },
     "manual_help_button": {
-      "ko": "manual · 도움 버튼",
-      "en": "manual · Help button"
+      "ko": "도움 버튼으로 확인",
+      "en": "Use the help button"
     },
     "auto_check_after_completed_turns": {
-      "ko": "auto · 완료 턴 뒤 자동 검사",
-      "en": "auto · Check after completed turns"
+      "ko": "완료 턴 뒤 자동 검사",
+      "en": "Automatically check after completed turns"
     },
     "mentor_name": {
       "ko": "멘토 이름",
@@ -2211,6 +2211,10 @@
     "select_a_common_model": {
       "ko": "공통 모델 선택 필요",
       "en": "Select a common model"
+    },
+    "registered_and_verified_model_required": {
+      "ko": "등록·검증된 모델이 필요합니다.",
+      "en": "A registered and verified model is required."
     },
     "existing_per_role_models_are_preserved_explicitly_select_a_common_model_before_saving": {
       "ko": "기존 역할별 모델을 보존했습니다. 공통 모델을 명시적으로 선택해야 저장할 수 있습니다.",

@@ -15,8 +15,8 @@ export default async function check(page) {
     assert.equal(await page.locator('#new-name').inputValue(), '원문 그룹');
   }
   for (const [language, labels, modeLabel, levels] of [
-    ['ko',['학생봇','멘토','사후 분석'],'manual · 도움 버튼',['지정하지 않음','높음','낮음']],
-    ['en',['Student','Mentor','Post-session analysis'],'manual · Help button',['Unspecified','High','Low']],
+    ['ko',['학생봇','멘토','사후 분석'],'멘토 사용 모드: 도움 버튼으로 확인',['지정하지 않음','높음','낮음']],
+    ['en',['Student','Mentor','Post-session analysis'],'Mentor mode: Use the help button',['Unspecified','High','Low']],
   ]) {
     await page.context().addCookies([{name:'ui_lang',value:language,url:base}]);
     await page.goto(`${base}/fixtures/s2/editor`);

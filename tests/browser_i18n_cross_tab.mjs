@@ -70,7 +70,7 @@ export default async function check(page) {
         await page.locator('#open-about-modal').click();
         await page.locator('#about-load-error').waitFor({state:'visible'});
         assert.equal(await page.locator('#about-load-error').innerText(), language === 'ko'
-          ? '소개를 불러올 수 없습니다. About을 다시 눌러 주세요.'
+          ? '소개를 불러올 수 없습니다. 소개를 다시 눌러 주세요.'
           : 'Could not load About. Select About to try again.');
         await page.unroute('**/about/content');
         if (path.startsWith('/chat')) {

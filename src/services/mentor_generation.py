@@ -247,7 +247,6 @@ async def _reserve_mentor(
             db,
             session_id,
             turn_id,
-            limit=lesson.config.runtime.context_turn_limit,
         )
         connection, model, options = await resolve_frozen_model(
             db, lesson.config.mentor.resolved_model_config, "mentor"

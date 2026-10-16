@@ -233,7 +233,6 @@ async def _reserve_student(
             db,
             session_id,
             before_turn_index=teacher.turn_index,
-            limit=lesson.config.runtime.context_turn_limit,
         )
         try:
             call = build_student_request(

@@ -1,4 +1,4 @@
-"""Generation inputs use bounded pairs, independent of storage order."""
+"""Generation inputs use all completed pairs, independent of storage order."""
 
 from datetime import datetime
 from uuid import uuid4
@@ -9,7 +9,6 @@ from sqlalchemy import event
 from test_scenario_api import login
 from test_student_generation import client, frames, scenario_payload, student
 
-from src.config import config
 from src.db.migrations import migrate
 from src.models import GenerationRun, Message, Session
 
@@ -93,10 +92,9 @@ async def long_dialogue(data, monkeypatch):
     return other_session.id
 
 
-async def test_student_route_receives_n_completed_pairs_and_current_once(
-    data, client, student, long_dialogue, monkeypatch
+async def test_student_route_receives_all_completed_pairs_and_current_once(
+    data, client, student, long_dialogue
 ):
-    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
     from lesson_fixtures import install_snapshot
 
     await install_snapshot(
@@ -118,16 +116,10 @@ async def test_student_route_receives_n_completed_pairs_and_current_once(
         == STUDENT_INSTRUCTION
     )
     assert actual == [
-        {"role": "user", "content": "Teacher 57"},
-        {"role": "assistant", "content": "Student 57"},
-        {"role": "user", "content": "Teacher 58"},
-        {"role": "assistant", "content": "Student 58"},
-        {"role": "user", "content": "Teacher 59"},
-        {"role": "assistant", "content": "Student 59"},
-        {"role": "user", "content": "Teacher 60"},
-        {"role": "assistant", "content": "Student 60"},
-        {"role": "user", "content": "Current question"},
-    ]
+        {"role": role, "content": f"{name} {index}"}
+        for index in range(1, 61)
+        for role, name in (("user", "Teacher"), ("assistant", "Student"))
+    ] + [{"role": "user", "content": "Current question"}]
     assert student.responses.create.await_count == 1
     history = await client.get(f"/scenarios/{data.scenario.id}")
     assert history.status_code == 200
@@ -142,19 +134,11 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
 ):
     from src.services.turn_context import load_mentor_context
 
-    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
     context = await load_mentor_context(data.db, data.session.id, "turn-50")
     assert context == [
-        {"role": "teacher", "content": "Teacher 46"},
-        {"role": "student", "content": "Student 46"},
-        {"role": "teacher", "content": "Teacher 47"},
-        {"role": "student", "content": "Student 47"},
-        {"role": "teacher", "content": "Teacher 48"},
-        {"role": "student", "content": "Student 48"},
-        {"role": "teacher", "content": "Teacher 49"},
-        {"role": "student", "content": "Student 49"},
-        {"role": "teacher", "content": "Teacher 50"},
-        {"role": "student", "content": "Student 50"},
+        {"role": role, "content": f"{role.title()} {index}"}
+        for index in range(1, 51)
+        for role in ("teacher", "student")
     ]
     # New paid generation for an older target is forbidden, even without a newer mentor run.
     from types import SimpleNamespace
@@ -191,14 +175,12 @@ async def test_mentor_input_stays_at_target_after_later_turns_complete(
 async def test_nonstream_generation_also_uses_only_completed_pairs(
     data, scenario_payload, long_dialogue, monkeypatch
 ):
-    from src.services.session_mgr import SessionManager
-
-    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 4)
     import httpx2
     from lesson_fixtures import LESSON_KEY, install_connection
     from test_student_probe import sdk_transport
 
     from src.services.invocation_types import InvocationError
+    from src.services.session_mgr import SessionManager
 
     connection, model = await install_connection(data, monkeypatch)
     from lesson_fixtures import install_snapshot
@@ -221,9 +203,9 @@ async def test_nonstream_generation_also_uses_only_completed_pairs(
         with pytest.raises(InvocationError, match="transient"):
             await manager.process_teacher_message("Legacy caller question")
         actual = calls[0]["input"]
-        assert len(actual) == 9  # Four pairs and the current question.
+        assert len(actual) == 121  # All 60 pairs and the current question.
         assert calls[0]["instructions"] == STUDENT_INSTRUCTION
-        assert actual[0] == {"role": "user", "content": "Teacher 57"}
+        assert actual[0] == {"role": "user", "content": "Teacher 1"}
         assert actual[-2:] == [
             {"role": "assistant", "content": "Student 60"},
             {"role": "user", "content": "Legacy caller question"},
@@ -234,18 +216,17 @@ async def test_nonstream_generation_also_uses_only_completed_pairs(
 
 
 @pytest.mark.parametrize(
-    "before, first, last", [(None, 51, 60), (50, 40, 49), (1, None, None)]
+    "before, first, last", [(None, 1, 60), (50, 1, 49), (1, None, None)]
 )
-async def test_completed_turn_window_is_limited_and_uses_024_indexes(
-    data, long_dialogue, monkeypatch, before, first, last
+async def test_all_completed_turns_are_loaded_using_024_indexes(
+    data, long_dialogue, before, first, last
 ):
     from src.services.turn_context import load_completed_turns
 
-    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 10)
     queries = []
 
     def capture(conn, cursor, statement, parameters, context, executemany):
-        if statement.startswith("SELECT") and "LIMIT" in statement:
+        if statement.startswith("SELECT") and "message" in statement:
             queries.append((statement, parameters))
 
     event.listen(data.engine.sync_engine, "before_cursor_execute", capture)
@@ -263,11 +244,9 @@ async def test_completed_turn_window_is_limited_and_uses_024_indexes(
             for index in range(first, last + 1)
             for role in ("teacher", "student")
         ]
-        assert len(history) == 20
     assert len(queries) == 1
     statement, parameters = queries[0]
-    assert "turn_index DESC" in statement
-    assert "LIMIT ? OFFSET ?" in statement
+    assert "LIMIT" not in statement
     connection = await data.db.connection()
     plan = "\n".join(
         row[-1]
@@ -280,7 +259,6 @@ async def test_completed_turn_window_is_limited_and_uses_024_indexes(
     assert "ix_message_completed_student" in plan
     assert "uq_message_turn_role" in plan
     assert "SCAN message" not in plan
-    # Only the bounded outer result may sort; the inner LIMIT is indexed.
     assert plan.count("USE TEMP B-TREE FOR ORDER BY") <= 1
 
 

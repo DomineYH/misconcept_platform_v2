@@ -73,7 +73,6 @@
         {{ text_field('subject', t('admin.subject'), limit=100) }}
         {{ text_field('target_grade', t('admin.target_grade'), limit=100) }}
         {% if editor.is_active is defined %}<label><input id="is_active" data-field="is_active" type="checkbox"> {{ t('admin.active') }}</label>{% endif %}
-        {{ text_field('runtime.context_turn_limit', t('admin.recent_completed_turns_in_context'), 'number', hint=t('admin.use_1_100_turns_for_student_and_mentor_context_analysis_uses_the_full_dialogue')) }}
         <fieldset id="scenario-groups"><legend>{{ t('admin.assigned_groups') }}</legend>{% for group in editor.available_groups|default([]) %}<label><input type="checkbox" name="groups" value="{{ group.id }}"> {{ group.name }}</label>{% endfor %}</fieldset>
       </section>
       <section id="step-1" data-panel="1" hidden><h2 tabindex="-1">{{ t('admin.2_problem_situation') }}</h2>

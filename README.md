@@ -112,20 +112,19 @@ Encryption uses the exactly pinned [cryptography 50.0.2](https://pypi.org/projec
 [AES-GCM API](https://cryptography.io/en/stable/hazmat/primitives/aead/), a fresh
 12-byte nonce per encryption, and authenticated provider/connection ID/credential revision.
 
-`CONTEXT_WINDOW_TURNS` defaults to 10 completed teacher–student pairs.
-Student input includes those prior pairs and the current question once; mentor
-input includes the prior pairs and its target pair, excluding later turns.
-On upgrading to Phase A, review any explicitly configured value: it previously
-counted individual messages (including mentor rows), and now counts complete
-pairs. Existing values are preserved, so administrators should adjust them
-before starting new sessions. Failed attempts and greetings consume no slots.
+Student input includes all completed teacher–student pairs and the current
+question once; mentor input includes all prior completed pairs and its target
+pair, excluding later turns. Failed attempts and greetings are excluded.
+The stored scenario field `runtime.context_turn_limit` is accepted for
+compatibility but ignored. The former `CONTEXT_WINDOW_TURNS` environment
+setting is also ignored, including when present in an existing `.env`.
 
-Student stream/nonstream and single structured mentor calls fit the frozen prior-turn limit into a local
-input budget by dropping the oldest complete pairs. The role instruction,
-problem, current question or completed mentor target pair, intervention condition,
-provider-facing output schema and frozen output options are preserved. Mentor
-input contains at most N prior pairs plus the target pair (N+1 pairs), excluding
-later turns and other mentor messages. Required input that still exceeds the
+Student stream/nonstream and single structured mentor calls fit the full dialogue
+into a local input budget by dropping the oldest complete pairs. The role
+instruction, problem, current question or completed mentor target pair,
+intervention condition, provider-facing output schema and frozen output options
+are preserved. Mentor input excludes later turns and other mentor messages.
+Required input that still exceeds the
 budget returns HTTP 422 `context_limit` before a new run or provider attempt is
 stored and consumes no mentor interval, rolling capacity or counter; shorten the question or ask an
 administrator to review the configuration. Provider context failures are recorded

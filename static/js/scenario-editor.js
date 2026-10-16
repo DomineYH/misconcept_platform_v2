@@ -15,7 +15,6 @@ for (const input of fields) {
   if (input.type === 'checkbox') input.checked = get(input.dataset.field);
   else input.value = get(input.dataset.field);
 }
-document.getElementById('runtime.context_turn_limit').max = 100;
 for (const input of document.querySelectorAll('[name="groups"]')) input.checked = data.groups.includes(Number(input.value));
 
 let rubric = structuredClone(data.config.analysis.rubric);

@@ -22,7 +22,6 @@ FIELD_KEYS = {
     "mentor.intervention_policy.condition": "automatic_intervention_condition",
     "mentor.intervention_policy.max_interventions": "maximum_interventions_in_the_recent_turn_window",
     "mentor.intervention_policy": "mentor_mode",
-    "runtime.context_turn_limit": "recent_completed_turns_in_context",
     "analysis.context": "analysis_context",
     "analysis.expected_understanding": "correct_answer_and_expected_understanding",
     "analysis.instruction": "analysis_instructions_and_focus",

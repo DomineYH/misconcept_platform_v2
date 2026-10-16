@@ -58,7 +58,7 @@ def build_student_request(
             request_id,
         ),
         prior_pair_count=len(history) // 2,
-        configured_prior_turn_limit=lesson.config.runtime.context_turn_limit,
+        configured_prior_turn_limit=None,
     )
 
 
@@ -95,7 +95,6 @@ class StudentBot:
             history = await load_completed_turns(
                 db,
                 self.session_id,
-                limit=lesson.config.runtime.context_turn_limit,
             )
             request = build_student_request(
                 lesson,

@@ -1,16 +1,13 @@
-"""Bound generation context by completed turn identity, not message order."""
+"""Load generation context by completed turn identity, not message order."""
 
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
 
-from src.config import config
 from src.models import Message
 
 
-async def load_completed_turns(
-    db, session_id, *, before_turn_index=None, limit=None
-):
-    """Return the last N completed pairs, in teacher–student turn order."""
+async def load_completed_turns(db, session_id, *, before_turn_index=None):
+    """Return all completed pairs, in teacher–student turn order."""
     students = select(
         Message.turn_id, Message.turn_index, Message.content
     ).where(
@@ -21,20 +18,16 @@ async def load_completed_turns(
     )
     if before_turn_index is not None:
         students = students.where(Message.turn_index < before_turn_index)
-    recent = (
-        students.order_by(Message.turn_index.desc())
-        .limit(config.CONTEXT_WINDOW_TURNS if limit is None else limit)
-        .subquery()
-    )
+    completed = students.subquery()
     rows = await db.execute(
-        select(Message.content, recent.c.content)
+        select(Message.content, completed.c.content)
         .join(
-            recent,
+            completed,
             (Message.session_id == session_id)
-            & (Message.turn_id == recent.c.turn_id)
+            & (Message.turn_id == completed.c.turn_id)
             & (Message.role == "teacher"),
         )
-        .order_by(recent.c.turn_index)
+        .order_by(completed.c.turn_index)
     )
     return [
         {"role": role, "content": content}
@@ -43,8 +36,8 @@ async def load_completed_turns(
     ]
 
 
-async def load_mentor_context(db, session_id, turn_id, *, limit=None):
-    """Return N preceding completed pairs plus the completed target pair.
+async def load_mentor_context(db, session_id, turn_id):
+    """Return all preceding completed pairs plus the completed target pair.
 
     Mentor budgeting protects the last pair and trims only preceding pairs.
     Missing/incomplete targets raise NoResultFound.
@@ -68,7 +61,7 @@ async def load_mentor_context(db, session_id, turn_id, *, limit=None):
         )
     ).one()
     history = await load_completed_turns(
-        db, session_id, before_turn_index=turn_index, limit=limit
+        db, session_id, before_turn_index=turn_index
     )
     return history + [
         {"role": "teacher", "content": teacher},

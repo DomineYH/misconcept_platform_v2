@@ -87,6 +87,29 @@ async def legacy(data, api, publishable):
         await db.commit()
 
 
+@pytest.mark.parametrize("limit", [None, 0, 7, 101, "omitted"])
+async def test_conversion_does_not_map_or_warn_about_retired_turn_limit(
+    data, api, legacy, effective, limit
+):
+    if limit == "omitted":
+        effective.pop("context_turn_limit")
+    else:
+        effective["context_turn_limit"] = limit
+    async with data.factory() as db:
+        archive = await capture_archive(db)
+        manifest = await conversion_manifest(
+            db, archive, effective, "private/archive.json"
+        )
+    converted = next(
+        row for row in manifest["scenarios"] if row["id"] == data.scenario.id
+    )
+    assert converted["target"]["config"]["runtime"]["context_turn_limit"] == 10
+    assert all(
+        reason["path"] != "runtime.context_turn_limit"
+        for reason in converted["review_reasons"]
+    )
+
+
 async def test_private_dry_run_and_conversion_preserve_reviewable_source(
     data, api, legacy, effective
 ):

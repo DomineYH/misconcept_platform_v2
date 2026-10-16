@@ -73,9 +73,10 @@ export default async function checkScenarioFilterHelp(page) {
           card.dataset.publication = published ? 'published' : 'draft';
           card.classList.toggle('inactive',!active);
           const badge = card.querySelector('.status-badge');
-          badge.classList.toggle('active',active);
           badge.textContent = active ? '활성' : '비활성';
-          card.querySelector('.card-status .meta-tag').textContent = published ? '게시' : '초안';
+          const publication = card.querySelector('.card-status .meta-tag');
+          publication.classList.toggle('badge-success',published);
+          publication.textContent = published ? '게시됨' : '초안';
         }));
         const requestCount = requests.length;
         for (const longHelp of [false,true]) {

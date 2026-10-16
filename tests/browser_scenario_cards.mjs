@@ -88,6 +88,7 @@ export default async function checkScenarioCards(page) {
                 meta:card.querySelector('.card-meta').textContent,
                 leaves:[...card.querySelectorAll('.card-title, .status-badge, .meta-tag, .card-description, .btn')].map(el => ({text:el.textContent,clipped:el.scrollWidth > el.clientWidth+1 || el.scrollHeight > el.clientHeight+1,...box(el)})),
                 actionNames:[...card.querySelectorAll('.card-actions .btn')].map(el => el.textContent.trim()),
+                actionTops:[...card.querySelectorAll('.card-actions .btn')].map(el => el.getBoundingClientRect().top),
               })),
             };
           });
@@ -116,6 +117,7 @@ export default async function checkScenarioCards(page) {
             } else assert(card.actions.top >= card.body.bottom, `${label}: narrow cards use vertical information/actions`);
             const legacy = card.status.includes('변환 필요');
             assert.deepEqual(card.actionNames,legacy ? ['대화목록'] : ['대화목록','모델 비교','수정','삭제']);
+            if (width >= 769) assert(card.actionTops.every(top => Math.abs(top-card.actionTops[0]) < 1), `${label}: card actions share one row`);
             for (const [index,leaf] of card.leaves.entries()) {
               assert(!leaf.clipped, `${label}: content not clipped: ${leaf.text}`);
               assert(leaf.left >= card.box.left && leaf.right <= card.box.right+0.5 && leaf.top >= card.box.top && leaf.bottom <= card.box.bottom+0.5, `${label}: content inside card: ${leaf.text}`);

@@ -292,13 +292,10 @@ async def test_student_uses_frozen_provider_and_native_options(
         assert evidence["estimator"] == "utf8-v1"
         assert evidence["reserved_output_tokens"] == 1024
         assert evidence["capability_definition_version"] == version
-        assert evidence["configured_prior_turn_limit"] == (2 if trim else 10)
-        assert evidence["selected_prior_pairs"] == (2 if trim else 0)
-        assert (
-            evidence["kept_prior_pairs"]
-            == evidence["dropped_prior_pairs"]
-            == (1 if trim else 0)
-        )
+        assert evidence["configured_prior_turn_limit"] is None
+        assert evidence["selected_prior_pairs"] == (3 if trim else 0)
+        assert evidence["kept_prior_pairs"] == (1 if trim else 0)
+        assert evidence["dropped_prior_pairs"] == (2 if trim else 0)
         assert evidence["target_pair_included"] is False
         assert (
             evidence["estimated_input_tokens"]

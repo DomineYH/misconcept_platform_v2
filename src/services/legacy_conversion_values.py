@@ -26,7 +26,7 @@ class EffectiveSettings(ConfigValue):
     analysis_greeting: EffectiveOperation | None
     analysis_classification: EffectiveOperation | None
     tutor_intervention_threshold: StrictInt | None
-    context_turn_limit: StrictInt | None
+    context_turn_limit: StrictInt | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -236,17 +236,6 @@ def convert_values(source, settings, models):
             "temperature_not_applied",
             "기존 chat_temperature는 적용되지 않았으므로 새 옵션에 넣지 않았습니다.",
             False,
-        )
-    if (
-        type(settings.context_turn_limit) is int
-        and 1 <= settings.context_turn_limit <= 100
-    ):
-        config["runtime"]["context_turn_limit"] = settings.context_turn_limit
-    else:
-        reason(
-            "runtime.context_turn_limit",
-            "invalid_source",
-            "배포 문맥 상한을 확인하여 1–100 범위로 보완하세요.",
         )
     framework = source["framework"]
     if framework is None:

@@ -31,9 +31,6 @@ class Config(BaseSettings):
 
     TUTOR_INTERVENTION_THRESHOLD: int = 3
 
-    # Number of completed teacher–student pairs preceding the current turn.
-    CONTEXT_WINDOW_TURNS: int = 10
-
     # Session Security
     SESSION_SECRET: str = "change-this-insecure-default"
 
@@ -141,16 +138,6 @@ class Config(BaseSettings):
             raise ValueError(
                 f"TUTOR_INTERVENTION_THRESHOLD must be between 1 and "
                 f"10, got {v}"
-            )
-        return v
-
-    @field_validator("CONTEXT_WINDOW_TURNS")
-    @classmethod
-    def validate_context_window(cls, v):
-        """Validate context window size range."""
-        if not (4 <= v <= 200):
-            raise ValueError(
-                "CONTEXT_WINDOW_TURNS must be between " f"4 and 200, got {v}"
             )
         return v
 

@@ -63,7 +63,7 @@ def build_mentor_input(
 
 
 def build_mentor_request(lesson, history, trigger, options, request_id):
-    """Fit N preceding pairs while preserving the completed target and instructions."""
+    """Fit preceding pairs while preserving the completed target and instructions."""
     selection = lesson.config.mentor.resolved_model_config
     request = build_mentor_input(
         lesson.config, history, trigger, selection, options, request_id
@@ -71,7 +71,7 @@ def build_mentor_request(lesson, history, trigger, options, request_id):
     return fit_context(
         request,
         prior_pair_count=len(history) // 2 - 1,
-        configured_prior_turn_limit=lesson.config.runtime.context_turn_limit,
+        configured_prior_turn_limit=None,
         target_pair_included=True,
         rebuild_messages=lambda dropped: build_mentor_input(
             lesson.config,

@@ -23,7 +23,7 @@ __all__ = ["client"]
 
 @pytest.mark.parametrize("provider", ["openai", "anthropic", "google"])
 @pytest.mark.parametrize(
-    "prior_pairs,trim", [(0, False), (1, False), (2, False), (2, True)]
+    "prior_pairs,trim", [(0, False), (1, False), (3, False), (3, True)]
 )
 @pytest.mark.parametrize(
     "trigger,positive", [("manual", True), ("auto", True), ("auto", False)]
@@ -102,13 +102,13 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
     )
     for index, question in enumerate(
         [
-            "OUTSIDE WINDOW",
+            "First teacher",
             "Old 한🙂 {x}" * (1200 if trim else 1),
             "Recent teacher",
         ],
         1,
     ):
-        if prior_pairs < 2 and index <= 3 - prior_pairs:
+        if prior_pairs < 3 and index <= 3 - prior_pairs:
             continue
         prior = str(uuid4())
         data.db.add_all(
@@ -264,17 +264,16 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
                 "teacher: Recent teacher\nstudent: Prior answer 3\n"
                 + expected_dialogue
             )
-        old_included = prior_pairs == 2 and not trim
+        old_included = prior_pairs == 3 and not trim
         if old_included:
             expected_dialogue = (
+                "teacher: First teacher\nstudent: Prior answer 1\n"
                 "teacher: Old 한🙂 {x}\nstudent: Prior answer 2\n"
                 + expected_dialogue
             )
         assert messages == [dict(role="user", content=expected_dialogue)]
-        assert (
-            "OUTSIDE WINDOW" not in dialogue
-            and "PRIVATE MENTOR HISTORY" not in dialogue
-        )
+        assert "PRIVATE MENTOR HISTORY" not in dialogue
+        assert ("First teacher" in dialogue) == old_included
         assert ("Old 한🙂" in dialogue) == old_included
         assert ("Prior answer 2" in dialogue) == old_included
         assert ("Recent teacher" in dialogue) == (prior_pairs > 0)
@@ -338,10 +337,10 @@ async def test_mentor_single_structured_call_uses_frozen_provider_config(
                 )
             ),
             reserved_output_tokens=1024,
-            configured_prior_turn_limit=2,
+            configured_prior_turn_limit=None,
             selected_prior_pairs=prior_pairs,
-            kept_prior_pairs=prior_pairs - int(trim),
-            dropped_prior_pairs=1 if trim else 0,
+            kept_prior_pairs=prior_pairs - 2 * int(trim),
+            dropped_prior_pairs=2 if trim else 0,
             target_pair_included=True,
             capability_definition_version=version,
         )

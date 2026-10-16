@@ -218,12 +218,11 @@ async def test_auto_policy_counts_completed_pairs_and_sliding_interventions(
     assert old.json()["run_id"] == frames(admitted)[0][1]["run_id"]
 
 
-async def test_mentor_context_uses_frozen_window_and_excludes_other_roles(
-    data, client, mentor, monkeypatch
+async def test_mentor_context_ignores_stored_limit_and_excludes_other_roles(
+    data, client, mentor
 ):
     from copy import deepcopy
 
-    from src.config import config
     from src.models import Message
     from src.services.lesson_snapshots import canonical_hash
 
@@ -232,9 +231,10 @@ async def test_mentor_context_uses_frozen_window_and_excludes_other_roles(
     data.session.config_snapshot_json = envelope
     data.session.config_hash = canonical_hash(envelope)
     await data.db.commit()
-    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 100)
     login(client, data.owner)
-    await complete_turn(client, data, "Outside frozen window")
+    await complete_turn(client, data, "First teacher")
+    for index in range(2, 11):
+        await complete_turn(client, data, f"Teacher {index}")
     prior = await complete_turn(client, data, "Previous teacher A")
     await complete_turn(client, data, "Previous teacher B")
     latest = await complete_turn(client, data, "Current teacher once")
@@ -259,7 +259,7 @@ async def test_mentor_context_uses_frozen_window_and_excludes_other_roles(
     assert frames(response)[-1][1]["result_kind"] == "message"
     body = mentor.responses.create.call_args.kwargs
     dialogue = "\n".join(message["content"] for message in body["input"])
-    assert "Outside frozen window" not in dialogue
+    assert "First teacher" in dialogue
     assert "Previous teacher A" in dialogue and "Previous teacher B" in dialogue
     assert dialogue.count("Current teacher once") == 1
     assert (

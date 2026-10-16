@@ -62,7 +62,6 @@ async def test_retry_keeps_snapshot_hash_options_and_completed_turn_window(
 ):
     from sqlalchemy import select
 
-    from src.config import config
     from src.models import GenerationRun, Message
 
     await install_snapshot(
@@ -120,7 +119,6 @@ async def test_retry_keeps_snapshot_hash_options_and_completed_turn_window(
     data.scenario.prompt = "Changed current instruction"
     data.scenario.chat_model = "changed-model"
     data.scenario.status = "draft"
-    monkeypatch.setattr(config, "CONTEXT_WINDOW_TURNS", 1)
     monkeypatch.setenv("STUDENT_MAX_TOKENS", "99")
     await data.db.commit()
     retry = await client.post(
@@ -129,6 +127,10 @@ async def test_retry_keeps_snapshot_hash_options_and_completed_turn_window(
     assert frames(retry)[-1][0] == "output.completed", retry.text
     assert student.responses.create.call_args.kwargs == original
     assert original["input"] == [
+        {"role": "user", "content": "teacher 1"},
+        {"role": "assistant", "content": "student 1"},
+        {"role": "user", "content": "teacher 2"},
+        {"role": "assistant", "content": "student 2"},
         {"role": "user", "content": "teacher 3"},
         {"role": "assistant", "content": "student 3"},
         {"role": "user", "content": "teacher 4"},

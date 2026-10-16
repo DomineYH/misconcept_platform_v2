@@ -10,22 +10,14 @@ REASONING_FIELDS = (
 )
 
 
-def test_context_window_defaults_to_ten_completed_pairs(monkeypatch):
-    monkeypatch.delenv("CONTEXT_WINDOW_TURNS", raising=False)
-    assert Config(_env_file=None).CONTEXT_WINDOW_TURNS == 10
-
-
-@pytest.mark.parametrize("turns", [4, 20, 200])
-def test_explicit_context_window_pair_count_is_preserved(monkeypatch, turns):
-    monkeypatch.setenv("CONTEXT_WINDOW_TURNS", str(turns))
-    assert Config(_env_file=None).CONTEXT_WINDOW_TURNS == turns
-
-
-@pytest.mark.parametrize("turns", [3, 201])
-def test_context_window_rejects_out_of_range_pair_count(monkeypatch, turns):
-    monkeypatch.setenv("CONTEXT_WINDOW_TURNS", str(turns))
-    with pytest.raises(ValidationError, match="CONTEXT_WINDOW_TURNS"):
-        Config(_env_file=None)
+@pytest.mark.parametrize("value", ["10", "201", "obsolete"])
+def test_removed_context_window_is_ignored_in_environment_and_dotenv(
+    tmp_path, monkeypatch, value
+):
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"CONTEXT_WINDOW_TURNS={value}\n")
+    monkeypatch.setenv("CONTEXT_WINDOW_TURNS", value)
+    assert "CONTEXT_WINDOW_TURNS" not in Config(_env_file=env_file).model_dump()
 
 
 @pytest.mark.parametrize(

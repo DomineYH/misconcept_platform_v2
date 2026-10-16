@@ -1856,14 +1856,6 @@
       "ko": "대상 학년",
       "en": "Target grade"
     },
-    "recent_completed_turns_in_context": {
-      "ko": "최근 완료 턴 문맥 상한",
-      "en": "Recent completed turns in context"
-    },
-    "use_1_100_turns_for_student_and_mentor_context_analysis_uses_the_full_dialogue": {
-      "ko": "학생봇·멘토의 문맥 1–100턴. 분석에는 전체 대화를 사용합니다.",
-      "en": "Use 1–100 turns for student and mentor context. Analysis uses the full dialogue."
-    },
     "assigned_groups": {
       "ko": "배정 그룹",
       "en": "Assigned groups"

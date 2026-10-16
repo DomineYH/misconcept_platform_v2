@@ -140,7 +140,6 @@ async def check():
                 SimpleNamespace(db=db, session=session, scenario=scenario),
                 connection,
                 model,
-                context_turn_limit=1 if measuring else 10,
             )
             from copy import deepcopy
 
@@ -466,7 +465,7 @@ async def check():
                                 ),
                             )
                             row["conditions"]["mock_completion_delay_ms"] = 50
-                            row["conditions"]["context_turn_limit"] = 1
+                            row["conditions"]["context_turn_limit"] = None
                             row["conditions"]["model_options"] = {
                                 key: calls[index][key]
                                 for key in (
@@ -487,9 +486,8 @@ async def check():
                         await process.wait()
                 assert len(calls) == len(observations) == 6
                 assert all(sdk.is_closed() for sdk in owned_clients)
-                assert (
-                    len({value["input_sha256"] for value in observations[1:]})
-                    == 1
+                assert [len(call["input"]) for call in calls] == list(
+                    range(1, 12, 2)
                 )
                 print(
                     "PASS: six browser measurements; warmup plus five repeats"

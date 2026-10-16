@@ -256,11 +256,12 @@ below only under separate approval, with the actual deployment paths supplied.
    turn/run links must stay NULL. Repair blank public problems explicitly in
    the administrator UI before starting new sessions; never copy transcripts
    automatically or substitute the private student prompt.
-6. Review `CONTEXT_WINDOW_TURNS` with the administrator: N now means **completed
-   teacher–student pairs**, with default 10. Previously it counted individual
-   messages, including mentor messages. Explicit existing values are preserved,
-   so an old value of 20 now allows 20 complete pairs. Do not silently halve
-   values. Record the chosen value before reopening traffic.
+6. As of #161, student and mentor context includes all completed teacher–student
+   pairs up to the current question or mentor target. The former
+   `CONTEXT_WINDOW_TURNS` setting and stored `runtime.context_turn_limit` are
+   ignored. Existing `.env` entries remain accepted, and token budgeting drops
+   oldest pairs when necessary; review the input-token and cost impact before
+   reopening traffic.
 7. With writers still stopped, apply the same official migration command to
    the approved destination and repeat integrity/data checks. Do not edit 023,
    historical SQL, legacy video columns or stored `tutor` roles. Production

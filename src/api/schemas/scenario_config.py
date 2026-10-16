@@ -174,6 +174,7 @@ class AnalysisConfig(ConfigValue):
 
 
 class RuntimeConfig(ConfigValue):
+    # ponytail: Ignored at runtime; retained for stored config and snapshot hashes.
     context_turn_limit: StrictInt = Field(default=10, ge=1, le=100)
 
 

@@ -22,8 +22,10 @@ uv run --frozen python tests/s6_measurement.py --output "$s6_measurement_dir/rep
 ledger와 SDK 경계에서 확인한다. 짧은 사후 분석도 한 호출과 zero-call replay를
 확인한다. 멘토는 검증된 최종 결과 시간만 기록하며 본문 TTFT와 혼동하지 않는다.
 관리자 `/admin/ai/state` 조회와 `/admin/ai/settings/update` 저장은 제공자 호출 0이다.
-브라우저 실험의 context_turn_limit은 1이다. warmup이 한 쌍을 채우며, 측정 다섯
-턴의 실제 SDK 입력 hash가 동일함을 확인한다. 제품 기본 context 설정은 바꾸지 않는다.
+#161부터 브라우저 실험도 완료된 전체 대화를 사용하며 context_turn_limit은 null로
+기록한다. warmup과 측정 다섯 턴의 실제 SDK 입력에 과거 쌍이 0–5개 누적됨을
+확인하고, 각 표본에 입력 hash와 bytes를 기록한다. 이전의 한 쌍 고정 입력 표본과
+입력 크기가 다르므로 지연 수치를 직접 비교하지 않는다.
 
 20개 독립 교사 세션과 관리자 비교 3패널은 수업 우선/비교 우선 순서를 각각
 기록한다. 기본 limits에서는 전체 23개 역할 시도에 거부된 패널도 포함한다.

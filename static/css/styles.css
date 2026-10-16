@@ -631,6 +631,20 @@ textarea {
   box-shadow: var(--shadow-md);
 }
 
+.scenarios-container .scenario-subject {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .scenario-card .scenario-title {
   font-size: 1.25rem;
   font-weight: 600;

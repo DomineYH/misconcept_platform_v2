@@ -1,4 +1,6 @@
 // Run with a Playwright Page against tests/browser_server.py; no real API/DB.
+import {colorMath} from './uiux_color_math.mjs';
+
 export default async function checkScenarioScreens(page) {
   const base = page.url().split('/').slice(0, 3).join('/');
   await page.unrouteAll({behavior: 'wait'});
@@ -86,6 +88,52 @@ export default async function checkScenarioScreens(page) {
     assert(await page.locator('.scenario-card').isVisible(), 'conflict preserves list');
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal overflow');
     checks.push(`${width}px unified list links/filter/keyboard/CSRF/version conflict`);
+  }
+  for (const theme of ['light', 'dark']) {
+    await page.emulateMedia({colorScheme:theme, reducedMotion:'reduce'});
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({width, height:900});
+      for (const query of ['', '?subject_long=1&long=1', '?subject_missing=1&missing_problem=1', '?empty=1']) {
+        await page.goto(`${base}/scenarios${query}`);
+        const label = `${theme}/${width}/${query || 'subject present'}`;
+        const chip = page.locator('.scenario-subject');
+        const omitted = query.includes('subject_missing') || query.includes('empty');
+        assert(await chip.count() === (omitted ? 0 : 1), `${label}: subject chip presence`);
+        if (!omitted) {
+          assert(await chip.innerText() === (query ? '긴교과이름'.repeat(20) : 'Math'), `${label}: exact public subject`);
+          const layout = await chip.evaluate((el, colorSource) => {
+            const {rgba, background, contrast} = (new Function(`return (${colorSource})()`))();
+            const card = el.closest('.scenario-card');
+            const box = card.getBoundingClientRect();
+            const leaves = [...card.querySelectorAll('.scenario-subject, .scenario-title, .scenario-description, .btn-primary')];
+            const rects = leaves.map(leaf => leaf.getBoundingClientRect());
+            const overlaps = rects.some((a, i) => rects.slice(i + 1).some(b =>
+              a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom));
+            return {
+              fits:leaves.every((leaf, i) => leaf.scrollWidth <= leaf.clientWidth + 1 && leaf.scrollHeight <= leaf.clientHeight + 1 &&
+                rects[i].left >= box.left && rects[i].right <= box.right && rects[i].top >= box.top && rects[i].bottom <= box.bottom),
+              overlaps,
+              contrast:contrast(rgba(getComputedStyle(el).color), background(el)),
+            };
+          }, colorMath.toString());
+          assert(layout.fits && !layout.overlaps, `${label}: chip and long title fit without overlap or clipping`);
+          assert(layout.contrast >= 4.5, `${label}: chip contrast`);
+          assert(await page.locator('a.btn-primary').getAttribute('href') === '/scenarios/1', `${label}: primary start retained`);
+          assert(await page.getByText('Profile', {exact:false}).count() > 0, `${label}: public profile retained`);
+        } else if (query.includes('empty')) {
+          assert(await page.locator('.empty-state').isVisible(), `${label}: empty list retained`);
+          assert(await page.locator('.scenario-card').count() === 0, `${label}: no empty cards`);
+        } else {
+          assert(await page.locator('button.btn-primary').isDisabled(), `${label}: unavailable start retained`);
+        }
+        const html = await page.content();
+        for (const privateText of ['PRIVATE STUDENT PROFILE', 'PRIVATE STUDENT PROMPT', 'PRIVATE LEGACY TRANSCRIPT']) {
+          assert(!html.includes(privateText), `${label}: private content absent`);
+        }
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${label}: no horizontal overflow`);
+        checks.push(`${label}: teacher subject chip and preserved selection state`);
+      }
+    }
   }
   assert(requests.length === 2, 'one request per delete attempt');
   for (const request of requests) {

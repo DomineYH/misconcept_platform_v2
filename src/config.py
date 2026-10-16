@@ -15,6 +15,7 @@ class Config(BaseSettings):
         env_file=None if IS_TEST_ENV else ".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
     # OpenAI API Configuration

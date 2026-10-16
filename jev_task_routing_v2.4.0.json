@@ -64,8 +64,8 @@
   "roles": {
     "planner": {
       "harness": "codex",
-      "model": "gpt-6.1-sol",
-      "effort": "xhigh",
+      "model": "gpt-6-astra",
+      "effort": "medium",
       "responsibility": "Under a coordinator work order, produce or revise the executable implementation plan: approach, contracts, dependencies, failure handling, verification and relevant rollout/recovery. Resolve ordinary design work inside that one plan. Return a proposal, not an approval, another task/risk/TDD classification or instructions to implementer. If a material decision remains disputed or unsupported, report it to the coordinator rather than invoking advisor.",
       "when": "Only when the coordinator issues a planning assignment for high-risk delivery, a concrete needs_design signal, or substantive replanning. A routine brief plan may be handled by the host. needs_specialist alone neither assigns planner nor requests advisor.",
       "authority": "Read only the permitted inputs. Write only named planning/report artifacts when explicitly authorized; no product-code/configuration changes, worker dispatch, scope expansion or final acceptance. The coordinator approves the executable plan through the existing work order."
@@ -79,25 +79,25 @@
       "authority": "Write only permitted files/resources and run only allowed actions/checks. In-scope self-repair may be preauthorized within the existing budget. No independent workflow, testing-mode, dependency, model or scope changes; no peer delegation or final acceptance. PR creation, merge, deploy and destructive actions need explicit coordinator authorization within the user-approved scope."
     },
     "task-verifier": {
-      "harness": "opencode",
-      "model": "opencode/muse-spark-1.3-contributor-free",
-      "effort": "xhigh",
+      "harness": "agy",
+      "model": "gemini-4-argon",
+      "effort": "high",
       "responsibility": "Under a coordinator review order, independently inspect the fixed current diff and verification evidence against requirements, design and risk conditions. Report PASS, FAIL or BLOCKED findings with evidence to the coordinator; these are review verdicts, not task acceptance or commands to implementer. Run an authorized focused diagnostic only for a concrete unresolved concern. Recheck invalidated scope, not the same full review mechanically.",
       "when": "The coordinator must arrange the existing required independent review for standard/high delivery, emergency, repository rules and high-risk live-system experiments. Use a separate review context; the same model is permitted. Do not allocate a separate final-verifier.",
       "authority": "Read-only on the reviewed product artifact and authoritative configuration. Reports and authorized disposable diagnostic outputs are allowed only in named locations. No code fixes, test weakening, peer repair orders or final acceptance. Reporting to the coordinator never requires agreement with it."
     },
     "inspector": {
       "harness": "agy",
-      "model": "gemini-3.8-flash-high",
-      "effort": "high",
+      "model": "gemini-4-argon",
+      "effort": "medium",
       "responsibility": "Under a bounded coordinator evidence order, gather repository-specific code, caller/dependency and test facts with source references and actual execution status. Reuse sufficient current findings; mark unknowns explicitly. Do not choose a TDD mode, perform a duplicate code review or start an external research assignment.",
       "when": "Only when the coordinator identifies a material repository evidence gap that current sessions or valid prior evidence cannot cheaply resolve. May run before Jev under a read-only intake order; complexity alone is not a trigger.",
       "authority": "Read only the permitted repository scope and write only authorized evidence/report artifacts. Diagnostics require explicit allowed actions and isolated outputs. No product edits, scope expansion, worker invocation or routing changes."
     },
     "researcher": {
       "harness": "agy",
-      "model": "gemini-3.8-flash-high",
-      "effort": "high",
+      "model": "gemini-4-argon",
+      "effort": "medium",
       "responsibility": "Under a coordinator research order, resolve the specific missing external API, dependency or platform fact from relevant official sources. Return the fact, source, limitations and remaining uncertainty to the coordinator. Do not duplicate repository inspection or choose the workflow/testing mode.",
       "when": "Only after the coordinator identifies a necessary external-document gap not covered by current evidence. May run before Jev under a bounded research order; do not research afresh merely because a task mentions an API.",
       "authority": "Use only authorized sources/network access and report locations. No product/configuration edits, credential disclosure, new work items, peer dispatch or final acceptance."

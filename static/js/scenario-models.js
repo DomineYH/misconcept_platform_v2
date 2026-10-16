@@ -32,7 +32,11 @@ export function mountScenarioModels(data, onChange) {
       common.append(option);
     }
     common.value = mixed ? '' : selections.student.model_config_id;
-    note.textContent = mixed ? uiLanguage.t('admin.existing_per_role_models_are_preserved_explicitly_select_a_common_model_before_saving') : uiLanguage.t('admin.all_active_roles_use_the_same_model_options_are_preserved_per_role');
+    if (!data.model_choices.length) {
+      note.replaceChildren(uiLanguage.t('admin.registered_and_verified_model_required'), ' ', node('a', uiLanguage.t('admin.ai_connections_and_models'), {href:'/admin/ai'}));
+    } else {
+      note.textContent = mixed ? uiLanguage.t('admin.existing_per_role_models_are_preserved_explicitly_select_a_common_model_before_saving') : uiLanguage.t('admin.all_active_roles_use_the_same_model_options_are_preserved_per_role');
+    }
     for (const role of active) {
       for (const input of document.getElementById(`${role}-model-options`).querySelectorAll('input,select,button')) input.disabled = mixed;
     }

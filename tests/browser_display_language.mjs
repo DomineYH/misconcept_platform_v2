@@ -36,8 +36,9 @@ export default async function check(page) {
   assert.equal(await page.evaluate(() => uiLanguage.t('common.interpolation_probe', {name:'{other}', other:'not the name'})), 'Hello {other}');
   await page.unroute(`${base}/login`);
   await switchTo('en');
-  assert.equal(await choose('en').getAttribute('aria-pressed'), 'true');
-  assert.equal(await page.getByRole('group', {name:'Display language'}).count(), 1);
+  assert.equal(await choose('ko').innerText(), 'EN');
+  assert.equal(await page.getByRole('button', {name:'Display language: EN',exact:true}).count(), 1);
+  assert.equal(await page.locator('[data-ui-language]').count(), 1);
   assert.equal(await page.locator('.subtitle').innerText(), 'Teacher training platform');
   const cookie = (await page.context().cookies()).find(c => c.name === 'ui_lang');
   assert.equal(cookie.path, '/');
@@ -169,7 +170,7 @@ export default async function check(page) {
     assert.equal(secureCookie.domain, 'ui.example');
   } finally { await securePage.close(); }
 
-  // Both themes, logged-out/in, five viewport widths, long English and keyboard.
+  // Both themes, logged-out/in, six viewport widths, long English and keyboard.
   for (const colorScheme of ['light','dark']) {
     await page.emulateMedia({colorScheme});
     await page.context().addCookies([{name:'ui_lang',value:'en',url:base}]);
@@ -194,11 +195,11 @@ export default async function check(page) {
           const a = boxes[i], b = boxes[j];
           assert(!(a.x < b.right && b.x < a.right && a.y < b.bottom && b.y < a.bottom), 'no overlapping targets');
         }
-        await choose('en').focus();
+        await choose('ko').focus();
         await page.keyboard.press('Shift+Tab');
         await page.keyboard.press('Tab');
-        assert(await choose('en').evaluate(el => el === document.activeElement));
-        const colors = await choose('en').evaluate(new Function('el', `
+        assert(await choose('ko').evaluate(el => el === document.activeElement));
+        const colors = await choose('ko').evaluate(new Function('el', `
           const {rgba,background,contrast} = (${colorMath})();
           const s = getComputedStyle(el);
           return {text:contrast(rgba(s.color),background(el)),focus:contrast(rgba(s.outlineColor),background(el)),outline:s.outlineWidth};

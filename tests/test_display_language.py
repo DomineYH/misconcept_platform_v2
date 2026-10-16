@@ -45,6 +45,12 @@ async def test_login_resolves_display_language_per_request(
     response = await get_login(request(header, cookie))
     html = response.body.decode()
     assert f'<html lang="{language}">' in html
+    target = "en" if language == "ko" else "ko"
+    label = "KOR" if language == "ko" else "EN"
+    accessible_name = "표시 언어" if language == "ko" else "Display language"
+    assert html.count("data-ui-language=") == 1
+    assert f'data-ui-language="{target}"' in html
+    assert f'aria-label="{accessible_name}: {label}">{label}</button>' in html
     assert (
         "Teacher training platform" if language == "en" else "교사 연수 플랫폼"
     ) in html

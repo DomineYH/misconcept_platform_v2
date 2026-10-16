@@ -20,12 +20,16 @@ export default async function check(page) {
       }
       assert.equal(await menu.locator('.nav-links .nav-item').count(), 3);
       assert.equal(await menu.locator('.nav-account .nav-item').count(), 1);
+      assert.equal(await menu.locator('.nav-account > li:last-child [data-ui-language]').count(), 1);
       assert.equal(await menu.getByRole('link', {name:'관리자', exact:true}).getAttribute('aria-current'), 'page');
       assert.equal(await menu.locator('.nav-username').innerText(), '긴한글별명'.repeat(20));
       const links = await menu.locator('.nav-links').boundingBox();
       const account = await menu.locator('.nav-account').boundingBox();
       if (width > 768) {
         assert(account.x >= links.x + links.width, 'account follows navigation on the right');
+        const logout = await menu.locator('.nav-logout').boundingBox();
+        const toggle = await menu.locator('[data-ui-language]').boundingBox();
+        assert(toggle.x >= logout.x + logout.width, 'language toggle follows logout on the right');
         const nav = await page.locator('body > header nav').boundingBox();
         assert(Math.abs(account.x + account.width - nav.x - nav.width) < 1, 'account aligns to right edge');
       } else {

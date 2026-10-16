@@ -41,10 +41,10 @@
         <span></span>
       </button>
       <div class="nav-menu" id="nav-menu">
-        <div class="language-selector" role="group" aria-label="{{ t('common.language') }}">
-          <button type="button" data-ui-language="ko" aria-pressed="{{ 'true' if ui_lang == 'ko' else 'false' }}">한국어</button>
-          <button type="button" data-ui-language="en" aria-pressed="{{ 'true' if ui_lang == 'en' else 'false' }}">English</button>
-        </div>
+        {% set language_toggle %}
+          <button type="button" data-ui-language="{{ 'en' if ui_lang == 'ko' else 'ko' }}"
+                  aria-label="{{ t('common.language') }}: {{ 'KOR' if ui_lang == 'ko' else 'EN' }}">{{ 'KOR' if ui_lang == 'ko' else 'EN' }}</button>
+        {% endset %}
         <ul class="nav-links" aria-label="{{ t('common.menu') }}">
           {% if user %}
           <li><a class="nav-item" href="/scenarios"{% if current_path.startswith('/scenarios') %} aria-current="page"{% endif %}>{{ t('common.scenarios') }}</a></li>
@@ -60,11 +60,14 @@
         {% if user %}
         <ul class="nav-account" aria-label="{{ t('common.account') }}">
           <li><span class="nav-username" title="{{ user.nickname }}">{{ user.nickname }}</span></li>
-          <li>
+          <li class="nav-logout">
             <button type="button" class="btn-link nav-item"
                     onclick="doLogout()">{{ t('common.logout') }}</button>
           </li>
+          <li class="language-selector">{{ language_toggle }}</li>
         </ul>
+        {% else %}
+        <div class="language-selector">{{ language_toggle }}</div>
         {% endif %}
         <div class="nav-notices">
           <span id="about-load-error" role="alert" tabindex="-1" hidden></span>

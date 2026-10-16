@@ -37,12 +37,13 @@ export default async function checkScenarioCards(page) {
                 const published = index < 16 && Math.floor(index / 2) % 2 === 0;
                 card.classList.toggle('inactive', !active);
                 const activation = card.querySelector('.status-badge');
-                activation.classList.toggle('active', active);
                 activation.textContent = active ? '활성' : '비활성';
-                card.querySelector('.card-status .meta-tag').textContent = published ? '게시' : '초안';
+                const publication = card.querySelector('.card-status .meta-tag');
+                publication.classList.toggle('badge-success', published);
+                publication.textContent = published ? '게시됨' : '초안';
                 if (index >= 16 ? index % 4 >= 2 : Math.floor(index / 4) % 2 === 0) {
                   const review = document.createElement('span');
-                  review.className = 'meta-tag';
+                  review.className = 'meta-tag badge-warning';
                   review.textContent = '검토 필요';
                   card.querySelector('.card-status').append(review);
                 }
@@ -50,6 +51,25 @@ export default async function checkScenarioCards(page) {
             });
           });
           await settle(page);
+          const badges = await page.locator('.card-status > span').evaluateAll(elements => elements.map(el => {
+            const text = el.textContent.trim();
+            const kind = text === '게시됨' ? 'success' : ['검토 필요','변환 필요'].includes(text) ? 'warning' : 'neutral';
+            const probe = document.createElement('span');
+            probe.style.color = `var(--color-${kind === 'neutral' ? 'text-secondary' : `${kind}-text`})`;
+            probe.style.backgroundColor = `var(--color-${kind === 'neutral' ? 'bg-secondary' : `${kind}-bg`})`;
+            el.parentElement.append(probe);
+            const actual = getComputedStyle(el), expected = getComputedStyle(probe);
+            const result = {text,kind,classes:[...el.classList],color:actual.color,background:actual.backgroundColor,expectedColor:expected.color,expectedBackground:expected.backgroundColor};
+            probe.remove();
+            return result;
+          }));
+          for (const badge of badges) {
+            assert.equal(badge.color,badge.expectedColor,`${theme}: ${badge.text} foreground token`);
+            assert.equal(badge.background,badge.expectedBackground,`${theme}: ${badge.text} background token`);
+            assert.equal(badge.classes.includes('badge-success'),badge.kind === 'success');
+            assert.equal(badge.classes.includes('badge-warning'),badge.kind === 'warning');
+            if (badge.classes.includes('status-badge')) assert(!badge.classes.includes('active'),'activation stays neutral');
+          }
           const layout = await page.evaluate(() => {
             const box = el => {
               const r = el.getBoundingClientRect();

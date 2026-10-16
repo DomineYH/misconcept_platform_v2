@@ -5,8 +5,10 @@
 <div class="container scenarios-admin">
   <header class="page-header-admin">
     <div class="header-content"><h1>{{ t('admin.choose_a_saved_scenario_to_compare') if request is defined and request.query_params.get('compare') else t('admin.scenario_management') }}</h1><p class="subtitle">{{ t('admin.write_publish_and_manage_scenario_settings') }}</p></div>
-    <a href="/admin/scenarios?compare=1" class="btn btn-secondary">{{ t('admin.whole_model_comparison') }}</a>
-    <a href="/admin/model-comparison" class="btn btn-secondary">{{ t('admin.comparison_history') }}</a>
+    <div class="scenario-toolbar-secondary">
+      <a href="/admin/scenarios?compare=1" class="btn btn-secondary">{{ t('admin.whole_model_comparison') }}</a>
+      <a href="/admin/model-comparison" class="btn btn-secondary">{{ t('admin.comparison_history') }}</a>
+    </div>
     <a href="/admin/scenarios/new" class="btn btn-primary">{{ t('admin.create_scenario_draft') }}</a>
   </header>
   <section class="filter-bar" aria-label="{{ t('admin.search_scenarios') }}">
@@ -28,13 +30,17 @@
     <div class="scenarios-grid" id="scenarios-grid">
       {% for scenario in scenarios %}
       <div class="scenario-card {% if scenario.is_active != 1 %}inactive{% endif %}" data-scenario-id="{{ scenario.id }}" data-title="{{ scenario.title }}" data-publication="{{ scenario.status if scenario.config_json else 'draft' }}">
-        <div class="card-status"><span class="status-badge {% if scenario.is_active == 1 %}active{% endif %}">{{ t('admin.active') if scenario.is_active == 1 else t('admin.inactive') }}</span></div>
         <div class="card-body">
-          <h3 class="card-title">{{ scenario.title }}</h3>
+          <div class="card-heading">
+            <h3 class="card-title">{{ scenario.title }}</h3>
+            <div class="card-status">
+              <span class="status-badge {% if scenario.is_active == 1 %}active{% endif %}">{{ t('admin.active') if scenario.is_active == 1 else t('admin.inactive') }}</span>
+              <span class="meta-tag">{{ t('admin.publish') if scenario.status == 'published' and scenario.config_json else t('admin.draft') }}</span>
+              {% if scenario.review_required %}<span class="meta-tag">{{ t('admin.review_required') }}</span>{% endif %}
+              {% if not scenario.config_json %}<span class="meta-tag">{{ t('admin.conversion_required') }}</span>{% endif %}
+            </div>
+          </div>
           <div class="card-meta">
-            <span class="meta-tag">{{ t('admin.publish') if scenario.status == 'published' and scenario.config_json else t('admin.draft') }}</span>
-            {% if scenario.review_required %}<span class="meta-tag">{{ t('admin.review_required') }}</span>{% endif %}
-            {% if not scenario.config_json %}<span class="meta-tag">{{ t('admin.conversion_required') }}</span>{% endif %}
             {% if scenario.subject %}<span class="meta-tag">{{ scenario.subject }}</span>{% endif %}
             {% for gid in scenario_group_map.get(scenario.id, []) %}{% for g in groups if g.id == gid %}<span class="meta-tag">{{ g.name }}</span>{% endfor %}{% endfor %}
           </div>

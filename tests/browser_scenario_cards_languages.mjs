@@ -17,13 +17,31 @@ export default async function checkScenarioCardLanguages(page) {
     await page.context().addCookies([{name:'ui_lang',value:language,url:base}]);
     for (const theme of ['light','dark']) {
       await page.emulateMedia({colorScheme:theme});
-      for (const width of [320,390,768,769,1024,1136,1440]) {
+      for (const width of [320,390,767,768,769,1024,1136,1180,1440]) {
         await page.setViewportSize({width,height:900});
-        for (const fixture of ['single','multiple','legacy-only']) {
-          await page.goto(`${base}/fixtures/s6/scenarios?total=${fixture === 'single' ? 1 : 20}&uiux123=1`);
-          if (fixture === 'legacy-only') await page.locator('.scenario-card').evaluateAll(cards => {
-            cards.forEach((card,index) => { if (index !== 1) card.remove(); });
-          });
+        let column;
+        const fixtures = [
+          {name:'multiple',total:20,count:20},
+          {name:'single',total:1,count:1},
+          {name:'last-page-21',total:21,page:2,count:1},
+          {name:'last-page-41',total:41,page:3,count:1},
+          {name:'two',total:2,count:2},
+          {name:'four',total:4,count:4},
+          {name:'filtered-single',search:'시나리오 2',count:1,id:'2'},
+          {name:'restored-single',count:4},
+          {name:'legacy-only',search:'시나리오 3',count:1,id:'3'},
+          {name:'restored-legacy',count:4},
+          {name:'filtered-select',publication:'published',count:1,id:'4'},
+          {name:'restored-select',count:4},
+          {name:'no-results',search:'no_matching_scenario_166',count:0},
+          {name:'restored-empty',count:4},
+        ];
+        for (const {name:fixture,total,page:currentPage = 1,search = '',publication = '',count,id} of fixtures) {
+          if (total) await page.goto(`${base}/fixtures/s6/scenarios?total=${total}&page=${currentPage}&uiux123=1`);
+          else {
+            await page.locator('#search-input').fill(search);
+            await page.locator('#filter-publication').selectOption(publication);
+          }
           await settle(page);
           assert.equal(await page.locator('html').getAttribute('lang'),language);
           const layout = await page.evaluate(() => {
@@ -33,8 +51,13 @@ export default async function checkScenarioCardLanguages(page) {
             };
             return {
               overflow:document.documentElement.scrollWidth > innerWidth,
-              cards:[...document.querySelectorAll('.scenario-card')].map(card => ({
+              domCount:document.querySelectorAll('.scenario-card').length,
+              hiddenCount:document.querySelectorAll('.scenario-card[style*="display: none"]').length,
+              emptyVisible:!document.querySelector('#scenario-filter-empty').hidden,
+              cards:[...document.querySelectorAll('.scenario-card')].filter(card => card.getClientRects().length).map(card => ({
+                id:card.dataset.scenarioId,
                 box:box(card),
+                body:box(card.querySelector('.card-body')),
                 actions:box(card.querySelector('.card-actions')),
                 buttons:[...card.querySelectorAll('.card-actions .btn')].map(el => {
                   const range = document.createRange();
@@ -47,7 +70,13 @@ export default async function checkScenarioCardLanguages(page) {
           });
           const label = `${language}/${theme}/${width}/${fixture}`;
           assert(!layout.overflow, `${label}: no horizontal document scroll`);
-          assert.equal(layout.cards.length,fixture === 'multiple' ? 20 : 1);
+          assert.equal(layout.cards.length,count,`${label}: visible result count`);
+          assert.equal(layout.domCount,total ? count : 4,`${label}: hidden siblings stay in the DOM`);
+          assert.equal(layout.hiddenCount,layout.domCount-count,`${label}: only matching cards visible`);
+          assert.equal(layout.emptyVisible,count === 0,`${label}: no-results status`);
+          if (fixture === 'multiple') column = layout.cards[0].box;
+          if (count) assert(Math.abs(layout.cards[0].box.left-column.left) < 1, `${label}: first visible card in first column`);
+          if (id) assert.equal(layout.cards[0].id,id,`${label}: expected filtered card`);
           if (fixture === 'multiple') {
             const columns = new Set(layout.cards.map(card => card.box.left)).size;
             assert(width <= 768 ? columns === 1 : columns > 1, `${label}: responsive grid preserved`);
@@ -55,7 +84,9 @@ export default async function checkScenarioCardLanguages(page) {
           }
           for (const card of layout.cards) {
             const legacy = card.buttons.length === 1;
-            assert.equal(legacy,fixture === 'legacy-only' || (fixture === 'multiple' && card === layout.cards[1]));
+            assert.equal(legacy,total ? count > 1 && card === layout.cards[1] : card.id === '3', `${label}: legacy actions preserved`);
+            assert(Math.abs(card.box.width-column.width) < 1, `${label}: same width as a populated grid column`);
+            assert(card.actions.top >= card.body.bottom, `${label}: vertical information/actions`);
             assert.deepEqual(card.buttons.map(button => button.text),legacy ? names[language].slice(0,1) : names[language],label);
             if (!legacy) {
               for (const key of ['id','title','sessionCount','version']) assert(card.deletion[key], `${label}: deletion ${key} preserved`);

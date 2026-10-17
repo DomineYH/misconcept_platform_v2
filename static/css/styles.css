@@ -779,7 +779,7 @@ textarea {
 .scenarios-admin .card-status { position: static; display: flex; flex-wrap: wrap; gap: var(--spacing-sm); }
 .scenarios-admin .meta-tag { max-width: 100%; overflow-wrap: anywhere; }
 .scenarios-admin .card-body { min-width: 0; padding-right: 0; }
-.scenarios-admin .scenarios-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+.scenarios-admin .scenarios-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); }
 .scenarios-admin .card-actions { flex-wrap: nowrap; gap: 0.125rem; }
 .scenarios-admin .card-actions .btn { flex-shrink: 0; padding: 0.5rem 0.125rem; font-size: var(--font-size-xs); white-space: nowrap; }
 .scenarios-admin .card-description { display: block; overflow: visible; overflow-wrap: anywhere; }
@@ -796,11 +796,6 @@ textarea {
   .scenarios-admin .scenarios-grid { grid-template-columns: 1fr; }
   .scenarios-admin .card-actions { flex-wrap: wrap; }
   .scenarios-admin .filter-bar { grid-template-columns: minmax(0, 1fr); }
-}
-
-@media (min-width: 769px) {
-  .scenarios-admin .scenario-card:only-child { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 20rem); gap: var(--spacing-lg); align-items: start; }
-  .scenarios-admin .scenario-card:only-child .card-actions { margin-top: 0; padding: 0 0 0 var(--spacing-lg); border-top: 0; border-left: 1px solid var(--color-border-light); }
 }
 
 /* ========================================

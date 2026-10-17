@@ -10,11 +10,12 @@ export default async function checkScenarioCards(page) {
   await mkdir(evidence, {recursive:true});
   await page.emulateMedia({reducedMotion:'reduce'});
   const measurements = [];
-  const cases = [{total:0,page:1}, {total:1,page:1}, {total:20,page:1}, {total:21,page:2}, {total:41,page:3}];
+  const cases = [{total:20,page:1}, {total:0,page:1}, {total:1,page:1}, {total:2,page:1}, {total:4,page:1}, {total:21,page:2}, {total:41,page:3}];
   for (const theme of ['light','dark']) {
     await page.emulateMedia({colorScheme:theme});
-    for (const width of [1440,320,390,767,768,769,1024]) {
+    for (const width of [1440,320,390,767,768,769,1024,1180]) {
       await page.setViewportSize({width,height:900});
+      let column;
       for (const fixture of cases) {
         await page.goto(`${base}/fixtures/s6/scenarios?total=${fixture.total}&page=${fixture.page}&uiux123=1`);
         for (const stress of [false,true]) {
@@ -109,12 +110,13 @@ export default async function checkScenarioCards(page) {
             }
           }
           assert.equal(layout.cards.length, Math.min(20,fixture.total-(fixture.page-1)*20));
+          if (fixture.total === 20) column = layout.cards[0].box;
+          if (layout.cards.length) assert(Math.abs(layout.cards[0].box.left-column.left) < 1, `${label}: first card in first column`);
           for (const card of layout.cards) {
+            assert(Math.abs(card.box.width-column.width) < 1, `${label}: same width as a populated grid column`);
             assert(card.heading?.includes(card.title) && card.heading.includes(card.status), `${label}: title and statuses share top area`);
             assert(!/활성|초안|게시|검토 필요|변환 필요/.test(card.meta), `${label}: metadata separate from status`);
-            if (layout.cards.length === 1 && width >= 769) {
-              assert(card.actions.left >= card.body.right+8, `${label}: single wide card has horizontal information/actions`);
-            } else assert(card.actions.top >= card.body.bottom, `${label}: narrow cards use vertical information/actions`);
+            assert(card.actions.top >= card.body.bottom, `${label}: vertical information/actions for every card`);
             const legacy = card.status.includes('변환 필요');
             assert.deepEqual(card.actionNames,legacy ? ['대화목록'] : ['대화목록','모델 비교','수정','삭제']);
             if (width >= 769) assert(card.actionTops.every(top => Math.abs(top-card.actionTops[0]) < 1), `${label}: card actions share one row`);

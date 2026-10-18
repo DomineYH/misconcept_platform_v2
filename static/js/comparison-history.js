@@ -6,8 +6,8 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
   const detail = node('section', null, {'aria-label':uiLanguage.t('admin.comparison_history_details'), hidden:''});
   const notice = node('p', uiLanguage.t('admin.your_comparisons_are_retained_for_30_days_after_creation_retrying_does_not_extend_their_expiry'), {role:'status'});
   let cursor = null;
-  const next = button(uiLanguage.t('admin.next_20'), () => load(cursor), true);
-  const open = button(uiLanguage.t('admin.comparison_history'), () => load());
+  const next = button(uiLanguage.t('admin.next_20'), () => load(cursor), true, 'secondary');
+  const open = button(uiLanguage.t('admin.comparison_history'), () => load(), false, 'secondary');
   root.append(open, notice, list, next, detail);
   function unavailable(id) {
     detail.replaceChildren();
@@ -25,7 +25,7 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
       for (const item of data.items) {
         const row = node('article');
         row.append(node('p', `${roles[item.target_role]} · ${item.source_origin === 'saved_scenario_edit' ? uiLanguage.t('admin.unsaved_edits_to_a_saved_scenario') : uiLanguage.t('admin.new_draft')} · ${item.created_at} · ${item.status === 'running' ? uiLanguage.t('admin.operation_in_progress') : uiLanguage.t('admin.end')}`),
-          button(`${item.title || uiLanguage.t('admin.untitled_draft')} ${uiLanguage.t('admin.details')}`, () => show(item.comparison_run_id)));
+          button(`${item.title || uiLanguage.t('admin.untitled_draft')} ${uiLanguage.t('admin.details')}`, () => show(item.comparison_run_id), false, 'secondary'));
         for (const status of item.panel_statuses || []) row.append(node('p', statusLabel(status, item.target_role) || uiLanguage.t('admin.unknown')));
         list.append(row);
       }
@@ -57,7 +57,7 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
           || sourceComparisonId() === data.comparison_run_id;
         renderComparisonResult(card, panel, data.target_role, {stop:() => {}, retry:() => {}, adopt:() => {}, apply:() => apply(panel, data)}, true);
         card.querySelectorAll('button').forEach(control => control.remove());
-        if (canApply) card.append(button(uiLanguage.t('admin.apply_this_model'), () => apply(panel, data), running));
+        if (canApply) card.append(button(uiLanguage.t('admin.apply_this_model'), () => apply(panel, data), running, 'primary'));
       }
       if (data.source_available !== false && data.source_snapshot?.scenario_id != null && data.source_snapshot.scenario_id !== sourceId()) {
         detail.append(node('a', uiLanguage.t('admin.open_source_scenario_editor'), {href:`/admin/scenarios/${data.source_snapshot.scenario_id}/edit?comparison_id=${encodeURIComponent(id)}`}));
@@ -75,7 +75,7 @@ export function mountComparisonHistory(root, {request, apply, invalidate, source
           open.focus();
         } else if (response.status === 404) unavailable(id);
         else notice.textContent = uiLanguage.t('admin.could_not_delete_stop_the_running_comparison_before_deleting_again');
-      }, running));
+      }, running, 'danger'));
       if (running) detail.append(node('p', uiLanguage.t('admin.running_comparisons_cannot_be_deleted_stop_the_comparison_and_check_again')));
       title.focus();
     } catch { notice.textContent = uiLanguage.t('admin.could_not_load_comparison_details_try_again'); }

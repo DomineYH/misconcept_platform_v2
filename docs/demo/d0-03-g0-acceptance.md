@@ -1,6 +1,6 @@
 # D0-03 G0 입력·소비자 검토·승인 기록
 
-상태: **r3 소비자·독립 재검토 ACCEPT (새 지적 없음), maintainer G0 승인 pending**. 1차·r2 결과는 각 REVIEW 보고서에서 옮겼다. 검토는 모두 정적 계약 검토이며 실행 증거가 아니다. 승인 댓글·승인 시각은 maintainer 승인 후 coordinator가 채운다.
+상태: **r3 소비자·독립 재검토 ACCEPT (새 지적 없음), maintainer G0 승인 완료 (2026-10-19, §5)**. 1차·r2 결과는 각 REVIEW 보고서에서 옮겼다. 검토는 모두 정적 계약 검토이며 실행 증거가 아니다.
 
 ## 1. 고정 입력
 
@@ -95,15 +95,15 @@
 | 항목 | 값 |
 | --- | --- |
 | G0 최종 승인자 | @DomineYH |
-| 승인 상태 | pending |
-| 승인 대상 입력 전체 SHA·계약 버전·후보 전체 SHA | pending |
-| 소비자/독립 결함 해결 확인 | pending |
-| 승인 댓글/PR 참조 | pending |
-| 승인 시각 / 승인 시점 main SHA | pending / pending |
-| 지정 대상 branch 통합 SHA·acceptance | pending |
+| 승인 상태 | approved |
+| 승인 대상 입력 전체 SHA·계약 버전·후보 전체 SHA | 입력 `f6551482fb895da7af90a4bd481c3e25fd9d5c19`, 계약 `d0-03-v1-r3`, 후보 `d6455d10c2d75acde811f85a53143be086d67545` |
+| 소비자/독립 결함 해결 확인 | R1–R10·S1–S5 정정, r3 다섯 lens 재검토 ACCEPT·새 지적 없음 (§3.3, §4) |
+| 승인 댓글/PR 참조 | Claude Code 세션에서 maintainer 승인, 기록 [#190 댓글](https://github.com/DomineYH/misconcept_platform_v2/issues/190#issuecomment-6255428137); 통합 PR #211 |
+| 승인 시각 / 승인 시점 main SHA | 2026-10-19 06:34 (+09:00) / `33d1e3e8584a917007b043eae3f4d371355e9146` |
+| 지정 대상 branch 통합 SHA·acceptance | `main` `33d1e3e8584a917007b043eae3f4d371355e9146` (PR #211 merge, 후보 `d6455d1` 포함), CI test·browser 통과 |
 
 모든 소비자·독립 리뷰 결함 해결과 정확한 후보에 대한 명시 G0 승인 전에는 #190 완료/G0 통과를 선언하지 않는다. D0-02의 교육 승인·이번 문서 작성 착수 승인은 G0 승인이 아니다. 배포 host/origin/URL/root/mount/용량·quota·최종 TTL의 실제 값은 D5-02 approval input으로 남기며 문서 후보 작성의 미해결 기술 결정으로 취급하지 않는다.
 
 ## 6. 작성 시 확인과 실행 한계
 
-이번 제출은 고정 입력·기존 경로/심볼·소유 표·C-item 대응·문서 diff의 정적 확인에 한정한다. 실제 실행 명령과 결과는 `REPORT-impl-190.md`에 기록한다. 1차/r2 소비자·독립 정적 리뷰는 위 다섯 보고서에 기록되어 있고 r3 재검토는 pending이다. 앱·pytest·ruff·black·migration·브라우저·live streaming·네트워크·운영 환경 검사는 not run(문서 전용 작업 지시에서 금지)이다. 격리·reset 안전성·egress 0·G0 승인을 이 기록 골격만으로 입증하지 않는다.
+이번 제출은 고정 입력·기존 경로/심볼·소유 표·C-item 대응·문서 diff의 정적 확인에 한정한다. 실제 실행 명령과 결과는 `REPORT-impl-190.md`에 기록한다. 1차/r2/r3 소비자·독립 정적 리뷰는 위 다섯 보고서에 기록되어 있다. 앱·pytest·ruff·black·migration·브라우저·live streaming·네트워크·운영 환경 검사는 not run(문서 전용 작업 지시에서 금지)이다. 격리·reset 안전성·egress 0·G0 승인을 이 기록 골격만으로 입증하지 않는다.

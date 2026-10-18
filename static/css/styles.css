@@ -3782,7 +3782,8 @@ body > header nav h1 { flex: 0 1 auto; min-width: 0; margin-right: 1rem; }
   font-size: var(--font-size-sm);
 }
 .language-selector button:hover:not(:disabled),
-.modal-close:hover:not(:disabled) {
+.modal-close:hover:not(:disabled),
+.close-modal-btn:hover:not(:disabled) {
   background-color: var(--color-gray-50);
 }
 .language-selector button:active,

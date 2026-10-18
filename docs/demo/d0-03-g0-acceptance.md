@@ -25,9 +25,9 @@
 | 계약 경로·버전 | [d0-03-contract-v1.md](d0-03-contract-v1.md), `d0-03-v1-r2` |
 | ADR | [0013-demo-isolation-and-keyless-provider.md](../adr/0013-demo-isolation-and-keyless-provider.md) |
 | 1차 계약 후보 전체 SHA | `83f7ec0fff0895aed872114ad4e5d66ce3b38a5c` |
-| r2 계약 후보 전체 SHA | pending — coordinator fills after commit |
+| r2 계약 후보 전체 SHA | `e0b8cc38f491e1178f8d39c7fe7bacedd02bcf76` |
 | 1차 계약 blob | `326de9e66104be61f6c6b16fd42bec53366c84db` |
-| r2 계약 blob / 재검토 기준 main SHA | pending / pending |
+| r2 계약 blob / 재검토 기준 main SHA | `77e1af80df24fcc417d1240ed4b6145ec445b15b` / pending |
 | 변경 이력·무효화된 증거 | 계약 §29의 R1–R10; r1의 미결 항목은 r2 재검토 필요. 실제 실행 증거 없음 |
 | 추적 기준 | 계약 §27의 C01–C29 → 절 → 소비자 → G1–G5 → 검사 방법 |
 
@@ -73,7 +73,7 @@
 
 | 결함 ID / C-item | 지적 근거·소비자 | 해결 담당 | 수정 SHA·해결 근거 | 재검토 결과 |
 | --- | --- | --- | --- | --- |
-| R1–R10 / 계약 §29 | 1차 DB-01–07/P1–2/UI-1–2/V1–3/F1–3 | #190 문서 정정 | r2 후보 SHA 연결 후 재검토 | pending |
+| R1–R10 / 계약 §29 | 1차 DB-01–07/P1–2/UI-1–2/V1–3/F1–3 | #190 문서 정정 | 후보 `e0b8cc38f491e1178f8d39c7fe7bacedd02bcf76`, 계약 §29 대응; 재검토 대기 | pending |
 
 ## 5. maintainer G0 승인
 

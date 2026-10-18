@@ -226,3 +226,13 @@ DB에 저장되는 cache/singleton도 전역 메모리와 구별해야 한다. `
 | cancellation | 세션 종료/helper #192, 분석·probe registry/finalization #192, 비교 service 5개 registry 소비자의 namespace/lease/currentness 호환 #192, 연결 ID 취소 #198, 생성·분석 전달/저장 #198, 관리자/비교 route의 registry API 소비 #200 |
 
 이 목록은 #190의 설계 입력이다. 경계 조사 문서 제출과 demo 구현의 보안·격리 승인, 이후 이슈의 acceptance를 구분한다.
+
+### 독립 검토 기록
+
+| 항목 | 기록 |
+|---|---|
+| 검토자 | 작성자와 다른 독립 reviewer 세션(task-verifier, 2026-10-18), 읽기 전용 정적 검토 |
+| 1차 검토 | `abc3e6d928238ffe74b5985fe6002534bc8984f1`: **ACCEPT_WITH_FIXES**. major 1건 — 분석 호출 전달부 소유를 #190 미정으로 둠(계획 §9.5는 D2-04 #198로 배정). coordinator 확인 중 비교 service registry 소비자 5개가 위임 답변 #192-1에 이미 배정된 것도 추가 지적 |
+| 수정 | `c1c9cc58abb64228f56613c8750e42f8c46018d2`: 전달부 → #198, 비교 소비자 5개 → #192(namespace 호환 한정), 남은 #190 전달 항목을 (a) 패치 필요 여부 / (b) 파일 소유로 구분 |
+| 재검토 | `c1c9cc58abb64228f56613c8750e42f8c46018d2`: **ACCEPT**. §4 소유 78개가 위임 답변 소유 표와 일치, 인용 경로 존재, 변경 파일 1개 |
+| 미실행 | 앱·테스트·migration·브라우저·네트워크. 정적 검토이며 격리·reset 경합 안전·AI egress 0을 입증하지 않는다 |

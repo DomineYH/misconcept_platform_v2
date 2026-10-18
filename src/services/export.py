@@ -356,7 +356,7 @@ class CSVExporter:
         teacher_result = await db.execute(
             select(User).where(User.id == session.teacher_id)
         )
-        teacher = teacher_result.scalar_one()
+        teacher = teacher_result.scalar_one_or_none()
 
         display = session_display(session)
         history_columns = _history_columns(display)
@@ -424,12 +424,12 @@ class CSVExporter:
                     "session_id": session_id,
                     "scenario_id": session.scenario_id,
                     "scenario_title": scenario_title,
-                    "teacher_id": teacher.id,
+                    "teacher_id": teacher.id if teacher else "",
                     "teacher_username": self._sanitize_csv_value(
-                        teacher.username
+                        teacher.username if teacher else ""
                     ),
                     "teacher_nickname": self._sanitize_csv_value(
-                        teacher.nickname
+                        teacher.nickname if teacher else ""
                     ),
                     "session_started_at": session.started_at.isoformat(),
                     "session_ended_at": (
@@ -471,12 +471,12 @@ class CSVExporter:
                     "session_id": session_id,
                     "scenario_id": session.scenario_id,
                     "scenario_title": scenario_title,
-                    "teacher_id": teacher.id,
+                    "teacher_id": teacher.id if teacher else "",
                     "teacher_username": self._sanitize_csv_value(
-                        teacher.username
+                        teacher.username if teacher else ""
                     ),
                     "teacher_nickname": self._sanitize_csv_value(
-                        teacher.nickname
+                        teacher.nickname if teacher else ""
                     ),
                     "session_started_at": session.started_at.isoformat(),
                     "session_ended_at": (
@@ -617,12 +617,12 @@ class CSVExporter:
                         "session_id": session_id,
                         "scenario_id": session.scenario_id,
                         "scenario_title": scenario_title,
-                        "teacher_id": teacher.id,
+                        "teacher_id": teacher.id if teacher else "",
                         "teacher_username": self._sanitize_csv_value(
-                            teacher.username
+                            teacher.username if teacher else ""
                         ),
                         "teacher_nickname": self._sanitize_csv_value(
-                            teacher.nickname
+                            teacher.nickname if teacher else ""
                         ),
                         "session_started_at": (session.started_at.isoformat()),
                         "session_ended_at": (
@@ -668,12 +668,12 @@ class CSVExporter:
                         "session_id": session_id,
                         "scenario_id": session.scenario_id,
                         "scenario_title": scenario_title,
-                        "teacher_id": teacher.id,
+                        "teacher_id": teacher.id if teacher else "",
                         "teacher_username": self._sanitize_csv_value(
-                            teacher.username
+                            teacher.username if teacher else ""
                         ),
                         "teacher_nickname": self._sanitize_csv_value(
-                            teacher.nickname
+                            teacher.nickname if teacher else ""
                         ),
                         "session_started_at": (session.started_at.isoformat()),
                         "session_ended_at": (

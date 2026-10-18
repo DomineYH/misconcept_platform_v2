@@ -9,6 +9,7 @@ from typing import Literal, Protocol
 from uuid import UUID, uuid4
 from weakref import WeakValueDictionary
 
+import anyio
 from fastapi import HTTPException
 
 ExecutionScope = tuple[UUID | str, int]
@@ -73,7 +74,7 @@ class ExecutionToken:
         await self.task_control.done.wait()
 
 
-def _error(code, *, scope=None):
+def _error(code, *, scope=None, auth_epoch=None):
     busy = code == "DEMO_BUSY"
     raise HTTPException(
         409 if busy else 422,
@@ -82,7 +83,7 @@ def _error(code, *, scope=None):
             retryable=busy,
             recovery="demo.wait_or_stop" if busy else "demo.check_input",
             generation=scope[1] if scope and scope != NORMAL_SCOPE else None,
-            auth_epoch=None,
+            auth_epoch=auth_epoch,
         ),
         headers={"Cache-Control": "no-store"},
     )
@@ -179,7 +180,7 @@ class Lifecycle:
             if key in self._tokens:
                 if scope == NORMAL_SCOPE:
                     raise RuntimeError("Execution already registered")
-                _error("DEMO_BUSY", scope=scope)
+                _error("DEMO_BUSY", scope=scope, auth_epoch=ctx.auth_epoch)
             if handle is None:
                 return self.register_normal(kind, id, task)
             lease = handle.retain_lease(ctx.lease)
@@ -209,7 +210,7 @@ class Lifecycle:
         if not token.completed:
             if scope == NORMAL_SCOPE:
                 raise RuntimeError("Execution is not complete")
-            _error("DEMO_BUSY", scope=scope)
+            _error("DEMO_BUSY")
         if scope == NORMAL_SCOPE:
             async with self._normal_lock:
                 return self._remove(key, token)
@@ -308,8 +309,24 @@ class Lifecycle:
         try:
             yield replace(ctx, lease=lease)
         finally:
-            async with self._authority().transition(ctx.visitor_id) as handle:
-                handle.release_lease(lease)
+
+            async def release():
+                async with self._authority().transition(
+                    ctx.visitor_id
+                ) as handle:
+                    handle.release_lease(lease)
+
+            cancelled = False
+            with anyio.CancelScope(shield=True):
+                cleanup = asyncio.create_task(release())
+                while not cleanup.done():
+                    try:
+                        await asyncio.shield(cleanup)
+                    except asyncio.CancelledError:
+                        cancelled = True
+                cleanup.result()
+            if cancelled:
+                raise asyncio.CancelledError
 
     async def assert_current(self, ctx):
         async with self.transition(ctx):

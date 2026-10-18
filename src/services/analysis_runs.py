@@ -3,9 +3,11 @@
 import asyncio
 import json
 import logging
+from dataclasses import replace
 from datetime import timezone
 from uuid import uuid4
 
+import anyio
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
@@ -15,6 +17,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
+)
+from src.demo.lifecycle import (
+    NORMAL_SCOPE,
+    NormalContext,
+    TaskControl,
+    lifecycle,
+    scope_for,
 )
 from src.i18n import translate
 from src.models import GenerationRun, Message, Session, User
@@ -39,8 +48,7 @@ from src.services.lesson_snapshots import read_lesson_snapshot
 
 logger = logging.getLogger(__name__)
 RUN_SECONDS = 900
-# shortcut: tasks require one worker, coordinate cancellation before adding workers.
-active_analyses: dict[str, asyncio.Task] = {}
+active_analyses = lifecycle.normal_view("analysis", lambda task: task.cancel())
 cleanup_tasks: set[asyncio.Task] = set()
 
 
@@ -148,8 +156,16 @@ async def reserve_analysis(
     regenerate=False,
     plan_hash=None,
     language="ko",
+    ctx=None,
+    registry=lifecycle,
 ):
-    async with execution_lock():
+    ctx = ctx if ctx is not None else NormalContext(factory)
+    factory = ctx.factory
+    async with (
+        registry.write_guard(ctx),
+        registry.resource_lock(scope_for(ctx), "session", session_id),
+        execution_lock(),
+    ):
         async with factory() as db:
             await db.execute(text("BEGIN IMMEDIATE"))
             session = await db.get(Session, session_id)
@@ -319,8 +335,12 @@ async def reserve_analysis(
             )
 
 
-async def finish_failure(factory, run_id, status, code):
-    async with factory() as db:
+async def finish_failure(
+    factory, run_id, status, code, *, ctx=None, registry=lifecycle
+):
+    ctx = ctx if ctx is not None else NormalContext(factory)
+    factory = ctx.factory
+    async with registry.write_guard(ctx), factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
         run = await db.get(GenerationRun, run_id)
         if run is not None and run.status == "running":
@@ -329,9 +349,12 @@ async def finish_failure(factory, run_id, status, code):
             await db.commit()
 
 
-async def execute_analysis(factory, execution):
+async def execute_analysis(factory, execution, *, ctx=None, registry=lifecycle):
+    ctx = ctx if ctx is not None else NormalContext(factory)
+    factory = ctx.factory
     run_id = execution["run_id"]
     try:
+        await registry.assert_current(ctx)
         remaining = (
             RUN_SECONDS
             - (
@@ -360,7 +383,7 @@ async def execute_analysis(factory, execution):
                     else {}
                 ),
             )
-            async with factory() as db:
+            async with registry.write_guard(ctx), factory() as db:
                 await save_analysis(
                     execution["session_id"],
                     result,
@@ -369,9 +392,23 @@ async def execute_analysis(factory, execution):
                     run_id=run_id,
                 )
     except asyncio.CancelledError:
-        await finish_failure(factory, run_id, "interrupted", "interrupted")
+        await finish_failure(
+            factory,
+            run_id,
+            "interrupted",
+            "interrupted",
+            ctx=ctx,
+            registry=registry,
+        )
     except TimeoutError:
-        await finish_failure(factory, run_id, "failed", "timeout_total")
+        await finish_failure(
+            factory,
+            run_id,
+            "failed",
+            "timeout_total",
+            ctx=ctx,
+            registry=registry,
+        )
     except (HTTPException, InvocationError) as error:
         await finish_failure(
             factory,
@@ -382,32 +419,98 @@ async def execute_analysis(factory, execution):
                 if isinstance(error, InvocationError)
                 else "configuration_unavailable"
             ),
+            ctx=ctx,
+            registry=registry,
         )
     except DBAPIError:
-        logger.exception("Analysis storage failed")
-        await finish_failure(factory, run_id, "failed", "storage_failed")
+        if scope_for(ctx) == NORMAL_SCOPE:
+            logger.exception("Analysis storage failed")
+        else:
+            logger.error("Analysis storage failed")
+        await finish_failure(
+            factory,
+            run_id,
+            "failed",
+            "storage_failed",
+            ctx=ctx,
+            registry=registry,
+        )
     except Exception:
-        logger.exception("Analysis execution failed")
-        await finish_failure(factory, run_id, "failed", "analysis_failed")
+        if scope_for(ctx) == NORMAL_SCOPE:
+            logger.exception("Analysis execution failed")
+        else:
+            logger.error("Analysis execution failed")
+        await finish_failure(
+            factory,
+            run_id,
+            "failed",
+            "analysis_failed",
+            ctx=ctx,
+            registry=registry,
+        )
 
 
-def start_analysis(factory, execution):
+def start_analysis(
+    factory, execution, *, ctx=None, registry=lifecycle, token=None
+):
+    ctx = ctx if ctx is not None else NormalContext(factory)
+    factory = ctx.factory
     run_id = execution["run_id"]
-    task = asyncio.create_task(execute_analysis(factory, execution))
-    active_analyses[run_id] = task
+    if scope_for(ctx) != NORMAL_SCOPE and token is None:
+        raise ValueError("Demo analysis requires scoped registration")
+    task = asyncio.create_task(
+        execute_analysis(factory, execution, ctx=ctx, registry=registry)
+    )
+    if token is None:
+        active_analyses[run_id] = task
+        token = lifecycle.lookup(NORMAL_SCOPE, "analysis", run_id)
+        registry = lifecycle
 
-    def done(task):
-        active_analyses.pop(run_id, None)
-        if task.cancelled():
-            cleanup = asyncio.create_task(
-                finish_failure(factory, run_id, "interrupted", "interrupted")
-            )
-            cleanup_tasks.add(cleanup)
-            cleanup.add_done_callback(cleaned)
-        elif task.exception() is not None:
-            logger.error("Analysis state cleanup failed")
+    async def finalize(completed):
+        try:
+            if completed.cancelled():
+                await finish_failure(
+                    factory,
+                    run_id,
+                    "interrupted",
+                    "interrupted",
+                    ctx=ctx,
+                    registry=registry,
+                )
+            elif completed.exception() is not None:
+                logger.error("Analysis state cleanup failed")
+        finally:
+            token.task_control.done.set()
+            await registry.pop(*token.key, token)
+
+    def done(completed):
+        cleanup = asyncio.create_task(finalize(completed))
+        cleanup_tasks.add(cleanup)
+        cleanup.add_done_callback(cleaned)
 
     task.add_done_callback(done)
+    return task
+
+
+async def start_scoped_analysis(ctx, execution, *, registry=lifecycle):
+    tasks = []
+    token = await registry.register(
+        ctx,
+        "analysis",
+        execution["run_id"],
+        TaskControl(lambda: tasks[0].cancel(), asyncio.Event()),
+    )
+    try:
+        child = replace(ctx, lease=token.registry_lease)
+        task = start_analysis(
+            ctx.factory, execution, ctx=child, registry=registry, token=token
+        )
+        tasks.append(task)
+        return token
+    except BaseException:
+        token.task_control.done.set()
+        await registry.pop(*token.key, token)
+        raise
 
 
 def cleaned(task):
@@ -421,7 +524,10 @@ async def stop_analyses():
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
-    await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+    while cleanup_tasks:
+        pending = tuple(cleanup_tasks)
+        await asyncio.gather(*pending, return_exceptions=True)
+        cleanup_tasks.difference_update(pending)
 
 
 async def request_analysis(
@@ -433,22 +539,71 @@ async def request_analysis(
     regenerate=False,
     plan_hash=None,
     language="ko",
+    ctx=None,
+    registry=lifecycle,
 ):
-    factory = async_sessionmaker(
-        db.bind, expire_on_commit=False, autoflush=False
+    factory = (
+        ctx.factory
+        if ctx is not None
+        else async_sessionmaker(
+            db.bind, expire_on_commit=False, autoflush=False
+        )
     )
-    await db.commit()
-    accepted, execution = await reserve_analysis(
-        factory,
-        session_id,
-        actor_id,
-        request_id,
-        regenerate=regenerate,
-        plan_hash=plan_hash,
-        language=language,
-    )
-    if execution is not None:
-        start_analysis(factory, execution)
+    async with registry.write_guard(
+        ctx if ctx is not None else NormalContext(factory)
+    ):
+        try:
+            await db.commit()
+        except BaseException:
+            await db.rollback()
+            raise
+    async with registry.child_context(
+        ctx if ctx is not None else NormalContext(factory)
+    ) as child:
+        accepted, execution = await reserve_analysis(
+            factory,
+            session_id,
+            actor_id,
+            request_id,
+            regenerate=regenerate,
+            plan_hash=plan_hash,
+            language=language,
+            ctx=child,
+            registry=registry,
+        )
+        if execution is not None:
+            if ctx is None or scope_for(ctx) == NORMAL_SCOPE:
+                start_analysis(factory, execution)
+            else:
+                try:
+                    await start_scoped_analysis(
+                        child, execution, registry=registry
+                    )
+                except BaseException:
+                    with anyio.CancelScope(shield=True):
+                        cleanup = asyncio.create_task(
+                            finish_failure(
+                                factory,
+                                execution["run_id"],
+                                "interrupted",
+                                "interrupted",
+                                ctx=child,
+                                registry=registry,
+                            )
+                        )
+                        while not cleanup.done():
+                            try:
+                                await asyncio.shield(cleanup)
+                            except asyncio.CancelledError:
+                                continue
+                            except Exception:
+                                break
+                        if (
+                            cleanup.cancelled()
+                            or cleanup.exception() is not None
+                        ):
+                            logger.error("Analysis reservation cleanup failed")
+                    raise
     status_code = accepted.pop("_http_status", None)
     return JSONResponse(
         accepted,
@@ -476,36 +631,48 @@ async def get_run(db, session_id, run_id, *, language="ko"):
 
 
 async def cancel_analysis(
-    db, session_id, run_id, actor_id, *, admin=False, language="ko"
+    db,
+    session_id,
+    run_id,
+    actor_id,
+    *,
+    admin=False,
+    language="ko",
+    ctx=None,
+    registry=lifecycle,
 ):
-    await db.commit()
-    await db.execute(text("BEGIN IMMEDIATE"))
-    user = await db.get(User, actor_id, populate_existing=True)
-    session = await db.get(Session, session_id, populate_existing=True)
-    if session is None or session.deleted_at is not None:
-        raise HTTPException(
-            404, detail=translate("teacher.session_not_found", language)
-        )
-    if (
-        user is None
-        or (admin and not user.is_admin)
-        or (not admin and session.teacher_id != actor_id)
-    ):
-        raise HTTPException(
-            403, detail=translate("teacher.forbidden", language)
-        )
-    run = await get_run(db, session_id, run_id, language=language)
-    if run.status == "running":
-        run.status, run.error_code, run.finished_at = (
-            "cancelled",
-            "cancelled",
-            now(),
-        )
-        run.outcome_json = json.dumps(
-            dict(status="cancelled", error_code="cancelled")
-        )
-    await db.commit()
-    task = active_analyses.get(run_id)
-    if task is not None:
-        task.cancel()
+    ctx = ctx if ctx is not None else NormalContext(db.bind)
+    async with registry.write_guard(ctx):
+        try:
+            await db.commit()
+            await db.execute(text("BEGIN IMMEDIATE"))
+            user = await db.get(User, actor_id, populate_existing=True)
+            session = await db.get(Session, session_id, populate_existing=True)
+            if session is None or session.deleted_at is not None:
+                raise HTTPException(
+                    404, detail=translate("teacher.session_not_found", language)
+                )
+            if (
+                user is None
+                or (admin and not user.is_admin)
+                or (not admin and session.teacher_id != actor_id)
+            ):
+                raise HTTPException(
+                    403, detail=translate("teacher.forbidden", language)
+                )
+            run = await get_run(db, session_id, run_id, language=language)
+            if run.status == "running":
+                run.status, run.error_code, run.finished_at = (
+                    "cancelled",
+                    "cancelled",
+                    now(),
+                )
+                run.outcome_json = json.dumps(
+                    dict(status="cancelled", error_code="cancelled")
+                )
+            await db.commit()
+        except BaseException:
+            await db.rollback()
+            raise
+    registry.cancel(scope_for(ctx), "analysis", run_id)
     return await run_response(db, run, admin=admin)

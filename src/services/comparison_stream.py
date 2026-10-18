@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import anyio
 from starlette.responses import StreamingResponse
 
+from src.demo.lifecycle import NORMAL_SCOPE, lifecycle
 from src.services.call_admission import recheck_call
 from src.services.call_execution import execute_call
 from src.services.comparison_analysis import analysis_comparison_result
@@ -40,7 +41,12 @@ class ComparisonStreamingResponse(StreamingResponse):
             )
             accepted["request_id"] = execution["request"].request_id
             cancelled = active_runs[panel["run_id"]] = asyncio.Event()
-            child = dict(accepted=accepted, execution=execution, seq=0)
+            child = dict(
+                accepted=accepted,
+                execution=execution,
+                seq=0,
+                token=lifecycle.lookup(NORMAL_SCOPE, "run", panel["run_id"]),
+            )
             child["task"] = asyncio.create_task(self.forward(child, cancelled))
             execution["permit"].task = child["task"]
             self.children.append(child)
@@ -55,6 +61,7 @@ class ComparisonStreamingResponse(StreamingResponse):
 
     async def forward(self, child, cancelled):
         await self.ready.wait()
+        child["stream_started"] = True
         async with aclosing(
             stream_comparison(
                 self.factory, child["accepted"], child["execution"], cancelled
@@ -93,7 +100,6 @@ class ComparisonStreamingResponse(StreamingResponse):
                         continue
                     pending.discard(task)
                     child["execution"]["permit"].release()
-                    active_runs.pop(child["accepted"]["run_id"], None)
                     error = None if task.cancelled() else task.exception()
                     if child.get("recovering") and error is not None:
                         logger.error(
@@ -110,6 +116,8 @@ class ComparisonStreamingResponse(StreamingResponse):
                 reading.cancel()
                 with suppress(asyncio.CancelledError):
                     await reading
+            if not getattr(self, "asgi_started", False):
+                await self.finish_children()
 
     async def recover(self, child):
         accepted = child["accepted"]
@@ -138,36 +146,49 @@ class ComparisonStreamingResponse(StreamingResponse):
         # Keep recovery behind already queued frames from this run.
         await self.queue.put(terminal)
 
+    async def finish_children(self):
+        for child in self.children:
+            if not child["task"].done():
+                child["task"].cancel()
+        await asyncio.gather(
+            *(child["task"] for child in self.children), return_exceptions=True
+        )
+        if getattr(self, "asgi_started", False):
+            await self.body_iterator.aclose()
+        for child in self.children:
+            token = child["token"]
+            if token.completed:
+                continue
+            try:
+                if not child.get("stream_started"):
+                    await finish_comparison(
+                        self.factory,
+                        child["accepted"]["run_id"],
+                        status="interrupted",
+                        error_code="disconnected",
+                    )
+            except Exception:
+                logger.error("Unable to record unsent comparison")
+            finally:
+                child["execution"]["permit"].release()
+                token.task_control.done.set()
+                await lifecycle.pop(*token.key, token)
+
     async def __call__(self, scope, receive, send):
+        self.asgi_started = True
         try:
             await super().__call__(scope, receive, send)
         finally:
             with anyio.CancelScope(shield=True):
+                cleanup = asyncio.create_task(self.finish_children())
+                cleanup.add_done_callback(self.cleanup_done)
                 with anyio.move_on_after(CLEANUP_SECONDS):
-                    for child in self.children:
-                        child["task"].cancel()
-                    await asyncio.gather(
-                        *(child["task"] for child in self.children),
-                        return_exceptions=True,
-                    )
-                    await self.body_iterator.aclose()
-                    for child in self.children:
-                        run_id = child["accepted"]["run_id"]
-                        if active_runs.pop(run_id, None) is not None:
-                            try:
-                                await finish_comparison(
-                                    self.factory,
-                                    run_id,
-                                    status="interrupted",
-                                    error_code="disconnected",
-                                )
-                            except Exception:
-                                logger.error(
-                                    "Unable to record unsent comparison"
-                                )
-                for child in self.children:
-                    active_runs.pop(child["accepted"]["run_id"], None)
-                    child["execution"]["permit"].release()
+                    await asyncio.shield(cleanup)
+
+    @staticmethod
+    def cleanup_done(task):
+        if not task.cancelled() and task.exception() is not None:
+            logger.error("Comparison state cleanup failed")
 
 
 def sse_frame(accepted, kind, seq, **data):
@@ -389,7 +410,6 @@ async def stream_comparison(factory, accepted, execution, cancelled):
             logger.error("Comparison finalization failed")
             yield frame("run.failed", error_code="storage_error")
     finally:
-        active_runs.pop(accepted["run_id"], None)
         closing = True
         with anyio.CancelScope(shield=True):
             with anyio.move_on_after(CLEANUP_SECONDS):

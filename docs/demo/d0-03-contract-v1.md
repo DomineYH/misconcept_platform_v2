@@ -2,7 +2,7 @@
 
 ## 1. 기준·범위와 읽는 법
 
-계약 버전은 `d0-03-v1-r2`이다. 상태는 **G0 승인 후보**이며 구현 완료·소비자 리뷰·독립 리뷰·maintainer 승인을 뜻하지 않는다. 승인 기록은 [G0 기록](d0-03-g0-acceptance.md), 설계 이유는 [ADR-0013](../adr/0013-demo-isolation-and-keyless-provider.md)에 둔다. 용어는 [GLOSSARY](../../GLOSSARY.md)를 따른다.
+계약 버전은 `d0-03-v1-r3`이다. 상태는 **G0 승인 후보**이며 구현 완료·소비자 리뷰·독립 리뷰·maintainer 승인을 뜻하지 않는다. 승인 기록은 [G0 기록](d0-03-g0-acceptance.md), 설계 이유는 [ADR-0013](../adr/0013-demo-isolation-and-keyless-provider.md)에 둔다. 용어는 [GLOSSARY](../../GLOSSARY.md)를 따른다.
 
 | 고정 입력 | merge SHA | 파일 버전·최종 파일 commit·blob |
 | --- | --- | --- |
@@ -81,7 +81,8 @@
 | --- | --- |
 | `create_visit(verified_bootstrap, request_id, role)` | §5.1 reserve_start로 bootstrap당 하나의 방문/작업을 예약 → preparing 202 또는 검증된 GenerationRef(g=1). 같은 ID/다른 body는 충돌; 다른 ID 경합·실패 복구는 §7.1/9.1. 예약 quota에 staging 포함 |
 | `resolve_visit(verified_visitor, expected_generation)` | 현재 ready 세대만 반환; lookup은 DB를 만들지 않음. 부재/만료/전환은 §11 오류 |
-| `acquire_lease(ref, expected_auth_epoch)`, `retain_lease(lease)` | 현재 ready 세대/epoch를 같은 전환 lock에서 검사 → 고유 Lease(lease_id:UUID, visitor_id, generation, auth_epoch, released=false); 한 번 증가, 폐기 세대 신규 획득 거절 |
+| `acquire_lease(ref, expected_auth_epoch)` | 전환 lock 밖에서 호출. #191이 lock을 획득하고 현재 ready/generation/auth_epoch/TTL 검사 → 고유 Lease(lease_id:UUID, visitor_id, generation, auth_epoch, released=false) 1개·refcount +1. 폐기 세대 신규 획득 거절 |
+| `retain_lease(lease)` | 전환 lock 밖에서 호출하는 wrapper. #191이 해당 lock을 획득하고 handle.retain_lease(lease)에 위임. 이미 handle을 보유하면 wrapper 대신 아래 handle API만 사용 |
 | `release_lease(lease)` | refcount를 한 번만 감소; 중복 해제는 no-op, 마지막 해제만 cleanup 가능 통지. 새 세대 생성 기능 없음 |
 | `reset_visit(ctx, request_id)` | §5.1 transition/mark_reset으로 §7 전환을 시작/조회해 ResetResult 반환. 같은 request_id는 같은 reset operation. ResetResult는 §9 DemoState의 resetting/ready 응답 또는 §11 오류 envelope |
 | `expire_visit(verified_visitor, reason)` | TTL/shutdown/version_replace 중 하나 → generation 폐기·취소·정리 예약; 반복은 no-op |
@@ -106,6 +107,8 @@ seed는 #197이 정식 `run_all_migrations(db_engine=...)`로 새 staging DB에 
 | `reserve_start(verified_bootstrap, request_id, role)` | bootstrap→visit index와 방문/디스크 예약을 하나의 admission lock 안에서 검사·갱신. leader만 새 OperationToken과 preparing snapshot을 받고 clone을 실행. replay/loser는 §9.1 결과만 받음. 기존 방문이 있으면 admission lock 다음에 그 방문 전환 lock 획득; 역순 금지 |
 | `transition(verified_visitor)` | async context manager. 진입 시 방문객 전환 lock을 잡아 `TransitionHandle` 반환, 종료 시 해제. handle은 context 밖 사용 금지, caller가 lock을 직접 해제/재진입하지 않음 |
 | `handle.snapshot()`, `handle.check(ctx)` | 불변 snapshot / ready·TTL·scope/generation·auth_epoch·미해제 lease 검사. 오류는 EXPIRED → STALE_GENERATION → 전환 state 오류 → STALE_ROLE 순서. DB lookup 전에도 사용 |
+| `handle.retain_lease(lease)` | 이미 보유한 같은 방문 전환 handle에서만 호출. lock 재획득/재진입 없이 미해제 부모 lease와 현재 ready/generation/auth_epoch/TTL을 검사하고 새 lease_id의 child 1개·refcount +1을 원자 반환. 오류는 handle.check와 동일, 실패 시 증가0 |
+| `handle.release_lease(lease)` | 보유 handle 안의 해제/등록 실패 복구용. lock 재획득 없이 그 lease_id를 한 번만 해제. 폐기 세대도 허용, 중복은 no-op. lock 밖의 release_lease는 lock을 획득해 이 연산에 위임 |
 | `handle.mark_reset(ctx, request_id)` | ready에서는 DemoContext를, reset_failed 재시도에서는 ControlContext의 서버 방문/g/epoch를 검사하고 resetting/g+1/auth_epoch+1/operation을 한 번에 기록 → OperationToken + 폐기 scope. reset_failed의 새 ID retry는 예약 g/epoch 유지·attempt_no+1. 같은 ID는 기존 receipt, 다른 진행 ID는 RESET_IN_PROGRESS |
 | `handle.publish(op, candidate_ref)` | op의 visitor/generation/attempt_no가 현재 preparing/resetting과 같고 candidate 검증·TTL이 유효할 때만 factory와 ready를 원자 연결. start는 예약 role, reset은 admin. 완료 receipt/CSRF revision도 함께 확정 → snapshot. expired면 EXPIRED, 오래된 op면 STALE_GENERATION, 검증 불일치 VERSION_MISMATCH; candidate는 정리 대상으로 반환 |
 | `handle.fail(op, code)` | 현재 op일 때 factory=None으로 start는 prepare_failed, reset은 reset_failed 및 불변 실패 receipt 기록. 오류 status는 §7.1/11. 오래된 op의 fail은 상태를 덮지 않는 false 반환 |
@@ -125,7 +128,7 @@ seed는 #197이 정식 `run_all_migrations(db_engine=...)`로 새 staging DB에 
 
 | 공개 API(#192) | 입력·결과·경합 의미 |
 | --- | --- |
-| `register(ctx, kind, id, task:TaskControl)` | ctx에서 scope/epoch/lease 결정. #191 transition 안에서 check와 동일 key 중복 검사를 하고 registry 전용 child lease를 retain한 뒤 token 등록, ExecutionToken 반환. 실패 시 retain/등록 없음; 중복은 BUSY. consumer는 반환 token을 보관 |
+| `register(ctx, kind, id, task:TaskControl)` | ctx에서 scope/epoch/lease 결정. #191 transition 안에서 check와 동일 key 중복 검사 → handle.retain_lease(ctx.lease) → token 등록 순서, ExecutionToken 반환. outer retain_lease를 handle 안에서 호출하지 않음. 중복은 BUSY/추가 lease0. retain 뒤 등록 실패는 같은 handle.release_lease로 되돌려 순증0. consumer는 반환 token을 보관 |
 | `lookup(scope, kind, id)` | 해당 token 또는 None. 다른 namespace 검색 없음 |
 | `pop(scope, kind, id, token)` | token 일치 AND done.set 이후만 제거/registry lease 1회 release, true 반환. 불일치·이미 제거는 false; 아직 done=false는 BUSY. 폐기 세대도 이 정리는 허용 |
 | `busy(scope, kind=None, id=None)` / `busy_locked(handle, scope)` | 미제거 token 또는 실행 child lease 존재 여부. role 변경은 같은 transition의 busy_locked만 사용, 중간 await 없이 change_role 호출 |
@@ -138,7 +141,9 @@ normal은 동일 API에 `ctx={app_mode:"normal",scope:("normal",0),auth_epoch:0,
 
 Event 기반 SSE 예: 기존 active_runs의 cancel Event를 만들고 `TaskControl(request_cancel=cancel_event.set, done=cleanup_done_event)`로 register한다. response 소유자가 ASGI 전송 종료/disconnect 시 producer 취소·shield된 원장/완료 cleanup을 끝내고 finally에서 done.set → token pop을 실행한다. Event.set만으로 drain이 완료되지 않는다. background 예: 생성한 asyncio.Task의 cancel을 request_cancel로 연결하고 task의 finally(자식/shield await 포함)가 끝난 뒤 완료 callback에서 done.set/pop한다. task가 취소 전에 시작되지 못한 경우도 소유자의 완료 callback이 cleanup을 수행한 뒤 같은 순서로 끝낸다.
 
-요청 lease는 #194가 첫 DB 접근 전에 획득·응답 종료/거절에 해제한다. register는 registry child lease를 보유하므로 요청이 끝나도 실행 DB는 남는다. registry/자식 작업은 원래 ctx의 lease 필드만 각자 retain한 child lease로 바꾼 불변 child ctx를 사용한다(나머지 factory/g/epoch는 동일). 실행이 chunk/원장 shield/다른 background에 독립 작업을 넘기면 **그 작업 전용 child lease**를 먼저 retain하고 해당 finally에서 release한다. 요청/작업/registry lease는 서로 다른 lease_id이며 각각 한 번 해제한다. disconnect가 registry lease를 먼저 제거하지 않는다. 늦은 token A의 pop은 동일 key의 token B를 지우지 못한다. drain은 request_cancel만 호출한 상태에서 false, 실제 finally/done/pop/모든 child 해제 후에만 true다.
+요청 lease는 #194가 첫 DB 접근 전에 획득·응답 종료/거절에 해제한다. 단, reset 요청 자신의 lease는 §7.2의 조기 이관 순서로 해제한다. register는 registry child lease를 보유하므로 요청이 끝나도 실행 DB는 남는다. registry/자식 작업은 원래 ctx의 lease 필드만 각자 retain한 child lease로 바꾼 불변 child ctx를 사용한다(나머지 factory/g/epoch는 동일). 실행이 chunk/원장 shield/다른 background에 독립 작업을 넘기면 **그 작업 전용 child lease**를 먼저 retain하고 해당 finally에서 release한다. 요청/작업/registry lease는 서로 다른 lease_id이며 각각 한 번 해제한다. disconnect가 registry lease를 먼저 제거하지 않는다. 늦은 token A의 pop은 동일 key의 token B를 지우지 못한다. drain은 request_cancel만 호출한 상태에서 false, 실제 finally/done/pop/모든 child 해제 후에만 true다.
+
+lease 연산의 단일 소유자는 #191이다(S1). handle 안의 caller는 handle.retain_lease/handle.release_lease만 사용하고, 밖의 caller는 outer 함수를 사용한다. #192가 이미 보유한 handle을 숨긴 채 outer 함수의 재진입을 기대하지 않는다. 유효 register 완료는 token 정확히1/추가 lease 정확히1, 중복 register는 token/lease 순증0이며 자기 lock 대기 없이 끝나야 한다. role/reset mark가 먼저면 retain/등록0이고 r2의 STALE_ROLE/STALE_GENERATION 결과를 유지한다.
 
 `cancel_connection`(#198)은 connection_id에 keyword-only scope를 받아 같은 scope만 취소한다. seed 정수 ID/UUID 중복과 normal 동작을 보존한다. register와 role 변경은 같은 #191 전환 lock을 사용한다. 등록 먼저면 다른 역할 전환은 BUSY; 전환 먼저면 old ctx register가 STALE_ROLE이고 token/child lease가 생기지 않는다. 같은 역할 요청은 **current ctx에서만** busy 중에도 200 no-op이며 epoch/CSRF revision/등록 상태 불변이다. 같은 역할이라도 stale epoch는 STALE_ROLE이지 no-op가 아니다.
 
@@ -149,7 +154,7 @@ Event 기반 SSE 예: 기존 active_runs의 cancel Event를 만들고 `TaskContr
 서버 방문 상태는 `preparing|prepare_failed|ready|resetting|reset_failed|expired|closing`이다. 폐기 DB의 cleanup 상태 `queued|draining|locked|removed`는 별도이며 UI 성공 상태로 쓰지 않는다.
 
 1. #193이 §5.1 handle.mark_reset을 호출해 ready 세대 g에서 reset을 수락하면 #191 전환 lock 안에서 `resetting`, generation=g+1, auth_epoch+1을 기록한다. 새 세대는 아직 factory 없음, old g는 영구 폐기다. 이후 old g의 요청/저장 거절이 즉시 적용되고 #192 namespace 취소는 lock을 놓은 직후 실행한다.
-2. old scope를 취소하고 최대 `DEMO_DRAIN_SECONDS` 동안 모든 lease를 기다린다. drain 실패는 reset_failed(`DEMO_DRAIN_TIMEOUT`), 새 seed를 연결하지 않는다. 잠김/복제/검증 실패도 reset_failed다.
+2. §7.2대로 reset 요청의 DB 세션/자기 lease를 먼저 닫고 해제한 뒤 old scope를 취소하고 최대 `DEMO_DRAIN_SECONDS` 동안 나머지 모든 lease를 기다린다. drain 실패는 reset_failed(`DEMO_DRAIN_TIMEOUT`), 새 seed를 연결하지 않는다. 잠김/복제/검증 실패도 reset_failed다.
 3. 검증된 새 DB를 원자적으로 g+1에 publish하면 ready. 선택 역할은 admin으로 복귀하며 삭제된 교사도 seed로 복원된다. old DB 정리가 지연되어도 lease 0/dispose가 확인되면 ready 가능하나 cleanup quota는 계속 차지한다.
 4. 실패 상태는 old DB로 rollback하지 않는다. 같은 request_id 조회는 같은 실패를 반환한다. 사용자가 새 request_id로 재시도하면 예약한 g+1을 다시 준비한다(추가 generation 증가 없음); 모든 실패 staging은 먼저 회수/계수한다.
 
@@ -170,6 +175,18 @@ prepare_failed에서도 방문 예약 1개는 원래 expires_at까지 유지하�
 반복 GET /demo는 유효한 bootstrap_nonce를 보존한다. bootstrap을 이미 가진 탭에 새 nonce를 발급하지 않는다. 세션 cookie는 §10의 **안정된 bootstrap 참조**이고 실제 visitor/role/g/epoch는 서버 mapping이므로, start 승패·응답 역순으로 cookie가 다른 공간/role을 가리킬 수 없다. cookie 없는 첫 GET은 익명 참조만 만들고, POST는 그 요청의 cookie/CSRF에 결합된 bootstrap으로만 실행한다. cookie가 없는 동시 GET 자체를 IP로 하나의 신원으로 묶지 않는다. 이후 공유 cookie가 채택한 bootstrap 이외의 오래된 페이지 token은 CSRF 거절/안전 GET 재동기화하며 다른 bootstrap의 공간을 합치지 않는다.
 
 관찰 검사(#191/#193, 실제 middleware #194/#203): 동일 bootstrap의 request X(teacher)/Y(admin)를 barrier로 동시에 보내면 leader 하나/방문 예약1/clone1, loser409 START_IN_PROGRESS·cookie 변경0, 최종 role은 leader의 것. 실패-before-publication이면 ready 자료0, 같은 ID로 clone 증가0, 새 ID retry 성공 시 같은 visitor/g=1. publish 뒤 HTTP 응답을 잃어도 state GET/같은 ID replay로 같은 공간을 얻고 clone/slot 증가0이다.
+
+### 7.2 reset 요청의 DB·lease 조기 이관 (S2)
+
+**조기 해제 방식(a)을 채택한다.** #193은 ready DemoContext로 권한 검사와 mark_reset을 마친 직후, 같은 handle 구간에서 다음 await 전에 #194의 신규 동기 공개 `handoff_request_db(ctx)`로 요청 DB 자원을 handoff 상태로 표시하고 OperationToken에 결합한 orchestration Task를 소유·보관한다. 이 이관은 성공한 mark의 필수 후처리여서 요청 취소/연결 단절로 생략하지 않는다. 전환 lock을 놓은 뒤 그 Task의 첫 정리는 #194의 신규 async 공개 `release_request_db(ctx)`다. 이 함수는 전환 lock 밖에서 열려 있는 요청 transaction을 rollback(새 commit 없음), AsyncSession.close 완료, 요청 자신의 release_lease 순서로 처리한다. handoff 후에는 old ctx/factory로 읽기·User 조회·쓰기·자동 commit을 하지 않는다.
+
+#194의 dependencies.py가 handoff 표식과 release_request_db의 단독 소유자다. 요청 dependency의 최종 정리도 같은 idempotent 함수를 호출하고, 요청별 정리 직렬화로 조기/최종 정리가 경합해도 session close와 lease 해제가 한 번만 완료되게 한다. handoff 표식이 있으면 yield 뒤 자동 commit은 건너뛴다. session close가 실패하면 lease를 해제된 것으로 표시하지 않고 reset을 안전한 DB_LOCKED/RESET_FAILED로 실패시킨다. 별도 세션/작업의 lease를 대신 해제하지 않는다.
+
+자기 세션/lease 정리 완료 뒤 #193 Task는 **OperationToken과 폐기 scope만** 사용해 cancel/drain/clone/publish 또는 fail을 수행한다. 새 작업 lease로 reset 요청 lease를 대체하거나, 자기 lease를 drain 집계에서 몰래 제외하지 않는다. 유효한 token으로 공개 transition/publish/fail에 들어가는 것은 old DemoContext 재사용이 아니다. 살아 있는 최초 caller는 shield로 이 Task의 결과를 기다려 성공 시 200 ready(실패 시 해당 오류)를 받을 수 있다. 진행 중 동일 POST/조회는 기존 202, 응답 예산상 최초 요청을 202로 끝내도 같은 소유 Task가 계속한다. 따라서 §9/9.1의 200/202 계약은 유지된다.
+
+연결 단절은 관찰자만 끝내며 mark 뒤의 Task를 취소하지 않는다. #193이 Task 참조와 결과/실패 receipt를 끝까지 보관하고 예외를 회수해 handle.fail에 연결한다. 이후 같은 ID/state GET은 그 결과를 조회한다. shutdown에 의한 Task 취소/실패도 #193이 취소 정리·clone 중단을 수행하고 아직 유효한 op를 fail(이미 expired/closing이면 덮어쓰기 없음)한다. 요청 최종 정리의 중복 release는 no-op다.
+
+관찰 기대값(#191/#192 단위, #193/#194 연결, #203/#204 검증): 다른 작업 없는 reset은 자기 lease 때문에 timeout하지 않고 old 요청 lease0 뒤 drain=true/ready가 된다. **별도의** live 요청/child lease가 남으면 설정 시간 뒤 DRAIN_TIMEOUT이고 그 파일을 dispose/unlink하지 않는다. 그 lease의 실제 해제 전에는 삭제가 불가능하다. mark 후 caller가 끊겨도 조기 정리와 같은 reset 결과가 완료되며, 재조회로 확인하고 generation을 추가 증가시키지 않는다.
 
 ## 8. 상한·TTL와 운영 승인 입력 (C08)
 
@@ -407,7 +424,7 @@ event iterator는 종료 event를 정확히 한 번 내고 더 이상 delta를 �
 
 | 필드 | 타입·값/검증 |
 | --- | --- |
-| `manifest_version`, `contract_version`, `content_version`, `fixture_version` | int 1, `d0-03-v1-r2`, `d0-02-v1`, `demo-fixture-v1` |
+| `manifest_version`, `contract_version`, `content_version`, `fixture_version` | int 1, `d0-03-v1-r3`, `d0-02-v1`, `demo-fixture-v1` |
 | `db_schema_version` | `_migrations` 최종 filename 문자열. #195의 실제 새 migration명과 정확히 일치해야 함; 현재 036을 demo 호환으로 선언하지 않음 |
 | `migration_set_sha256` | 정식 baseline+적용 migration 파일의 경로/내용을 정렬해 만든 SHA-256. 단순 마지막 번호만으로 호환 판단 금지 |
 | `scenario_config_schema_version`, `analysis_schema_version` | int 1, int 2 |
@@ -455,9 +472,9 @@ responses[key]는 files에 정확히 1회 등록된 fixture-root 상대 POSIX pa
 
 예컨대 첫 key의 envelope는 fixture_version=demo-fixture-v1, case_id=그 key, role=analysis, content_state=after_compare, branch=A, input_kind=common, trigger=null, analysis_phase=single, terminal=completed, error_code/text/partial_text=null, structured=D0-02 §6의 **A 전용 전체 UnifiedAnalysisOutput template**다. B는 해당 key/branch와 D0-02 B 전체 template로만 바뀐다. 두 멘토 envelope는 role=mentor, branch=A, state/input_kind=after_compare/common, phase=none이며 trigger와 위 structured만 auto/manual에 맞게 달라진다. 이 예제의 모든 필드/선택 차원은 mandatory이고 나머지 structured 본문도 D0-02에 정해진 전체 필드를 사용한다.
 
-chunk/merge도 같은 key 문법으로 마지막 phase만 바꾼 명시 파일을 사용한다. chunk 파일은 해당 branch의 symbolic template 원본이다. #196 output_binding.py가 **현재 chunk validation_context.messages와 owned_message_ids로** projection한다: 교사 classification은 owned teacher만(unsupported는 실제 해당 메시지의 non_analyzable), strengths/improvements/coaching은 owned ID만, finding의 모든 근거는 chunk messages 안에 존재하고 changed는 앞/뒤 시간순·적어도 하나 owned 조건을 만족하는 것만 남긴다. 현재 chunk에 실제 없는 symbolic ref는 해당 항목을 제외하고 다른 chunk의 가짜 ID를 채우지 않는다. 실패 fixture 이외에는 모든 owned teacher의 classification이 한 번씩 있어야 한다. coverage는 기존 서버 계산을 유지한다.
+chunk/merge도 같은 key 문법으로 마지막 phase만 바꾼 명시 파일을 사용한다. chunk 파일은 해당 branch의 symbolic template 원본이다. #196 output_binding.py가 **현재 chunk validation_context.messages와 owned_message_ids로** projection한다: `message_classifications`는 owned teacher만(unsupported는 실제 해당 메시지의 non_analyzable), `strengths`/`improvements`/`dialogue_coaching`은 owned ID만 남긴다. `misconception_findings`의 각 항목은 모든 근거가 현재 chunk messages에 존재하고 **모든 kind에서 적어도 하나의 근거가 owned**여야 한다. changed 이외(maintained/deviated/insufficient_evidence)는 **모든 근거가 owned**여야 한다. changed는 overlap 근거를 함께 쓸 수 있지만 적어도 하나는 owned이고, 서로 다른 학생 메시지 두 개 이상의 유효한 인용·시간순 조건도 만족해야 한다(S3). 조건을 만족하지 않는 항목/현재 chunk에 없는 symbolic ref는 검증 전에 제외하고 다른 chunk의 가짜 ID를 채우지 않는다. 실패 fixture 이외에는 모든 owned teacher의 classification이 한 번씩 있어야 한다. coverage와 기존 validate_item은 바꾸지 않는다.
 
-merge 파일은 message_classifications 필드가 **없고** schema_version/findings/brief_feedback/strengths/improvements/coaching만 갖는 MergeAnalysisOutput template다. binder는 검증된 chunk 결과와 allowed_evidence에 있는 실제 (message_id,quote)만 골라 시간순으로 묶고, 모든 근거가 검증 목록에 없는 항목은 제외한다. 새 인용/분류/메시지는 만들지 않는다. single은 전체 실제 세션, chunk는 현재 owned 범위, merge는 검증된 범위만 사용한다. 예: B 첫 턴만 owned인 chunk에는 r2 하나, 공통 턴만 owned이면 r3 하나이며 overlap의 B 학생 근거가 messages에 있으면 changed 근거로 참조할 수 있으나 classification 중복은0이다. phase별 출력 검증·누락/부분 판정은 기존 계약에 맡기며 실패를 정상으로 수선하지 않는다.
+merge 파일은 `message_classifications` 필드가 **없고** 정확히 `schema_version`, `misconception_findings`, `brief_feedback`, `strengths`, `improvements`, `dialogue_coaching` 여섯 JSON key만 갖는 MergeAnalysisOutput template다(S4). `findings`/`coaching` 별칭은 허용하지 않으며 기존 verified_sections의 exact key-set 검증을 유지한다. binder는 검증된 chunk 결과와 allowed_evidence에 있는 실제 (message_id,quote)만 골라 시간순으로 묶고, 모든 근거가 검증 목록에 없는 항목은 제외한다. 새 인용/분류/메시지는 만들지 않는다. single은 전체 실제 세션, chunk는 현재 owned 범위, merge는 검증된 범위만 사용한다. 예: B 첫 턴만 owned인 chunk에는 r2 하나, 공통 턴만 owned이면 r3 하나다. 공통 턴 chunk에서 B 첫 학생 응답은 overlap/미소유, 공통 학생 응답은 owned라면, overlap만 인용한 maintained 항목은 **projection에서 제거되어 validation error를 만들지 않는다**. 앞 overlap+뒤 owned를 시간순 인용한 유효 changed 항목은 남고 classification 중복은0이다. #197/#198/#203은 이 정상 chunk/merge 기대값을 소비한다. phase별 출력 검증·누락/부분 판정은 기존 계약에 맡기며 실패를 정상으로 수선하지 않는다.
 
 ## 18. 실제 근거 바인딩·멘토·분석 (C18)
 
@@ -475,7 +492,7 @@ merge 파일은 message_classifications 필드가 **없고** schema_version/find
 
 로컬 adapter의 실제 외부 AI 호출은 없음이다. 기존 `empty_usage()`의 input/output/total/cache/reasoning 토큰·estimated_cost_usd/pricing_*·raw_usage_json은 null, usage_complete=false다. DB/화면/CSV에서 unknown을 0으로 변환하지 않는다. 로컬 context token 추정은 기존 context_budget_json에 추정으로만 남긴다. 로컬 처리 시간은 서버 경과일 뿐 실제 AI 속도 보증이 아니다.
 
-신규 공통 provenance 객체는 `{mode:"demo",response_source:"prepared_example",external_ai_called:false,contract_version:"d0-03-v1-r2",content_version:"d0-02-v1",fixture_version:"demo-fixture-v1",record_origin:"seed_prepared"|"visitor_generated"}`다. template·demo 상태·실행/분석 JSON·export에 같은 의미를 전달한다. provenance는 서버의 seed ref/생성 메타데이터에서 계산하고 클라이언트 입력을 신뢰하지 않는다. 완료 예시도 실제 체험 생성 자료와 명확히 구분한다.
+신규 공통 provenance 객체는 `{mode:"demo",response_source:"prepared_example",external_ai_called:false,contract_version:"d0-03-v1-r3",content_version:"d0-02-v1",fixture_version:"demo-fixture-v1",record_origin:"seed_prepared"|"visitor_generated"}`다. template·demo 상태·실행/분석 JSON·export에 같은 의미를 전달한다. provenance는 서버의 seed ref/생성 메타데이터에서 계산하고 클라이언트 입력을 신뢰하지 않는다. 완료 예시도 실제 체험 생성 자료와 명확히 구분한다.
 
 화면 배너와 이력·분석·CSV 안내는 D0-02의 ‘데모 · 준비된 예시 응답 · 실제 AI 품질 평가용 아님’ 의미를 유지한다. UI 영어 전환은 콘텐츠/출처 버전을 바꾸지 않는다. unknown 토큰/가격은 ‘알 수 없음/미측정’으로 표시한다.
 
@@ -561,7 +578,9 @@ DOM 계약은 root `data-demo-mode`, `data-demo-scope`, `data-demo-generation`, 
 
 브라우저 관찰은 `demo:tour-observed` 이벤트의 `{schema_version:1,browser_scope_id,generation,auth_epoch,journey_session_id:int,kind:"history_viewed"|"admin_record_viewed"|"csv_received",request_id:UUID}`다. #199가 현재 namespace/대상과 응답 성공을 확인한 이벤트만 수용한다. history_viewed는 종료된 대상의 이력/분석 상세가 정상 응답으로 실제 DOM에 열렸을 때다. admin_record_viewed는 관리자 화면에서 **그 대상**의 종료 기록/분석을 열었을 때이며 이 동작은 history_viewed도 충족한다. seed나 두 번째 신규 세션의 열람으로 첫 대상 관찰을 채우지 않는다.
 
-csv_received는 대상 단일 관리자 CSV를 fetch해 status200, 전체 body EOF 수신, UTF-8 CSV parse, 관리자27+suffix5 헤더·모든 행의 대상 session_id·출처/버전·summary행·행수 검증을 끝내고 Blob 다운로드를 시작한 뒤다. #200의 demo 단일 export 응답은 클라이언트의 신규 `X-Demo-Export-Request-ID:UUID`를 같은 값으로 echo하고(수신 관찰에서 요청/응답 ID 일치 필수), 신규 `X-Demo-Export-Row-Count:int>=1`(header 제외 실제 행수)을 제공한다. #199의 tour 다운로드는 링크 navigation 대신 이 경로를 소비한다. #201의 기존 export JS는 같은 검증 후 이벤트를 발행하고 template 링크 연결은 #199 소유다. abort/부분 body/parse 실패/다른 세션/오류 응답은 관찰0이다. **사용자가 로컬 저장 대화상자에서 저장했는지는 앱이 알 수 없으며 csv_received가 그것을 보증하지 않는다.** #204는 별도로 다운로드 파일을 실제 파싱한다.
+csv_received는 대상 단일 관리자 CSV 또는 **여정 세션 하나만 선택한 CSV**를 fetch해 status200, 전체 body EOF 수신, UTF-8 CSV parse, 관리자27+suffix5 헤더·모든 행의 대상 session_id·출처/버전·summary행·행수 검증을 끝내고 Blob 다운로드를 시작한 뒤다. #200은 demo의 단일 `download_session`과 POST `/admin/sessions/export-selected`의 `export_selected_sessions` **두 응답 모두** 클라이언트의 `X-Demo-Export-Request-ID:UUID`를 같은 값으로 echo하고(수신 관찰에서 요청/응답 ID 일치 필수), `X-Demo-Export-Row-Count:int>=1`(header 제외 실제 행수)을 제공한다. #199의 tour 단일 다운로드는 링크 navigation 대신 fetch를 사용하고 template 연결을 소유한다. #201은 기존 선택 다운로드에서 요청 시점의 선택 session ID 집합과 namespace를 캡처하고 같은 헤더/본문 검증 후 이벤트를 발행한다(S5).
+
+선택 export의 csv_received는 **요청 선택 집합도 `{journey_session_id}`이고 파싱한 행의 session_id 집합도 정확히 같을 때만** 허용한다. 다른 세션을 섞은 export는 기존 권한/삭제 제외 정책대로 유효한 다운로드지만 여정 관찰은0이다. 삭제 제외 결과 우연히 대상만 남아도 원래 선택 집합이 혼합이면 관찰0이다. abort/부분 body/parse 실패/다른 세션/오류 응답도 관찰0이다. 기존 관찰 payload/storage/단계 소유는 그대로다. **사용자가 로컬 저장 대화상자에서 저장했는지는 앱이 알 수 없으며 csv_received가 그것을 보증하지 않는다.** #204는 별도로 다운로드 파일을 실제 파싱한다.
 
 관찰의 localStorage key는 `demo:<browser_scope_id>:<generation>:tour-v1`이고 payload는 `{schema_version:1,journey_session_id:int|null,observations:[위 이벤트 객체],closed:bool,skipped:bool}`다. 관찰은 kind별 첫 성공 한 건만 보관한다. #199는 localStorage를 쓰기 직전 읽은 값/현재 메모리/다른 탭의 storage event를 같은 대상의 kind별 합집합으로 병합하고, 순서 차이로 검증된 관찰을 false로 덮지 않는다. body/CSV/secret은 저장하지 않는다. auth_epoch는 캡처 검증용이고 **투어 key에는 넣지 않으므로 역할 전환/refresh/언어 전환에도 같은 대상의 관찰을 보존**한다. 이것은 일반 draft/run storage의 epoch 격리에 대한 유일한 예외다. 늦게 도착한 old-epoch 응답으로 새 관찰을 만들지 않지만, 전환 전에 검증·보관한 관찰은 계속 쓴다. storage 불가/삭제 시 관찰은 메모리에서만 유지되고 refresh 후 재열람/재수신을 요구한다. 서버 사실은 유지된다. 다른 브라우저 context/새 generation에는 공유하지 않는다.
 
@@ -587,6 +606,8 @@ csv_received는 대상 단일 관리자 CSV를 fetch해 status200, 전체 body E
 | S1은 1턴, S2만 두 턴/분석 완료 | target=S1, `C C X P P P`; S2 사실/CSV로 합성하지 않음 |
 | S1이 정상 완료된 뒤 S2 생성 | S1 유지, 기존 map 유지 |
 | S1 관리자 열람+CSV 성공 수신/parse | S1, `C C C C C X` |
+| S1만 선택 다운로드, 선택/파싱 집합 모두 S1·헤더/본문 검증 성공 | S1, `C C C C C X`; 해당 행 CSV와 같은 관찰 |
+| S1/S2 혼합 선택 다운로드 성공 | 유효 다운로드, 새 관찰0. 이전 성공 없으면 `C C C C X P`, 있으면 기존 완료 유지 |
 | CSV status200 뒤 abort/parse 실패 | 이전 성공이 없으면 `C C C C X P`, 이미 성공이면 완료 유지 |
 | CSV 성공 후 교사 삭제→S1 soft delete, reset 전 | S1 tombstone 유지, `C C C C C X`; 본문/분석 비노출 |
 | CSV 전에 S1 삭제 | target 변경 없음, 미확인 관찰은 미완료; 새 대상은 reset으로만 시작 |
@@ -724,7 +745,7 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 | C28 #190답2·3/계획9.2·9.3·9.5·10 | §27/G0기록 | #191–206 | G1–G5 | 고정 후보·소비자·독립/maintainer 승인·변경 영향/재검토 기록 확인 |
 | C29 #203/#204/#206/계획10·11 | §28 | #203–206 | G4/G5 | 실제 서버·CSRF·독립 보안/E2E, 후보 tuple·운영 인계 기대값 대조 |
 
-계약을 바꾸면 #190 소유자가 변경 이유·기존/새 버전·C-item·소비 이슈·SHA·무효 evidence 범위를 기록한다. G0 승인 전 후보 정정은 이번 `d0-03-v1-r2`처럼 revision을 올린다. 승인 후 의미가 바뀌는 필드/오류/기본값/소유/버전 조합은 `d0-03-v2` 이상으로 올리고 manifest 참조도 갱신한다. 의미 없는 오탈자만 v1 유지 가능하나 후보 SHA는 갱신한다. 영향받는 소비자와 독립 reviewer가 다시 검토하고 @DomineYH가 해당 후보의 G0 변경을 승인한다. 관련 없는 작업을 일괄 중지하지 않는다. 앱/DB/보안 공통 계약 변경은 해당 G1/G2/G3 및 G4/G5 증거 유효성을 다시 평가한다. 구현자가 자기 파일에서 계약값을 조용히 바꾸지 않는다.
+계약을 바꾸면 #190 소유자가 변경 이유·기존/새 버전·C-item·소비 이슈·SHA·무효 evidence 범위를 기록한다. G0 승인 전 후보 정정은 이번 `d0-03-v1-r3`처럼 revision을 올린다. 승인 후 의미가 바뀌는 필드/오류/기본값/소유/버전 조합은 `d0-03-v2` 이상으로 올리고 manifest 참조도 갱신한다. 의미 없는 오탈자만 v1 유지 가능하나 후보 SHA는 갱신한다. 영향받는 소비자와 독립 reviewer가 다시 검토하고 @DomineYH가 해당 후보의 G0 변경을 승인한다. 관련 없는 작업을 일괄 중지하지 않는다. 앱/DB/보안 공통 계약 변경은 해당 G1/G2/G3 및 G4/G5 증거 유효성을 다시 평가한다. 구현자가 자기 파일에서 계약값을 조용히 바꾸지 않는다.
 
 ## 28. 독립 검증·운영 인계 계약 (C29)
 
@@ -768,4 +789,18 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 | R9 / P2 | §16.1 exact projection·679-byte canonical vector/digest·편집 예 | #195 공유 helper, #196/#197/#198 재사용, #203 검증 |
 | R10 / F3 | §3 lease-before-User·거절 해제 | #194 resolver, #191/#192 lease, #203 검증 |
 
-r1 리뷰에서 위 인터페이스/여정에 걸린 미결 판정은 재검토로 해소해야 하며 r1의 긍정 검토를 r2 승인으로 재사용하지 않는다. G1/G2/G3의 source API 및 G4/G5 검사 입력은 새 계약 버전을 소비한다. G0 기록의 1차 리뷰 판정은 보존하고 r2 재검토 행은 pending으로 남긴다.
+r1 리뷰에서 위 인터페이스/여정에 걸린 미결 판정은 재검토로 해소해야 하며 r1의 긍정 검토를 r2 승인으로 재사용하지 않는다. G1/G2/G3의 source API 및 G4/G5 검사 입력은 새 계약 버전을 소비한다. G0 기록의 1차 판정은 보존한다. r2 재검토 결과는 G0 §3.2에 기록하고 후속 S1–S5 정정 및 r3 재검토 대기는 아래 §30에 기록한다.
+
+## 30. 후보 r3 변경 기록·재검토 범위
+
+후보 `e0b8cc38f491e1178f8d39c7fe7bacedd02bcf76`(`d0-03-v1-r2`)의 다섯 재검토 결과는 모두 ACCEPT_WITH_FIXES다. 기존 R1–R10의 정정은 보존하고, 마지막 자동 conditional_repair impl-190-r3에서 아래 다섯 공백만 정정해 **d0-03-v1-r3**로 올렸다. r3 재검토와 @DomineYH G0 승인은 pending이다.
+
+| repair / finding | 규범·관찰 기대값 위치 | 영향 소비자·구현 소유 |
+| --- | --- | --- |
+| S1 / DB-08 | §5/5.1/6 handle 안/밖 retain·release 구분, 유효 등록 token1/child lease1·중복 순증0·재진입 대기 없음 | #191 lease 권위, #192 registry, #198 소비, #203 검증 |
+| S2 / DB-09/V4 | §6/7/7.2 reset 자기 DB/lease 조기 해제 후 OperationToken 이관. idle reset 성공, 별도 live lease는 DRAIN_TIMEOUT, disconnect 후 결과 보존 | #193 Task/orchestration, #194 요청 DB handoff/정리, #191/#192 수명, #203/#204 검증 |
+| S3 / P3 | §17.1 모든 finding의 owned 근거≥1, non-changed는 모두 owned, changed의 overlap 조건. 공통 턴 chunk의 overlap-only maintained 제외·유효 changed 보존·제외로 인한 검증 오류0 | #196 projection, #197/#198 정상 fixture 기대값, #203 검증 |
+| S4 / P4/F4 | §17.1 MergeAnalysisOutput의 정확한 여섯 key 및 chunk의 literal 필드명. message_classifications는 merge에 없음, validator 불변 | #196/#197/#198, #202/#203/#205 phase 호환 검증 |
+| S5 / UI-3 | §24.1 단일/선택 export의 같은 echo/row-count, S1-only 관찰 인정·혼합은 다운로드만 허용·기대 map | #200 응답, #201 선택 검증/event, #199 최종 map, #202/#204 검증 |
+
+79개 기존 소유·고정 입력·ADR 원칙·CSV27/20+5·cookie 분리·mode 전환 금지·비교 제외는 바꾸지 않았다. 신규 제품 구현/실행 증거가 아니라 계약 문구 정정이며 소비자와 독립 reviewer가 실제 r3 후보에 재검토해야 한다.

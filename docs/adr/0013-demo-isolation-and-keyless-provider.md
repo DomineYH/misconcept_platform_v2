@@ -24,4 +24,4 @@
 - 예시 콘텐츠/fixture/schema/역할 계약 버전이 불일치하면 시작/실행을 거절한다. 사용량 미측정은 unknown이며 화면·CSV에서 준비된 예시/외부 호출 없음·콘텐츠 버전·seed/신규 자료 출처를 식별한다.
 - 계약 문서는 실행 증거가 아니다. 소비자·별도 reviewer의 G0 검토와 @DomineYH 승인, 이후 실제 DB/AI/CSRF/브라우저 격리·경합·무호출 검증이 필요하다. 실제 host/origin/URL/용량·quota·최종 TTL은 D5-02 승인 입력이다.
 
-결정 근거: #190 Agent Brief C01–C29와 maintainer 위임 답변, [D0-01](../demo/d0-01-boundary-survey.md) §6–7, [D0-02](../demo/d0-02-experience-spec.md) §11, 계획 §2/4.1/5/9.2/9.5. 동작 규범은 [d0-03-v1-r2](../demo/d0-03-contract-v1.md), G0 승인 상태는 [별도 기록](../demo/d0-03-g0-acceptance.md)을 따른다. 이 ADR은 승인 후보이며 G0 통과를 선언하지 않는다.
+결정 근거: #190 Agent Brief C01–C29와 maintainer 위임 답변, [D0-01](../demo/d0-01-boundary-survey.md) §6–7, [D0-02](../demo/d0-02-experience-spec.md) §11, 계획 §2/4.1/5/9.2/9.5. 동작 규범은 [d0-03-v1-r3](../demo/d0-03-contract-v1.md), G0 승인 상태는 [별도 기록](../demo/d0-03-g0-acceptance.md)을 따른다. 이 ADR은 승인 후보이며 G0 통과를 선언하지 않는다.

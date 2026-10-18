@@ -297,6 +297,29 @@ class HandleDouble:
             self.visit.csrf_revision += 1
         return self.snapshot()
 
+    def mark_reset(self, ctx, request_id):
+        record = self.visit
+        if self.snapshot().state in ("expired", "closing"):
+            raise self.error("EXPIRED")
+        if ctx.generation != record.generation:
+            raise self.error("STALE_GENERATION")
+        self.check_control_state("reset")
+        if ctx.auth_epoch != record.auth_epoch:
+            raise self.error("STALE_ROLE")
+        if record.state == "ready":
+            self.check(ctx)
+            record.retired_scope = (ctx.visitor_id, record.generation)
+            record.generation += 1
+            record.auth_epoch += 1
+        record.state = "resetting"
+        record.role = None
+        record.current_ref = None
+        op = self.visitors.operation(
+            ctx.visitor_id, record, request_id, "reset"
+        )
+        self.visitors.calls.append("mark_reset")
+        return op, record.retired_scope
+
     def publish(self, op, candidate):
         record = self.visit
         if self.snapshot().state in ("expired", "closing"):
@@ -753,3 +776,300 @@ async def test_role_busy_noop_stale_and_deleted_teacher(harness):
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "DEMO_ROLE_DELETED"
+
+
+async def reset(h, request_id=None, generation=1, epoch=1, **extra):
+    return await h.client.post(
+        "/demo/reset",
+        json={
+            "request_id": request_id or uid(),
+            "expected_generation": generation,
+            "expected_auth_epoch": epoch,
+            "confirm": True,
+            **extra,
+        },
+        headers=headers(h.client),
+    )
+
+
+async def test_reset_handoff_order_and_replay(harness):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    h.visitors.calls.clear()
+    request_id = uid()
+    response = await reset(h, request_id)
+    assert response.status_code == 200
+    assert response.json()["state"] == "ready"
+    assert response.json()["role"] == "admin"
+    assert response.json()["generation"] == response.json()["auth_epoch"] == 2
+    assert "set-cookie" not in response.headers
+    calls = h.visitors.calls
+    mark = calls.index("mark_reset")
+    assert calls[mark : mark + 3] == ["mark_reset", "handoff", "unlock"]
+    assert (
+        calls.index("rollback")
+        < calls.index("close")
+        < calls.index("release_lease")
+    )
+    assert (
+        calls.index("release_lease")
+        < calls.index("cancel_scope")
+        < calls.index("drain")
+        < calls.index("clone")
+    )
+    assert h.lifecycle.scopes == [("A", 1)]
+    await h.client.get("/demo/state")
+    # Replay is looked up before this stale g/epoch could resolve a DB context.
+    contexts = len(h.security.contexts)
+    response = await reset(h, request_id)
+    assert response.status_code == 200
+    assert response.json()["result"]["generation"] == 2
+    assert len(h.security.contexts) == contexts
+    assert h.visitors.records["A"].generation == 2
+    assert h.visitors.clones == 2
+
+
+async def test_reset_disconnect_keeps_task_and_in_progress_receipt(harness):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    h.visitors.clone_started.clear()
+    h.visitors.clone_continue.clear()
+    request_id = uid()
+    caller = asyncio.create_task(reset(h, request_id))
+    await h.visitors.clone_started.wait()
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    assert len(h.session._tasks) == 1
+    progress = await reset(h, request_id)
+    assert progress.status_code == 202
+    assert progress.json()["state"] == "resetting"
+    assert progress.json()["generation"] == 2
+    observed = await h.client.get(f"/demo/state?request_id={request_id}")
+    assert observed.status_code == 202
+    assert "set-cookie" not in observed.headers
+    other = await reset(h)
+    assert other.json()["detail"]["code"] == "DEMO_RESET_IN_PROGRESS"
+    h.visitors.clone_continue.set()
+    await asyncio.gather(*h.session._tasks.values())
+    await h.client.get("/demo/state")
+    result = await h.client.get(f"/demo/state?request_id={request_id}")
+    assert result.status_code == 200
+    assert result.json()["result"]["state"] == "ready"
+    assert h.visitors.records["A"].generation == 2
+
+
+async def test_live_other_lease_times_out_without_clone_then_retries_reserved_generation(
+    harness,
+):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    h.lifecycle.remaining = 1
+    request_id = uid()
+    response = await reset(h, request_id)
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "DEMO_DRAIN_TIMEOUT"
+    assert h.visitors.clones == 1
+    state = await h.client.get("/demo/state")
+    assert state.json()["state"] == "reset_failed"
+    assert state.json()["generation"] == state.json()["auth_epoch"] == 2
+    replay = await reset(h, request_id)
+    assert replay.status_code == 503
+    assert replay.json()["result"]["detail"]["code"] == "DEMO_DRAIN_TIMEOUT"
+    assert h.visitors.clones == 1
+    h.lifecycle.remaining = 0
+    stale = await reset(h)
+    assert stale.json()["detail"]["code"] == "DEMO_STALE_GENERATION"
+    retry = await reset(h, generation=2, epoch=2)
+    assert retry.status_code == 200
+    assert retry.json()["generation"] == retry.json()["auth_epoch"] == 2
+    assert h.visitors.records["A"].attempt == 3
+
+
+async def test_reset_close_failure_preserves_lease_and_fails_closed(harness):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    h.request_db.close_error = True
+    h.visitors.calls.clear()
+    response = await reset(h)
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "DEMO_DB_LOCKED"
+    assert response.headers["retry-after"] == "1"
+    assert "release_lease" not in h.visitors.calls
+    assert "cancel_scope" not in h.visitors.calls
+    assert h.visitors.records["A"].active_leases == 1
+    assert h.visitors.clones == 1
+
+
+async def test_reset_shutdown_cancels_builder_and_records_failure(harness):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    h.visitors.clone_started.clear()
+    h.visitors.clone_continue.clear()
+    request_id = uid()
+    caller = asyncio.create_task(reset(h, request_id))
+    await h.visitors.clone_started.wait()
+    await h.session.shutdown()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    assert h.visitors.cancelled == 1
+    result = await h.client.get(f"/demo/state?request_id={request_id}")
+    assert result.status_code == 503
+    assert result.json()["result"]["detail"]["code"] == "DEMO_RESET_FAILED"
+    assert not h.session._tasks
+
+
+@pytest.mark.parametrize(
+    "code,status,retryable,recovery,retry_after",
+    [
+        ("SESSION_REQUIRED", 401, False, "start_required", None),
+        ("EXPIRED", 410, False, "expired", None),
+        ("STALE_GENERATION", 409, False, "stale_generation", None),
+        ("STALE_ROLE", 409, False, "stale_role", None),
+        ("START_IN_PROGRESS", 409, False, "preparing", None),
+        ("PREPARE_FAILED", 503, True, "prepare_failed", None),
+        ("RESET_IN_PROGRESS", 409, False, "resetting", None),
+        ("RESET_FAILED", 503, True, "reset_failed", None),
+        ("DRAIN_TIMEOUT", 503, True, "reset_failed", None),
+        ("DB_LOCKED", 503, True, "retry_later", 1),
+        ("ROLE_DELETED", 409, False, "role_deleted", None),
+        ("BUSY", 409, True, "wait_or_stop", None),
+        ("CSRF_INVALID", 403, False, "csrf_refresh", None),
+        ("LIMIT_REACHED", 429, False, "limit_reached", None),
+        ("RATE_LIMITED", 429, True, "retry_later", 17),
+        ("CAPACITY", 503, True, "capacity", 30),
+        ("STORAGE_LIMIT", 507, False, "storage_limit", None),
+        ("CLEANUP_BACKLOG", 503, True, "retry_later", 30),
+        ("VERSION_MISMATCH", 503, False, "unavailable", None),
+        ("CONFIGURATION_INVALID", 503, False, "unavailable", None),
+        ("INVALID_REQUEST", 422, False, "check_input", None),
+        ("REQUEST_CONFLICT", 409, False, "refresh_state", None),
+        ("RESOURCE_NOT_FOUND", 404, False, "not_found", None),
+    ],
+)
+async def test_dependency_error_table_is_preserved(
+    harness, code, status, retryable, recovery, retry_after
+):
+    h = harness
+    h.visitors.admission_error = DemoError(code, retry_after=retry_after)
+    response = await start(h)
+    assert response.status_code == status
+    assert response.json() == {
+        "detail": {
+            "code": f"DEMO_{code}",
+            "retryable": retryable,
+            "recovery": f"demo.{recovery}",
+            "generation": None,
+            "auth_epoch": None,
+        }
+    }
+    assert response.headers.get("retry-after") == (
+        str(retry_after) if retry_after else None
+    )
+    assert response.headers["cache-control"] == "no-store"
+    assert "set-cookie" not in response.headers
+    assert h.visitors.clones == 0
+
+
+@pytest.mark.parametrize("path", ["role", "reset"])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("expected_generation", True),
+        ("expected_generation", 0),
+        ("expected_generation", -1),
+        ("expected_generation", "1"),
+        ("expected_auth_epoch", False),
+        ("expected_auth_epoch", 0),
+        ("expected_auth_epoch", -1),
+        ("expected_auth_epoch", 1.1),
+    ],
+)
+async def test_strict_epochs_reject_before_context(harness, path, field, value):
+    h = harness
+    payload = {
+        "request_id": uid(),
+        "expected_generation": 1,
+        "expected_auth_epoch": 1,
+        **({"role": "admin"} if path == "role" else {"confirm": True}),
+        field: value,
+    }
+    response = await h.client.post(
+        f"/demo/{path}", json=payload, headers=headers(h.client)
+    )
+    assert response.status_code == 422
+    assert not h.security.contexts
+    assert not h.visitors.records
+
+
+async def test_signature_csrf_and_origin_precede_schema_and_replay(harness):
+    h = harness
+    h.client.cookies.clear()
+    response = await h.client.post(
+        "/demo/start",
+        content="bad json",
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 401
+    assert h.security.verify_calls == 0
+    await h.client.get("/demo")
+    response = await h.client.post(
+        "/demo/start",
+        content="bad json",
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 403
+    assert not h.visitors.calls
+    response = await h.client.post(
+        "/demo/start",
+        json={"request_id": uid(), "role": "teacher"},
+        headers={**headers(h.client), "origin": "https://evil.test"},
+    )
+    assert response.status_code == 403
+    response = await h.client.post(
+        "/demo/start",
+        data={"request_id": uid(), "role": "teacher"},
+        headers={
+            "x-csrf-token": h.client.cookies.get("demo_csrftoken"),
+            "referer": "https://demo.test/demo",
+        },
+    )
+    assert response.status_code == 201
+
+
+async def test_malformed_multipart_is_safe_422(harness):
+    response = await harness.client.post(
+        "/demo/start",
+        content="not multipart",
+        headers={
+            **headers(harness.client),
+            "content-type": "multipart/form-data",
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "DEMO_INVALID_REQUEST"
+    assert response.headers["cache-control"] == "no-store"
+    assert "set-cookie" not in response.headers
+
+
+async def test_historical_reset_receipt_cannot_restore_old_mapping(harness):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    x = uid()
+    assert (await reset(h, x)).status_code == 200
+    await h.client.get("/demo/state")
+    assert (await reset(h, generation=2, epoch=2)).status_code == 200
+    await h.client.get("/demo/state")
+    response = await h.client.get(f"/demo/state?request_id={x}")
+    assert response.status_code == 200
+    assert response.json()["historical"] is True
+    assert response.json()["result"]["next_url"] is None
+    assert response.json()["current"]["generation"] == 3
+    assert "set-cookie" not in response.headers
+    assert h.visitors.records["A"].generation == 3

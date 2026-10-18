@@ -5,6 +5,8 @@ protocols are adapter contracts for #191/#192/#194, not alternate providers.
 """
 
 import asyncio
+import errno
+import sqlite3
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -15,6 +17,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 Role = Literal["admin", "teacher"]
@@ -179,6 +182,20 @@ class DemoError(Exception):
             )
         )
         super().__init__(self.code)
+
+
+def operation_error(exc: Exception, fallback: str) -> DemoError:
+    if isinstance(exc, DemoError):
+        return exc
+    if isinstance(exc, DBAPIError):
+        number = getattr(exc.orig, "sqlite_errorcode", 0) & 0xFF
+        if number in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+            return DemoError("DB_LOCKED")
+        if number == sqlite3.SQLITE_FULL:
+            return DemoError("STORAGE_LIMIT")
+    if isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
+        return DemoError("STORAGE_LIMIT")
+    return DemoError(fallback)
 
 
 class CurrentState(Schema):
@@ -428,6 +445,8 @@ class DemoSession:
         *,
         drain_seconds: int = 5,
     ):
+        if type(drain_seconds) is not int or not 1 <= drain_seconds <= 30:
+            raise DemoError("CONFIGURATION_INVALID")
         self.visitors = visitors
         self.lifecycle = lifecycle
         self.request_db = request_db
@@ -487,25 +506,137 @@ class DemoSession:
         task.add_done_callback(completed)
         return task
 
+    async def _build(self, op: OperationToken) -> VisitorSnapshot:
+        candidate = await self.visitors.clone(op)
+        async with self.visitors.transition(op) as handle:
+            return handle.publish(op, candidate)
+
+    async def _failed(self, op: OperationToken, exc: Exception) -> DemoError:
+        fallback = (
+            "PREPARE_FAILED" if op.operation == "start" else "RESET_FAILED"
+        )
+        error = operation_error(exc, fallback)
+        async with self.visitors.transition(op) as handle:
+            snapshot = handle.snapshot()
+            if snapshot.state in ("expired", "closing"):
+                return DemoError("EXPIRED")
+            handle.fail(op, error.code)
+        return error
+
+    async def _cancelled(self, op: OperationToken) -> None:
+        try:
+            await self.visitors.cancel_preparation(op)
+        finally:
+            await self._failed(op, RuntimeError())
+
     async def _prepare(self, op: OperationToken) -> VisitorSnapshot:
         try:
-            candidate = await self.visitors.clone(op)
-            async with self.visitors.transition(op) as handle:
-                return handle.publish(op, candidate)
+            return await self._build(op)
         except asyncio.CancelledError:
-            await self.visitors.cancel_preparation(op)
-            async with self.visitors.transition(op) as handle:
-                handle.fail(op, "DEMO_PREPARE_FAILED")
+            await self._cancelled(op)
             raise
         except Exception as exc:
-            error = (
-                exc
-                if isinstance(exc, DemoError)
-                else DemoError("PREPARE_FAILED")
+            raise await self._failed(op, exc) from None
+
+    async def _release(self, ctx: object) -> None:
+        cleanup = asyncio.create_task(self.request_db.release_request_db(ctx))
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:
+            await cleanup
+            raise
+
+    async def reset(
+        self,
+        bootstrap: object,
+        command: ResetCommand,
+        context: Callable[[], Awaitable[object]],
+    ) -> ControlResult:
+        if self._closing:
+            raise DemoError("CONFIGURATION_INVALID")
+        visitor = await self.visitors.lookup(bootstrap)
+        async with self.visitors.transition(visitor) as handle:
+            stored = handle.replay(
+                command.request_id, "reset", command.model_dump()
             )
-            async with self.visitors.transition(op) as handle:
-                handle.fail(op, error.code)
-            raise error from None
+            if stored is not None:
+                return replay_result(stored, handle.snapshot())
+        ctx = await context()
+        task = None
+        released = asyncio.Event()
+        try:
+            async with self.visitors.transition(visitor) as handle:
+                stored = handle.replay(
+                    command.request_id, "reset", command.model_dump()
+                )
+                if stored is not None:
+                    return replay_result(stored, handle.snapshot())
+                ready = handle.snapshot().state == "ready"
+                handle.record("reset", command, None, 0)
+                op, scope = handle.mark_reset(ctx, command.request_id)
+                handoff_error = None
+                if ready:
+                    try:
+                        self.request_db.handoff_request_db(ctx)
+                    except Exception as exc:
+                        handoff_error = exc
+                # No await is allowed between mark, handoff and Task ownership.
+                task = self._own(
+                    self._reset(
+                        op,
+                        scope,
+                        ctx if ready else None,
+                        released,
+                        handoff_error,
+                    ),
+                    op,
+                )
+        finally:
+            released.set()
+            if task is None:
+                await self._release(ctx)
+        snapshot = await asyncio.shield(task)
+        return ControlResult(public_state(snapshot))
+
+    async def _reset(
+        self,
+        op: OperationToken,
+        scope: object | None,
+        ctx: object | None,
+        released: asyncio.Event,
+        handoff_error: Exception | None,
+    ) -> VisitorSnapshot:
+        try:
+            await released.wait()
+            if ctx is not None:
+                await self._release(ctx)
+                ctx = None
+            if handoff_error is not None:
+                raise handoff_error
+            if scope is not None:
+                await self.lifecycle.cancel_scope(scope)
+                drained = await self.lifecycle.drain(scope, self.drain_seconds)
+                if not drained.drained:
+                    raise DemoError("DRAIN_TIMEOUT")
+            return await self._build(op)
+        except asyncio.CancelledError:
+            try:
+                if ctx is not None:
+                    await self._release(ctx)
+            finally:
+                await self._cancelled(op)
+            raise
+        except Exception as exc:
+            raise await self._failed(op, exc) from None
+
+    async def shutdown(self) -> None:
+        self._closing = True
+        # Let newly owned Tasks enter their cancellation/cleanup handlers first.
+        await asyncio.sleep(0)
+        tasks = tuple(self._tasks.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def role(
         self,
@@ -547,6 +678,14 @@ class DemoSession:
                                 auth_epoch=ctx.auth_epoch,
                             )
                         if command.role != ctx.role:
+                            if self.lifecycle.busy_locked(
+                                handle, (ctx.visitor_id, ctx.generation)
+                            ):
+                                raise DemoError(
+                                    "BUSY",
+                                    generation=ctx.generation,
+                                    auth_epoch=ctx.auth_epoch,
+                                )
                             target = (
                                 refs.admin
                                 if command.role == "admin"
@@ -577,8 +716,9 @@ class DemoSession:
                     )
                     handle.record("role", command, result, 200)
                     return ControlResult(result)
-                except DemoError as error:
+                except Exception as exc:
+                    error = operation_error(exc, "CONFIGURATION_INVALID")
                     handle.record("role", command, error.envelope, error.status)
-                    raise
+                    raise error from None
         finally:
             await self.request_db.release_request_db(ctx)

@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.demo.session import (
     ERRORS,
@@ -16,6 +17,7 @@ from src.demo.session import (
     DemoContext,
     DemoError,
     DemoSession,
+    ResetCommand,
     RoleCommand,
     Schema,
     StartCommand,
@@ -127,7 +129,10 @@ async def command_body(request: Request, schema: type[Schema]) -> Schema:
         "application/x-www-form-urlencoded",
         "multipart/form-data",
     ):
-        form = await request.form()
+        try:
+            form = await request.form()
+        except StarletteHTTPException:
+            raise DemoError("INVALID_REQUEST") from None
         if len(form.multi_items()) != len(form):
             raise DemoError("INVALID_REQUEST")
         value = dict(form)
@@ -249,6 +254,29 @@ async def demo_role(
     command = await command_body(request, RoleCommand)
     return control_response(
         await session.role(
+            bootstrap,
+            command,
+            lambda: security.context(
+                request,
+                bootstrap,
+                command.expected_generation,
+                command.expected_auth_epoch,
+            ),
+        )
+    )
+
+
+@router.post("/demo/reset")
+async def demo_reset(
+    request: Request,
+    security: DemoSecurity = Depends(get_demo_security),
+    session: DemoSession = Depends(get_demo_session),
+):
+    bootstrap = await security.verified_bootstrap(request, issue=False)
+    await security.verify_csrf(request, bootstrap)
+    command = await command_body(request, ResetCommand)
+    return control_response(
+        await session.reset(
             bootstrap,
             command,
             lambda: security.context(

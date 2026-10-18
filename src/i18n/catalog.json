@@ -1459,8 +1459,12 @@
       "en": "End and analyze this session?"
     },
     "confirm_delete_session": {
-      "ko": "세션을 삭제하시겠습니까? (복구 불가)",
-      "en": "Delete this session? (Cannot be undone)"
+      "ko": "이 대화를 삭제할까요? 목록과 다운로드에서 사라지며 되돌릴 수 없습니다. 대화 기록은 시스템에 보관됩니다.",
+      "en": "Delete this conversation? It will be removed from lists and downloads and cannot be undone. The conversation record is retained in the system."
+    },
+    "deleted_session_notice": {
+      "ko": "삭제된 대화 · 내용은 표시하지 않습니다",
+      "en": "Deleted conversation · content is not shown"
     },
     "end": {
       "ko": "종료",

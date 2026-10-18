@@ -81,6 +81,35 @@ class Handler(BaseHTTPRequestHandler):
                 .encode()
             )
             mime = "text/html; charset=utf-8"
+        elif path.path == "/fixtures/169/deleted-detail":
+            from tests.uiux_admin_fixtures import admin_fixture
+
+            _, context = admin_fixture("row")
+            session = context["session"]
+            session.deleted_at = datetime(2026, 10, 2)
+            session.messages = [
+                SimpleNamespace(
+                    id=169,
+                    role="teacher",
+                    content="DELETED MESSAGE BODY 169",
+                    created_at=datetime(2026, 10, 1),
+                )
+            ]
+            context.update(
+                scenario_title="Retained scenario",
+                student_name="Student",
+                snapshot_provenance=dict(
+                    snapshot_origin=query.get("origin", ["native"])[0]
+                ),
+            )
+            if query.get("analysis") == ["1"]:
+                context["analysis_result_url"] = "/admin/sessions/1/analysis"
+            body = (
+                templates.get_template("partials/session_detail.html")
+                .render(request=self.display_request(), **context)
+                .encode()
+            )
+            mime = "text/html; charset=utf-8"
         elif path.path == "/fixtures/uiux/admin/groups":
             body = (
                 templates.get_template("admin/groups.html")

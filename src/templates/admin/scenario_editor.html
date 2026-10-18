@@ -28,9 +28,11 @@
 <link rel="stylesheet" href="/static/css/scenario-editor.css">
 <link rel="stylesheet" href="/static/css/scenario-comparison.css">
 <div class="container scenario-editor">
-  <h1>{{ t('admin.scenario_editor') }}</h1>
-  {% if editor.comparison_draft_id|default(none) %}<p role="status">{{ t('admin.frozen_comparison_conditions_are_open_in_a_new_draft_a_scenario_is_created_only_when_you_save_or_pub') }}</p>{% endif %}
-  <p>{{ t('admin.write_public_content_and_internal_instructions_separately_use_pseudonyms_and_educational_personas_in') }}</p>
+  <header class="page-header page-header--workflow">
+    <h1>{{ t('admin.scenario_editor') }}</h1>
+    {% if editor.comparison_draft_id|default(none) %}<p role="status">{{ t('admin.frozen_comparison_conditions_are_open_in_a_new_draft_a_scenario_is_created_only_when_you_save_or_pub') }}</p>{% endif %}
+    <p class="subtitle">{{ t('admin.write_public_content_and_internal_instructions_separately_use_pseudonyms_and_educational_personas_in') }}</p>
+  </header>
   <p id="editor-status" role="status" aria-live="polite"></p>
   <div id="editor-errors" class="scenario-error-summary" role="alert" tabindex="-1" hidden><h2>{{ t('admin.items_to_complete_before_publication') }}</h2><ul id="editor-error-links"></ul></div>
   <div id="editor-conflict" role="alert" tabindex="-1" hidden><p id="editor-conflict-message"></p><button type="button" id="editor-reload" class="btn btn-secondary">{{ t('admin.reload_latest_version') }}</button></div>

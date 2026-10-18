@@ -4,10 +4,12 @@
 {% block content %}
 <link rel="stylesheet" href="/static/css/scenario-comparison.css">
 <div class="container comparison-page">
-  <h1>{{ t('admin.scenario_model_comparison') }}</h1>
-  <p><a href="/admin/scenarios?compare=1" class="btn btn-secondary">{{ t('admin.choose_a_saved_scenario') }}</a></p>
-  <p>{{ t('admin.all_panels_use_the_same_question_and_adopted_dialogue_results_are_retained_for_30_days_after_creatio') }}</p>
-  <p>{{ t('admin.adopting_a_student_response_updates_the_canonical_conversation_history_applying_a_model_opens_the_ed') }}</p>
+  <header class="page-header page-header--workflow">
+    <h1>{{ t('admin.scenario_model_comparison') }}</h1>
+    <p><a href="/admin/scenarios?compare=1" class="btn btn-secondary">{{ t('admin.choose_a_saved_scenario') }}</a></p>
+    <p class="subtitle">{{ t('admin.all_panels_use_the_same_question_and_adopted_dialogue_results_are_retained_for_30_days_after_creatio') }}</p>
+    <p class="subtitle">{{ t('admin.adopting_a_student_response_updates_the_canonical_conversation_history_applying_a_model_opens_the_ed') }}</p>
+  </header>
   <p id="conversation-status" role="status" aria-live="polite"></p>
   <div id="conversation-setup"></div>
   <section id="conversation-dialogue" aria-label="{{ t('admin.canonical_dialogue') }}"></section>

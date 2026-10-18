@@ -128,6 +128,8 @@ class DatabaseRoot:
         self._refs = {}
         self._seed = None
         self._orphans = []
+        self._pending = {}
+        self._pending_refs = {}
         self.seed_bytes = 0
         self.seed_manifest_sha256 = None
         self.root_id = None
@@ -217,6 +219,10 @@ class DatabaseRoot:
 
     def owns(self, ref):
         return self._refs.get(id(ref)) is ref
+
+    @property
+    def pending_operations(self):
+        return frozenset(self._pending)
 
     @property
     def external_seed_bytes(self):
@@ -424,6 +430,7 @@ class DatabaseRoot:
                 raise ValueError("generation identity")
         except (ValueError, TypeError, AttributeError) as exc:
             raise DemoError("INVALID_REQUEST") from exc
+        operation_id = operation_id or str(uuid4())
         stem = f"{visitor_id}-g{generation}-{uuid4()}"
         staging = self.path / (stem + ".staging")
         final = self.path / (stem + ".db")
@@ -432,7 +439,13 @@ class DatabaseRoot:
         )
         builder = asyncio.create_task(
             asyncio.to_thread(
-                self._clone, staging, final, visitor_id, generation, stopped
+                self._clone,
+                staging,
+                final,
+                visitor_id,
+                generation,
+                stopped,
+                operation_id,
             )
         )
         try:
@@ -446,12 +459,29 @@ class DatabaseRoot:
                 pass
             else:
                 ref.factory.retire()
-                await _settle(asyncio.create_task(self.cleanup(ref)))
+                try:
+                    await _settle(asyncio.create_task(self.cleanup(ref)))
+                except (OSError, DemoError):
+                    files = {ref.path: ref.factory.identity}
+                    for suffix in ("-wal", "-shm", "-journal"):
+                        path = Path(str(ref.path) + suffix)
+                        files[path] = None
+                        try:
+                            if path.exists() or path.is_symlink():
+                                info = _plain(path)
+                                files[path] = (info.st_dev, info.st_ino)
+                        except DemoError:
+                            pass
+                    self._pending.setdefault(operation_id, {}).update(files)
+                    self._pending_refs.setdefault(operation_id, []).append(ref)
             raise
 
-    def _clone(self, staging, final, visitor_id, generation, stopped):
+    def _clone(
+        self, staging, final, visitor_id, generation, stopped, operation_id
+    ):
         spec = self._seed
         created = renamed = False
+        main_identity = None
         try:
             self._check()
             manifest = self._manifest(spec)
@@ -471,6 +501,8 @@ class DatabaseRoot:
                     )
                 )
                 created = True
+                info = _plain(staging)
+                main_identity = (info.st_dev, info.st_ino)
                 with (
                     closing(sqlite3.connect(staging)) as destination,
                     destination,
@@ -518,9 +550,39 @@ class DatabaseRoot:
                 self._refs[id(ref)] = ref
                 return ref
         except BaseException as exc:
-            for path, owned in ((staging, created), (final, renamed)):
-                if owned and (path.exists() or path.is_symlink()):
-                    _unlink_files(path)
+            cleanup_error = None
+            for path, owned in (
+                (staging, created and not renamed),
+                (final, renamed),
+            ):
+                if owned:
+                    files = {
+                        path: main_identity,
+                        **{
+                            Path(str(path) + suffix): None
+                            for suffix in ("-wal", "-shm", "-journal")
+                        },
+                    }
+                    try:
+                        for item in (
+                            path,
+                            *(
+                                Path(str(path) + suffix)
+                                for suffix in ("-wal", "-shm", "-journal")
+                            ),
+                        ):
+                            if item.exists() or item.is_symlink():
+                                info = _plain(item)
+                                identity = (info.st_dev, info.st_ino)
+                                if item == path and identity != main_identity:
+                                    raise DemoError("CONFIGURATION_INVALID")
+                                files[item] = identity
+                        _unlink_files(path)
+                    except (OSError, DemoError) as failed:
+                        self._pending.setdefault(operation_id, {}).update(files)
+                        cleanup_error = failed
+            if cleanup_error is not None:
+                raise DemoError("DB_LOCKED") from cleanup_error
             if isinstance(exc, sqlite3.Error) or (
                 isinstance(exc, OSError) and exc.errno == errno.ENOSPC
             ):
@@ -530,6 +592,35 @@ class DatabaseRoot:
             ):
                 raise DemoError("VERSION_MISMATCH") from exc
             raise
+
+    async def cleanup_pending(self):
+        self._check()
+        removed, codes = 0, []
+        for operation_id, files in tuple(self._pending.items()):
+            try:
+                for ref in self._pending_refs.get(operation_id, ()):
+                    await ref.factory.dispose()
+                for path, identity in files.items():
+                    if path.exists() or path.is_symlink():
+                        info = _plain(path)
+                        if (info.st_dev, info.st_ino) != identity:
+                            raise DemoError("CONFIGURATION_INVALID")
+                for path in files:
+                    path.unlink(missing_ok=True)
+            except (OSError, DemoError) as exc:
+                codes.append(
+                    exc.code if isinstance(exc, DemoError) else "DEMO_DB_LOCKED"
+                )
+            else:
+                self._pending.pop(operation_id)
+                for ref in self._pending_refs.pop(operation_id, ()):
+                    self._refs.pop(id(ref), None)
+                removed += 1
+        return dict(
+            removed=removed,
+            pending=len(self._pending),
+            codes=tuple(sorted(set(codes))),
+        )
 
     def orphan_refs(self):
         """Recover only files with verified generation names and database markers."""
@@ -544,6 +635,7 @@ class DatabaseRoot:
             spec.path,
             spec.manifest_path,
         }
+        known.update(path for files in self._pending.values() for path in files)
         known.update(
             spec.manifest_path.parent / item["path"]
             for item in manifest["files"]
@@ -574,10 +666,14 @@ class DatabaseRoot:
             match = pattern.fullmatch(base.name)
             if base.parent != self.path or match is None or not base.exists():
                 raise DemoError("CONFIGURATION_INVALID")
-            if any(
-                str(UUID(value)) != value or UUID(value).version != 4
-                for value in (match[1], match[3])
-            ):
+            try:
+                valid_ids = all(
+                    str(UUID(value)) == value and UUID(value).version == 4
+                    for value in (match[1], match[3])
+                )
+            except ValueError as exc:
+                raise DemoError("CONFIGURATION_INVALID") from exc
+            if not valid_ids:
                 raise DemoError("CONFIGURATION_INVALID")
             if base not in owned and base not in {
                 item[0] for item in candidates
@@ -724,6 +820,18 @@ class GenerationFactory:
         self._write_check = None
         info = _plain(path)
         self.identity = (info.st_dev, info.st_ino)
+        self.write_headroom_bytes = 0
+        self.page_limit = None
+        if max_db_bytes is not None:
+            with _readonly(path) as db:
+                page_size = db.execute("PRAGMA page_size").fetchone()[0]
+                page_count = db.execute("PRAGMA page_count").fetchone()[0]
+            # shortcut: reserve whole files; use page deltas if near-limit seeds need writes.
+            self.page_limit = max(
+                page_count,
+                (max_db_bytes - 32768 - 32) // (4 * (page_size + 24)),
+            )
+            self._headroom(self.page_limit, page_size)
         self.engine = create_async_engine(
             URL.create(
                 "sqlite+aiosqlite",
@@ -749,14 +857,14 @@ class GenerationFactory:
                     "journal_mode=WAL",
                     "synchronous=NORMAL",
                     "busy_timeout=1000",
+                    "cache_spill=OFF",
                 ):
                     cursor.execute("PRAGMA " + pragma)
                 if max_db_bytes is not None:
                     cursor.execute("PRAGMA page_size")
                     page_size = cursor.fetchone()[0]
-                    cursor.execute(
-                        f"PRAGMA max_page_count={max_db_bytes // page_size}"
-                    )
+                    cursor.execute(f"PRAGMA max_page_count={self.page_limit}")
+                    self._headroom(cursor.fetchone()[0], page_size)
             finally:
                 cursor.close()
 
@@ -776,7 +884,7 @@ class GenerationFactory:
                 return
             normalized = sql.strip().upper()
             if normalized.startswith("SELECT ") or re.fullmatch(
-                r"PRAGMA\s+(FOREIGN_KEYS|JOURNAL_MODE|SYNCHRONOUS|BUSY_TIMEOUT|PAGE_SIZE|PAGE_COUNT|MAX_PAGE_COUNT)\s*;?",
+                r"PRAGMA\s+(FOREIGN_KEYS|JOURNAL_MODE|SYNCHRONOUS|BUSY_TIMEOUT|PAGE_SIZE|PAGE_COUNT|MAX_PAGE_COUNT|CACHE_SPILL)\s*;?",
                 normalized,
             ):
                 return
@@ -796,6 +904,13 @@ class GenerationFactory:
         def commit(conn):
             if self._write_check is not None:
                 self._write_check()
+
+    def _headroom(self, page_limit, page_size):
+        # Reserve main growth, one WAL frame/page, and extra WAL-index blocks.
+        index_growth = ((page_limit + 4061) // 4062 + 1) * 32768
+        self.write_headroom_bytes = (
+            page_limit * (2 * page_size + 24) + 32 + index_growth
+        )
 
     def _check(self):
         if self.retired:

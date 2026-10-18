@@ -279,7 +279,9 @@ async def test_publication_write_check_guards_raw_factory_and_commit(tmp_path):
                 )
                 == "fictional"
             )
-            assert await session.scalar(text("PRAGMA max_page_count")) == 256
+            assert (
+                0 < await session.scalar(text("PRAGMA max_page_count")) <= 256
+            )
             with pytest.raises(DemoError, match="DEMO_STALE_ROLE"):
                 await session.execute(
                     text("UPDATE synthetic_record SET body='bypass' WHERE id=1")
@@ -536,4 +538,145 @@ async def test_open_session_blocks_dispose_and_cleanup_until_connection_returned
         assert ref.factory.disposed and not ref.path.exists()
     finally:
         await session.close()
+        root.close()
+
+
+async def test_page_cap_and_wal_headroom_reject_large_write_without_durable_growth(
+    tmp_path,
+):
+    from sqlalchemy import text
+
+    limit = 33554432
+    root = await make_root(tmp_path, max_db_bytes=limit)
+    ref = await root.clone(str(uuid4()), 1)
+    try:
+        assert ref.factory.write_headroom_bytes > 0
+
+        def check_budget():
+            if (
+                root.generation_bytes(ref) + ref.factory.write_headroom_bytes
+                > limit
+            ):
+                raise DemoError("STORAGE_LIMIT")
+
+        ref.factory.set_write_check(check_budget)
+        async with ref.factory() as session:
+            await session.execute(
+                text("INSERT INTO synthetic_record VALUES(2,zeroblob(1048576))")
+            )
+            await session.commit()
+            assert root.generation_bytes(ref) <= limit
+            assert await session.scalar(text("PRAGMA cache_spill")) == 0
+            with pytest.raises(DemoError, match="DEMO_STORAGE_LIMIT"):
+                await session.execute(
+                    text(
+                        "INSERT INTO synthetic_record VALUES(3,zeroblob(33554432))"
+                    )
+                )
+            await session.rollback()
+            assert (
+                await session.scalar(
+                    text("SELECT count(*) FROM synthetic_record")
+                )
+                == 2
+            )
+        assert root.generation_bytes(ref) <= limit
+    finally:
+        ref.factory.retire()
+        await root.cleanup(ref)
+        root.close()
+
+
+async def test_failed_staging_unlink_retains_operation_and_retries_only_owned_inode(
+    tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    root = await make_root(tmp_path)
+
+    def verify(db, manifest):
+        if (
+            db.execute("SELECT kind FROM demo_metadata").fetchone()[0]
+            == "demo_visitor"
+        ):
+            raise DemoError("VERSION_MISMATCH")
+
+    _revalidate(root, verify)
+    operation_id = str(uuid4())
+    original_unlink = Path.unlink
+
+    def locked_unlink(path, *args, **kwargs):
+        if path.suffix == ".staging":
+            raise PermissionError("simulated locked file")
+        return original_unlink(path, *args, **kwargs)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "unlink", locked_unlink)
+            with pytest.raises(DemoError):
+                await root.clone(str(uuid4()), 1, operation_id=operation_id)
+        assert root.pending_operations == {operation_id}
+        staged = next(root.path.glob("*.staging"))
+        parked = staged.with_suffix(".parked")
+        staged.rename(parked)
+        staged.write_text("replacement must survive")
+        result = await root.cleanup_pending()
+        assert result["pending"] == 1
+        assert result["codes"] == ("DEMO_CONFIGURATION_INVALID",)
+        assert staged.read_text() == "replacement must survive"
+        staged.unlink()
+        parked.rename(staged)
+        result = await root.cleanup_pending()
+        assert result["removed"] == 1 and result["pending"] == 0
+        assert not root.pending_operations and not staged.exists()
+    finally:
+        root.close()
+
+
+async def test_cancelled_after_rename_keeps_operation_when_candidate_cleanup_is_locked(
+    tmp_path, monkeypatch
+):
+    import asyncio
+    import os
+    import threading
+    from pathlib import Path
+
+    root = await make_root(tmp_path)
+    renamed = threading.Event()
+    resume = threading.Event()
+    original_rename = os.rename
+    original_unlink = Path.unlink
+    operation_id = str(uuid4())
+
+    def pause_rename(source, destination):
+        original_rename(source, destination)
+        renamed.set()
+        assert resume.wait(5)
+
+    def locked_unlink(path, *args, **kwargs):
+        if path.suffix == ".db" and path.name != "seed.db":
+            raise PermissionError("simulated locked candidate")
+        return original_unlink(path, *args, **kwargs)
+
+    task = None
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(os, "rename", pause_rename)
+            patch.setattr(Path, "unlink", locked_unlink)
+            task = asyncio.create_task(
+                root.clone(str(uuid4()), 1, operation_id=operation_id)
+            )
+            assert await asyncio.to_thread(renamed.wait, 5)
+            task.cancel()
+            resume.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        assert root.pending_operations == {operation_id}
+        assert len(list(root.path.glob("*.db"))) == 2
+        assert (await root.cleanup_pending())["pending"] == 0
+        assert list(root.path.glob("*.db")) == [root.path / "seed.db"]
+    finally:
+        resume.set()
+        if task is not None:
+            await asyncio.gather(task, return_exceptions=True)
         root.close()

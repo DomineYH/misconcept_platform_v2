@@ -431,6 +431,8 @@ class VisitorRegistry:
         )
 
     def _state_check(self, state, generation=None, epoch=None, scope=None):
+        if self._closing:
+            self._expire(state, "shutdown")
         if self._due(state) and state.state not in ("expired", "closing"):
             self._expire(state, "ttl")
         if state.state in ("expired", "closing"):
@@ -885,6 +887,8 @@ class VisitorRegistry:
         if state is None:
             raise DemoError("INVALID_REQUEST")
         async with self.transition(state.verified) as handle:
+            if self._closing:
+                handle.expire("shutdown")
             if self._due(state):
                 handle.expire("ttl")
             if state.state in ("expired", "closing"):
@@ -906,6 +910,8 @@ class VisitorRegistry:
         for scope in scopes:
             await self.drain_retired(scope)
         async with self.transition(state.verified) as handle:
+            if self._closing:
+                handle.expire("shutdown")
             if self._due(state):
                 handle.expire("ttl")
             if not self._valid_op(state, op):
@@ -1148,10 +1154,13 @@ class VisitorRegistry:
 
     async def shutdown(self):
         self._closing = True
+        operations = []
         for state in list(self._states.values()):
             await self.expire_visit(state.verified, "shutdown")
             if state.operation is not None:
-                await self.cancel_preparation(state.operation)
+                operations.append(state.operation)
+        for operation in operations:
+            await self.cancel_preparation(operation)
         return await self.cleanup_retired()
 
 
@@ -1301,6 +1310,8 @@ class TransitionHandle:
         )
         _positive_int(generation)
         _positive_int(epoch)
+        if registry._closing:
+            self.expire("shutdown")
         if registry._due(state):
             self.expire("ttl")
         if state.state in ("expired", "closing"):
@@ -1348,6 +1359,8 @@ class TransitionHandle:
         self._require()
         registry, state = self._registry, self._state
         try:
+            if registry._closing:
+                self.expire("shutdown")
             if registry._due(state):
                 self.expire("ttl")
             if state.state in ("expired", "closing"):

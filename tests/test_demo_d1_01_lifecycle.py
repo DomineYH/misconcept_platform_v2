@@ -722,3 +722,44 @@ async def test_expired_pending_start_receipt_stays_terminal_after_new_visit(
         await visitors.reserve_start(
             bootstrap, first.operation.request_id, "admin"
         )
+
+
+async def test_shutdown_blocks_other_visits_while_waiting_for_cancelled_builder(
+    make_visitors, monkeypatch
+):
+    visitors, _, lifecycle = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("shutdown-cancel-builder-bootstrap")
+    first = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    _, ready, ctx = await ready_context(visitors)
+    await visitors.release_lease(ctx.lease)
+    entered = asyncio.Event()
+    finish = asyncio.Event()
+    closing = asyncio.Event()
+    actual_clone = visitors.root.clone
+    actual_cancel = lifecycle.cancel_scope
+
+    async def delayed_clone(visitor_id, generation, **kwargs):
+        entered.set()
+        await finish.wait()
+        return await actual_clone(visitor_id, generation, **kwargs)
+
+    def cancel_scope(scope):
+        closing.set()
+        return actual_cancel(scope)
+
+    monkeypatch.setattr(visitors.root, "clone", delayed_clone)
+    monkeypatch.setattr(lifecycle, "cancel_scope", cancel_scope)
+    preparing = asyncio.create_task(visitors.prepare(first.operation))
+    await entered.wait()
+    shutdown = asyncio.create_task(visitors.shutdown())
+    await closing.wait()
+    try:
+        with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+            await visitors.acquire_lease(
+                ready.snapshot.ref, ready.snapshot.auth_epoch
+            )
+    finally:
+        finish.set()
+        await shutdown
+        with pytest.raises(DemoError):
+            await preparing

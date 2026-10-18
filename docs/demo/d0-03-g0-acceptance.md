@@ -24,8 +24,8 @@
 | --- | --- |
 | 계약 경로·버전 | [d0-03-contract-v1.md](d0-03-contract-v1.md), `d0-03-v1` |
 | ADR | [0013-demo-isolation-and-keyless-provider.md](../adr/0013-demo-isolation-and-keyless-provider.md) |
-| 계약 후보 전체 SHA | pending — coordinator fills |
-| 계약 후보 blob / 검토 기준 main SHA | pending / pending |
+| 계약 후보 전체 SHA | `83f7ec0fff0895aed872114ad4e5d66ce3b38a5c` |
+| 계약 후보 blob / 검토 기준 main SHA | `326de9e66104be61f6c6b16fd42bec53366c84db` / pending |
 | 변경 이력·무효화된 증거 | pending |
 | 추적 기준 | 계약 §27의 C01–C29 → 절 → 소비자 → G1–G5 → 검사 방법 |
 

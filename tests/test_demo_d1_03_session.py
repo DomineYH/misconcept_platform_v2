@@ -161,6 +161,18 @@ class VisitorsDouble:
                 return StartReservation(record, replay=stored)
             handle.check_control_state("start")
             if record.state == "ready":
+                record.bodies[request_id] = ("start", body)
+                result = public_state(handle.snapshot()).model_copy(
+                    update={"request_id": request_id}
+                )
+                record.receipts[request_id] = StoredResult(
+                    "start",
+                    request_id,
+                    result,
+                    record.browser_scope_id,
+                    record.generation,
+                    record.auth_epoch,
+                )
                 return StartReservation(record)
             record.bodies[request_id] = ("start", body)
             record.reserved_role = role
@@ -345,7 +357,7 @@ class HandleDouble:
         record.operation = None
         return self.snapshot()
 
-    def fail(self, op, code):
+    def fail(self, op, code, *, retry_after=None):
         record = self.visit
         if (
             self.snapshot().state in ("expired", "closing")
@@ -367,7 +379,7 @@ class HandleDouble:
             record.generation,
             record.auth_epoch,
             error.status,
-            error.retry_after,
+            error.retry_after if error.retry_after is not None else retry_after,
         )
         record.operation = None
         return True
@@ -533,11 +545,7 @@ async def harness(tmp_path):
             await client.get("/demo")
             yield item
         finally:
-            for task in tuple(session._tasks.values()):
-                task.cancel()
-            await asyncio.gather(
-                *session._tasks.values(), return_exceptions=True
-            )
+            await session.shutdown()
             for ctx in security.contexts:
                 request_db.close_error = False
                 await request_db.release_request_db(ctx)
@@ -1073,3 +1081,717 @@ async def test_historical_reset_receipt_cannot_restore_old_mapping(harness):
     assert response.json()["current"]["generation"] == 3
     assert "set-cookie" not in response.headers
     assert h.visitors.records["A"].generation == 3
+
+
+class TourContentDouble:
+    """Verified #195/#197 hash/content boundary; facts themselves are real SQL."""
+
+    first_inputs = frozenset({"A", "B", "C"})
+    common_input = "common"
+
+    def supported_snapshot(self, row):
+        return (
+            row["config_hash"] == "supported"
+            and row["snapshot_origin"] == "native"
+        )
+
+
+async def tour_tables(h):
+    async with h.engine.begin() as conn:
+        for ddl in (
+            'CREATE TABLE "session" (id INTEGER PRIMARY KEY, deleted_at TEXT, ended_at TEXT, config_snapshot_json TEXT, config_hash TEXT, snapshot_origin TEXT, source_scenario_version INTEGER, snapshot_created_at TEXT)',
+            "CREATE TABLE message (id INTEGER PRIMARY KEY, session_id INTEGER, role TEXT, content TEXT, turn_id TEXT, turn_index INTEGER, generation_run_id TEXT)",
+            "CREATE TABLE generation_run (id TEXT PRIMARY KEY, session_id INTEGER, turn_id TEXT, operation TEXT, status TEXT, result_kind TEXT, mentor_trigger TEXT, accepted_report_id INTEGER, accepted_report_version INTEGER)",
+            "CREATE TABLE session_summary (id INTEGER PRIMARY KEY, session_id INTEGER)",
+            "CREATE TABLE session_feedback_report (id INTEGER PRIMARY KEY, session_id INTEGER, version INTEGER, status TEXT, payload_json TEXT)",
+        ):
+            await conn.exec_driver_sql(ddl)
+    h.visitors.records["A"].current_ref.tour_content = TourContentDouble()
+
+
+async def tour_session(h, sid, *, supported=True, deleted=False, ended=False):
+    async with h.factory() as db:
+        await db.execute(
+            text(
+                "INSERT INTO \"session\" VALUES (:id, :deleted, :ended, :snapshot, :hash, 'native', 1, '2026-01-01')"
+            ),
+            {
+                "id": sid,
+                "deleted": "2026-01-02" if deleted else None,
+                "ended": "2026-01-02" if ended else None,
+                "snapshot": '{"config_schema_version":1}',
+                "hash": "supported" if supported else "unsupported",
+            },
+        )
+        await db.commit()
+
+
+async def tour_turn(
+    h, sid, index, teacher, *, complete=True, coaching="message", trigger="auto"
+):
+    turn = uid()
+    student_run, mentor_run = uid(), uid()
+    async with h.factory() as db:
+        for role, content, run in (
+            ("teacher", teacher, None),
+            ("student", "prepared reply", student_run),
+        ):
+            await db.execute(
+                text(
+                    "INSERT INTO message (session_id, role, content, turn_id, turn_index, generation_run_id) VALUES (:sid,:role,:content,:turn,:idx,:run)"
+                ),
+                {
+                    "sid": sid,
+                    "role": role,
+                    "content": content,
+                    "turn": turn,
+                    "idx": index,
+                    "run": run,
+                },
+            )
+        await db.execute(
+            text(
+                "INSERT INTO generation_run (id,session_id,turn_id,operation,status,result_kind) VALUES (:run,:sid,:turn,'student',:status,'message')"
+            ),
+            {
+                "run": student_run,
+                "sid": sid,
+                "turn": turn,
+                "status": "completed" if complete else "failed",
+            },
+        )
+        await db.execute(
+            text(
+                "INSERT INTO generation_run (id,session_id,turn_id,operation,status,result_kind,mentor_trigger) VALUES (:run,:sid,:turn,'mentor','completed',:kind,:trigger)"
+            ),
+            {
+                "run": mentor_run,
+                "sid": sid,
+                "turn": turn,
+                "kind": coaching,
+                "trigger": trigger,
+            },
+        )
+        if coaching == "message":
+            await db.execute(
+                text(
+                    "INSERT INTO message (session_id,role,content,turn_id,turn_index,generation_run_id) VALUES (:sid,'tutor','prepared coaching',:turn,:idx,:run)"
+                ),
+                {
+                    "sid": sid,
+                    "turn": turn,
+                    "idx": index,
+                    "run": mentor_run,
+                },
+            )
+        await db.commit()
+
+
+async def tour_analysis(h, sid, status="ok", adopted=True):
+    run_id = uid()
+    async with h.factory() as db:
+        await db.execute(
+            text("INSERT INTO session_summary (session_id) VALUES (:sid)"),
+            {"sid": sid},
+        )
+        await db.execute(
+            text(
+                "INSERT INTO session_feedback_report (id,session_id,version,status,payload_json) VALUES (:id,:sid,2,:status,:payload)"
+            ),
+            {
+                "id": sid,
+                "sid": sid,
+                "status": status,
+                "payload": '{"metadata":{"run_id":"'
+                + run_id
+                + '","outcome":"dialogue"}}',
+            },
+        )
+        await db.execute(
+            text(
+                "INSERT INTO generation_run (id,session_id,turn_id,operation,status,accepted_report_id,accepted_report_version) VALUES (:run,:sid,:turn,'analysis',:status,:report,2)"
+            ),
+            {
+                "run": run_id,
+                "sid": sid,
+                "turn": uid(),
+                "status": status,
+                "report": sid if adopted else None,
+            },
+        )
+        await db.commit()
+
+
+async def facts(h):
+    response = await h.client.get("/demo/state?include_tour=true")
+    assert response.status_code == 200
+    return response.json()["tour_facts"]
+
+
+async def test_tour_schema_seed_exclusion_and_pinned_first_session(harness):
+    h = harness
+    await start(h)
+    await tour_tables(h)
+    initial = await facts(h)
+    assert initial == {
+        "schema_version": 1,
+        "browser_scope_id": "scope-A",
+        "generation": 1,
+        "auth_epoch": 1,
+        "journey_session_id": None,
+        "teacher_entered": True,
+        "scenario_created": False,
+        "dialogue_complete": False,
+        "analysis_ready": False,
+        "teacher_deleted": False,
+        "session_deleted": False,
+    }
+    await tour_session(h, 1, ended=True)  # Seed must never become the journey.
+    await tour_session(h, 2)
+    await tour_session(h, 3, ended=True)
+    await tour_turn(h, 2, 1, "A")
+    await tour_turn(h, 3, 1, "B")
+    await tour_turn(h, 3, 2, "common", coaching="no_intervention")
+    await tour_analysis(h, 3)
+    current = await facts(h)
+    assert current["journey_session_id"] == 2
+    assert current["scenario_created"] is True
+    assert current["dialogue_complete"] is current["analysis_ready"] is False
+    await tour_turn(h, 2, 2, "unsupported")
+    await tour_turn(h, 2, 3, " common ", coaching="no_intervention")
+    current = await facts(h)
+    assert current["dialogue_complete"] is True
+    assert current["analysis_ready"] is False
+    async with h.factory() as db:
+        await db.execute(
+            text("UPDATE \"session\" SET ended_at='2026-01-02' WHERE id=2")
+        )
+        await db.commit()
+    await tour_analysis(h, 2)
+    current = await facts(h)
+    assert current["analysis_ready"] is True
+    assert current["journey_session_id"] == 2
+    plain = await h.client.get("/demo/state")
+    assert plain.json()["tour_facts"] is None
+
+
+@pytest.mark.parametrize(
+    "complete,coaching,trigger,status,adopted",
+    [
+        (False, "message", "auto", "ok", True),
+        (True, "message", "manual", "ok", True),
+        (True, "no_intervention", "auto", "ok", True),
+        (True, "message", "auto", "degraded", True),
+        (True, "message", "auto", "ok", False),
+    ],
+)
+async def test_tour_requires_completed_supported_turns_auto_coaching_and_adopted_analysis(
+    harness, complete, coaching, trigger, status, adopted
+):
+    h = harness
+    await start(h)
+    await tour_tables(h)
+    await tour_session(h, 2, ended=True)
+    await tour_turn(
+        h, 2, 1, "A", complete=complete, coaching=coaching, trigger=trigger
+    )
+    await tour_turn(h, 2, 2, "common", coaching="no_intervention")
+    await tour_analysis(h, 2, status, adopted)
+    current = await facts(h)
+    assert current["analysis_ready"] is False
+    assert current["dialogue_complete"] is (
+        complete and coaching == "message" and trigger == "auto"
+    )
+
+
+async def test_tour_teacher_history_survives_role_changes_and_cache_clears_on_reset(
+    harness,
+):
+    h = harness
+    await start(h, "admin")
+    await tour_tables(h)
+    assert (await facts(h))["teacher_entered"] is False
+    response = await h.client.post(
+        "/demo/role",
+        json={
+            "request_id": uid(),
+            "role": "teacher",
+            "expected_generation": 1,
+            "expected_auth_epoch": 1,
+        },
+        headers=headers(h.client),
+    )
+    assert response.status_code == 200
+    assert response.json()["tour_facts"] is None
+    assert (await facts(h))["teacher_entered"] is True
+    response = await h.client.post(
+        "/demo/role",
+        json={
+            "request_id": uid(),
+            "role": "admin",
+            "expected_generation": 1,
+            "expected_auth_epoch": 2,
+        },
+        headers=headers(h.client),
+    )
+    assert response.status_code == 200
+    current = await facts(h)
+    assert current["teacher_entered"] is True
+    assert current["auth_epoch"] == 3
+    response = await reset(h, epoch=3)
+    assert response.status_code == 200
+    h.visitors.records["A"].current_ref.tour_content = TourContentDouble()
+    current = await facts(h)
+    assert current["generation"] == 2
+    assert current["teacher_entered"] is False
+
+
+async def test_tour_capture_retain_deletion_and_rollback_without_body_reads(
+    harness,
+):
+    from sqlalchemy import event
+
+    from src.demo.session import capture_tour_facts, retain_tour_facts
+
+    h = harness
+    await start(h)
+    await tour_tables(h)
+    await tour_session(h, 2, ended=True)
+    await tour_turn(h, 2, 1, "B")
+    await tour_turn(h, 2, 2, "common", coaching="no_intervention")
+    await tour_analysis(h, 2)
+    request = SimpleNamespace(url=SimpleNamespace(path="/demo/state"))
+    ctx = await h.security.context(request, "A", 1, 1)
+    try:
+        async with h.visitors.transition("A") as handle:
+            projection = await capture_tour_facts(ctx, handle)
+            assert projection.analysis_ready
+            # Capture itself retains nothing, including on a rollback path.
+            async with h.factory() as db:
+                await db.execute(
+                    text(
+                        "UPDATE \"session\" SET deleted_at='2026-01-02' WHERE id=2"
+                    )
+                )
+                await db.rollback()
+            async with h.factory() as db:
+                await db.execute(
+                    text(
+                        "UPDATE \"session\" SET deleted_at='2026-01-02' WHERE id=2"
+                    )
+                )
+                await db.commit()
+            tombstone = await capture_tour_facts(ctx, handle)
+            assert tombstone.journey_session_id == 2
+            assert tombstone.scenario_created is False
+            assert tombstone.dialogue_complete is False
+            assert tombstone.analysis_ready is False
+            # #200 retains its pre-delete proof only after successful commit.
+            retain_tour_facts(
+                handle, projection.model_copy(update={"session_deleted": True})
+            )
+    finally:
+        await h.request_db.release_request_db(ctx)
+    statements = []
+
+    def observe(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement.lower())
+
+    event.listen(h.engine.sync_engine, "before_cursor_execute", observe)
+    try:
+        current = await facts(h)
+        assert current["journey_session_id"] == 2
+        assert current["analysis_ready"] is current["dialogue_complete"] is True
+        assert current["session_deleted"] is True
+        assert not any(
+            "from message" in s
+            or "from generation_run" in s
+            or "session_feedback_report" in s
+            for s in statements
+        )
+    finally:
+        event.remove(h.engine.sync_engine, "before_cursor_execute", observe)
+    async with h.factory() as db:
+        await db.execute(text('DELETE FROM "user" WHERE id=2'))
+        await db.commit()
+    current = await facts(h)
+    assert current["teacher_deleted"] is True
+    assert current["analysis_ready"] is True
+    assert current["journey_session_id"] == 2
+
+
+async def test_tour_first_tombstone_does_not_invent_historical_progress(
+    harness,
+):
+    h = harness
+    await start(h, "admin")
+    await tour_tables(h)
+    await tour_session(h, 1, ended=True)
+    await tour_session(h, 2, deleted=True, ended=True)
+    await tour_session(h, 3, ended=True)
+    await tour_turn(h, 2, 1, "A")
+    await tour_turn(h, 2, 2, "common", coaching="no_intervention")
+    await tour_analysis(h, 2)
+    current = await facts(h)
+    assert current["journey_session_id"] == 2
+    assert current["session_deleted"] is True
+    for name in (
+        "teacher_entered",
+        "scenario_created",
+        "dialogue_complete",
+        "analysis_ready",
+    ):
+        assert current[name] is False
+
+
+async def test_tour_unsupported_snapshot_and_input_never_advance(harness):
+    h = harness
+    await start(h)
+    await tour_tables(h)
+    await tour_session(h, 2, supported=False, ended=True)
+    await tour_session(h, 3, ended=True)
+    await tour_turn(h, 2, 1, "A")
+    await tour_turn(h, 2, 2, "common", coaching="no_intervention")
+    await tour_analysis(h, 2)
+    await tour_turn(h, 3, 1, "not A")
+    await tour_turn(h, 3, 2, "common", coaching="no_intervention")
+    await tour_analysis(h, 3)
+    current = await facts(h)
+    assert current["journey_session_id"] == 3
+    assert current["dialogue_complete"] is current["analysis_ready"] is False
+
+
+async def test_expired_and_257th_new_id_keep_old_receipts_and_cookie_policy(
+    harness,
+):
+    h = harness
+    first = uid()
+    await start(h, request_id=first)
+    await h.client.get("/demo/state")
+    for _ in range(255):
+        assert (await start(h)).status_code == 200
+    response = await start(h)
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "DEMO_LIMIT_REACHED"
+    assert "set-cookie" not in response.headers
+    assert h.visitors.clones == 1
+    replay = await h.client.get(f"/demo/state?request_id={first}")
+    assert replay.status_code == 200
+    assert len(h.visitors.records["A"].receipts) == 256
+    h.visitors.records["A"].expires_at = datetime(
+        2000, 1, 1, tzinfo=timezone.utc
+    )
+    response = await h.client.get(f"/demo/state?request_id={first}")
+    assert response.status_code == 410
+    assert set(response.json()) == {"detail"}
+    assert "set-cookie" not in response.headers
+    response = await start(h, request_id=first)
+    assert response.status_code == 410
+    assert h.visitors.clones == 1
+
+
+async def test_scope_ownership_unknown_id_and_state_get_do_not_acquire_db(
+    harness,
+):
+    h = harness
+    request_id = uid()
+    await start(h, request_id=request_id)
+    await h.client.get("/demo/state")
+    deadline = h.visitors.records["A"].expires_at
+    for path, status in (
+        ("/demo/state", 200),
+        (f"/demo/state?request_id={uid()}", 404),
+        (f"/demo/state?request_id={request_id}", 200),
+    ):
+        response = await h.client.get(path)
+        assert response.status_code == status
+        assert ("set-cookie" in response.headers) is (path == "/demo/state")
+    assert not h.security.contexts
+    assert h.visitors.records["A"].expires_at == deadline
+    h.client.cookies.clear()
+    h.client.cookies.set("demo_session_id", "B", domain="demo.test", path="/")
+    h.client.cookies.set("demo_csrftoken", "B-1", domain="demo.test", path="/")
+    await start(h, "admin")
+    response = await h.client.get(f"/demo/state?request_id={request_id}")
+    assert response.status_code == 404
+    assert "set-cookie" not in response.headers
+
+
+async def test_prepare_expiry_wins_before_publish_and_late_fail_cannot_overwrite(
+    harness,
+):
+    h = harness
+    h.visitors.clone_continue.clear()
+    request_id = uid()
+    caller = asyncio.create_task(start(h, request_id=request_id))
+    await h.visitors.clone_started.wait()
+    record = h.visitors.records["A"]
+    record.expires_at = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    h.visitors.clone_continue.set()
+    response = await caller
+    assert response.status_code == 410
+    assert record.state == "expired"
+    assert record.current_ref is None
+
+
+@pytest.mark.parametrize(
+    "state,operation,code",
+    [
+        ("preparing", "role", "SESSION_REQUIRED"),
+        ("preparing", "reset", "SESSION_REQUIRED"),
+        ("prepare_failed", "role", "PREPARE_FAILED"),
+        ("prepare_failed", "reset", "PREPARE_FAILED"),
+        ("resetting", "start", "RESET_IN_PROGRESS"),
+        ("resetting", "role", "RESET_IN_PROGRESS"),
+        ("resetting", "reset", "RESET_IN_PROGRESS"),
+        ("reset_failed", "start", "RESET_FAILED"),
+        ("reset_failed", "role", "RESET_FAILED"),
+    ],
+)
+async def test_new_operation_state_matrix_never_creates_work(
+    harness, state, operation, code
+):
+    h = harness
+    await start(h, "admin")
+    await h.client.get("/demo/state")
+    record = h.visitors.records["A"]
+    record.state = state
+    if state == "preparing":
+        record.operation = SimpleNamespace(request_id=uid())
+    if operation == "start":
+        response = await start(h)
+    elif operation == "reset":
+        response = await reset(h)
+    else:
+        response = await h.client.post(
+            "/demo/role",
+            json={
+                "request_id": uid(),
+                "role": "teacher",
+                "expected_generation": 1,
+                "expected_auth_epoch": 1,
+            },
+            headers=headers(h.client),
+        )
+    assert response.json()["detail"]["code"] == f"DEMO_{code}"
+    assert "set-cookie" not in response.headers
+    assert h.visitors.clones == 1
+
+
+@pytest.mark.parametrize("confirm", [False, None, "true", 1])
+async def test_reset_requires_literal_true(harness, confirm):
+    response = await reset(harness, confirm=confirm)
+    assert response.status_code == 422
+    assert not harness.security.contexts
+
+
+async def test_shutdown_during_start_admission_does_not_launch_late_task(
+    harness,
+):
+    h = harness
+    entered, release = asyncio.Event(), asyncio.Event()
+    reserve = h.visitors.reserve_start
+
+    async def delayed(*args):
+        result = await reserve(*args)
+        entered.set()
+        await release.wait()
+        return result
+
+    h.visitors.reserve_start = delayed
+    caller = asyncio.create_task(start(h))
+    await entered.wait()
+    await h.session.shutdown()
+    release.set()
+    response = await caller
+    assert response.status_code == 503
+    assert h.visitors.clones == 0
+    assert not h.session._tasks
+    assert h.visitors.records["A"].state == "prepare_failed"
+
+
+async def test_shutdown_during_reset_context_does_not_mark_or_leak_lease(
+    harness,
+):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    entered, release = asyncio.Event(), asyncio.Event()
+    context = h.security.context
+
+    async def delayed(*args):
+        result = await context(*args)
+        entered.set()
+        await release.wait()
+        return result
+
+    h.security.context = delayed
+    caller = asyncio.create_task(reset(h))
+    await entered.wait()
+    await h.session.shutdown()
+    release.set()
+    response = await caller
+    assert response.status_code == 503
+    assert h.visitors.records["A"].generation == 1
+    assert h.visitors.records["A"].active_leases == 0
+    assert h.visitors.clones == 1
+    assert not h.session._tasks
+
+
+async def test_role_sqlite_locked_failure_replays_retry_after(harness):
+    h = harness
+    await start(h, "admin")
+    await h.client.get("/demo/state")
+    request_id = uid()
+    command = {
+        "request_id": request_id,
+        "role": "teacher",
+        "expected_generation": 1,
+        "expected_auth_epoch": 1,
+    }
+    async with h.engine.connect() as locker:
+        await locker.exec_driver_sql("BEGIN EXCLUSIVE")
+        response = await h.client.post(
+            "/demo/role", json=command, headers=headers(h.client)
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"]["code"] == "DEMO_DB_LOCKED"
+        assert response.headers["retry-after"] == "1"
+        await locker.rollback()
+    response = await h.client.post(
+        "/demo/role", json=command, headers=headers(h.client)
+    )
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "1"
+    assert h.visitors.records["A"].auth_epoch == 1
+
+
+async def test_operation_failure_receipt_preserves_dynamic_retry_after(harness):
+    h = harness
+    h.visitors.clone_error = DemoError("CLEANUP_BACKLOG", retry_after=23)
+    request_id = uid()
+    response = await start(h, request_id=request_id)
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "23"
+    await h.client.get("/demo/state")
+    response = await h.client.get(f"/demo/state?request_id={request_id}")
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "23"
+    assert h.visitors.clones == 1
+
+
+async def test_busy_precedes_deleted_target_and_noop_keeps_revision(harness):
+    h = harness
+    await start(h, "admin")
+    await h.client.get("/demo/state")
+    record = h.visitors.records["A"]
+    revision = record.csrf_revision
+    async with h.factory() as db:
+        await db.execute(text('DELETE FROM "user" WHERE id=2'))
+        await db.commit()
+    h.lifecycle.busy = True
+    command = {
+        "request_id": uid(),
+        "role": "teacher",
+        "expected_generation": 1,
+        "expected_auth_epoch": 1,
+    }
+    response = await h.client.post(
+        "/demo/role", json=command, headers=headers(h.client)
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "DEMO_BUSY"
+    response = await h.client.post(
+        "/demo/role",
+        json={**command, "request_id": uid(), "role": "admin"},
+        headers=headers(h.client),
+    )
+    assert response.status_code == 200
+    assert record.csrf_revision == revision
+    assert record.auth_epoch == 1
+
+
+async def test_reset_rolls_back_pending_request_transaction_and_duplicate_release_is_noop(
+    harness,
+):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    context = h.security.context
+
+    async def pending(*args):
+        ctx = await context(*args)
+        await ctx.db.execute(
+            text("INSERT INTO \"user\" VALUES (99, 'teacher')")
+        )
+        return ctx
+
+    h.security.context = pending
+    response = await reset(h)
+    assert response.status_code == 200
+    async with h.factory() as db:
+        assert (
+            await db.scalar(text('SELECT id FROM "user" WHERE id=99')) is None
+        )
+    released = h.visitors.calls.count("release_lease")
+    await h.request_db.release_request_db(h.security.contexts[-1])
+    assert h.visitors.calls.count("release_lease") == released
+
+
+@pytest.mark.parametrize("form", [False, True])
+@pytest.mark.parametrize("operation", ["role", "reset"])
+@pytest.mark.parametrize("invalid", ["extra", "uuid", "generation", "epoch"])
+async def test_control_json_form_validation_before_lookup(
+    harness, form, operation, invalid
+):
+    h = harness
+    body = {
+        "request_id": uid(),
+        "expected_generation": 1,
+        "expected_auth_epoch": 1,
+        **(
+            {"role": "teacher"}
+            if operation == "role"
+            else {"confirm": "true" if form else True}
+        ),
+    }
+    if invalid == "extra":
+        body["user_id"] = 99
+    elif invalid == "uuid":
+        body["request_id"] = "ABC"
+    elif invalid == "generation":
+        body["expected_generation"] = "true" if form else True
+    else:
+        body["expected_auth_epoch"] = -1
+    response = await h.client.post(
+        f"/demo/{operation}",
+        headers=headers(h.client),
+        **({"data": body} if form else {"json": body}),
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "DEMO_INVALID_REQUEST"
+    assert "set-cookie" not in response.headers
+    assert not h.visitors.records
+    assert not h.security.contexts
+
+
+async def test_reset_form_true_and_missing_confirmation(harness):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    body = {
+        "request_id": uid(),
+        "expected_generation": 1,
+        "expected_auth_epoch": 1,
+    }
+    missing = await h.client.post(
+        "/demo/reset", data=body, headers=headers(h.client)
+    )
+    assert missing.status_code == 422
+    response = await h.client.post(
+        "/demo/reset",
+        data={**body, "confirm": "true"},
+        headers=headers(h.client),
+    )
+    assert response.status_code == 200
+    assert response.json()["generation"] == 2

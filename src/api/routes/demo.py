@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.demo.session import (
     ERRORS,
+    ControlContext,
     ControlResult,
     DemoContext,
     DemoError,
@@ -42,7 +43,9 @@ class DemoSecurity(Protocol):
         """Verify origin, double-submit signature/nonce/current revision."""
         ...
 
-    async def cookies(self, bootstrap: object) -> CookieValues: ...
+    async def cookies(self, bootstrap: object) -> CookieValues:
+        """Signed current revision; Secure=false only for validated loopback dev."""
+        ...
 
     async def context(
         self,
@@ -50,7 +53,7 @@ class DemoSecurity(Protocol):
         bootstrap: object,
         expected_generation: int | None,
         expected_auth_epoch: int | None,
-    ) -> DemoContext:
+    ) -> DemoContext | ControlContext:
         """Acquire a verified lease, or DB-free ControlContext for reset_failed."""
         ...
 
@@ -199,7 +202,7 @@ async def demo_entry(
         '<label for="demo-role">Choose a role</label>'
         '<select id="demo-role"><option value="teacher">Teacher</option>'
         '<option value="admin">Administrator</option></select>'
-        "<p>Start your demo using POST /demo/start.</p></main></html>"
+        "<p>Choose a role to explore the prepared demo.</p></main></html>"
     )
     return await synchronized(response, security, bootstrap)
 
@@ -224,7 +227,12 @@ async def demo_state(
     include = params.get("include_tour", "false")
     if include not in ("true", "false"):
         raise DemoError("INVALID_REQUEST")
-    result = await session.state(bootstrap, request_id)
+    result = await session.state(
+        bootstrap,
+        request_id,
+        include_tour=include == "true",
+        context=lambda: security.context(request, bootstrap, None, None),
+    )
     response = control_response(result)
     if request_id is None:
         return await synchronized(response, security, bootstrap)

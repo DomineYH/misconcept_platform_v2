@@ -790,3 +790,27 @@ async def test_shutdown_consumes_finished_cleanup_without_waiting_for_queued_don
     stop = module.stop_analyses if kind == "analysis" else module.stop_probes
     await stop()
     assert not module.cleanup_tasks
+
+
+@pytest.mark.parametrize("missing", ["context", "namespace", "lease", "epoch"])
+async def test_missing_demo_context_fields_are_invalid_requests(missing):
+    from types import SimpleNamespace
+
+    fields = dict(
+        app_mode="demo",
+        visitor_id=uuid4(),
+        generation=1,
+        auth_epoch=1,
+        lease=object(),
+    )
+    if missing == "namespace":
+        fields.pop("visitor_id")
+    elif missing in {"lease", "epoch"}:
+        fields.pop("lease" if missing == "lease" else "auth_epoch")
+    ctx = None if missing == "context" else SimpleNamespace(**fields)
+    with pytest.raises(HTTPException) as error:
+        await Lifecycle().register(
+            ctx, "run", "id", TaskControl(lambda: None, asyncio.Event())
+        )
+    assert error.value.status_code == 422
+    assert error.value.detail["code"] == "DEMO_INVALID_REQUEST"

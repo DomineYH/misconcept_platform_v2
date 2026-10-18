@@ -205,7 +205,7 @@ session_id,scenario_id,scenario_title,teacher_id,teacher_username,teacher_nickna
 
 ## 12. 검토 기록
 
-상태: **독립 검토 완료, maintainer 승인 pending**. 초안 제출과 독립 검토 통과는 교육 내용 승인이나 이슈 완료를 뜻하지 않는다.
+상태: **독립 검토 완료, 교육 내용 승인 완료**. 승인은 교육 내용에만 한정한다. 구현 착수·G0 승인은 별도이며, 실제 동작·약 5분 체험 시간·방문객 격리·reset 안전성·외부 AI 호출 차단은 후속 실행 검증이 필요하다.
 
 | 항목 | 상태·기록 |
 | --- | --- |
@@ -214,6 +214,6 @@ session_id,scenario_id,scenario_title,teacher_id,teacher_username,teacher_nickna
 | 지적 사항과 반영한 수정 | 지적 사항 없음. 수정 없음 |
 | 검토 대상 전체 SHA | `2f2474a78e03bc476c1f29f0424598d2c095ee9c` (이 표를 채운 커밋은 §12 기록만 바꾼다) |
 | 교육 내용 검토 및 최종 승인자 | @DomineYH |
-| @DomineYH 승인 여부·근거 참조 | pending |
+| @DomineYH 승인 여부·근거 참조 | **승인** (2026-10-18). 대상: 문서 버전 `d0-02-v1`, 커밋 `84c2fe4cc9e0af0b1c7b77ff22accc20793d93bb`. 근거: [#189 댓글](https://github.com/DomineYH/misconcept_platform_v2/issues/189#issuecomment-6249579919), [PR #210 댓글](https://github.com/DomineYH/misconcept_platform_v2/pull/210#issuecomment-6249579454). 승인 뒤 커밋은 이 §12 기록만 바꾼다 |
 
 검토는 같은 전체·등분 조건이 모든 문장에 유지되는지, 준비된 표현 변화를 실제 학습 효과로 단정하지 않는지, 내부 근거 비공개·실제 메시지 인용·삭제/CSV 의미가 지켜지는지 확인한다. 독립 검토가 끝나도 maintainer 승인 전 교육 내용 승인을 표시하지 않는다.

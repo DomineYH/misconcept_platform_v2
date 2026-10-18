@@ -680,3 +680,96 @@ async def test_cancelled_after_rename_keeps_operation_when_candidate_cleanup_is_
         if task is not None:
             await asyncio.gather(task, return_exceptions=True)
         root.close()
+
+
+async def test_seed_rejects_normal_database_filename_even_with_demo_metadata(
+    tmp_path,
+):
+    from dataclasses import replace
+
+    root = await make_root(tmp_path)
+    spec = root._seed
+    renamed = spec.path.with_name("dialogue_sim.db")
+    spec.path.rename(renamed)
+    try:
+        with pytest.raises(DemoError, match="DEMO_CONFIGURATION_INVALID"):
+            root.validate_seed(replace(spec, path=renamed))
+    finally:
+        root.close()
+
+
+@pytest.mark.parametrize("path", [None, True, 1.0, -1, "relative/demo"])
+def test_root_configuration_rejects_missing_or_non_absolute_path(path):
+    with pytest.raises(DemoError, match="DEMO_CONFIGURATION_INVALID"):
+        DatabaseRoot(path).open()
+
+
+@pytest.mark.parametrize(
+    "mutation,code",
+    [
+        ("unknown", "VERSION_MISMATCH"),
+        ("duplicate", "VERSION_MISMATCH"),
+        ("escape", "VERSION_MISMATCH"),
+        ("file_hash", "VERSION_MISMATCH"),
+        ("history", "VERSION_MISMATCH"),
+        ("metadata_rows", "VERSION_MISMATCH"),
+        ("seed_generation", "VERSION_MISMATCH"),
+        ("key_material", "CONFIGURATION_INVALID"),
+        ("external_model", "CONFIGURATION_INVALID"),
+    ],
+)
+async def test_seed_validation_rejects_manifest_metadata_and_provider_tampering(
+    tmp_path, mutation, code
+):
+    import hashlib
+    import json
+    import sqlite3
+
+    root = await make_root(tmp_path)
+    spec = root._seed
+    manifest = json.loads(spec.manifest_path.read_bytes())
+    if mutation == "unknown":
+        manifest["unexpected"] = True
+    if mutation == "escape":
+        manifest["files"] = [
+            dict(path="../escape.json", sha256="a" * 64, kind="student")
+        ]
+    if mutation == "file_hash":
+        (root.path / "sample.json").write_text("{}")
+        manifest["files"] = [
+            dict(path="sample.json", sha256="a" * 64, kind="student")
+        ]
+    serialized = json.dumps(manifest)
+    if mutation == "duplicate":
+        serialized = serialized[:-1] + ',"manifest_version":1}'
+    spec.manifest_path.write_text(serialized)
+    with sqlite3.connect(spec.path) as db:
+        db.execute(
+            "UPDATE demo_metadata SET manifest_sha256=?",
+            (hashlib.sha256(spec.manifest_path.read_bytes()).hexdigest(),),
+        )
+        if mutation == "history":
+            db.execute(
+                "DELETE FROM _migrations WHERE filename='unit_demo_metadata.sql'"
+            )
+        if mutation == "metadata_rows":
+            db.execute(
+                "INSERT INTO demo_metadata(id,kind) VALUES(2,'demo_seed')"
+            )
+        if mutation == "seed_generation":
+            db.execute("UPDATE demo_metadata SET generation=1")
+        if mutation == "key_material":
+            db.execute(
+                "UPDATE provider_connection SET encrypted_key=?,nonce=?,encryption_key_version='fictional',masked_hint='test' WHERE id=1",
+                (b"fictional-key-bytes", b"fictional-12"),
+            )
+        if mutation == "external_model":
+            db.execute(
+                "INSERT INTO model_config(provider_connection_id,model_id,display_name) VALUES (1,'fictional-external','fictional external')"
+            )
+    try:
+        with pytest.raises(DemoError, match="DEMO_" + code):
+            root.validate_seed(spec)
+        assert not list(root.path.glob("*.staging"))
+    finally:
+        root.close()

@@ -13,11 +13,13 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
+from weakref import WeakValueDictionary
 
 from src.demo.database import DatabaseRoot, DemoError, GenerationRef
 
 Role = Literal["admin", "teacher"]
 Scope = tuple[str, int]
+_USER_CHECKED_BY_CALLER = object()
 VisitStatus = Literal[
     "preparing",
     "prepare_failed",
@@ -251,7 +253,7 @@ class VisitorState:
 
 @dataclass
 class _Retired:
-    verified: VerifiedVisitor
+    verified: VerifiedVisitor | None
     ref: GenerationRef
     scope: Scope
     state: str = "queued"
@@ -274,7 +276,7 @@ def _uuid(value):
         parsed = UUID(value)
     except (ValueError, AttributeError):
         raise DemoError("INVALID_REQUEST") from None
-    if parsed.version != 4 or str(parsed) != value:
+    if str(parsed) != value:
         raise DemoError("INVALID_REQUEST")
     return value
 
@@ -309,11 +311,15 @@ class VisitorRegistry:
         ):
             raise DemoError("CONFIGURATION_INVALID")
         root.max_db_bytes = self.settings.max_db_bytes
+        if root.seed_manifest_sha256 is None:
+            raise DemoError("CONFIGURATION_INVALID")
         self.clock = clock or SystemClock()
         self.lifecycle = lifecycle
         self._authority = object()
         self._admission = asyncio.Lock()
-        self._bootstraps: dict[str, VerifiedBootstrap] = {}
+        self._bootstraps = WeakValueDictionary()
+        self._bootstrap_seen: dict[str, float] = {}
+        self._issued_leases = WeakValueDictionary()
         self._index: dict[str, VerifiedVisitor] = {}
         self._states: dict[str, VisitorState] = {}
         self._retired: dict[int, _Retired] = {}
@@ -322,10 +328,30 @@ class VisitorRegistry:
         self._cancelled: set[str] = set()
         self._cleanup_lock = asyncio.Lock()
         self._closing = False
+        for ref in root.orphan_refs():
+            self._retired[id(ref)] = _Retired(
+                None, ref, (ref.visitor_id, ref.generation), needs_drain=False
+            )
 
     @property
     def reserved_visitors(self):
-        return sum(state.slot_reserved for state in self._states.values())
+        return sum(
+            state.slot_reserved for state in self._states.values()
+        ) + len(
+            {
+                item.ref.visitor_id
+                for item in self._retired.values()
+                if item.verified is None
+            }
+        )
+
+    @property
+    def reserved_bytes(self):
+        return sum(self._reservations.values())
+
+    @property
+    def pending_cleanup_count(self):
+        return len(self._retired) + len(self.root.pending_operations)
 
     def verify_bootstrap(self, bootstrap_nonce: str) -> VerifiedBootstrap:
         """Trusted bridge called only after #193 verifies the signed bootstrap."""
@@ -335,6 +361,8 @@ class VisitorRegistry:
             or not bootstrap_nonce.isascii()
         ):
             raise DemoError("INVALID_REQUEST")
+        if bootstrap_nonce in self._index:
+            self._bootstrap_seen[bootstrap_nonce] = self.clock.monotonic()
         return self._bootstraps.setdefault(
             bootstrap_nonce, VerifiedBootstrap(bootstrap_nonce, self._authority)
         )
@@ -392,7 +420,14 @@ class VisitorRegistry:
 
     def _error(self, state, code):
         return DemoError(
-            code, generation=state.generation, auth_epoch=state.auth_epoch
+            code,
+            generation=state.generation,
+            auth_epoch=state.auth_epoch,
+            retry_after=(
+                self.settings.cleanup_interval_seconds
+                if code.removeprefix("DEMO_") == "CLEANUP_BACKLOG"
+                else None
+            ),
         )
 
     def _state_check(self, state, generation=None, epoch=None, scope=None):
@@ -438,6 +473,7 @@ class VisitorRegistry:
         if state.state in ("expired", "closing"):
             return None
         scope = (state.verified.visitor_id, state.generation)
+        unfinished = state.state in ("preparing", "resetting")
         self._retire(state.verified, state.ref)
         state.ref = None
         if state.operation is not None:
@@ -446,19 +482,25 @@ class VisitorRegistry:
         state.generation += 1
         state.auth_epoch += 1
         state.role = None
+        if unfinished and state.operation is not None:
+            receipt = state.receipts[state.operation.request_id]
+            receipt.error_code = "DEMO_EXPIRED"
+            receipt.snapshot = self._snapshot(state)
         state.changed.set()
         return scope
 
     def _backlog(self):
-        if len(self._retired) >= self.settings.max_retired_generations:
+        if self.pending_cleanup_count >= self.settings.max_retired_generations:
             raise DemoError(
                 "CLEANUP_BACKLOG",
                 retry_after=self.settings.cleanup_interval_seconds,
             )
 
-    def _budget(self, *, additional=0, ref=None):
+    def _budget(self, *, additional=0, ref=None, writing=False):
         if ref is not None and (
-            self.root.generation_bytes(ref) > self.settings.max_db_bytes
+            self.root.generation_bytes(ref)
+            + (ref.factory.write_headroom_bytes if writing else 0)
+            > self.settings.max_db_bytes
         ):
             raise DemoError("STORAGE_LIMIT")
         if (
@@ -545,6 +587,30 @@ class VisitorRegistry:
             if self._closing:
                 raise DemoError("EXPIRED")
             verified = self._index.get(verified_bootstrap.bootstrap_nonce)
+            for previous in self._states.values():
+                if (
+                    previous.verified is verified
+                    or previous.bootstrap is not verified_bootstrap
+                ):
+                    continue
+                if (
+                    self.clock.monotonic()
+                    >= previous.created_mono
+                    + self.settings.absolute_ttl_seconds
+                ):
+                    continue
+                receipt = self._receipt(previous, request_id, "start", (role,))
+                if receipt is not None:
+                    if verified is None:
+                        raise self._error(previous, "EXPIRED")
+                    async with self.transition(verified) as handle:
+                        current = handle._state
+                        if self._due(current):
+                            handle.expire("ttl")
+                        if current.state in ("expired", "closing"):
+                            raise self._error(current, "EXPIRED")
+                        result = self._result(current, receipt=receipt)
+                        return replace(result, historical=True)
             if verified is not None:
                 async with self.transition(verified) as handle:
                     state = handle._state
@@ -600,6 +666,7 @@ class VisitorRegistry:
             self._new_op(state, request_id, "start", (role,))
             self._states[visitor_id] = state
             self._index[verified_bootstrap.bootstrap_nonce] = verified
+            self._bootstrap_seen[verified_bootstrap.bootstrap_nonce] = mono
             return self._result(state, leader=True)
 
     @asynccontextmanager
@@ -650,6 +717,12 @@ class VisitorRegistry:
     async def release_lease(self, lease, *, app_mode="demo"):
         if lease is None and app_mode == "normal":
             return None
+        if (
+            isinstance(lease, Lease)
+            and self._issued_leases.get(lease.lease_id) is lease
+            and lease.released
+        ):
+            return False
         state = self._lease_state(lease)
         async with self.transition(state.verified) as handle:
             return handle.release_lease(lease)
@@ -658,7 +731,10 @@ class VisitorRegistry:
         if not isinstance(lease, Lease):
             raise DemoError("INVALID_REQUEST")
         state = self._states.get(lease.visitor_id)
-        if state is None or state.leases.get(lease.lease_id) is not lease:
+        if (
+            state is None
+            or self._issued_leases.get(lease.lease_id) is not lease
+        ):
             raise DemoError("INVALID_REQUEST")
         return state
 
@@ -703,7 +779,9 @@ class VisitorRegistry:
             handle.check(ctx)
             reservation_id = str(uuid4())
             self._budget(
-                ref=handle._state.ref, additional=self.settings.max_db_bytes
+                ref=handle._state.ref,
+                additional=self.settings.max_db_bytes,
+                writing=True,
             )
             self._reservations[reservation_id] = self.settings.max_db_bytes
             handle._write_ctx = ctx
@@ -728,7 +806,7 @@ class VisitorRegistry:
         ):
             raise self._error(state, "STALE_GENERATION")
         handle.check(handle._write_ctx)
-        self._budget(ref=ref)
+        self._budget(ref=ref, writing=True)
 
     async def reset_visit(self, ctx, request_id):
         verified = (
@@ -859,7 +937,8 @@ class VisitorRegistry:
             raise
         except Exception:
             async with self.transition(state.verified):
-                self._reservations.pop(op.op_id, None)
+                if op.op_id not in self.root.pending_operations:
+                    self._reservations.pop(op.op_id, None)
             raise
         async with self.transition(state.verified) as handle:
             builder.candidate = candidate
@@ -920,7 +999,8 @@ class VisitorRegistry:
         if candidate is not None and candidate is not state.ref:
             builder.candidate = candidate
             self._retire(state.verified, candidate, needs_drain=False)
-        self._reservations.pop(op.op_id, None)
+        if op.op_id not in self.root.pending_operations:
+            self._reservations.pop(op.op_id, None)
         if cancelled:
             raise asyncio.CancelledError
 
@@ -935,14 +1015,16 @@ class VisitorRegistry:
             candidate = await self.prepare(op)
             async with self.transition(reservation.verified_visitor) as handle:
                 snapshot = handle.publish(op, candidate)
-            return replace(reservation, snapshot=snapshot, leader=False)
+            return replace(reservation, snapshot=snapshot)
         except Exception as error:
             code = (
                 error.code if isinstance(error, DemoError) else "PREPARE_FAILED"
             )
             async with self.transition(reservation.verified_visitor) as handle:
                 handle.fail(op, code)
-            raise DemoError(code) from None
+            raise self._error(
+                self._state(reservation.verified_visitor), code
+            ) from None
 
     async def drain_retired(self, scope):
         self.lifecycle.cancel_scope(scope)
@@ -958,16 +1040,25 @@ class VisitorRegistry:
 
     async def cleanup_retired(self):
         async with self._cleanup_lock:
-            codes = []
-            removed = 0
+            pending_result = await self.root.cleanup_pending()
+            codes = list(pending_result["codes"])
+            removed = pending_result["removed"]
+            for op_id, builder in self._builders.items():
+                if (
+                    builder.task.done()
+                    and op_id not in self.root.pending_operations
+                ):
+                    if builder.cancelled or builder.candidate is None:
+                        self._reservations.pop(op_id, None)
             for key, retired in list(self._retired.items()):
                 retired.state = "draining"
                 try:
                     if retired.needs_drain:
                         await self.drain_retired(retired.scope)
-                    async with self.transition(retired.verified):
-                        if self.lease_count(retired.scope):
-                            raise DemoError("DRAIN_TIMEOUT")
+                    if retired.verified is not None and retired.needs_drain:
+                        async with self.transition(retired.verified):
+                            if self.lease_count(retired.scope):
+                                raise DemoError("DRAIN_TIMEOUT")
                     # Retired generations cannot acquire a new lease after this check.
                     if not await self.root.cleanup(retired.ref):
                         raise DemoError("DB_LOCKED")
@@ -992,7 +1083,10 @@ class VisitorRegistry:
                     for item in self._retired.values()
                 ) or any(
                     builder.op.visitor_id == state.verified.visitor_id
-                    and not builder.task.done()
+                    and (
+                        not builder.task.done()
+                        or builder.op.op_id in self._reservations
+                    )
                     for builder in self._builders.values()
                 )
                 if (
@@ -1007,7 +1101,42 @@ class VisitorRegistry:
                     )
                 ):
                     state.slot_reserved = False
-            return CleanupResult(removed, len(self._retired), tuple(codes))
+            self._prune()
+            return CleanupResult(
+                removed,
+                len(self._retired) + pending_result["pending"],
+                tuple(codes),
+            )
+
+    def _prune(self):
+        now = self.clock.monotonic()
+        for visitor_id, state in list(self._states.items()):
+            if (
+                state.slot_reserved
+                or now < state.created_mono + self.settings.absolute_ttl_seconds
+            ):
+                continue
+            self._states.pop(visitor_id)
+            for receipt in state.receipts.values():
+                if receipt.snapshot.operation is not None:
+                    self._cancelled.discard(receipt.snapshot.operation.op_id)
+            nonce = state.bootstrap.bootstrap_nonce
+            if self._index.get(nonce) is state.verified:
+                self._index.pop(nonce)
+            for op_id, builder in list(self._builders.items()):
+                if builder.op.visitor_id == visitor_id and builder.task.done():
+                    self._builders.pop(op_id)
+                    self._cancelled.discard(op_id)
+        active = {
+            state.bootstrap.bootstrap_nonce for state in self._states.values()
+        }
+        for nonce, seen in list(self._bootstrap_seen.items()):
+            if (
+                nonce not in active
+                and now >= seen + self.settings.absolute_ttl_seconds
+            ):
+                self._bootstrap_seen.pop(nonce)
+                self._bootstraps.pop(nonce, None)
 
     async def cleanup_tick(self):
         for state in list(self._states.values()):
@@ -1091,6 +1220,7 @@ class TransitionHandle:
             ref,
         )
         self._state.leases[lease.lease_id] = lease
+        self._registry._issued_leases[lease.lease_id] = lease
         return lease
 
     def acquire_lease(self, ref, expected_auth_epoch):
@@ -1121,7 +1251,9 @@ class TransitionHandle:
         if lease.released:
             return False
         object.__setattr__(lease, "_released", True)
-        self._state.changed.set()
+        self._state.leases.pop(lease.lease_id, None)
+        if not self._registry.lease_count((lease.visitor_id, lease.generation)):
+            self._state.changed.set()
         return True
 
     def context(self, lease, *, user_id):
@@ -1245,6 +1377,7 @@ class TransitionHandle:
         except DemoError:
             if (
                 registry.root.owns(candidate_ref)
+                and candidate_ref.visitor_id == state.verified.visitor_id
                 and candidate_ref is not state.ref
             ):
                 registry._retire(
@@ -1267,6 +1400,8 @@ class TransitionHandle:
     def fail(self, op, code):
         self._require()
         registry, state = self._registry, self._state
+        if registry._due(state):
+            self.expire("ttl")
         if not registry._valid_op(state, op):
             return False
         error = registry._error(state, code)
@@ -1280,7 +1415,9 @@ class TransitionHandle:
         receipt.error_code = error.code
         receipt.snapshot = self.snapshot()
         builder = registry._builders.get(op.op_id)
-        if builder is None or builder.task.done():
+        if (
+            builder is None or builder.task.done()
+        ) and op.op_id not in registry.root.pending_operations:
             if builder is not None and builder.candidate is not None:
                 registry._retire(
                     state.verified, builder.candidate, needs_drain=False
@@ -1292,24 +1429,55 @@ class TransitionHandle:
         self._require()
         return self._registry._expire(self._state, reason)
 
-    def change_role(self, ctx, role, busy, *, user_id=None):
+    def change_role(
+        self,
+        ctx,
+        role,
+        busy,
+        *,
+        user_id=_USER_CHECKED_BY_CALLER,
+        request_id=None,
+    ):
         """#193 checks both current and target User under this same handle."""
-        self.check(ctx)
+        self._require()
         _role(role)
+        state, registry = self._state, self._registry
+        if (
+            not isinstance(ctx, DemoContext)
+            or ctx.verified_visitor is not state.verified
+        ):
+            raise DemoError("INVALID_REQUEST")
+        if registry._due(state):
+            self.expire("ttl")
+        if state.state in ("expired", "closing"):
+            raise registry._error(state, "EXPIRED")
+        body = (ctx.generation, ctx.auth_epoch, role)
+        if request_id is not None:
+            _uuid(request_id)
+            receipt = registry._receipt(state, request_id, "role", body)
+            if receipt:
+                if receipt.error_code:
+                    raise registry._error(state, receipt.error_code)
+                return receipt.snapshot
+        self.check(ctx)
         if type(busy) is not bool:
             raise DemoError("INVALID_REQUEST")
-        state = self._state
-        if role == state.role:
-            return self.snapshot()
-        if busy:
-            raise self._registry._error(state, "BUSY")
-        if user_id is None:
-            raise self._registry._error(state, "ROLE_DELETED")
-        _positive_int(user_id)
-        state.role = role
-        state.auth_epoch += 1
-        state.csrf_revision += 1
-        return self.snapshot()
+        if request_id is not None and len(state.receipts) >= 256:
+            raise registry._error(state, "LIMIT_REACHED")
+        if role != state.role:
+            if busy:
+                raise registry._error(state, "BUSY")
+            if user_id is None:
+                raise registry._error(state, "ROLE_DELETED")
+            if user_id is not _USER_CHECKED_BY_CALLER:
+                _positive_int(user_id)
+            state.role = role
+            state.auth_epoch += 1
+            state.csrf_revision += 1
+        snapshot = self.snapshot()
+        if request_id is not None:
+            state.receipts[request_id] = _Receipt("role", body, snapshot)
+        return snapshot
 
 
 # The same operations can be imported and injected without a global registry.

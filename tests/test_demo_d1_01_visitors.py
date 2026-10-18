@@ -288,7 +288,7 @@ async def test_role_change_and_raw_factory_writes_share_guard_authority(
         with pytest.raises(DemoError, match="DEMO_BUSY"):
             handle.change_role(ctx, "teacher", True, user_id=2)
         with pytest.raises(DemoError, match="DEMO_ROLE_DELETED"):
-            handle.change_role(ctx, "teacher", False)
+            handle.change_role(ctx, "teacher", False, user_id=None)
         changed = handle.change_role(ctx, "teacher", False, user_id=2)
         assert (changed.auth_epoch, changed.csrf_revision) == (2, 2)
         with pytest.raises(DemoError, match="DEMO_STALE_ROLE"):
@@ -303,3 +303,96 @@ async def test_role_change_and_raw_factory_writes_share_guard_authority(
             await db.execute(text("SELECT body FROM synthetic_record"))
         ).scalar_one() == "fictional"
     await visitors.release_lease(ctx.lease)
+
+
+async def test_registry_retain_rolls_back_on_failed_or_duplicate_registration(
+    visitors,
+):
+    _, ready, ctx = await ready_context(visitors)
+    tokens = {}
+
+    async def register(key, *, fail=False):
+        async with visitors.transition(ready.verified_visitor) as handle:
+            handle.check(ctx)
+            if key in tokens:
+                raise DemoError("BUSY")
+            child = handle.retain_lease(ctx.lease)
+            try:
+                if fail:
+                    raise RuntimeError("test registration failure")
+                tokens[key] = child
+            except Exception:
+                handle.release_lease(child)
+                raise
+            return child
+
+    with pytest.raises(RuntimeError, match="test registration failure"):
+        await register("run", fail=True)
+    assert visitors.lease_count(ctx.scope) == 1
+    child = await register("run")
+    assert len(tokens) == 1
+    assert visitors.lease_count(ctx.scope) == 2
+    with pytest.raises(DemoError, match="DEMO_BUSY"):
+        await register("run")
+    assert visitors.lease_count(ctx.scope) == 2
+    async with visitors.transition(ready.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_BUSY"):
+            handle.change_role(ctx, "teacher", bool(tokens), user_id=2)
+        handle.release_lease(child)
+        tokens.clear()
+        handle.change_role(ctx, "teacher", bool(tokens), user_id=2)
+    with pytest.raises(DemoError, match="DEMO_STALE_ROLE"):
+        await register("new")
+    assert visitors.lease_count(ctx.scope) == 1
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_guard_serializes_crud_commit_before_role_change(visitors):
+    import asyncio
+
+    from sqlalchemy import text
+
+    _, ready, ctx = await ready_context(visitors)
+    acquired = asyncio.Event()
+    role_started = asyncio.Event()
+    commit_allowed = asyncio.Event()
+    order = []
+
+    async def write():
+        async with ctx.factory() as db:
+            async with visitors.write_guard(ctx):
+                acquired.set()
+                await commit_allowed.wait()
+                await db.execute(
+                    text("UPDATE synthetic_record SET body='saved by admin'")
+                )
+                await db.commit()
+                order.append("commit")
+
+    async def role():
+        await acquired.wait()
+        role_started.set()
+        async with visitors.transition(ready.verified_visitor) as handle:
+            handle.change_role(ctx, "teacher", False, user_id=2)
+            order.append("role")
+
+    writer = asyncio.create_task(write())
+    change = asyncio.create_task(role())
+    await role_started.wait()
+    commit_allowed.set()
+    await asyncio.gather(writer, change)
+    assert order == ["commit", "role"]
+    async with ctx.factory() as db:
+        assert (
+            await db.execute(text("SELECT body FROM synthetic_record"))
+        ).scalar_one() == "saved by admin"
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_start_request_ids_accept_canonical_uuid_versions(visitors):
+    from uuid import NAMESPACE_URL, uuid5
+
+    bootstrap = visitors.verify_bootstrap("canonical-uuid-request-bootstrap0")
+    request_id = str(uuid5(NAMESPACE_URL, "fictional-demo-start"))
+    result = await visitors.reserve_start(bootstrap, request_id, "teacher")
+    assert result.operation.request_id == request_id

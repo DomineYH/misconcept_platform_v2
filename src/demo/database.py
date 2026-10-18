@@ -120,9 +120,12 @@ class DatabaseRoot:
     def __init__(
         self, path, *, initialize=False, forbidden_paths=(), max_db_bytes=None
     ):
-        self.path = Path(path)
+        try:
+            self.path = Path(path)
+            self.forbidden_paths = tuple(Path(p) for p in forbidden_paths)
+        except (ValueError, TypeError):
+            raise DemoError("CONFIGURATION_INVALID") from None
         self.initialize = initialize
-        self.forbidden_paths = tuple(Path(p) for p in forbidden_paths)
         self.max_db_bytes = max_db_bytes
         self._lock = None
         self._refs = {}
@@ -234,7 +237,12 @@ class DatabaseRoot:
         self._check()
         total = 0
         for path in self.path.rglob("*"):
-            info = _plain(path, directory=path.is_dir())
+            try:
+                info = _plain(path, directory=path.is_dir())
+            except DemoError:
+                if not path.exists() and not path.is_symlink():
+                    continue  # A tracked builder may rename its staging file.
+                raise
             if not path.is_dir():
                 total += info.st_size
         return total
@@ -242,6 +250,11 @@ class DatabaseRoot:
     def validate_seed(self, spec):
         self._check()
         try:
+            if spec.path.name == "dialogue_sim.db" or any(
+                forbidden.exists() and os.path.samefile(spec.path, forbidden)
+                for forbidden in self.forbidden_paths
+            ):
+                raise DemoError("CONFIGURATION_INVALID")
             _file_bytes(spec.path)
             manifest = self._manifest(spec)
             with _readonly(spec.path) as db:

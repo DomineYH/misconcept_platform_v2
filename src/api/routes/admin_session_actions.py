@@ -14,7 +14,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
 from src.api.routes.session_helpers import (
@@ -73,7 +73,7 @@ async def end_session(
     result = await db.execute(query)
     session = result.scalar_one_or_none()
 
-    if not session:
+    if not session or session.deleted_at is not None:
         raise session_missing(request)
 
     require_native_session(session, language=display_language(request))
@@ -157,7 +157,6 @@ async def session_detail(
         .options(
             joinedload(Session.scenario),
             joinedload(Session.teacher),
-            selectinload(Session.messages),
         )
         .where(Session.id == session_id)
     )
@@ -166,6 +165,9 @@ async def session_detail(
 
     if not session:
         raise session_missing(request)
+
+    if session.deleted_at is None:
+        await db.refresh(session, ["messages"])
 
     return templates.TemplateResponse(
         "partials/session_detail.html",
@@ -177,7 +179,8 @@ async def session_detail(
                 {
                     "analysis_result_url": f"/admin/sessions/{session_id}/analysis"
                 }
-                if session.ended_at
+                if session.deleted_at is None
+                and session.ended_at
                 and await _load_analysis_response(session_id, db, admin=True)
                 is not None
                 else {}
@@ -205,7 +208,7 @@ async def analysis_modal(
     result = await db.execute(query)
     session = result.scalar_one_or_none()
 
-    if not session:
+    if not session or session.deleted_at is not None:
         raise session_missing(request)
 
     if not session.ended_at:
@@ -254,7 +257,7 @@ async def get_admin_analysis(
     request: Request = None,
 ):
     session = await db.get(Session, session_id)
-    if session is None:
+    if session is None or session.deleted_at is not None:
         raise session_missing(request)
     if not session.ended_at:
         raise HTTPException(

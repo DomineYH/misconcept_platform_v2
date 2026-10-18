@@ -228,7 +228,10 @@ def test_shared_session_row_localizes_actions_and_confirmation():
     )
     assert 'aria-label="Active sessions cannot be downloaded"' in html
     assert 'hx-confirm="End and analyze this session?"' in html
-    assert 'hx-confirm="Delete this session? (Cannot be undone)"' in html
+    assert (
+        'hx-confirm="Delete this conversation? It will be removed from lists and downloads and cannot be undone. The conversation record is retained in the system."'
+        in html
+    )
     assert "원본 제목" in html
 
 

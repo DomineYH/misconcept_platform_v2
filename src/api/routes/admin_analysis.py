@@ -49,6 +49,7 @@ async def analysis_page(
         select(QuestionAnalysis, Message, Session)
         .join(Message, QuestionAnalysis.message_id == Message.id)
         .join(Session, Message.session_id == Session.id)
+        .where(Session.deleted_at.is_(None))
         .order_by(desc(QuestionAnalysis.id))
     )
 
@@ -108,6 +109,7 @@ async def analysis_page(
         select(QuestionAnalysis.label, Session)
         .join(Message, QuestionAnalysis.message_id == Message.id)
         .join(Session, Message.session_id == Session.id)
+        .where(Session.deleted_at.is_(None))
         .distinct()
     )
     label_names = {}
@@ -121,11 +123,17 @@ async def analysis_page(
     # Calculate stats
     avg_conf_result = await db.scalar(
         select(func.avg(QuestionAnalysis.confidence))
+        .join(Message, QuestionAnalysis.message_id == Message.id)
+        .join(Session, Message.session_id == Session.id)
+        .where(Session.deleted_at.is_(None))
     )
 
     # Get most common label
     most_common_result = await db.execute(
         select(QuestionAnalysis.label, func.count(QuestionAnalysis.id))
+        .join(Message, QuestionAnalysis.message_id == Message.id)
+        .join(Session, Message.session_id == Session.id)
+        .where(Session.deleted_at.is_(None))
         .group_by(QuestionAnalysis.label)
         .order_by(desc(func.count(QuestionAnalysis.id)))
         .limit(1)
@@ -188,7 +196,10 @@ async def analysis_detail_modal(
         select(QuestionAnalysis, Message, Session)
         .join(Message, QuestionAnalysis.message_id == Message.id)
         .join(Session, Message.session_id == Session.id)
-        .where(QuestionAnalysis.id == analysis_id)
+        .where(
+            QuestionAnalysis.id == analysis_id,
+            Session.deleted_at.is_(None),
+        )
     )
 
     result = await db.execute(query)

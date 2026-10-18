@@ -124,7 +124,7 @@ export function mountScenarioModel(data, role, label, {select, options, status},
       input.dataset.field = `${select.id}.options.${definition.name}`;
       const errorId = `${input.dataset.field}-error`;
       input.setAttribute('aria-describedby', errorId);
-      options.append(node('p', null, {id:errorId, class:'scenario-error', hidden:''}));
+      input.parentElement.append(node('p', null, {id:errorId, class:'scenario-error', hidden:''}));
       input.addEventListener('input', () => {
         const path = definition.name.split('.');
         let target = selection.options;

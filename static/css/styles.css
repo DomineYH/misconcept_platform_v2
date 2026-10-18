@@ -483,19 +483,45 @@ label {
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--form-label-gap, 0.5rem);
   display: block;
+}
+
+/* Screens opt into density; fieldset and section spacing stays local. */
+.form-density--comfortable,
+.form-density--compact {
+  --form-control-padding-y: calc(var(--spacing-md) * .875);
+  --form-control-padding-x: var(--spacing-md);
+  --form-label-gap: var(--spacing-sm);
+  --form-help-gap: var(--spacing-xs);
+  --form-error-gap: var(--spacing-xs);
+  --form-field-gap: var(--spacing-lg);
+}
+.form-density--compact {
+  --form-control-padding-y: calc(var(--spacing-md) * .6);
+  --form-control-padding-x: calc(var(--spacing-md) * .6);
+  --form-label-gap: var(--spacing-xs);
+  --form-field-gap: var(--spacing-md);
+}
+.filter-bar.form-density--compact,
+.filter-form.form-density--compact,
+#analysis-filter-form.form-density--compact {
+  --form-control-padding-x: var(--spacing-md);
+  --form-control-font-size: var(--font-size-sm);
+  --form-field-gap: var(--spacing-sm);
+  gap: var(--form-field-gap);
 }
 
 input[type="text"],
 input[type="password"],
 input[type="number"],
+:where(.form-density--comfortable, .form-density--compact) input:is(:not([type]), [type="email"], [type="tel"], [type="url"], [type="date"], [type="search"]),
 textarea,
 select {
   width: 100%;
-  padding: 0.875rem 1rem;
+  padding: var(--form-control-padding-y, 0.875rem) var(--form-control-padding-x, 1rem);
   font-family: inherit;
-  font-size: 1rem;
+  font-size: var(--form-control-font-size, 1rem);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--radius-md);
   background-color: var(--color-white);
@@ -523,15 +549,45 @@ textarea {
 }
 
 .form-group {
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--form-field-gap, 1.25rem);
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--form-label-gap, 0.5rem);
   font-weight: 600;
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
+}
+
+:where(.form-density--comfortable, .form-density--compact) :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]), select, textarea) {
+  display: block;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+}
+:where(.form-density--comfortable, .form-density--compact) .form-group small {
+  display: block;
+  margin-top: var(--form-help-gap);
+  overflow-wrap: anywhere;
+}
+:where(.form-density--comfortable, .form-density--compact) .form-group small:empty {
+  display: none;
+}
+:where(.form-density--comfortable, .form-density--compact) :is(input, select, textarea) + [role="status"]:not(:empty) {
+  margin-top: var(--form-help-gap);
+}
+:where(.form-density--comfortable, .form-density--compact) .scenario-error,
+:where(.form-density--comfortable, .form-density--compact) .form-error {
+  margin-top: var(--form-error-gap);
+  overflow-wrap: anywhere;
+}
+:where(.form-density--comfortable, .form-density--compact) label:has(input[type="checkbox"], input[type="radio"]) {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .form-group .required {
@@ -542,6 +598,13 @@ textarea {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+:where(.form-density--comfortable, .form-density--compact) .form-row {
+  row-gap: var(--form-field-gap);
+  margin-bottom: var(--form-field-gap);
+}
+:where(.form-density--comfortable, .form-density--compact) .form-row > .form-group {
+  margin-bottom: 0;
 }
 
 /* Checkbox */
@@ -1515,8 +1578,17 @@ main:has(.split-layout) {
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--form-field-gap, 1.5rem);
   text-align: left;
+}
+
+form:where(.form-density--comfortable, .form-density--compact):has(> .form-group),
+:where(.form-density--comfortable, .form-density--compact) form:has(> .form-group) {
+  gap: var(--form-field-gap);
+}
+form:where(.form-density--comfortable, .form-density--compact) > .form-group,
+:where(.form-density--comfortable, .form-density--compact) form > .form-group {
+  margin-bottom: 0;
 }
 
 .login-form .btn-primary {
@@ -1744,31 +1816,23 @@ main:has(.split-layout) {
   color: var(--color-black);
 }
 
-.close-modal-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: var(--color-gray-500);
-  cursor: pointer;
+.close-modal-btn,
+.modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
   min-width: 44px;
   min-height: 44px;
   padding: 0;
-  line-height: 1;
-  transition: color 0.2s;
-}
-
-.close-modal-btn:hover {
-  color: var(--color-black);
-}
-
-.modal-close {
-  min-width: 44px;
-  min-height: 44px;
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--radius-md);
   font-size: var(--font-size-xl);
+  line-height: 1;
 }
 
 .modal-error,
@@ -1916,20 +1980,6 @@ main:has(.split-layout) {
   color: var(--color-black);
 }
 
-.close-panel-btn {
-  min-width: 44px;
-  min-height: 44px;
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: var(--color-gray-500);
-  cursor: pointer;
-}
-
-.close-panel-btn:hover {
-  color: var(--color-black);
-}
-
 .panel-body {
   flex: 1;
   padding: 1.5rem;
@@ -2072,7 +2122,7 @@ main:has(.split-layout) {
 }
 
 .filter-form select {
-  padding: 0.6rem 1rem;
+  padding: var(--form-control-padding-y, 0.6rem) var(--form-control-padding-x, 1rem);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
@@ -2080,6 +2130,8 @@ main:has(.split-layout) {
   min-width: 250px;
   cursor: pointer;
 }
+
+.filter-form input[type="date"] { width: auto; }
 
 .filter-form select:focus {
   border-color: var(--color-black);
@@ -2123,7 +2175,7 @@ main:has(.split-layout) {
 
 .search-input {
   width: 100%;
-  padding: 0.6rem 1rem;
+  padding: var(--form-control-padding-y, 0.6rem) var(--form-control-padding-x, 1rem);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
@@ -2137,11 +2189,11 @@ main:has(.split-layout) {
 
 .filter-group {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--form-field-gap, 0.75rem);
 }
 
 .filter-select {
-  padding: 0.6rem 1rem;
+  padding: var(--form-control-padding-y, 0.6rem) var(--form-control-padding-x, 1rem);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--radius-md);
   background: var(--color-white);
@@ -3787,7 +3839,8 @@ body > header nav h1 { flex: 0 1 auto; min-width: 0; margin-right: 1rem; }
   background-color: var(--color-gray-50);
 }
 .language-selector button:active,
-.modal-close:active {
+.modal-close:active,
+.close-modal-btn:active {
   transform: none;
 }
 .nav-notices { width: 100%; }

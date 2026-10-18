@@ -3046,6 +3046,21 @@ main:has(.split-layout) {
    ======================================== */
 @media (max-width: 768px) {
   /* Header */
+  .users-admin .page-header-admin {
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+  }
+
+  .users-admin .page-header-admin .header-content {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .users-admin .page-header-admin .header-actions {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
   .hamburger {
     display: block;
   }
@@ -3783,6 +3798,14 @@ body > header nav h1 { flex: 0 1 auto; min-width: 0; margin-right: 1rem; }
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
+}
+.language-selector button:hover:not(:disabled),
+.modal-close:hover:not(:disabled) {
+  background-color: var(--color-gray-50);
+}
+.language-selector button:active,
+.modal-close:active {
+  transform: none;
 }
 .nav-notices { width: 100%; }
 .nav-notices:not(:has(> :not([hidden]))) { display: none; }

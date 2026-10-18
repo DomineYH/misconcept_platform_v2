@@ -1,9 +1,10 @@
-#scenario-comparison { margin: 1rem 0; padding: 1rem; border: 1px solid var(--color-border-medium); border-radius: var(--radius-xl); }
+#scenario-comparison { margin: var(--spacing-md) 0; padding: var(--spacing-md); border: 1px solid var(--color-border-light); border-radius: var(--radius-xl); background: var(--color-bg-surface); }
+#scenario-comparison fieldset, .comparison-page fieldset { border: 1px solid var(--color-border-light); border-radius: var(--radius-xl); background: var(--color-bg-surface); }
 #scenario-comparison > button { margin: .3rem; padding: .5rem; }
 #scenario-comparison p, #scenario-comparison pre, #scenario-comparison a { overflow-wrap: anywhere; }
 .comparison-text { white-space: pre-wrap; }
 .comparison-grid { display: grid; grid-template-columns: repeat(var(--comparison-panels, 3), minmax(0, 1fr)); gap: 1rem; }
-.comparison-grid article { min-width: 0; padding: 1rem; border: 1px solid var(--color-border-medium); border-radius: var(--radius-xl); background: var(--color-bg-surface); }
+.comparison-grid article { min-width: 0; padding: var(--spacing-md); border: 1px solid var(--color-border-light); border-radius: var(--radius-xl); background: var(--color-bg-surface); }
 .comparison-grid button { padding: .5rem; margin: .2rem; }
 .comparison-grid fieldset { padding: .5rem; }
 .comparison-tabs { display: none; }
@@ -39,10 +40,10 @@
 .comparison-page textarea { resize: vertical; }
 .comparison-page input:disabled, .comparison-page textarea:disabled, .comparison-page select:disabled { background: var(--color-bg-secondary); color: var(--color-text-secondary); }
 .comparison-page summary, #scenario-comparison summary { min-width: 44px; min-height: 44px; padding: .5rem; cursor: pointer; }
-.comparison-page fieldset { padding: 1rem; margin: 1rem 0; }
+.comparison-page fieldset { padding: var(--spacing-md); margin: var(--spacing-md) 0; }
 .comparison-page > section, .comparison-page > details { margin-top: 1.5rem; }
 .conversation-panels > article, #conversation-dialogue article {
-  padding: 1rem; border: 1px solid var(--color-border-medium); border-radius: var(--radius-xl); background: var(--color-bg-surface);
+  padding: var(--spacing-md); border: 1px solid var(--color-border-light); border-radius: var(--radius-xl); background: var(--color-bg-surface);
 }
 #conversation-controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
 .comparison-page article > button, .comparison-page #conversation-history button { margin: .25rem; }

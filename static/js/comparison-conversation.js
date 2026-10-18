@@ -163,11 +163,11 @@ function render() {
   }
   const allowed = unavailable ? {} : state.allowed_actions || {};
   const target = state.pairs.at(-1)?.turn_id;
-  controls.replaceChildren(button(uiLanguage.t('admin.send_question'), () => action('turn', {message:question.value}, 'student'), busy || !allowed.turn),
-    button(uiLanguage.t('admin.mentor_help'), () => action('mentor', {target_turn_id:target, trigger:'manual'}, 'mentor'), busy || !allowed.mentor),
-    button(uiLanguage.t('admin.pending_automatic_check'), () => action('mentor', {target_turn_id:target, trigger:'auto'}, 'mentor'), unavailable || busy || !state.pending_auto || running()),
-    button(uiLanguage.t('admin.end_comparison_and_analyze'), () => action('end', {}, 'analysis'), busy || !allowed.end),
-    button(uiLanguage.t('admin.refresh_state'), () => refresh().catch(error => { notice.textContent = error.message; })));
+  controls.replaceChildren(button(uiLanguage.t('admin.send_question'), () => action('turn', {message:question.value}, 'student'), busy || !allowed.turn, 'primary'),
+    button(uiLanguage.t('admin.mentor_help'), () => action('mentor', {target_turn_id:target, trigger:'manual'}, 'mentor'), busy || !allowed.mentor, 'primary'),
+    button(uiLanguage.t('admin.pending_automatic_check'), () => action('mentor', {target_turn_id:target, trigger:'auto'}, 'mentor'), unavailable || busy || !state.pending_auto || running(), 'primary'),
+    button(uiLanguage.t('admin.end_comparison_and_analyze'), () => action('end', {}, 'analysis'), busy || !allowed.end, 'primary'),
+    button(uiLanguage.t('admin.refresh_state'), () => refresh().catch(error => { notice.textContent = error.message; }), false, 'secondary'));
   question.disabled = busy || !allowed.turn;
   results.replaceChildren();
   for (const child of state.children) {
@@ -200,7 +200,7 @@ function render() {
   }
   const activeChild = state.children.find(child => child.panels.some(panel => panel.status === 'running'));
   if (activeChild && !unavailable) controls.append(button(uiLanguage.t('admin.stop_all'), () => action('stop', {child_id:activeChild.comparison_run_id,
-    generations:activeChild.panels.filter(panel => panel.status === 'running').map(panel => ({panel_id:panel.panel_id, generation_id:panel.run_id}))})));
+    generations:activeChild.panels.filter(panel => panel.status === 'running').map(panel => ({panel_id:panel.panel_id, generation_id:panel.run_id}))}), false, 'secondary'));
   if (controlText) {
     const root = cardId ? [...results.querySelectorAll('[data-result-panel]')].find(card => card.dataset.resultPanel === cardId) : controls;
     [...(root?.querySelectorAll('button') || [])].find(button => button.textContent === controlText && !button.disabled)?.focus({preventScroll:true});
@@ -225,7 +225,7 @@ function mountSetup() {
       state = await response.json(); remember(); render();
     } catch (error) { notice.textContent = error.message; }
     finally { pendingRequests--; busy = false; start.disabled = false; render(); }
-  }, true);
+  }, true, 'primary');
   function draw() {
     selected = []; panels.replaceChildren();
     for (let i = 1; i <= Number(count.value); i++) {
@@ -271,10 +271,10 @@ async function loadHistory(cursor = null) {
         if (!response.ok) { notice.textContent = uiLanguage.t('admin.could_not_delete_the_comparison_record_check_the_state_again'); return; }
         if (state?.conversation_id === item.conversation_id) location.href = '/admin/model-comparison';
         else await loadHistory().catch(historyError);
-      }));
+      }, false, 'danger'));
     root.append(row);
   }
-  if (history.next_cursor) root.append(button(uiLanguage.t('admin.next_20'), () => loadHistory(history.next_cursor).catch(historyError)));
+  if (history.next_cursor) root.append(button(uiLanguage.t('admin.next_20'), () => loadHistory(history.next_cursor).catch(historyError), false, 'secondary'));
 }
 function historyError() { notice.textContent = uiLanguage.t('admin.could_not_load_comparison_history_try_again'); }
 mountComparisonHistory(document.getElementById('legacy-comparison-history'), {request, apply:(_panel, comparison) => { location.href = `/admin/scenarios/new?from_comparison=${comparison.comparison_run_id}`; }, invalidate:() => {}, sourceId:() => null});

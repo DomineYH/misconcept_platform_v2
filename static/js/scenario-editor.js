@@ -38,7 +38,7 @@ function renderRubric() {
       renderRubric();
       document.getElementById('add-rubric').focus();
       markDirty();
-    }));
+    }, false, 'secondary'));
     root.append(container);
   });
   document.getElementById('add-rubric').disabled = rubric.length >= 20;
@@ -144,7 +144,7 @@ function showErrors(errors) {
       else if (input?.closest('#rubric-settings[hidden]')) target = document.getElementById('analysis.classification_enabled');
       else if (input?.closest('#mentor-settings[hidden], #mentor-auto-settings[hidden]')) target = document.getElementById('mentor.mode');
       target.focus();
-    });
+    }, false, 'secondary');
     const item = node('li');
     item.append(link);
     links.append(item);

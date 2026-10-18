@@ -23,8 +23,9 @@ export function node(tag, text, attrs = {}) {
   return el;
 }
 
-export function button(text, action, disabled = false) {
+export function button(text, action, disabled = false, role = '') {
   const el = node('button', text, {type:'button'});
+  if (role) el.classList.add(`btn-${role}`);
   el.disabled = disabled;
   el.addEventListener('click', action);
   return el;
@@ -75,7 +76,7 @@ export function optionNotes(container, capabilities, saved = {}, onRemove) {
       onRemove(retained);
       notice.remove();
       container.querySelector('input:not(:disabled),select:not(:disabled)')?.focus();
-    }));
+    }, false, 'secondary'));
     container.append(notice);
   }
 }
@@ -95,18 +96,18 @@ export function render(state, actions) {
     if (p.status === 'decryption_failed') card.append(node('p', uiLanguage.t('admin.restore_the_original_master_key_and_version_if_recovery_is_impossible_delete_and_register_the_key_ag')));
     if (p.error_code) card.append(node('p', uiLanguage.t('admin.latest_non_generation_verification_failed_check_connection_settings_and_access_permissions')));
     const row = node('div', null, {class:'ai-actions'});
-    row.append(button(p.key_registered ? uiLanguage.t('admin.replace_key') : uiLanguage.t('admin.save_key'), () => actions.connection(p, 'key'), !state.master_key_available || p.status === 'decryption_failed'),
-      button(p.enabled ? uiLanguage.t('admin.disable') : uiLanguage.t('admin.re_enable'), () => actions.connection(p, 'enabled'), !p.key_registered || (!p.enabled && (!state.master_key_available || p.status === 'decryption_failed'))),
-      button(uiLanguage.t('admin.delete_key'), () => actions.connection(p, 'delete'), !p.key_registered),
-      button(uiLanguage.t('admin.verify_without_generation_and_refresh_catalog'), () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available || p.catalog.available === false));
+    row.append(button(p.key_registered ? uiLanguage.t('admin.replace_key') : uiLanguage.t('admin.save_key'), () => actions.connection(p, 'key'), !state.master_key_available || p.status === 'decryption_failed', 'primary'),
+      button(p.enabled ? uiLanguage.t('admin.disable') : uiLanguage.t('admin.re_enable'), () => actions.connection(p, 'enabled'), !p.key_registered || (!p.enabled && (!state.master_key_available || p.status === 'decryption_failed')), 'secondary'),
+      button(uiLanguage.t('admin.delete_key'), () => actions.connection(p, 'delete'), !p.key_registered, 'danger'),
+      button(uiLanguage.t('admin.verify_without_generation_and_refresh_catalog'), () => actions.catalog(p), !p.enabled || p.status !== 'ready' || !state.master_key_available || p.catalog.available === false, 'secondary'));
     card.append(row, node('p', p.catalog.available === false ? uiLanguage.t('admin.the_model_catalog_is_not_available_yet') : !p.catalog.fetched_at && !p.catalog.stale ? uiLanguage.t('admin.model_catalog_no_lookup_recorded') : `${uiLanguage.t('admin.model_catalog')} ${p.catalog.stale ? uiLanguage.t('admin.stale_catalog') : uiLanguage.t('admin.recent_catalog')} · ${uiLanguage.t('admin.last_refreshed')} ${p.catalog.fetched_at || uiLanguage.t('admin.none')}`));
     if (p.catalog.stale) card.append(node('p', uiLanguage.t('admin.this_catalog_is_for_reference_it_does_not_guarantee_access_or_successful_role_verification')));
     const choices = [['', uiLanguage.t('admin.select_a_model')], ...p.catalog.models.map(model => [model.model_id,
       `${model.model_id} · ${model.lifecycle || uiLanguage.t('admin.lifecycle_unknown')} · ${model.preview === true ? 'Preview' : model.preview === false ? uiLanguage.t('admin.stable') : uiLanguage.t('admin.release_status_unknown')}`])];
     const select = field(card, `${p.provider}-catalog-model`, `${providers[p.provider]} ${uiLanguage.t('admin.choose_model_id')}`, '', {}, choices);
-    const register = button(uiLanguage.t('admin.register_selected_model'), () => actions.register(p, select.value), true);
+    const register = button(uiLanguage.t('admin.register_selected_model'), () => actions.register(p, select.value), true, 'primary');
     select.addEventListener('change', () => { register.disabled = !select.value || state.models_available === false; });
-    card.append(register, button(uiLanguage.t('admin.enter_model_id_manually'), () => actions.register(p, ''), state.models_available === false));
+    card.append(register, button(uiLanguage.t('admin.enter_model_id_manually'), () => actions.register(p, ''), state.models_available === false, 'secondary'));
     cards.append(card);
   }
   connections.append(cards);
@@ -121,7 +122,7 @@ export function render(state, actions) {
     const card = node('article', null, {'data-model':m.id, 'aria-labelledby':`ai-model-${m.id}`});
     card.append(node('h3', `${m.display_name} · ${providers[m.provider]} / ${m.model_id}`, {id:`ai-model-${m.id}`}),
       node('p', `${m.capabilities?.preview ? 'Preview · ' : ''}${m.enabled ? uiLanguage.t('admin.active') : uiLanguage.t('admin.inactive')} · ${m.capabilities ? uiLanguage.t('admin.capability_definition_available') : uiLanguage.t('admin.capability_definition_required')}`),
-      button(uiLanguage.t('admin.edit_display_name_activation_and_options'), () => actions.model(m)));
+      button(uiLanguage.t('admin.edit_display_name_activation_and_options'), () => actions.model(m), false, 'secondary'));
     if (m.capabilities?.metadata_conflict) card.append(node('p', uiLanguage.t('admin.capability_definition_and_provider_catalog_do_not_match_role_tests_and_execution_are_unavailable')));
     const roleGrid = node('div', null, {class:'ai-role-grid'});
     for (const [role, label] of Object.entries(roles)) {
@@ -143,14 +144,14 @@ export function render(state, actions) {
         : p.status !== 'ready' ? uiLanguage.t('admin.check_provider_connection_settings_before_testing')
         : !m.probe_budgets?.[role] ? uiLanguage.t('admin.update_the_test_output_limit_and_saved_options_before_testing')
         : verification.status === 'verifying' ? uiLanguage.t('admin.you_can_check_or_cancel_the_running_test') : '';
-      const trial = button(`${label} ${uiLanguage.t('admin.test')}`, () => actions.probe(m, role), !!reason);
+      const trial = button(`${label} ${uiLanguage.t('admin.test')}`, () => actions.probe(m, role), !!reason, 'primary');
       if (reason) {
         const id = `ai-probe-reason-${m.id}-${role}`;
         row.append(node('p', reason, {id, class:'ai-help'}));
         trial.setAttribute('aria-describedby', id);
       }
       row.append(trial);
-      if (verification.status === 'verifying') row.append(button(`${label} ${uiLanguage.t('admin.check_progress')}`, () => actions.poll(verification.probe_request_id)), button(`${label} ${uiLanguage.t('admin.cancel_test')}`, () => actions.cancel(verification.probe_request_id)));
+      if (verification.status === 'verifying') row.append(button(`${label} ${uiLanguage.t('admin.check_progress')}`, () => actions.poll(verification.probe_request_id), false, 'secondary'), button(`${label} ${uiLanguage.t('admin.cancel_test')}`, () => actions.cancel(verification.probe_request_id), false, 'secondary'));
       roleGrid.append(row);
     }
     card.append(roleGrid);
@@ -169,6 +170,6 @@ export function render(state, actions) {
     const m = state.models.find(m => m.id === d?.model_config_id);
     settings.append(node('p', `${label}: ${d ? `${m?.display_name || d.model_config_id} · ${d.available ? uiLanguage.t('admin.available') : uiLanguage.t('admin.default_model_unavailable')}` : uiLanguage.t('admin.no_default')}`));
   }
-  settings.append(button(uiLanguage.t('admin.edit_authoring_defaults_and_call_settings'), () => actions.settings(state)));
+  settings.append(button(uiLanguage.t('admin.edit_authoring_defaults_and_call_settings'), () => actions.settings(state), false, 'secondary'));
   root.append(settings);
 }

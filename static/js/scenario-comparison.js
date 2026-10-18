@@ -20,7 +20,7 @@ export function mountComparison(data, draft) {
     root.hidden = true;
     open.setAttribute('aria-expanded', 'false');
     open.focus();
-  });
+  }, false, 'secondary');
   const setup = node('fieldset');
   setup.append(node('legend', uiLanguage.t('admin.common_input')));
   const target = field(setup, 'comparison-target', uiLanguage.t('admin.comparison_role'), 'student', {}, Object.entries(roles));
@@ -65,11 +65,11 @@ export function mountComparison(data, draft) {
       pairs.splice(pairs.indexOf(pair), 1);
       row.remove();
       addHistory.focus();
-    }));
+    }, false, 'secondary'));
     history.append(row);
     t.focus();
   }
-  const addHistory = button(uiLanguage.t('admin.add_completed_pair'), () => addPair());
+  const addHistory = button(uiLanguage.t('admin.add_completed_pair'), () => addPair(), false, 'secondary');
   const questionLabel = node('label', uiLanguage.t('admin.current_student_question'), {for:'comparison-question'});
   const question = node('textarea', null, {id:'comparison-question', rows:3, maxlength:50000});
   setup.append(note, history, addHistory, questionLabel, question);
@@ -77,7 +77,7 @@ export function mountComparison(data, draft) {
   const tabs = node('div', null, {class:'comparison-tabs', role:'tablist', 'aria-label':uiLanguage.t('admin.comparison_panels')});
   let selectedPanel = null;
   const grid = node('div', null, {class:'comparison-grid', role:'region', 'aria-label':uiLanguage.t('admin.comparison_panel_results'), tabindex:'0'});
-  const addPanel = button(uiLanguage.t('admin.add_panel'), () => addModel(null));
+  const addPanel = button(uiLanguage.t('admin.add_panel'), () => addModel(null), false, 'secondary');
   function available(model) {
     return model.enabled && model.connection_available && model.capabilities && !model.capabilities.metadata_conflict && model.verification_state[target.value]?.status === 'succeeded';
   }
@@ -101,7 +101,7 @@ export function mountComparison(data, draft) {
   function renderTabs() {
     tabs.replaceChildren();
     for (const panel of panels) {
-      const tab = button(`${uiLanguage.t('admin.panel')} ${panel.id}`, () => selectTab(panel.id));
+      const tab = button(`${uiLanguage.t('admin.panel')} ${panel.id}`, () => selectTab(panel.id), false, 'secondary');
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-controls', panel.card.id);
       tab.dataset.tab = panel.id;
@@ -136,7 +136,7 @@ export function mountComparison(data, draft) {
       card.remove();
       syncPanels();
       addPanel.focus();
-    }));
+    }, false, 'secondary'));
     card.append(settings, output);
     panels.push(panel);
     grid.append(card);
@@ -180,9 +180,9 @@ export function mountComparison(data, draft) {
     defaults();
     roleNote();
   });
-  const start = button(uiLanguage.t('admin.run_comparison'), () => execute());
-  const stop = button(uiLanguage.t('admin.stop_all'), () => stopRun());
-  const refresh = button(uiLanguage.t('admin.refresh_state'), () => refreshRun());
+  const start = button(uiLanguage.t('admin.run_comparison'), () => execute(), false, 'primary');
+  const stop = button(uiLanguage.t('admin.stop_all'), () => stopRun(), false, 'secondary');
+  const refresh = button(uiLanguage.t('admin.refresh_state'), () => refreshRun(), false, 'secondary');
   root.append(heading, source, close, notice, errors, setup, panelNote, addPanel, start, stop, refresh, total, tabs, grid);
   function locked() { return submitting || run?.panels.some(p => active(p.status)); }
   function sync() {
@@ -286,7 +286,7 @@ export function mountComparison(data, draft) {
       const panel = panels.find(p => p.id === error.panel_id);
       const input = error.field === 'current_message' ? question : error.field === 'history' ? addHistory : panel?.settings.querySelector('select');
       if (input) input.setAttribute('aria-invalid', 'true');
-      errors.append(button(error.message || uiLanguage.t('common.check_input'), () => input?.focus()));
+      errors.append(button(error.message || uiLanguage.t('common.check_input'), () => input?.focus(), false, 'secondary'));
     }
     errors.focus();
   }
@@ -486,7 +486,7 @@ export function mountComparison(data, draft) {
     comparisonBaseline = comparisonValues();
     notice.textContent = uiLanguage.t('admin.comparison_input_reset_saved_comparison_records_are_preserved');
     target.focus();
-  });
+  }, false, 'secondary');
   root.append(reset);
   mountComparisonHistory(root, {request, apply, sourceId:() => data.id, sourceComparisonId:() => data.comparison_draft_id, invalidate:id => {
     if (parentRunId === id) parentRunId = null;

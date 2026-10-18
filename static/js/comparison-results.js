@@ -75,7 +75,7 @@ export function renderComparisonResult(root, panel, role, actions, locked) {
     ['apply', 'apply_this_model', locked || !panel.model_config || active(panel.status)]
   ];
   for (const [action, label, disabled] of controls) {
-    const control = button(uiLanguage.t('admin.' + label), actions[action], disabled);
+    const control = button(uiLanguage.t('admin.' + label), actions[action], disabled, ['adopt','apply'].includes(action) ? 'primary' : 'secondary');
     control.dataset.action = action;
     root.append(control);
   }

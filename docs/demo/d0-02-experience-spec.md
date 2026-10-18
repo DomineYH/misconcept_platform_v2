@@ -205,14 +205,14 @@ session_id,scenario_id,scenario_title,teacher_id,teacher_username,teacher_nickna
 
 ## 12. 검토 기록
 
-상태: **pending**. 아래 기록은 coordinator가 독립 검토와 maintainer 확인 후 채운다. 초안 제출은 승인 또는 이슈 완료를 뜻하지 않는다.
+상태: **독립 검토 완료, maintainer 승인 pending**. 초안 제출과 독립 검토 통과는 교육 내용 승인이나 이슈 완료를 뜻하지 않는다.
 
 | 항목 | 상태·기록 |
 | --- | --- |
-| 작성자와 별도 reviewer worker 세션 | pending |
-| 교육적 표현·분기/분석·완료 이력의 일관성 검토 결과 | pending |
-| 지적 사항과 반영한 수정 | pending |
-| 검토 대상 전체 SHA | pending — 제출 커밋을 고정한 뒤 기록 |
+| 작성자와 별도 reviewer worker 세션 | 작성자와 다른 독립 reviewer 세션(task-verifier, 2026-10-18), 읽기 전용 정적 검토 |
+| 교육적 표현·분기/분석·완료 이력의 일관성 검토 결과 | **ACCEPT**. 수학 내용(같은 전체에서 1/4 > 1/8), 오개념의 타당성, 교사·학생봇·멘토 문장, 분기 합류, §6 인용문과 §4 대화의 일치, 여섯 단계 합계 300초, `scenario_config.py`·`MentorOutput`·분석 출력 계약·`export.py` CSV 열·삭제 정책과의 일치를 확인했다. 앱·테스트·브라우저는 실행하지 않았다 |
+| 지적 사항과 반영한 수정 | 지적 사항 없음. 수정 없음 |
+| 검토 대상 전체 SHA | `2f2474a78e03bc476c1f29f0424598d2c095ee9c` (이 표를 채운 커밋은 §12 기록만 바꾼다) |
 | 교육 내용 검토 및 최종 승인자 | @DomineYH |
 | @DomineYH 승인 여부·근거 참조 | pending |
 

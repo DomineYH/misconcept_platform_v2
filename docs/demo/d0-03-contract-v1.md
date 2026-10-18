@@ -2,7 +2,7 @@
 
 ## 1. 기준·범위와 읽는 법
 
-계약 버전은 `d0-03-v1`이다. 상태는 **G0 승인 후보**이며 구현 완료·소비자 리뷰·독립 리뷰·maintainer 승인을 뜻하지 않는다. 승인 기록은 [G0 기록](d0-03-g0-acceptance.md), 설계 이유는 [ADR-0013](../adr/0013-demo-isolation-and-keyless-provider.md)에 둔다. 용어는 [GLOSSARY](../../GLOSSARY.md)를 따른다.
+계약 버전은 `d0-03-v1-r2`이다. 상태는 **G0 승인 후보**이며 구현 완료·소비자 리뷰·독립 리뷰·maintainer 승인을 뜻하지 않는다. 승인 기록은 [G0 기록](d0-03-g0-acceptance.md), 설계 이유는 [ADR-0013](../adr/0013-demo-isolation-and-keyless-provider.md)에 둔다. 용어는 [GLOSSARY](../../GLOSSARY.md)를 따른다.
 
 | 고정 입력 | merge SHA | 파일 버전·최종 파일 commit·blob |
 | --- | --- | --- |
@@ -49,7 +49,7 @@
 | `factory` | `async_sessionmaker[AsyncSession]`과 동등한 호출 인터페이스; 이 세대의 검증된 engine에 고정, 다른 세대로 자동 교체하지 않음 |
 | `lease` | 서버 발급 Lease 참조; §6의 수명/현재성 API에서만 사용 |
 
-기존 `get_db_session()`은 normal에서 기존 factory 의미를 유지하고 demo에서는 서명된 방문 세션을 서버 레지스트리에서 찾는다. 검증 순서는 mode → 쿠키 서명/방문 상태 → URL/header 세대·scope·auth_epoch → 현재 User/권한 → 해당 DB lease → DB 조회다. 미방문/잘못된 쿠키는 `DEMO_SESSION_REQUIRED`, 만료는 `DEMO_EXPIRED`, 불일치는 `DEMO_STALE_GENERATION` 또는 `DEMO_STALE_ROLE`이다. 임의 경로/DB URL/visitor_id/user_id 입력은 `DEMO_INVALID_REQUEST`; 운영 factory fallback은 없다. 오류 렌더링·별도 세션·background도 동일하게 적용한다. 상태 동기화/기존 제어 요청 결과 조회만 §9의 DB 없는 별도 절차를 사용한다.
+기존 `get_db_session()`은 normal에서 기존 factory 의미를 유지하고 demo에서는 서명된 방문 세션을 서버 레지스트리에서 찾는다. 검증 순서는 mode → 쿠키 서명/방문 상태 → URL/header 세대·scope·auth_epoch → ready 확인 및 그 factory의 lease 획득 → lease 아래 현재 User 조회/권한 검사 → 나머지 DB 작업이다. User 부재/권한 거절에서도 finally로 lease를 해제한다(R10). 미방문/잘못된 쿠키는 `DEMO_SESSION_REQUIRED`, 만료는 `DEMO_EXPIRED`, 불일치는 `DEMO_STALE_GENERATION` 또는 `DEMO_STALE_ROLE`이다. 임의 경로/DB URL/visitor_id/user_id 입력은 `DEMO_INVALID_REQUEST`; 운영 factory fallback은 없다. 오류 렌더링·별도 세션·background도 동일하게 적용한다. 상태 동기화/기존 제어 요청 결과 조회만 §9의 DB 없는 별도 절차를 사용한다.
 
 방문객 factory는 SQLite URI `mode=rw`로 이미 검증된 파일만 열며 파일 생성은 staging builder만 허용한다. lease가 유효해도 폐기 세대 factory의 신규 연결은 거절한다. 모든 이미 열린 읽기는 응답 직전 현재성을 재검사한다. 모든 쓰기는 §6의 commit 직렬화로 보호한다. raw factory의 호출만으로 이 보호를 생략하지 않는다.
 
@@ -79,11 +79,11 @@
 
 | API | 입력 → 결과 / 오류·경합 |
 | --- | --- |
-| `create_visit(request_id, role)` | 검증 CSRF bootstrap의 UUID request_id, admin/teacher → 검증된 GenerationRef(g=1)와 방문 매핑. 같은 bootstrap/request_id/동일 body는 같은 결과; 다른 body는 충돌. 예약 quota에 staging도 포함 |
+| `create_visit(verified_bootstrap, request_id, role)` | §5.1 reserve_start로 bootstrap당 하나의 방문/작업을 예약 → preparing 202 또는 검증된 GenerationRef(g=1). 같은 ID/다른 body는 충돌; 다른 ID 경합·실패 복구는 §7.1/9.1. 예약 quota에 staging 포함 |
 | `resolve_visit(verified_visitor, expected_generation)` | 현재 ready 세대만 반환; lookup은 DB를 만들지 않음. 부재/만료/전환은 §11 오류 |
-| `acquire_lease(ref)`, `retain_lease(lease)` | 현재 ready 세대 → 고유 Lease(lease_id, visitor_id, generation, released=false); 한 번 증가, 폐기 세대 신규 획득 거절 |
+| `acquire_lease(ref, expected_auth_epoch)`, `retain_lease(lease)` | 현재 ready 세대/epoch를 같은 전환 lock에서 검사 → 고유 Lease(lease_id:UUID, visitor_id, generation, auth_epoch, released=false); 한 번 증가, 폐기 세대 신규 획득 거절 |
 | `release_lease(lease)` | refcount를 한 번만 감소; 중복 해제는 no-op, 마지막 해제만 cleanup 가능 통지. 새 세대 생성 기능 없음 |
-| `reset_visit(verified_visitor, expected_generation, request_id)` | §7 전환을 시작/조회해 ResetResult 반환. 같은 request_id는 같은 reset operation. ResetResult는 §9 DemoState의 resetting/ready 응답 또는 §11 오류 envelope |
+| `reset_visit(ctx, request_id)` | §5.1 transition/mark_reset으로 §7 전환을 시작/조회해 ResetResult 반환. 같은 request_id는 같은 reset operation. ResetResult는 §9 DemoState의 resetting/ready 응답 또는 §11 오류 envelope |
 | `expire_visit(verified_visitor, reason)` | TTL/shutdown/version_replace 중 하나 → generation 폐기·취소·정리 예약; 반복은 no-op |
 | `cleanup_retired()` | 검증 root 안의 폐기 세대만 dispose/삭제; 정리 수·대기 수·실패 code 반환, 방문객 factory 반환 금지 |
 
@@ -95,46 +95,81 @@ seed는 #197이 정식 `run_all_migrations(db_engine=...)`로 새 staging DB에 
 
 방문객 연결마다 `foreign_keys=ON`, `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=1000` ms를 적용한다. DB 본체·WAL·SHM·staging을 크기에 합산한다. 삭제는 namespace 취소/drain → lease 0 → 세션/연결 닫기 → engine dispose → 검증 경로의 DB/WAL/SHM 삭제다. 잠김은 대기 queue로 보내며 파일을 가진 동안 공간/디스크 quota를 반환하지 않는다. default DB 재생성은 없다.
 
+### 5.1 방문 상태·전환 lock의 단일 권위 (R1–R2)
+
+**#191의 신규 `src/demo/visitors.py`가 VisitorState와 방문객별 전환 lock의 유일한 소유자**다. database.py(#191)는 복제/engine/물리 정리, lifecycle.py(#192)는 실행 registry·취소/drain을 소유한다. #192/#193/#194/#198/#200은 아래 공개 경계만 사용하고 별도 전환 lock/상태 사본을 만들지 않는다.
+
+`VisitorSnapshot`은 visitor_id/browser_scope_id/state/generation/auth_epoch/role/만료/현재 GenerationRef 또는 None/현재 operation 또는 None/last_error/csrf_revision를 가진 불변 값이다. `ControlContext`는 서명 bootstrap에서 얻은 verified_visitor와 요청의 expected_generation/expected_auth_epoch를 묶은 서버 제어 참조이며 factory/lease/User 권한이 없다. reset_failed의 자기 공간 재시도에만 사용한다. `OperationToken`은 서버 UUID op_id와 visitor_id/예약 generation/attempt_no/operation(start|reset)/request_id의 불변 capability다. 외부 입력에서 만들지 않는다.
+
+| 공개 경계(#191) | 입력·결과·lock 책임 |
+| --- | --- |
+| `reserve_start(verified_bootstrap, request_id, role)` | bootstrap→visit index와 방문/디스크 예약을 하나의 admission lock 안에서 검사·갱신. leader만 새 OperationToken과 preparing snapshot을 받고 clone을 실행. replay/loser는 §9.1 결과만 받음. 기존 방문이 있으면 admission lock 다음에 그 방문 전환 lock 획득; 역순 금지 |
+| `transition(verified_visitor)` | async context manager. 진입 시 방문객 전환 lock을 잡아 `TransitionHandle` 반환, 종료 시 해제. handle은 context 밖 사용 금지, caller가 lock을 직접 해제/재진입하지 않음 |
+| `handle.snapshot()`, `handle.check(ctx)` | 불변 snapshot / ready·TTL·scope/generation·auth_epoch·미해제 lease 검사. 오류는 EXPIRED → STALE_GENERATION → 전환 state 오류 → STALE_ROLE 순서. DB lookup 전에도 사용 |
+| `handle.mark_reset(ctx, request_id)` | ready에서는 DemoContext를, reset_failed 재시도에서는 ControlContext의 서버 방문/g/epoch를 검사하고 resetting/g+1/auth_epoch+1/operation을 한 번에 기록 → OperationToken + 폐기 scope. reset_failed의 새 ID retry는 예약 g/epoch 유지·attempt_no+1. 같은 ID는 기존 receipt, 다른 진행 ID는 RESET_IN_PROGRESS |
+| `handle.publish(op, candidate_ref)` | op의 visitor/generation/attempt_no가 현재 preparing/resetting과 같고 candidate 검증·TTL이 유효할 때만 factory와 ready를 원자 연결. start는 예약 role, reset은 admin. 완료 receipt/CSRF revision도 함께 확정 → snapshot. expired면 EXPIRED, 오래된 op면 STALE_GENERATION, 검증 불일치 VERSION_MISMATCH; candidate는 정리 대상으로 반환 |
+| `handle.fail(op, code)` | 현재 op일 때 factory=None으로 start는 prepare_failed, reset은 reset_failed 및 불변 실패 receipt 기록. 오류 status는 §7.1/11. 오래된 op의 fail은 상태를 덮지 않는 false 반환 |
+| `handle.expire(reason)` | TTL/shutdown/version_replace로 generation/auth_epoch 증가·factory 폐기·expired(종료 중 closing) 표시 → 폐기 scope/정리 refs. 반복은 no-op. 준비 중 op도 publish 불가 |
+| `handle.change_role(ctx, role, busy)` | check와 현재 User 존재/권한 확인 후 같은 역할은 busy와 무관한 200 no-op. 다른 역할이며 busy면 BUSY; 아니면 같은 lease 아래 대상 User도 확인 후 role/auth_epoch+1/CSRF revision을 원자 갱신. #193이 User 조회와 change_role을 같은 handle 구간에서 수행하며 deleted User는 ROLE_DELETED. busy 값은 §6 busy_locked(handle)에서 얻은 값만 허용 |
+| `write_guard(ctx)` | async context manager로 TransitionHandle을 yield한다. ctx의 **generation과 auth_epoch 둘 다** check한 뒤 첫 DML부터 flush/commit 또는 rollback까지 같은 전환 lock 보유. old epoch는 STALE_ROLE, DB 변화 0. #192의 같은 이름 facade는 이 함수를 그대로 위임 |
+
+#193의 create/reset orchestration은 reserve/mark를 먼저 수행한 뒤 **lock 밖에서** #192 cancel_scope/drain, #191 clone/검증을 실행하고 다시 transition 안에서 publish/fail한다. 만료 scheduler #191도 mark 후 #192 취소/drain을 lock 밖에서 요청한다. 아직 publish 전인 clone은 #191의 공개 `cancel_preparation(op)`가 lock 밖에서 중단 신호를 보내고 builder 종료를 기다린다. builder 종료 전 staging 사용 예약/bytes를 반환하거나 파일을 unlink하지 않는다. 취소 불응/늦은 완료도 publish의 op/TTL 검사에 실패하며 #191이 정리한다. 네트워크·stream·drain 대기 동안 handle을 보유하지 않는다. quota 예약/해제는 #191만 수행한다.
+
+공개 API barrier 검사: (a) write_guard(ctx) 획득 → commit → mark_reset이면 old DB commit 1회 뒤 세대 폐기, 새 seed에는 결과 없음. (b) mark_reset → 같은 ctx write_guard면 STALE_GENERATION/rollback, old/new DB write 0. publish가 stale op로 호출되어도 원래 factory가 바뀌지 않는다. 이 검사는 #191/#192 단위 계약, #194 G1·#198 G3의 실제 연결에서 반복한다.
+
 ## 6. namespace·lease·현재성과 원자적 저장 (C05–C06)
 
 신규 `ExecutionScope`는 normal에서 `("normal", 0)`, demo에서 `(visitor_id, generation)`이다. `ExecutionKey=(scope, resource_kind, resource_id)`로 resource_kind는 `run|analysis|probe|connection|session|comparison`을 허용한다. ID는 해당 자원의 기존 int/UUID 타입을 유지한다. demo key에 빈 scope/세대를 허용하지 않는다. normal 동작은 보존하되 기존 문자열 dict 접근은 공개 API가 아니다.
 
-신규 lifecycle 공개 API:
+#192 lifecycle의 `TaskControl`은 `request_cancel: Callable[[],None]`(동기·멱등·대기 없음), `done:asyncio.Event`(실제 실행과 shield/자식 정리가 모두 끝난 후 한 번 set) 두 필드다. asyncio.Task/Event를 이 프로토콜로 명시적으로 연결하고 task 인자의 타입을 추측하지 않는다. `ExecutionToken`은 token_id:UUID/key/captured_auth_epoch/task_control/registry_lease/completed:bool을 가진 읽기 전용 참조이며 `request_cancel()`과 `wait_done()`를 노출한다. mutable 필드를 소비자가 수정하지 않는다.
 
-| 이름 | 입력·결과·경합 의미 |
+| 공개 API(#192) | 입력·결과·경합 의미 |
 | --- | --- |
-| `register(scope, kind, id, task, lease)` | current 세대의 task token을 등록. 같은 key 중복은 `DEMO_BUSY`; 새 실행 UUID를 seed에서 복사하지 않음 |
-| `lookup(scope, kind, id)` | 같은 namespace token 또는 None. 타 방문객을 검색하지 않음 |
-| `pop(scope, kind, id, token)` | token이 일치할 때만 제거. 늦은 callback의 pop이 새 실행을 지우지 못함; 불일치 no-op |
-| `busy(scope, kind=None, id=None)` | scope 안의 활성 작업 여부. role 전환은 그 방문객 세대의 전체 활성 작업 검사 |
-| `cancel(scope, kind, id)`, `cancel_scope(scope)` | 해당 token에 취소 신호, 요청 개수 반환; 부재 0, 반복 안전 |
-| `drain(scope, timeout_seconds)` | outstanding task와 retain된 callback/shield lease까지 대기 → drained bool, remaining int; timeout은 성공 아님 |
-| `resource_lock(scope, kind, id)` | 요청 중복/동시 실행을 직렬화; 서로 다른 scope는 독립 |
-| `assert_current(ctx)` | ready/generation/만료/auth_epoch 확인; 불일치 §11 오류 |
-| `write_guard(lease)` | 세대 현재성 검사부터 해당 DB transaction commit/rollback까지 방문객 전환 lock을 보유. reset/만료의 mark와 같은 lock을 사용 |
+| `register(ctx, kind, id, task:TaskControl)` | ctx에서 scope/epoch/lease 결정. #191 transition 안에서 check와 동일 key 중복 검사를 하고 registry 전용 child lease를 retain한 뒤 token 등록, ExecutionToken 반환. 실패 시 retain/등록 없음; 중복은 BUSY. consumer는 반환 token을 보관 |
+| `lookup(scope, kind, id)` | 해당 token 또는 None. 다른 namespace 검색 없음 |
+| `pop(scope, kind, id, token)` | token 일치 AND done.set 이후만 제거/registry lease 1회 release, true 반환. 불일치·이미 제거는 false; 아직 done=false는 BUSY. 폐기 세대도 이 정리는 허용 |
+| `busy(scope, kind=None, id=None)` / `busy_locked(handle, scope)` | 미제거 token 또는 실행 child lease 존재 여부. role 변경은 같은 transition의 busy_locked만 사용, 중간 await 없이 change_role 호출 |
+| `cancel(scope, kind, id)`, `cancel_scope(scope)` | TaskControl.request_cancel 신호, token 수 반환. done을 대신 set하거나 lease를 미리 해제하지 않음. 부재0, 반복 안전 |
+| `drain(scope, timeout_seconds)` | token.done과 registry pop, 요청/자식/shield lease 모두 0을 기다림 → `{drained:bool,remaining:int}`. timeout이면 false, 임의 제거 없음. 완료된 token은 identity를 확인해 pop 가능 |
+| `resource_lock(scope, kind, id)` | 동일 자원 reservation 직렬화. lock 순서는 transition → resource → DB. 그 역순/같은 transition 재진입 금지 |
+| `assert_current(ctx)`, `write_guard(ctx)` | #191 handle.check/guard facade. ctx에 고정된 generation/auth_epoch/lease를 검사, 최신 cookie로 치환하지 않음 |
 
-`cancel_connection`은 기존 connection_id에 더해 keyword-only `scope`를 받아 동일 scope의 연결 작업만 취소한다(#198). registry의 connection/probe 정수 ID, seed의 세션/실행 UUID 반복도 이 경계로 분리한다.
+normal은 동일 API에 `ctx={app_mode:"normal",scope:("normal",0),auth_epoch:0,lease:None,factory:기존factory}`를 전달한다. retain/release(None)는 no-op, demo 전환 check/lock은 적용하지 않고 기존 normal 자원 lock·권한·원장 의미/오류 코드를 유지하며 normal에 새 DEMO_ 오류를 주입하지 않는다. normal 전용 registry lock은 #192 소유다. demo의 lease=None은 INVALID_REQUEST다.
 
-요청은 DB 접근 전 lease를 얻고 응답 종료 후 해제한다. SSE/분석 task/chunk/완료 callback을 넘길 때 각 자식이 `retain_lease`를 완료한 다음 부모가 해제한다. `finally`에서 한 번만 release하며 취소 중에도 shield된 원장 시작/완료 task를 참조·기다린다. stream disconnect가 자식 lease를 해제하지 않은 채 DB 삭제를 허용해서는 안 된다. orphan/cleanup callback도 scope와 원래 factory를 보유한다.
+Event 기반 SSE 예: 기존 active_runs의 cancel Event를 만들고 `TaskControl(request_cancel=cancel_event.set, done=cleanup_done_event)`로 register한다. response 소유자가 ASGI 전송 종료/disconnect 시 producer 취소·shield된 원장/완료 cleanup을 끝내고 finally에서 done.set → token pop을 실행한다. Event.set만으로 drain이 완료되지 않는다. background 예: 생성한 asyncio.Task의 cancel을 request_cancel로 연결하고 task의 finally(자식/shield await 포함)가 끝난 뒤 완료 callback에서 done.set/pop한다. task가 취소 전에 시작되지 못한 경우도 소유자의 완료 callback이 cleanup을 수행한 뒤 같은 순서로 끝낸다.
 
-입력 reservation, 원장 start/finish, chunk 결과, 학생/멘토 본문, 사후 분석 채택·실패·취소 저장은 **모두** callback 입구에서 검사하고 실제 transaction의 `write_guard` 안에서 다시 검사·commit한다. 이미 열린 일반 요청의 쓰기에도 같은 규칙이다. provider 대기/stream 전송 중에는 전환 lock을 잡지 않는다. lock 순서는 전환 lock → resource lock → DB transaction이고 그 역순 대기는 금지한다. shutdown/cleanup은 DB를 열어 새 orphan 작업을 생성하지 않는다.
+요청 lease는 #194가 첫 DB 접근 전에 획득·응답 종료/거절에 해제한다. register는 registry child lease를 보유하므로 요청이 끝나도 실행 DB는 남는다. registry/자식 작업은 원래 ctx의 lease 필드만 각자 retain한 child lease로 바꾼 불변 child ctx를 사용한다(나머지 factory/g/epoch는 동일). 실행이 chunk/원장 shield/다른 background에 독립 작업을 넘기면 **그 작업 전용 child lease**를 먼저 retain하고 해당 finally에서 release한다. 요청/작업/registry lease는 서로 다른 lease_id이며 각각 한 번 해제한다. disconnect가 registry lease를 먼저 제거하지 않는다. 늦은 token A의 pop은 동일 key의 token B를 지우지 못한다. drain은 request_cancel만 호출한 상태에서 false, 실제 finally/done/pop/모든 child 해제 후에만 true다.
 
-저장이 먼저 lock을 얻으면 그 commit 후 reset mark가 실행되고 새 seed에서는 해당 결과가 없다. reset mark가 먼저면 늦은 저장은 old DB에도 commit하지 않고 stale로 끝난다. 검사 후 reset이 끼어든 채 commit하는 세 번째 결과는 없다. 원장 완료도 예외가 아니며, 폐기된 DB 원장의 running 행을 마무리하려고 DB를 재생성하지 않는다. 정상 모드의 원장 보존 의미는 바꾸지 않는다.
+`cancel_connection`(#198)은 connection_id에 keyword-only scope를 받아 같은 scope만 취소한다. seed 정수 ID/UUID 중복과 normal 동작을 보존한다. register와 role 변경은 같은 #191 전환 lock을 사용한다. 등록 먼저면 다른 역할 전환은 BUSY; 전환 먼저면 old ctx register가 STALE_ROLE이고 token/child lease가 생기지 않는다. 같은 역할 요청은 **current ctx에서만** busy 중에도 200 no-op이며 epoch/CSRF revision/등록 상태 불변이다. 같은 역할이라도 stale epoch는 STALE_ROLE이지 no-op가 아니다.
+
+일반 CRUD는 busy registry에 넣지 않는다. 대신 모든 첫 DML부터 commit까지 write_guard(ctx)를 잡는다. admin CRUD가 guard를 먼저 얻으면 commit 후 teacher 전환, 전환이 먼저면 이미 읽기/권한 검사를 마친 admin 요청도 guard에서 STALE_ROLE·rollback·DB 불변이다. callback 입구 검사만으로 이를 대체하지 않는다. 원장 start/finish·chunk·최종 학생/멘토/분석의 성공/실패/취소 저장과 요청 dependency의 자동 commit에도 같은 규칙이다. 늦은 저장은 원래 factory를 사용하다 거절될 뿐 새/폐기 DB를 재생성하지 않는다.
 
 ## 7. reset·만료·종료 상태 전이 (C07)
 
-서버 방문 상태는 `preparing|ready|resetting|reset_failed|expired|closing`이다. 폐기 DB의 cleanup 상태 `queued|draining|locked|removed`는 별도이며 UI 성공 상태로 쓰지 않는다.
+서버 방문 상태는 `preparing|prepare_failed|ready|resetting|reset_failed|expired|closing`이다. 폐기 DB의 cleanup 상태 `queued|draining|locked|removed`는 별도이며 UI 성공 상태로 쓰지 않는다.
 
-1. ready 세대 g에서 reset을 수락하면 전환 lock 안에서 `resetting`, generation=g+1, auth_epoch+1을 기록한다. 새 세대는 아직 factory 없음, old g는 영구 폐기다. 이후 old g의 요청/저장 거절과 namespace 취소가 즉시 적용된다.
+1. #193이 §5.1 handle.mark_reset을 호출해 ready 세대 g에서 reset을 수락하면 #191 전환 lock 안에서 `resetting`, generation=g+1, auth_epoch+1을 기록한다. 새 세대는 아직 factory 없음, old g는 영구 폐기다. 이후 old g의 요청/저장 거절이 즉시 적용되고 #192 namespace 취소는 lock을 놓은 직후 실행한다.
 2. old scope를 취소하고 최대 `DEMO_DRAIN_SECONDS` 동안 모든 lease를 기다린다. drain 실패는 reset_failed(`DEMO_DRAIN_TIMEOUT`), 새 seed를 연결하지 않는다. 잠김/복제/검증 실패도 reset_failed다.
 3. 검증된 새 DB를 원자적으로 g+1에 publish하면 ready. 선택 역할은 admin으로 복귀하며 삭제된 교사도 seed로 복원된다. old DB 정리가 지연되어도 lease 0/dispose가 확인되면 ready 가능하나 cleanup quota는 계속 차지한다.
 4. 실패 상태는 old DB로 rollback하지 않는다. 같은 request_id 조회는 같은 실패를 반환한다. 사용자가 새 request_id로 재시도하면 예약한 g+1을 다시 준비한다(추가 generation 증가 없음); 모든 실패 staging은 먼저 회수/계수한다.
 
-동일 reset request_id와 동일 body는 진행 중 202/완료 후 200/실패 후 같은 오류를 반환하며 generation을 두 번 늘리지 않는다. 다른 reset request_id는 resetting 중 409 `DEMO_RESET_IN_PROGRESS`; 정상 완료 후 old g로 온 요청은 stale다. reset 실패 시 `GET /demo/state`가 알려 준 예약 세대·auth_epoch로만 재시도한다. 이 조회는 DB 연결/역할 복원을 하지 않는다.
+동일 reset request_id와 동일 body는 §9.1의 유효 CSRF 조건에서 진행 중 202/완료 후 200/실패 후 같은 오류를 반환하며 generation을 두 번 늘리지 않는다. 다른 reset request_id는 resetting 중 409 `DEMO_RESET_IN_PROGRESS`; 정상 완료 후 old g로 온 요청은 stale다. reset 실패 시 `GET /demo/state`가 알려 준 예약 세대·auth_epoch로만 재시도한다. 이 조회는 DB 연결/역할 복원을 하지 않는다.
 
 TTL 판정은 서버의 monotonic 경과와 UTC 표시에 기반하고 `now >= expires_at`에서 만료한다. 허용된 foreground 자료 조회/조작만 idle 시각을 갱신한다. health/state polling, static, background chunk, 거절 요청은 갱신하지 않는다. 절대 만료는 생성 시각 기준이며 reset/역할 전환으로 연장하지 않는다. 만료가 reset 준비와 경합하면 publish 직전 lock에서 TTL을 다시 검사해 expired가 이긴다. 만료 시 generation을 다시 증가시켜 tombstone을 남기고 새 호출/저장을 막는다. 새 체험은 새로운 visitor/scope로만 시작한다.
 
 세션 종료는 기존 세션의 종료/분석 흐름, 세션 삭제는 기존 soft delete다. 어느 것도 방문객 generation을 바꾸지 않는다. shutdown은 closing으로 신규 작업을 차단한다. 재시작 시 전용 root에서 검증한 이전 세대만 orphan 정리하며 임의 파일은 격리·오류 처리하고 readiness를 내린다. cleanup은 §8 주기로 재시도하고 hard cap 초과 시 start/reset을 503으로 막으며 기존 세대의 안전한 조회/해제는 계속 허용한다.
+
+### 7.1 첫 준비의 실패·복구와 bootstrap 경합 (R4–R5)
+
+첫 reserve_start는 bootstrap_nonce→단일 visitor_id/OperationToken을 **방문객 quota 예약과 원자적으로** 연결한다. g=1/epoch=1/preparing/factory=None, 요청 role을 고정한다. #191 admission lock의 첫 승자만 clone하고, 같은 bootstrap의 다른 request_id/다른 role은 preparing 동안 409 `DEMO_START_IN_PROGRESS`, Set-Cookie 없음이다. 같은 ID/다른 body는 409 REQUEST_CONFLICT다. 다른 ID가 먼저 완료 응답을 받더라도 방문 공간/role을 새로 만들거나 교체하지 않는다. ready 뒤 새 start ID는 200 현재 공간/현재 role을 반환하며 요청 role로 전환하지 않는다.
+
+`preparing→ready`는 publish만 가능하다. 검증 실패/복제 오류는 `prepare_failed` + `DEMO_PREPARE_FAILED` 503, 디스크 초과는 STORAGE_LIMIT 507, 잠김은 DB_LOCKED 503, 버전 오류는 VERSION_MISMATCH 503으로 fail한다. `/demo/state`는 200 prepare_failed/factory 없음/role=null/next_url=null/last_error를 반환한다. 실패 전 어떤 자원 URL도 사용할 수 없고 clone 완료 전에 성공 응답을 보내지 않는다. same-ID replay는 같은 실패만 반환하며 clone을 다시 하지 않는다. state 확인 뒤 **새 request_id의 start**는 같은 visitor/g=1/epoch=1에서 attempt_no+1로 준비를 재시도한다. 이전 실패 op의 늦은 publish/fail은 무효다.
+
+prepare_failed에서도 방문 예약 1개는 원래 expires_at까지 유지하고 request receipt는 원래 absolute TTL까지 보관한다. 실패/retry가 idle/absolute deadline을 늘리지 않는다. 파일 bytes/실제 staging 예약은 close/dispose/unlink 후에만 반환한다. 새 clone 예약과 old 미정리 staging의 합이 quota를 넘으면 새 retry는 STORAGE_LIMIT/CLEANUP_BACKLOG이며 실패 상태를 유지한다. preparing/prepare_failed의 TTL 만료는 expire로 generation/epoch 증가, op 취소·폐기·410 EXPIRED다. 방문객 slot은 tombstone과 실제 파일/lease 정리 완료 후 반환하되 익명 bootstrap의 과거 receipt는 원래 absolute 만료까지만 남긴다. TTL 뒤 명시적 새 start는 새 visitor/scope를 예약하고 과거 op는 재실행하지 않는다.
+
+반복 GET /demo는 유효한 bootstrap_nonce를 보존한다. bootstrap을 이미 가진 탭에 새 nonce를 발급하지 않는다. 세션 cookie는 §10의 **안정된 bootstrap 참조**이고 실제 visitor/role/g/epoch는 서버 mapping이므로, start 승패·응답 역순으로 cookie가 다른 공간/role을 가리킬 수 없다. cookie 없는 첫 GET은 익명 참조만 만들고, POST는 그 요청의 cookie/CSRF에 결합된 bootstrap으로만 실행한다. cookie가 없는 동시 GET 자체를 IP로 하나의 신원으로 묶지 않는다. 이후 공유 cookie가 채택한 bootstrap 이외의 오래된 페이지 token은 CSRF 거절/안전 GET 재동기화하며 다른 bootstrap의 공간을 합치지 않는다.
+
+관찰 검사(#191/#193, 실제 middleware #194/#203): 동일 bootstrap의 request X(teacher)/Y(admin)를 barrier로 동시에 보내면 leader 하나/방문 예약1/clone1, loser409 START_IN_PROGRESS·cookie 변경0, 최종 role은 leader의 것. 실패-before-publication이면 ready 자료0, 같은 ID로 clone 증가0, 새 ID retry 성공 시 같은 visitor/g=1. publish 뒤 HTTP 응답을 잃어도 state GET/같은 ID replay로 같은 공간을 얻고 clone/slot 증가0이다.
 
 ## 8. 상한·TTL와 운영 승인 입력 (C08)
 
@@ -144,7 +179,7 @@ TTL 판정은 서버의 monotonic 경과와 UTC 표시에 기반하고 `now >= e
 | --- | --- | --- |
 | `DEMO_IDLE_TTL_SECONDS` | 초 1800, 300..7200 | 만료 410; #191/#192 정리 |
 | `DEMO_ABSOLUTE_TTL_SECONDS` | 초 7200, 1800..28800, idle 이상 | 만료 410; reset 연장 없음 |
-| `DEMO_MAX_VISITORS` | 공간 20, 1..1000 | preparing/ready/resetting/reset_failed/미정리 expired를 합산; 503 CAPACITY, 물리 정리 후 반환 |
+| `DEMO_MAX_VISITORS` | 공간 20, 1..1000 | preparing/prepare_failed/ready/resetting/reset_failed/미정리 expired를 합산; 503 CAPACITY, 물리 정리 후 반환 |
 | `DEMO_MAX_DB_BYTES` | 세대당 bytes 33554432, 1048576..268435456 | staging+WAL/SHM 포함, seed 크기 이상 필수; 쓰기 admission 및 commit 전 검사, 507 STORAGE_LIMIT |
 | `DEMO_MAX_DISK_BYTES` | root 총 bytes 1073741824, 67108864..10737418240 | seed+모든 세대+staging+예약 복제 여유 합산; 507, 실제 unlink 후 반환 |
 | `DEMO_MAX_TURNS` | 세션당 예약 교사 턴 10, 2..100 | 미지원/실패 예약 포함; retry는 같은 턴, 새 턴 거절 429; 세션 삭제로 누적 공간 할당량을 되돌리지 않음 |
@@ -168,28 +203,49 @@ schema의 방문객 `AppSetting.limits`에는 기존 total/openai/anthropic/goog
 | --- | --- | --- |
 | `GET /demo` | 없음 | 200 설명/역할 선택, 익명 bootstrap 및 CSRF cookie. DB 생성 없음 |
 | `POST /demo/start` | `request_id:UUID`, `role:admin\|teacher` | 신규 201 ready 응답, 동일 요청 replay 200/준비 중 202. 기존 유효 방문이면 현재 공간 반환하고 역할 변경은 별도 `/role` 사용. 만료 후 새 명시 start만 새 공간 생성 |
-| `POST /demo/role` | `request_id`, `role`, `expected_generation:int>=1`, `expected_auth_epoch:int>=1` | 200 현재 DB의 정상 User 선택, auth_epoch+1, cookie/CSRF 갱신. 같은 역할은 no-op. active 작업 있으면 409 BUSY, 삭제 교사는 409 ROLE_DELETED, 암묵 재생성 없음 |
+| `POST /demo/role` | `request_id`, `role`, `expected_generation:int>=1`, `expected_auth_epoch:int>=1` | 200 현재 DB의 정상 User 선택, auth_epoch+1, 서버 CSRF revision 갱신 후 current-state GET으로 cookie 동기화. current epoch의 같은 역할은 busy여도 no-op, stale epoch는 거절. active 작업 있으면 409 BUSY, 삭제 교사는 409 ROLE_DELETED, 암묵 재생성 없음 |
 | `POST /demo/reset` | `request_id`, `expected_generation`, `expected_auth_epoch`, `confirm:true` | 두 역할에서 허용, 202 resetting 또는 200 ready; §7 멱등/실패 계약. body의 role/user/path는 거절 |
-| `GET /demo/state` | optional `request_id:UUID` (자신의 mutation 조회), `include_tour:bool=false` | 상태 조회 200, 만료는 410 envelope; 알 수 없는 요청 ID는 404. old cookie generation으로 상태 동기화는 허용하되 자료 조회/권한 부여는 안 함 |
+| `GET /demo/state` | optional `request_id:UUID` (자신의 mutation 조회), `include_tour:bool=false` | 상태 조회 200, 만료는 410 envelope; 알 수 없는 요청 ID는 404. 안정된 bootstrap cookie로 현재 mapping 동기화; 과거 namespace의 자료 접근/권한 부여는 안 함 |
 
-ready/state 응답의 신규 공통 객체 `DemoState`는 `contract_version`, `content_version`, `fixture_version`, `state`, `browser_scope_id`, `generation`, `auth_epoch`, `role:admin|teacher|null`, `expires_at`, `idle_ttl_seconds`, `absolute_ttl_seconds`, `request_id:UUID|null`, `csrf_cookie_name`, `csrf_header_name`, `next_url:string|null`, `active:bool`, `provenance`, `tour_steps:null|단계 map`을 가진다. tour_steps는 ready/current context의 include_tour=true 조회에서만 채우며 제어 상태 응답에는 null이다. 준비/실패 상태의 role/next_url은 null, 만료 시에는 허용된 최소 상태와 복구 코드만 보낸다. factory/path/visitor_id/User ID는 보내지 않는다. 성공 next_url은 서버가 만든 현재 세대 URL이고 임의 return URL은 받지 않는다.
+ready/state 응답의 신규 공통 객체 `DemoState`는 `contract_version`, `content_version`, `fixture_version`, `state`, `browser_scope_id`, `generation`, `auth_epoch`, `role:admin|teacher|null`, `expires_at`, `idle_ttl_seconds`, `absolute_ttl_seconds`, `request_id:UUID|null`, `csrf_cookie_name`, `csrf_header_name`, `next_url:string|null`, `active:bool`, `provenance`, `last_error:null|code`, `tour_facts:null|TourFacts`을 가진다. tour_facts는 ready/current context의 include_tour=true 조회에서만 채우며 제어 상태 응답에는 null이다. 최종 tour_steps는 §24에서 #199가 계산한다. preparing/실패의 start 대상에는 공개 role=null이지만 내부 예약 role은 유지한다. 준비/실패 상태의 role/next_url은 null, 만료 시에는 허용된 최소 상태와 복구 코드만 보낸다. factory/path/visitor_id/User ID는 보내지 않는다. 성공 next_url은 서버가 만든 현재 세대 URL이고 임의 return URL은 받지 않는다.
 
-bootstrap은 별도 익명 서명 세션 nonce이며 자료 접근 권한이 없다. 첫 start 예약은 `(bootstrap_nonce,request_id)`에 묶여 쿠키 응답 유실 후 replay도 새 공간을 만들지 않는다. 이 예약과 mutation 결과는 방문 수명(익명은 absolute 기본 TTL) 동안 보관한다. 방문객당 서로 다른 request_id는 최대 256개, bootstrap 예약은 방문 공간 quota 안에서만 허용한다. 한도 도달 시 새 ID만 LIMIT_REACHED로 거절하고 기존 결과를 임의 eviction해 중복 실행하지 않는다. 유효 방문의 request_id는 `(visitor_id,operation,request_id)`로 unique, 같은 ID/다른 body는 409 REQUEST_CONFLICT다. CSRF·방문 서명 검증은 replay보다 먼저이며 회전 전 토큰 예외를 만들지 않는다. 제어 mutation의 소유된 request_id 결과 조회는 그 뒤 expected_generation/epoch 거절보다 먼저 수행한다. 이 예외는 캐시된 제어 결과만 반환하며 stale 자료 조회나 새 작업을 허용하지 않는다. 만료/재시작 후 과거 mutation은 재실행하지 않고 새 start를 안내한다.
+bootstrap은 별도 익명 서명 세션 nonce이며 자료 접근 권한이 없다. 방문 예약의 unique key는 bootstrap_nonce이고 그 안의 operation receipt key는 request_id여서 쿠키 응답 유실 후 replay도 새 공간을 만들지 않는다. 이 예약과 mutation 결과는 방문 수명(익명은 absolute 기본 TTL) 동안 보관한다. 방문객당 서로 다른 request_id는 최대 256개, bootstrap 예약은 방문 공간 quota 안에서만 허용한다. 한도 도달 시 새 ID만 LIMIT_REACHED로 거절하고 기존 결과를 임의 eviction해 중복 실행하지 않는다. 유효 방문의 request_id는 `(visitor_id,operation,request_id)`로 unique, 같은 ID/다른 body는 409 REQUEST_CONFLICT다. CSRF·방문 서명 검증은 replay보다 먼저이며 완료 후 회전 전 토큰을 허용하지 않는다. preparing/resetting 중 아직 회전하지 않은 유효 토큰의 replay는 아래 표대로 허용한다. 제어 mutation의 소유된 request_id 결과 조회는 그 뒤 expected_generation/epoch 거절보다 먼저 수행한다. 이 예외는 캐시된 제어 결과만 반환하며 stale 자료 조회나 새 작업을 허용하지 않는다. 만료/재시작 후 과거 mutation은 재실행하지 않고 새 start를 안내한다.
+
+### 9.1 제어 요청 replay·CSRF·Set-Cookie 행렬 (R6)
+
+#193 router와 #194 middleware는 이 표를 같은 우선순위로 소비한다. `N`은 **두 cookie 모두 Set-Cookie 없음**(일반 SessionMiddleware의 자동 재발급도 억제), `C`는 현재 bootstrap 참조 유지/서명 갱신 및 **현재 서버 CSRF revision의** cookie만 발급한다. 표의 POST는 올바른 Origin·서명·현재 유효 double-submit token을 전제로 하고 유효 서명 요청 안에서는 누락/오류 CSRF 행이 항상 replay/namespace 판정보다 우선한다. 위조/부재 서명은 먼저401 SESSION_REQUIRED다. GET에는 CSRF header를 요구하지 않는다. 아래 preparing는 start, resetting/reset_failed는 reset의 자기 operation을 가리킨다. prepare_failed는 실패 status가 §7.1이라는 차이 외에는 reset_failed 열과 같은 규칙이다.
+
+| 요청 | preparing | resetting | reset_failed | 완료 후 ready | Set-Cookie |
+| --- | --- | --- | --- | --- | --- |
+| 수락된 동일 ID/동일 body POST replay | 202 preparing, clone 추가0 | 202 resetting, 세대 증가0 | 저장된 실패 status/code, 새 준비0 | 저장된 결과 receipt(성공200/실패 원래 status), 현재와 다르면 historical=true | N |
+| 동일 ID/다른 body POST | 409 REQUEST_CONFLICT | 409 REQUEST_CONFLICT | 409 REQUEST_CONFLICT | 409 REQUEST_CONFLICT | N |
+| 새 ID POST | start409 START_IN_PROGRESS; role/reset401 SESSION_REQUIRED | start/role/reset409 RESET_IN_PROGRESS | reset은 state의 예약 g/epoch로 202(빠른 성공200), start/role503 RESET_FAILED | start200 기존 공간; role200/동일역할 no-op 또는 BUSY; reset202/200. stale 신규 요청은409 STALE_GENERATION/STALE_ROLE | N |
+| POST의 CSRF 누락/오류/회전 전 토큰 | 403 CSRF_INVALID | 403 CSRF_INVALID | 403 CSRF_INVALID | 403 CSRF_INVALID, replay 조회도 하지 않음 | N |
+| `GET /demo/state`(request_id 없음) | 200 현재 preparing | 200 현재 resetting | 200 현재 reset_failed/last_error | 200 현재 ready | C |
+| `GET /demo/state?request_id=<수락된 ID>` | 해당 현재 operation이면202 | 해당 현재 operation이면202; 과거 완료 ID면200 historical | 현재 실패 ID면 저장된 실패 status/code; 과거 완료면200 historical | 성공200/실패 원래 오류 status의 receipt, historical 여부 표시 | N |
+
+prepare_failed에서 새 ID start만 같은 방문을 재준비하고 role/reset은503 PREPARE_FAILED다. 미방문/위조 서명은401 SESSION_REQUIRED, 알 수 없거나 다른 bootstrap의 request_id는404 RESOURCE_NOT_FOUND, expired는410 EXPIRED, 어느 경우도 N이다. 짧은 코드 표기는 모두 `DEMO_` prefix를 붙인다. 새 ID의 한도/설정/검증 오류는 §11이 우선하고 clone/token을 만들지 않는다.
+
+저장된 결과는 `ControlReceipt={operation:"start"|"role"|"reset",request_id:UUID,result:DemoState|E,historical:bool,current:{state,generation,auth_epoch,role,browser_scope_id}}`라는 응답 형태로 반환한다. historical은 결과의 scope/g/epoch가 현재와 다를 때 true, next_url은 null로 강제한다. 현재 preparing/resetting의 replay는 DemoState + request_id 그대로다. 과거 실패 receipt는 저장된 오류 status를 유지한다. 브라우저는 receipt.result를 현재 상태로 적용하지 않고 current-state GET으로 동기화한다. **POST replay와 historical-result GET은 어떤 세대의 cookie도 발급하지 않는다.** 예: reset X 성공 뒤 reset Y 성공 후 X를 다시 조회하면 X 결과를 읽을 수 있지만 Y의 mapping/cookie/role은 변하지 않는다.
+
+start/role/reset의 최초 완료 응답도 N이며 클라이언트는 완료/실패/결과 불명확 시 current-state GET(C)을 수행한 뒤 다음 mutation을 보낸다. 전환 시작 시 기존 CSRF revision은 그대로 유효하므로 preparing/resetting 동일 POST의202가 가능하다. publish/실제 role 변경 성공 시 서버 revision을 올리고 이후 기존 토큰은403이다. CSRF403은 작업을 다시 실행하는 신호가 아니며 안전 GET→같은 request_id 결과 확인 순서로 복구한다. #203은 응답 유실/중복 진행 POST/후속 reset 후 과거 결과 조회를 이 표대로 검사한다.
 
 ## 10. 쿠키·CSRF와 세대 전달 (C10)
 
 | cookie | 속성·수명·내용 |
 | --- | --- |
-| `demo_session_id` | host-only(Domain 없음), Path=/, HttpOnly, SameSite=Lax, production Secure, Max-Age=28800. normal `session_id`와 이름·서명키 분리. 서명 payload는 익명 nonce 또는 visitor 참조/generation/auth_epoch/role 참조만; 비밀/DB 경로 없음 |
+| `demo_session_id` | host-only(Domain 없음), Path=/, HttpOnly, SameSite=Lax, production Secure, Max-Age=28800. normal `session_id`와 이름·서명키 분리. 서명 payload는 안정된 bootstrap_nonce 참조만. visitor/generation/auth_epoch/role은 서버 mapping으로 결정하며 cookie 값에 넣지 않음; 비밀/DB 경로 없음 |
 | `demo_csrftoken` | host-only, Path=/, HttpOnly=false(JS reader 필요), SameSite=Lax, production Secure. **session cookie: Max-Age/Expires 없음**, 브라우저 세션 수명. 8시간을 복사하지 않음 |
 
 위 이름은 고정값이며 임의 cookie 이름 설정을 추가하지 않는다. normal cookie 이름·정책은 보존한다. cookie의 8시간은 DB TTL이 아니며 서버 만료가 우선한다. development의 명시적 loopback 검사만 Secure=false; demo에서 보안 middleware를 끄는 `TESTING`은 금지한다.
 
-`GET /demo`가 signed double-submit CSRF를 발급한다. mutation은 `x-csrf-token`과 cookie의 일치/서명을 검증하고 Origin이 DEMO_ORIGIN과 정확히 같은지 검사한다(Origin 없는 form은 동일 origin Referer 필수, 둘 다 없으면 거절). start/role/reset/삭제는 `/login` 예외에 포함하지 않는다. 정상 role/reset 완료 후 CSRF와 session을 함께 회전한다. 준비 중에는 기존 토큰으로 상태 GET만 가능, 성공 조회가 새 토큰을 발급한다. 실패 재시도 전 state 조회로 현재 토큰을 동기화한다. 제어 상태 GET은 예약 세대/auth_epoch의 서명 cookie 참조도 갱신하되 ready 전에는 역할 권한을 부여하지 않는다. 이 참조로 실패 reset 재시도만 가능하며 DB 자료 접근은 거절한다. CSRF 본문 값은 응답 JSON/event/storage에 저장하지 않고 reader가 그때 cookie를 읽는다.
+`GET /demo`와 current-state GET만 signed double-submit CSRF를 발급한다. token은 bootstrap_nonce와 서버 csrf_revision에 결합하며 준비 중에는 이전 유효 revision을 유지한다. mutation은 `x-csrf-token`과 cookie의 일치/서명/서버 revision을 검증하고 Origin이 DEMO_ORIGIN과 같은지 검사한다(Origin 없는 form은 동일 origin Referer 필수, 둘 다 없으면 거절). start/role/reset/삭제는 `/login` 예외가 아니다. GET /demo는 유효 bootstrap을 재사용하고 현재 revision만 동기화한다. role/reset 성공 뒤 current-state GET에서 session 서명을 갱신하고 새 CSRF revision을 cookie로 전달한다. POST/historical GET은 §9.1대로 Set-Cookie를 억제한다.
+
+서버 visitor/권한/세대는 cookie 응답 순서로 rollback되지 않는다. 같은 bootstrap의 늦은 start/loser/과거 receipt 응답에는 Set-Cookie가 없어 다른 탭을 덮을 수 없다. 서로 다른 revision의 current-state GET 응답 자체가 역순 도착해 오래된 CSRF cookie가 남는 경우에는 다음 mutation403·작업0이고, 최신 current-state GET으로 복구한다. 오래된 token을 받아들이거나 세대/역할을 되돌리지 않는다. #199/#201은 제어 완료 뒤 state 응답의 g/epoch가 마지막 확인 값보다 작으면 JSON을 적용하지 않는다. CSRF 값은 응답 JSON/event/storage에 저장하지 않고 요청마다 cookie를 읽는다.
 
 template 공통 `demo_config`의 `csrf_cookie_name="demo_csrftoken"`, `csrf_header_name="x-csrf-token"`을 JSON 안전 인코딩해 전달한다. #199가 template/inline reader, #201이 기존 JS reader에 적용한다. csrf 오류는 본문을 재전송하지 않고 안전한 state GET/토큰 갱신 후 사용자가 다시 실행하게 한다.
 
-자료 URL에는 `ds=browser_scope_id&dg=generation&da=auth_epoch`를 넣는다. AJAX/HTMX/fetch는 `X-Demo-Scope`, `X-Demo-Generation`, `X-Demo-Auth-Epoch`를 보낸다. form은 `_demo_scope`, `_demo_generation`, `_demo_auth_epoch` hidden 값을 보낸다. 서버는 서명 세션과 교차 검증하고 중복 전달 값이 다르면 409로 거절한다. 기존 route body parsing 전 #194가 이 메타데이터를 검증하고 메타데이터 필드만 분리해 기존 strict body schema에 전달하지 않는다. 자료 ID가 있는 URL에 namespace가 없으면 409 STALE_GENERATION이며 새 공간에 자동 연결하지 않는다. 새 자료 없는 진입/목록 URL만 현재 상태에서 링크를 만들 수 있다.
+자료 URL에는 `ds=browser_scope_id&dg=generation&da=auth_epoch`를 넣는다. AJAX/HTMX/fetch는 `X-Demo-Scope`, `X-Demo-Generation`, `X-Demo-Auth-Epoch`를 보낸다. form은 `_demo_scope`, `_demo_generation`, `_demo_auth_epoch` hidden 값을 보낸다. 서버는 서명 bootstrap의 현재 mapping과 교차 검증하고 중복 전달 값이 다르면 409로 거절한다. 기존 route body parsing 전 #194가 이 메타데이터를 검증하고 메타데이터 필드만 분리해 기존 strict body schema에 전달하지 않는다. 자료 ID가 있는 URL에 namespace가 없으면 409 STALE_GENERATION이며 새 공간에 자동 연결하지 않는다. 새 자료 없는 진입/목록 URL만 현재 상태에서 링크를 만들 수 있다.
 
 ## 11. 오류·HTTP·API·SSE 대응표 (C11)
 
@@ -203,6 +259,8 @@ demo JSON 오류 `E(code)`는 `{"detail":{"code":code,"retryable":bool,"recovery
 | `DEMO_EXPIRED` | 410 | E / S=cancelled | false | `demo.expired` | TTL/lifecycle | #193/#199/#201/#204 |
 | `DEMO_STALE_GENERATION` | 409 | E / S=cancelled | false | `demo.stale_generation` | resolver/write_guard | #198/#199/#201/#203 |
 | `DEMO_STALE_ROLE` | 409 | E / S=cancelled | false | `demo.stale_role` | auth_epoch guard | #199/#201/#203 |
+| `DEMO_START_IN_PROGRESS` | 409 | E | false | `demo.preparing` | #191 reserve_start | #193/#199/#201/#203 |
+| `DEMO_PREPARE_FAILED` | 503 | E | true | `demo.prepare_failed` | #191 fail(start) | #193/#199/#201/#203 |
 | `DEMO_RESET_IN_PROGRESS` | 409 | E / S=cancelled | false | `demo.resetting` | provider/session | #193/#199/#201 |
 | `DEMO_RESET_FAILED` | 503 | E / S=failed | true | `demo.reset_failed` | seed/reset orchestration | #193/#199/#201/#203 |
 | `DEMO_DRAIN_TIMEOUT` | 503 | E / S=cancelled | true | `demo.reset_failed` | drain | #193/#199/#201/#203 |
@@ -233,7 +291,7 @@ demo JSON 오류 `E(code)`는 `{"detail":{"code":code,"retryable":bool,"recovery
 
 기존 공개 SSE code 대응도 보존한다. 학생 stream은 `empty_response→empty_output`, `timeout_first_output→first_output_timeout`, `timeout_total→run_timeout`, `output_limit→incomplete_response`, `interrupted→configuration_unavailable`로 표시하고 status=failed다. 학생의 session_ended는 run.cancelled이며 disconnect 중 전송 불가이면 terminal 전달을 보장하지 않고 정리/상태 조회로 복구한다. 멘토는 원래 출력 code를 유지하고 interrupted는 run.interrupted, session_ended는 run.cancelled, 나머지는 run.failed다. 새로운 demo 경계 오류는 표의 대문자 code 그대로 전달한다. `storage_error`, `provider_error`는 기존 public 실패 code로 유지하며 HTTP 503 / run.failed / retryable=true / recovery=demo.retry_later를 쓴다. 원장에는 기존 provider-neutral code/status를 보존한다. API의 canonical code와 SSE alias가 달라도 같은 recovery 의미로 소비한다.
 
-normal의 `AUTH_EXPIRED`와 demo의 미방문/만료를 혼동하지 않는다. 알 수 없는 예외는 `DEMO_RESET_FAILED`(reset) 또는 `configuration_unavailable`(AI)로 안전하게 변환하고 원래 예외/SQL/secret을 반환하지 않는다. 미지원 **입력문**은 §16의 정상 완료 콘텐츠 안내이며 422/transport 실패가 아니다. 부분 분석도 HTTP 성공의 별도 자료 상태이며 정상 분석으로 승격하지 않는다.
+normal의 `AUTH_EXPIRED`와 demo의 미방문/만료를 혼동하지 않는다. 알 수 없는 예외는 `DEMO_PREPARE_FAILED`(start 준비) 또는 `DEMO_RESET_FAILED`(reset) 또는 `configuration_unavailable`(AI)로 안전하게 변환하고 원래 예외/SQL/secret을 반환하지 않는다. 미지원 **입력문**은 §16의 정상 완료 콘텐츠 안내이며 422/transport 실패가 아니다. 부분 분석도 HTTP 성공의 별도 자료 상태이며 정상 분석으로 승격하지 않는다.
 
 ## 12. keyless schema·migration (C12)
 
@@ -281,7 +339,7 @@ SDK constructor·HTTP transport·outbound socket 감시에서 외부 AI 시도�
 
 기존 [invocation_types.py](../../src/services/invocation_types.py)의 필드를 유지한다. `TextRequest`의 provider/model_id/role/system_instruction/messages/validated_options/request_id와 keyword-only service_tier/context_budget_json, `StructuredRequest.output_schema/validation_context`를 재사용한다. demo 호출에는 신규 keyword-only `demo_context`(서버의 고정 context/lease 참조), `demo_selection`(아래 불변 선택)를 추가한다(#198). normal은 둘 다 None이며 외부 SDK payload에 전달하지 않는다. 클라이언트가 이 객체를 직접 공급할 수 없다.
 
-`demo_selection`은 `contract_version`, `content_version`, `fixture_version`, `manifest_sha256`, `scenario_ref="unit-fraction-v1"`, `content_state="initial"|"after_first"|"after_compare"`, `branch:null|"A"|"B"|"C"`, `input_kind:"A"|"B"|"C"|"common"|"unsupported"`, `trigger:null|"auto"|"manual"`, `target_turn_id:UUID|null`, `fixture_case`를 가진다. 공개 runtime의 fixture_case는 `normal`만 허용하고 실패 case는 테스트가 서버 객체를 직접 구성할 때만 가능하다. request query/header/본문/TESTING으로 case를 선택하지 않는다. 값·버전·실제 이력 불일치는 VERSION_MISMATCH/INVALID_REQUEST로 거절한다.
+`demo_selection`은 `contract_version`, `content_version`, `fixture_version`, `manifest_sha256`, `scenario_ref="unit-fraction-v1"`, `content_state="initial"|"after_first"|"after_compare"`, `branch:null|"A"|"B"|"C"`, `input_kind:"A"|"B"|"C"|"common"|"unsupported"`, `trigger:null|"auto"|"manual"`, `target_turn_id:UUID|null`, `analysis_phase:"none"|"single"|"chunk"|"merge"`, `fixture_case`를 가진다. 공개 runtime의 fixture_case는 `normal`만 허용하고 실패 case는 테스트가 서버 객체를 직접 구성할 때만 가능하다. request query/header/본문/TESTING으로 case를 선택하지 않는다. 값·버전·실제 이력 불일치는 VERSION_MISMATCH/INVALID_REQUEST로 거절한다.
 
 신규 adapter 공개 함수는 기존 제공자 adapter의 호출 형태를 따른다: `generate_text(request, secret, timeouts, *, deadline) -> CallEvent`, `stream_text(...) -> async iterator[CallEvent]`, `generate_structured(...) -> CallEvent`. secret이 None 이외거나 mode/provider/model이 틀리면 거절한다. catalog adapter는 제공하지 않는다. 요청의 system_instruction/messages는 원래 스냅샷·실제 메시지로 만들며 fixture가 입력을 다른 문장으로 교체하지 않는다. `service_tier`는 None만 허용한다.
 
@@ -308,7 +366,40 @@ event iterator는 종료 event를 정확히 한 번 내고 더 이상 delta를 �
 
 학생/멘토·관리자 분석은 자동 retry 0, 교사 분석은 기존 정책대로 response_received=false이고 출력 전의 transient/rate_limited/timeout_connect에서 최대 1회만 재시도한다. deadline/slot 재획득/lease 현재성을 다시 검사한다. refused/invalid_output/invalid_reference/이미 받은 부분 응답은 자동 retry하지 않는다. timeout_total을 새 성공 예시로 바꾸지 않는다. refresh/back/GET은 예약/생성을 하지 않는다.
 
-지원하지 않는 **설정 조합**은 저장/게시 규칙을 통과할 수 있지만 새 세션 실행 전 `DEMO_UNSUPPORTED_CONFIGURATION`으로 안내한다. 지원 hash는 제목/그룹/공개 표시 metadata/역할별 max_output_tokens를 제외한 실행 콘텐츠와 정책을 canonical JSON(sorted keys, UTF-8, compact separators)으로 hash한 값이다. config_schema_version/내용·rubric/mentor 정책을 포함한다. 제목만 편집한 지원 시나리오는 실행 가능하며 임의 rubric을 준비된 결과로 분석하지 않는다. 세션 스냅샷은 실행 후 관리자 편집과 무관하게 유지한다.
+지원하지 않는 **설정 조합**은 저장/게시 규칙을 통과할 수 있지만 새 세션 실행 전 `DEMO_UNSUPPORTED_CONFIGURATION`으로 안내한다. 지원 hash는 §16.1의 정확한 projection을 hash한 값이다. 제목/그룹·역할별 output-token 옵션은 제외하지만 student.name/public_profile 등 명시된 콘텐츠는 포함한다. 기존 전체 snapshot config_hash와는 다른 값이다. 제목만 편집한 지원 시나리오는 실행 가능하며 임의 rubric을 준비된 결과로 분석하지 않는다. 세션 스냅샷은 실행 후 관리자 편집과 무관하게 유지한다.
+
+### 16.1 supported_config_sha256의 정확한 projection (R9)
+
+공유 helper의 단독 소유자는 **#195의 기존 `src/services/model_configuration.py`**다. 신규 공개 `supported_config_projection(config_schema_version, config) -> dict`, `supported_config_sha256(config_schema_version, config) -> hex64`를 제공한다. #196/#197/#198은 이 helper를 import/호출하고 독립 복제하지 않는다. G2 전에는 아래 고정 vector를 module-boundary stub의 기대값으로 사용할 수 있다.
+
+입력은 config_schema_version의 strict int=1 및 기존 ScenarioConfig 검증 결과다. default를 채운 model_dump와 같은 값을 사용하고 extra/explicit null 금지 등 기존 strict schema 검증은 먼저 수행한다. nullable인 resolved_model_config/rubric.level만 null을 허용한다. projection은 **아래 열거한 필드만** 포함한다.
+
+| projection의 정확한 경로 | 포함 값·기본/null 처리 |
+| --- | --- |
+| `config_schema_version` | strict int 1 |
+| `config.problem.public_text`, `.learning_objective` | str, 생략 기본 각각 빈 문자열 |
+| `config.student.name`, `.public_profile`, `.internal_profile`, `.misconception`, `.behavior_instruction` | str, 각각 기본 빈 문자열. 공개 학생 소개/이름도 포함하며 ‘표시 metadata’로 빼지 않음 |
+| `config.mentor.mode`, `.name`, `.welcome_message`, `.behavior_instruction` | 각각 기본 manual, 멘토, 빈 문자열, 빈 문자열 |
+| `config.mentor.intervention_policy.condition`, `.start_turn`, `.min_interval_turns`, `.window_turns`, `.max_interventions` | 각각 기본 빈 문자열/3/2/10/3, strict int 규칙 유지 |
+| `config.analysis.context`, `.expected_understanding`, `.instruction`, `.rubric_name`, `.rubric_description`, `.category_name`, `.classification_enabled` | 각각 기본 빈 문자열 6개/true |
+| `config.analysis.rubric` | 배열 순서 그대로, 각 원소의 id/name/criteria/level만. 기본 `[]`; 원소의 str 기본 빈 문자열, level 생략은 명시 null로 채움. 정렬/중복 제거 없음 |
+| 세 역할의 `config.<role>.resolved_model_config` | 없거나 null이면 명시 null. 있으면 **provider/model_id 두 필드만** 가진 object, 문자열 원문 그대로. model_config_id/provider_connection_id와 options 전체는 projection에서 제외. 실제 PK/옵션 검증은 별도로 반드시 유지 |
+
+`title/subject/target_grade/groups/is_active/action/expected_version/acknowledge_review` 등 config 밖 metadata와 `config.runtime` 전체(보존용 context_turn_limit), 모든 모델 options는 포함하지 않는다. 값의 trim/NFC/NFKC/대소문자 변경·기존 모델 별칭 변환은 하지 않는다. `json.dumps(projection, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")` 바이트의 SHA-256 소문자 hex다. UTF-8 불가 문자열/비정상 타입/지원 안 되는 config_schema_version은 INVALID_REQUEST이며 hash를 만들지 않는다.
+
+다음은 **projection 단위 검사 vector**다. model 미선택 초안이므로 실행 지원 승인이 아니며 제품 manifest의 실제 D0-02 hash를 이 값으로 대체하지 않는다. canonical 입력 JSON(생략 필드는 위 기본값 적용):
+
+```json
+{"config_schema_version":1,"config":{"problem":{"public_text":"문제"},"student":{"behavior_instruction":"지시"},"mentor":{},"analysis":{},"runtime":{}}}
+```
+
+정확한 hash 대상 바이트(아래 한 줄을 UTF-8로 인코딩, 마지막 newline 없음):
+
+```json
+{"config":{"analysis":{"category_name":"","classification_enabled":true,"context":"","expected_understanding":"","instruction":"","resolved_model_config":null,"rubric":[],"rubric_description":"","rubric_name":""},"mentor":{"behavior_instruction":"","intervention_policy":{"condition":"","max_interventions":3,"min_interval_turns":2,"start_turn":3,"window_turns":10},"mode":"manual","name":"멘토","resolved_model_config":null,"welcome_message":""},"problem":{"learning_objective":"","public_text":"문제"},"student":{"behavior_instruction":"지시","internal_profile":"","misconception":"","name":"","public_profile":"","resolved_model_config":null}},"config_schema_version":1}
+```
+
+기대 digest: `84c3988b5ab0c5ad9aa47e1c7c66edb755909e8b65a820eac9456bcf56dfaadb`. python3의 json/hashlib만 사용해 계산했다(앱 import 없음). 같은 vector의 mentor 기본값/각 null을 명시해서 넣어도 같다. 실제 승인된 D0-02 config에서 title 또는 4096→8192 output-token 변경은 hash 동일(모델 옵션 허용 범위 검증은 여전히 필요), PK 교체도 provider/model_id가 같으면 동일하다. rubric criteria/배열 순서나 student/mentor behavior_instruction 변경, model_id 변경은 hash가 달라져 실행 시 UNSUPPORTED_CONFIGURATION이다. 잘못된 옵션을 ‘hash에 없으니 허용’하지 않는다.
 
 ## 17. fixture·seed manifest·호환 버전 (C17)
 
@@ -316,7 +407,7 @@ event iterator는 종료 event를 정확히 한 번 내고 더 이상 delta를 �
 
 | 필드 | 타입·값/검증 |
 | --- | --- |
-| `manifest_version`, `contract_version`, `content_version`, `fixture_version` | int 1, `d0-03-v1`, `d0-02-v1`, `demo-fixture-v1` |
+| `manifest_version`, `contract_version`, `content_version`, `fixture_version` | int 1, `d0-03-v1-r2`, `d0-02-v1`, `demo-fixture-v1` |
 | `db_schema_version` | `_migrations` 최종 filename 문자열. #195의 실제 새 migration명과 정확히 일치해야 함; 현재 036을 demo 호환으로 선언하지 않음 |
 | `migration_set_sha256` | 정식 baseline+적용 migration 파일의 경로/내용을 정렬해 만든 SHA-256. 단순 마지막 번호만으로 호환 판단 금지 |
 | `scenario_config_schema_version`, `analysis_schema_version` | int 1, int 2 |
@@ -324,12 +415,12 @@ event iterator는 종료 event를 정확히 한 번 내고 더 이상 delta를 �
 | `scenario_ref`, `supported_config_sha256` | unit-fraction-v1, §16 canonical 실행 콘텐츠의 64자리 소문자 hex |
 | `seed_version`, `seed_timestamp`, `seed_refs` | demo-seed-v1, 고정 `2026-10-18T00:00:00Z`, 논리 admin/teacher/group/scenario/completed_session/model/connection → 양의 PK 또는 기존 UUID 타입 |
 | `files` | 정렬된 `{path:POSIX상대경로,sha256:hex64,kind:student\|mentor\|analysis\|failure\|seed}` 배열, manifest 자신 제외, 중복 경로 금지 |
-| `branches`, `cases` | A/B/C/common/unsupported 전부와 §15 실패 case의 논리 ID→files 참조. 인용은 template ref이며 실제 ID 아님 |
+| `lookup_version`, `responses` | int 1 및 §17.1의 **정확한 flat key→상대 file path** object. 도달 가능한 A/B/C/common/unsupported·실패 case/phase 조합을 전부 열거, 인용은 symbolic ref |
 | `seed_provenance` | `{source:"synthetic",generator:"src/demo/seed.py",content_version:"d0-02-v1"}`; 운영 DB·테스트 서버 자료 참조 금지 |
 
-개별 응답 fixture JSON도 공통 envelope를 쓴다: `fixture_version:string`, `case_id:string`, `role:student|mentor|analysis`, `content_state:initial|after_first|after_compare`, `input_kind:A|B|C|common|unsupported`, `trigger:null|auto|manual`, `terminal:completed|refused|interrupted|error`, `error_code:null|string`, `text:null|string`, `structured:null|object`, `partial_text:null|string`. extra field는 거절한다. 학생 normal은 text만, 멘토/분석 normal은 structured만 채우고 terminal=completed/error_code=null이다. 실패 envelope는 §15 case와 기존 error code의 정해진 조합만 허용한다. interrupted_after_delta만 partial_text를 실제 응답 prefix로 채우며 invalid_* case의 고의 잘못된 structured는 검증이 실패해야 한다는 expected case로만 허용한다. seed 설정 파일은 별도 ScenarioConfig 스키마로 검증한다.
+개별 응답 fixture JSON도 공통 envelope를 쓴다: `fixture_version:string`, `case_id:string`, `role:student|mentor|analysis`, `content_state:initial|after_first|after_compare`, `branch:null|A|B|C`, `input_kind:A|B|C|common|unsupported`, `trigger:null|auto|manual`, `analysis_phase:none|single|chunk|merge`, `terminal:completed|refused|interrupted|error`, `error_code:null|string`, `text:null|string`, `structured:null|object`, `partial_text:null|string`. extra field는 거절한다. 학생 normal은 text만, 멘토/분석 normal은 structured만 채우고 terminal=completed/error_code=null이다. 실패 envelope는 §15 case와 기존 error code의 정해진 조합만 허용한다. interrupted_after_delta만 partial_text를 실제 응답 prefix로 채우며 invalid_* case의 고의 잘못된 structured는 검증이 실패해야 한다는 expected case로만 허용한다. seed 설정 파일은 별도 ScenarioConfig 스키마로 검증한다.
 
-structured template는 기존 역할 출력과 같은 필드 구조를 유지하되 `message_id` 위치의 값만 `@teacher_first|@student_first|@teacher_common|@student_common|@unsupported_teacher:<완료순서>|@unsupported_student:<완료순서>` symbolic 문자열로 허용한다. binder는 지정 위치에서만 실제 int로 바꾸고 다른 문자열/원문에는 치환하지 않는다. 현재 완료 턴 목록에서 refs를 만들고 해당 역할·인용·순서가 없으면 invalid_reference다. 단일 분석/chunk/merge는 현재 입력에 들어 있는 ref만 쓴다. A/B/C의 내용·코칭·분류 template는 D0-02 원문을 사용하며 unsupported 메시지 목록은 실제 메시지에서 생성해 non_analyzable로 확장한다. 이 envelope와 symbolic 바인딩 결과를 #196/#197의 공통 단위 입력으로 쓴다.
+structured template는 기존 역할 출력과 같은 필드 구조를 유지하되 `message_id` 위치의 값만 `@teacher_first|@student_first|@teacher_common|@student_common|@unsupported_teacher:<완료순서>|@unsupported_student:<완료순서>` symbolic 문자열로 허용한다. binder는 지정 위치에서만 실제 int로 바꾸고 다른 문자열/원문에는 치환하지 않는다. §17.1의 phase별 projection 후 현재 입력에 남은 refs를 바인딩하고 역할·인용·순서가 틀리면 invalid_reference다. single에서 필수 ref 부재는 invalid_reference, chunk/merge의 범위 밖 항목은 §17.1대로 바인딩 전에 제외한다. 단일 분석/chunk/merge는 현재 입력에 들어 있는 ref만 쓴다. A/B/C의 내용·코칭·분류 template는 D0-02 원문을 사용하며 unsupported 메시지 목록은 실제 메시지에서 생성해 non_analyzable로 확장한다. 이 envelope와 symbolic 바인딩 결과를 #196/#197의 공통 단위 입력으로 쓴다.
 
 `manifest_sha256`은 저장된 manifest UTF-8 bytes 자체의 SHA-256이며 manifest 자신의 필드는 아니다. seed builder 출력 receipt가 `source_commit`(실제 전체 commit), `manifest_sha256`, `db_schema_version`, `seed_sha256`, `logical_data_sha256`, `command`를 기록한다. commit/hash/실제 migration명은 생성 결과로만 채우며 미래 값을 발명하지 않는다. 논리 데이터의 row/order/고정 시각/seed ID는 결정적이고 password hash salt·SQLite 물리 page 차이로 물리 DB hash가 달라도 logical_data_sha256은 같아야 한다. DB hash는 해당 생성 산출물의 무결성 확인에 쓴다. 허구 User는 웹 로그인 불가이며 비밀번호를 공개 자격 증명으로 발급하지 않는다.
 
@@ -338,6 +429,35 @@ structured template는 기존 역할 출력과 같은 필드 구조를 유지하
 seed는 허구 관리자/교사 각 1명, 배정 그룹 1개, 게시 대표 시나리오 1개, demo 연결/모델 각 1개와 B→공통 완료 예시 1개를 포함한다. 완료 예시의 메시지·분류·정상 분석·원장도 실제 FK/역할 계약을 충족한다. 외부 AI usage는 unknown이다. seed 완료 세션의 출처는 seed_prepared, 방문객의 신규 완료 세션은 visitor_generated로 구분한다. 정상 여정 5단계는 완료 세션 2개, 신규 세션의 메시지 5개(교사2/학생2/멘토1)+summary 1행이다.
 
 배포 시 기존 공간은 version_replace로 모두 만료하고 새 seed를 검증한 후 새 방문을 받는다. 활동 중 방문객 DB에 migration을 반복 적용하지 않는다. 앱/seed/fixture 호환 실패 시 readiness 503, 기존 DB로 fallback하지 않는다.
+
+### 17.1 manifest lookup·분석 phase·chunk projection (R8)
+
+#197은 responses를 작성하고 #196 provider.py의 신규 `fixture_lookup_key(selection)`가 다음 문자열을 만든다. **필드 순서/구분자/대소문자를 고정**한다.
+
+`<fixture_case>/<role>/<content_state>/<branch-or-none>/<input_kind>/<trigger-or-none>/<analysis_phase>`
+
+fixture_case는 §15 enum, role은 student/mentor/analysis, content_state/input_kind는 §15 enum, branch는 A/B/C 또는 null을 뜻하는 `none`, trigger는 auto/manual 또는 `none`이다. student는 trigger=none/phase=none, mentor는 auto 또는 manual/phase=none, analysis는 trigger=none/phase=single|chunk|merge다. analysis의 branch/state/input_kind는 최신 chunk 메시지가 아니라 **전체 실제 세션의 교육 진행 상태**에서 고정한다. after_compare이면 input_kind=common, after_first이면 input_kind=선택된 A/B/C, initial이면 branch=null/input_kind=unsupported다. 사이에 낀 unsupported 입력은 이 key를 바꾸지 않고 실제 classification에만 반영한다. student의 첫 지원 입력은 응답 전 state=initial/branch=선택 A/B/C/input_kind=같은 A/B/C로 선택하고, 미지원이면 branch는 기존 진행 분기(없으면 null)를 유지한다. 따라서 A→공통과 B→공통은 다른 key다. branch가 아직 없으면 none이고 최초 지원 분기 전의 unsupported 이력만 사용한다. 멘토는 완료된 target_turn의 input_kind/당시 branch/state를 사용한다(더 늦은 세션 상태로 바꾸지 않음).
+
+responses[key]는 files에 정확히 1회 등록된 fixture-root 상대 POSIX path이고 그 파일의 case_id는 **그 key 전체와 동일**해야 한다. envelope의 role/state/branch/input_kind/trigger/phase도 key와 일치한다. 누락/중복/불일치는 VERSION_MISMATCH이고 유사 key/다른 branch/자동→수동 fallback은 없다. 분석 single/chunk는 StructuredRequest.output_schema=UnifiedAnalysisOutput, merge는 MergeAnalysisOutput이어야 하며 다르면 실행 전 VERSION_MISMATCH다.
+
+아래는 네 selection을 위한 responses 필드의 완전한 lookup 예제다(전체 제품 manifest는 이 밖의 도달 가능한 key도 열거한다). 모든 path는 신규 `src/demo/fixtures/` 아래 제안이다. 각각 files에 같은 path/hash/kind로 등록한다.
+
+```json
+{"normal/analysis/after_compare/A/common/none/single":"analysis/A-single.json","normal/analysis/after_compare/B/common/none/single":"analysis/B-single.json","normal/mentor/after_compare/A/common/auto/none":"mentor/A-common-auto.json","normal/mentor/after_compare/A/common/manual/none":"mentor/A-common-manual.json"}
+```
+
+| 전체 lookup key(위 예제) | output_schema / 구체적인 template 결과 |
+| --- | --- |
+| `normal/analysis/after_compare/A/common/none/single` | UnifiedAnalysisOutput, teacher_first→r1/quote=이유를 말해 줄래?, teacher_common→r3/공통 질문의 실제 인용; student_first의 A 원문 근거 |
+| `normal/analysis/after_compare/B/common/none/single` | UnifiedAnalysisOutput, teacher_first→r2/quote=이 답을 기억해 봐., teacher_common→r3/공통 질문의 실제 인용; student_first의 B 원문 근거. A 인용이 남으면 invalid_reference |
+| `normal/mentor/after_compare/A/common/auto/none` | MentorOutput `{"should_intervene":false,"feedback":"","reason_summary":"같은 전체와 한 조각 크기를 연결하는 표현이 나와 추가 자동 코칭을 생략한다."}` |
+| `normal/mentor/after_compare/A/common/manual/none` | MentorOutput `{"should_intervene":true,"feedback":"학생봇이 같은 전체에서 한 조각의 크기를 설명했습니다. 이 표현만으로 실제 이해를 확정하지 말고, 다음 연습에서는 다른 단위분수도 같은 방법으로 설명하도록 물어보세요.","reason_summary":"완료된 대상 턴에 대한 수동 도움 요청에 코칭한다."}` |
+
+예컨대 첫 key의 envelope는 fixture_version=demo-fixture-v1, case_id=그 key, role=analysis, content_state=after_compare, branch=A, input_kind=common, trigger=null, analysis_phase=single, terminal=completed, error_code/text/partial_text=null, structured=D0-02 §6의 **A 전용 전체 UnifiedAnalysisOutput template**다. B는 해당 key/branch와 D0-02 B 전체 template로만 바뀐다. 두 멘토 envelope는 role=mentor, branch=A, state/input_kind=after_compare/common, phase=none이며 trigger와 위 structured만 auto/manual에 맞게 달라진다. 이 예제의 모든 필드/선택 차원은 mandatory이고 나머지 structured 본문도 D0-02에 정해진 전체 필드를 사용한다.
+
+chunk/merge도 같은 key 문법으로 마지막 phase만 바꾼 명시 파일을 사용한다. chunk 파일은 해당 branch의 symbolic template 원본이다. #196 output_binding.py가 **현재 chunk validation_context.messages와 owned_message_ids로** projection한다: 교사 classification은 owned teacher만(unsupported는 실제 해당 메시지의 non_analyzable), strengths/improvements/coaching은 owned ID만, finding의 모든 근거는 chunk messages 안에 존재하고 changed는 앞/뒤 시간순·적어도 하나 owned 조건을 만족하는 것만 남긴다. 현재 chunk에 실제 없는 symbolic ref는 해당 항목을 제외하고 다른 chunk의 가짜 ID를 채우지 않는다. 실패 fixture 이외에는 모든 owned teacher의 classification이 한 번씩 있어야 한다. coverage는 기존 서버 계산을 유지한다.
+
+merge 파일은 message_classifications 필드가 **없고** schema_version/findings/brief_feedback/strengths/improvements/coaching만 갖는 MergeAnalysisOutput template다. binder는 검증된 chunk 결과와 allowed_evidence에 있는 실제 (message_id,quote)만 골라 시간순으로 묶고, 모든 근거가 검증 목록에 없는 항목은 제외한다. 새 인용/분류/메시지는 만들지 않는다. single은 전체 실제 세션, chunk는 현재 owned 범위, merge는 검증된 범위만 사용한다. 예: B 첫 턴만 owned인 chunk에는 r2 하나, 공통 턴만 owned이면 r3 하나이며 overlap의 B 학생 근거가 messages에 있으면 changed 근거로 참조할 수 있으나 classification 중복은0이다. phase별 출력 검증·누락/부분 판정은 기존 계약에 맡기며 실패를 정상으로 수선하지 않는다.
 
 ## 18. 실제 근거 바인딩·멘토·분석 (C18)
 
@@ -355,7 +475,7 @@ seed는 허구 관리자/교사 각 1명, 배정 그룹 1개, 게시 대표 시�
 
 로컬 adapter의 실제 외부 AI 호출은 없음이다. 기존 `empty_usage()`의 input/output/total/cache/reasoning 토큰·estimated_cost_usd/pricing_*·raw_usage_json은 null, usage_complete=false다. DB/화면/CSV에서 unknown을 0으로 변환하지 않는다. 로컬 context token 추정은 기존 context_budget_json에 추정으로만 남긴다. 로컬 처리 시간은 서버 경과일 뿐 실제 AI 속도 보증이 아니다.
 
-신규 공통 provenance 객체는 `{mode:"demo",response_source:"prepared_example",external_ai_called:false,contract_version:"d0-03-v1",content_version:"d0-02-v1",fixture_version:"demo-fixture-v1",record_origin:"seed_prepared"|"visitor_generated"}`다. template·demo 상태·실행/분석 JSON·export에 같은 의미를 전달한다. provenance는 서버의 seed ref/생성 메타데이터에서 계산하고 클라이언트 입력을 신뢰하지 않는다. 완료 예시도 실제 체험 생성 자료와 명확히 구분한다.
+신규 공통 provenance 객체는 `{mode:"demo",response_source:"prepared_example",external_ai_called:false,contract_version:"d0-03-v1-r2",content_version:"d0-02-v1",fixture_version:"demo-fixture-v1",record_origin:"seed_prepared"|"visitor_generated"}`다. template·demo 상태·실행/분석 JSON·export에 같은 의미를 전달한다. provenance는 서버의 seed ref/생성 메타데이터에서 계산하고 클라이언트 입력을 신뢰하지 않는다. 완료 예시도 실제 체험 생성 자료와 명확히 구분한다.
 
 화면 배너와 이력·분석·CSV 안내는 D0-02의 ‘데모 · 준비된 예시 응답 · 실제 AI 품질 평가용 아님’ 의미를 유지한다. UI 영어 전환은 콘텐츠/출처 버전을 바꾸지 않는다. unknown 토큰/가격은 ‘알 수 없음/미측정’으로 표시한다.
 
@@ -425,20 +545,53 @@ reset은 현재 공간 전체의 새 seed 교체다. 사용자 삭제의 이력 
 
 ## 24. UI key/data/event와 여섯 단계 (C24)
 
-#199는 template와 inline reader·신규 tour JS/CSS, #201은 기존 JS/i18n의 단독 소유자다. 공통 template 변수 `demo_config`는 mode, §9 DemoState의 표시 가능 필드, `start_url`, `role_url`, `reset_url`, `state_url`, `public_url`, `csrf_cookie_name`, `csrf_header_name`, `ui_language:ko|en`, `tour_steps`를 가진다. normal은 `{mode:"normal",public_url:string|null}`만 전달한다. `<script type="application/json" id="demo-config">`에 안전 JSON으로 넣고 DB factory/내부 reason/secret을 넣지 않는다.
+#199는 template와 inline reader·신규 tour JS/CSS, #201은 기존 JS/i18n의 단독 소유자다. 공통 template 변수 `demo_config`는 mode, §9 DemoState의 표시 가능 필드, `start_url`, `role_url`, `reset_url`, `state_url`, `public_url`, `csrf_cookie_name`, `csrf_header_name`, `ui_language:ko|en`, `tour_facts`를 가진다. `tour_steps`는 서버 필드가 아니라 아래 #199 계산 결과다. normal은 `{mode:"normal",public_url:string|null}`만 전달한다. `<script type="application/json" id="demo-config">`에 안전 JSON으로 넣고 DB factory/내부 reason/secret을 넣지 않는다.
 
 DOM 계약은 root `data-demo-mode`, `data-demo-scope`, `data-demo-generation`, `data-demo-auth-epoch`, 투어 `data-demo-step="start|scenario|dialogue|analysis|admin_csv|reset"`, 조작 `data-demo-action="start|role|reset|close|skip|resume|restart"`다. 번역 key namespace는 `demo.*`, 주요 키는 `demo.banner`, `demo.content_language`, `demo.supported_only`, `demo.reset_confirm`, `demo.role_deleted`, `demo.expired`, `demo.start_required`, `demo.tour.start`, `.scenario`, `.dialogue`, `.analysis`, `.admin_csv`, `.reset`와 §11의 모든 recovery key다. #201이 한영 쌍을 추가하고 D0-02 §9 의미를 그대로 따른다.
 
-현재 context의 `include_tour=true` 상태 조회가 제공하는 `tour_steps`는 위 단계 ID→`pending|current|complete`의 map이며 실제 자료를 읽어 재계산한다. #193은 신규 session 모듈의 이 read-only projection을 소유하고 #199는 결과를 표시한다. 버튼 클릭만으로 complete로 저장하지 않는다.
+### 24.1 투어 사실·관찰·최종 map의 단독 소유 (R7)
 
-| 단계 | 서버/브라우저가 확인할 실제 완료 근거 |
+**최종 `tour_steps` 계산의 유일 소유자는 #199의 신규 `static/js/demo-tour.js`**다. 서버 #193의 신규 session.py는 자료 기반 `TourFacts`만 계산하며 complete/current/pending map이나 다운로드 수신 사실을 계산하지 않는다. #201은 기존 페이지/JS의 아래 관찰 이벤트만 #199에 전달한다. 서버에 브라우저 관찰을 보내는 ACK API는 없고 서버는 그것을 알았다고 기록하지 않는다.
+
+`GET /demo/state?include_tour=true`의 TourFacts는 `{schema_version:1,browser_scope_id:string,generation:int,auth_epoch:int,journey_session_id:int|null,teacher_entered:bool,scenario_created:bool,dialogue_complete:bool,analysis_ready:bool,teacher_deleted:bool,session_deleted:bool}`다. started_at/body/분석/이름/내부 reason은 담지 않는다. teacher_entered는 이 세대에서 teacher 역할에 성공 진입한 이력이며 현재 역할 조건이 아니다. scenario_created는 대상의 스냅샷 존재, dialogue_complete는 해당 세션의 지원 두 턴·첫 자동 코칭/공통 미개입 저장, analysis_ready는 지원 경로 완료+종료+정상 채택 분석 존재다. analysis_ready는 dialogue_complete/scenario_created/teacher_entered를, dialogue_complete는 scenario_created/teacher_entered를 함의한다.
+
+**여정 대상은 현재 generation에서 seed_refs.completed_session을 제외한, 지원 스냅샷으로 만든 visitor 세션 중 가장 작은 session PK**다. #193이 최초 조회 시 고정하고 namespace-bound journey_session_id를 제공한다. start가 아직 teacher로 전환되지 않은 admin이면 teacher_entered=false다. 이후 세션을 더 만들거나 현재 다른 세션 화면을 열어도 대상을 바꾸지 않는다. soft delete/교사 삭제 후에도 그 ID와 긍정 milestone을 보존하며 다른 신규 세션/seed로 대체하지 않는다. 새 대상 선택은 reset/새 체험뿐이다. #198의 신규 세션 생성 결과와 #199 tour는 이 규칙을 소비하며 ID를 클라이언트가 선택하는 query는 없다.
+
+#193의 공개 `capture_tour_facts(ctx, handle)`는 caller가 이미 보유한 transition/write_guard handle과 current lease 아래(재진입 없음) 실제 자료에서 그 대상의 사실을 계산하고(현재 teacher 역할 이력은 #193의 start/role 성공 시 함께 기록), `retain_tour_facts(handle, facts)`는 해당 generation의 **증명된 true만 합집합**으로 보관한다. 보관은 #193의 tour cache, 동기화는 #191 handle을 사용하며 별도 전환 lock은 만들지 않는다. 일반 상태 조회도 transition 안에서 capture→retain한다. #200은 교사/대상 세션 삭제 transaction 전에 같은 handle 아래 capture하고, **commit 성공 후 lock을 놓기 전에** retain 및 teacher_deleted/session_deleted를 실제 삭제 결과로 확정한다. rollback이면 갱신0이다. 따라서 이후에는 삭제 본문/분석을 읽거나 API에 내보내지 않고 저장한 boolean만 돌려준다. 세대 만료/reset/restart는 이 cache를 버린다. #193은 대상 row가 tombstone으로 처음 발견되면 ID는 유지하되 증명되지 않은 과거 true를 발명하지 않는다.
+
+브라우저 관찰은 `demo:tour-observed` 이벤트의 `{schema_version:1,browser_scope_id,generation,auth_epoch,journey_session_id:int,kind:"history_viewed"|"admin_record_viewed"|"csv_received",request_id:UUID}`다. #199가 현재 namespace/대상과 응답 성공을 확인한 이벤트만 수용한다. history_viewed는 종료된 대상의 이력/분석 상세가 정상 응답으로 실제 DOM에 열렸을 때다. admin_record_viewed는 관리자 화면에서 **그 대상**의 종료 기록/분석을 열었을 때이며 이 동작은 history_viewed도 충족한다. seed나 두 번째 신규 세션의 열람으로 첫 대상 관찰을 채우지 않는다.
+
+csv_received는 대상 단일 관리자 CSV를 fetch해 status200, 전체 body EOF 수신, UTF-8 CSV parse, 관리자27+suffix5 헤더·모든 행의 대상 session_id·출처/버전·summary행·행수 검증을 끝내고 Blob 다운로드를 시작한 뒤다. #200의 demo 단일 export 응답은 클라이언트의 신규 `X-Demo-Export-Request-ID:UUID`를 같은 값으로 echo하고(수신 관찰에서 요청/응답 ID 일치 필수), 신규 `X-Demo-Export-Row-Count:int>=1`(header 제외 실제 행수)을 제공한다. #199의 tour 다운로드는 링크 navigation 대신 이 경로를 소비한다. #201의 기존 export JS는 같은 검증 후 이벤트를 발행하고 template 링크 연결은 #199 소유다. abort/부분 body/parse 실패/다른 세션/오류 응답은 관찰0이다. **사용자가 로컬 저장 대화상자에서 저장했는지는 앱이 알 수 없으며 csv_received가 그것을 보증하지 않는다.** #204는 별도로 다운로드 파일을 실제 파싱한다.
+
+관찰의 localStorage key는 `demo:<browser_scope_id>:<generation>:tour-v1`이고 payload는 `{schema_version:1,journey_session_id:int|null,observations:[위 이벤트 객체],closed:bool,skipped:bool}`다. 관찰은 kind별 첫 성공 한 건만 보관한다. #199는 localStorage를 쓰기 직전 읽은 값/현재 메모리/다른 탭의 storage event를 같은 대상의 kind별 합집합으로 병합하고, 순서 차이로 검증된 관찰을 false로 덮지 않는다. body/CSV/secret은 저장하지 않는다. auth_epoch는 캡처 검증용이고 **투어 key에는 넣지 않으므로 역할 전환/refresh/언어 전환에도 같은 대상의 관찰을 보존**한다. 이것은 일반 draft/run storage의 epoch 격리에 대한 유일한 예외다. 늦게 도착한 old-epoch 응답으로 새 관찰을 만들지 않지만, 전환 전에 검증·보관한 관찰은 계속 쓴다. storage 불가/삭제 시 관찰은 메모리에서만 유지되고 refresh 후 재열람/재수신을 요구한다. 서버 사실은 유지된다. 다른 브라우저 context/새 generation에는 공유하지 않는다.
+
+| 단계 | #199가 계산하는 완료 predicate |
 | --- | --- |
-| start | ready teacher context와 배너 |
-| scenario | 신규 세션과 설정 스냅샷, 첫 지원 응답 전 |
-| dialogue | 지원 경로 학생 완료2, 첫 자동 개입1, 공통 턴 자동 미개입 결과; unsupported 포함 총 턴과 분리 |
-| analysis | 종료 시각·채택 정상 분석·완료 이력 재열람, 재열람으로 새 분석 없음 |
-| admin_csv | admin 전환·새 완료 세션 열기·그 세션 export 성공 확인. export 요청의 기존 자원/namespace와 클라이언트 request_id(신규 `X-Demo-Export-Request-ID:UUID`, 응답에 그대로 반영)를 브라우저 다운로드 완료에 연결 |
-| reset | 교사 삭제/종료 기록 보존 → 새 세션 삭제/비노출 → 명시 reset 성공을 관찰. 새 seed의 tour가 과거 데이터 ID를 재사용하지 않음 |
+| start | teacher_entered(또는 아래의 더 나중 단계 완료가 함의) |
+| scenario | 대상 scenario_created. ‘첫 응답 전’은 안내 시점이며 응답 후 완료를 취소하는 조건이 아님 |
+| dialogue | 대상 dialogue_complete |
+| analysis | 대상 analysis_ready AND history_viewed |
+| admin_csv | analysis 완료 AND admin_record_viewed AND csv_received. 현재 role이 teacher여도 과거 관리자 관찰을 취소하지 않음 |
+| reset | 위 다섯 완료와 teacher_deleted/session_deleted를 확인한 뒤 그 scope의 명시 reset 성공 응답 관찰 |
+
+계산은 대상 하나의 사실/관찰만 결합하고 뒤 단계가 complete면 앞 단계도 complete로 채운다. complete가 아닌 첫 단계 하나만 current, 뒤는 pending이다. ready 자료가 잠시 로딩 중이면 마지막 유효 map을 유지하고 요청을 만들지 않는다. reset 성공 시 이전 map의 여섯 complete 표시는 일회 완료 안내에만 쓰고 저장 관찰/cache는 폐기한다. 새 generation은 새 facts와 빈 관찰로 시작한다. 일찍 reset한 경우 과거 여정을 완주했다고 표시하지 않는다.
+
+기대 map 표기 순서는 start/scenario/dialogue/analysis/admin_csv/reset이고 C=complete, X=current, P=pending이다.
+
+| 관찰 가능한 상황 | 대상/기대 map |
+| --- | --- |
+| 교사로 시작하고 새 세션 전 | target=null, `C X P P P P` |
+| 교사 두 턴·정상 분석, 이력 아직 안 열음 | target=S1, `C C C X P P` |
+| 완료 교사 여정+이력/분석 재열람 | S1, `C C C C X P` |
+| 위 상태에서 admin 전환/refresh | S1과 같은 map, epoch만 증가; 단계 회귀0 |
+| S1은 1턴, S2만 두 턴/분석 완료 | target=S1, `C C X P P P`; S2 사실/CSV로 합성하지 않음 |
+| S1이 정상 완료된 뒤 S2 생성 | S1 유지, 기존 map 유지 |
+| S1 관리자 열람+CSV 성공 수신/parse | S1, `C C C C C X` |
+| CSV status200 뒤 abort/parse 실패 | 이전 성공이 없으면 `C C C C X P`, 이미 성공이면 완료 유지 |
+| CSV 성공 후 교사 삭제→S1 soft delete, reset 전 | S1 tombstone 유지, `C C C C C X`; 본문/분석 비노출 |
+| CSV 전에 S1 삭제 | target 변경 없음, 미확인 관찰은 미완료; 새 대상은 reset으로만 시작 |
+| CSV 성공 뒤 refresh/다시 teacher 전환 | 같은 관찰·facts의 `C C C C C X`(교사가 삭제됐으면 role 전환은 ROLE_DELETED) |
+| 안내대로 reset 성공 | 이전 scope 일회 `C C C C C C`; 새 admin 세대 `X P P P P P` |
 
 신규 문서 이벤트는 `demo:state`, `demo:role-changed`, `demo:reset-started`, `demo:reset-completed`, `demo:expired`다. detail은 `{browser_scope_id,generation,auth_epoch,state,role,contract_version,content_version,fixture_version,reason:null|code}`이고 CSRF 값/자료 본문은 없다. #193/#194 응답을 #199 tour가 이벤트로 연결하며 기존 JS #201이 소비한다. reset-completed는 ready 응답 이후만 보낸다. 만료/stale 오류는 같은 복구 이벤트로 연결한다.
 
@@ -446,9 +599,9 @@ DOM 계약은 root `data-demo-mode`, `data-demo-scope`, `data-demo-generation`, 
 
 ## 25. 브라우저 stale 상태와 복구 (C25)
 
-storage key prefix는 `demo:<browser_scope_id>:<generation>:<auth_epoch>:`다. 이어서 기존 chat-run/chat-draft/chat-mentor/analysis/tour의 자원 ID를 붙인다. 원래 session ID만의 key에서 새 세대 자료로 자동 이관하지 않는다. draft는 같은 scope/generation/auth_epoch에서만 보존하고 stale이면 이전 초안임을 표시한 뒤 사용자가 명시 복사할 수 있으나 전송은 하지 않는다. 역할 전환 시 교사 초안을 관리자 DOM에 재노출하지 않는다. 언어/패널 접힘 등 내용 없는 환경설정만 기존 범위를 유지한다.
+투어의 사실/관찰은 §24.1의 별도 generation key를 사용한다. 그 외 storage key prefix는 `demo:<browser_scope_id>:<generation>:<auth_epoch>:`다. 이어서 기존 chat-run/chat-draft/chat-mentor/analysis의 자원 ID를 붙인다. 원래 session ID만의 key에서 새 세대 자료로 자동 이관하지 않는다. draft는 같은 scope/generation/auth_epoch에서만 보존하고 stale이면 이전 초안임을 표시한 뒤 사용자가 명시 복사할 수 있으나 전송은 하지 않는다. 역할 전환 시 교사 초안을 관리자 DOM에 재노출하지 않는다. 언어/패널 접힘 등 내용 없는 환경설정만 기존 범위를 유지한다.
 
-모든 pending fetch/SSE/타이머는 시작 namespace와 request_id를 캡처한다. 응답과 DOM의 scope/generation/auth_epoch가 다르면 반영하지 않고 controller abort, polling/timer 중단, run/분석 modal 참조 폐기 후 안내한다. 새 세대의 같은 정수 ID로 재연결하지 않는다. 상태 GET은 현재 namespace만 동기화하고 과거 자료 URL을 고쳐 자동 실행하지 않는다. 사용자가 현재 공간의 목록으로 이동하도록 한다.
+모든 pending fetch/SSE/타이머는 시작 namespace와 request_id를 캡처한다. 응답과 DOM의 scope/generation/auth_epoch가 다르면 반영하지 않고 controller abort, polling/timer 중단, run/분석 modal 참조 폐기 후 안내한다. 새 세대의 같은 정수 ID로 재연결하지 않는다. 자료 응답은 위 원칙을 따른다. 명시 제어 operation의 응답/현재-state GET만 마지막 확인 g/epoch 이상으로 단조 전진할 수 있으며, 요청에 고정된 reset operation이 성공하면 old scope 완료 관찰 후 새 scope를 적용한다. historical=true receipt는 적용하지 않는다. 상태 GET은 현재 namespace만 동기화하고 과거 자료 URL을 고쳐 자동 실행하지 않는다. 사용자가 현재 공간의 목록으로 이동하도록 한다.
 
 탭 통지는 `BroadcastChannel("misconcept-demo-v1")`, 미지원 시 localStorage의 `demo:notification` storage event로 §24 detail만 전달한다. 다른 scope event는 무시, 같은 scope의 더 큰 generation/auth_epoch에서만 invalidation한다. 이벤트는 권한이 아니며 수신 탭은 `/demo/state`로 확인한다. 쿠키 공유 탭은 다음 요청 때도 서버 검증을 받는다. 채널 실패/닫힌 탭은 서버 오류가 최종 방어다.
 
@@ -505,15 +658,15 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 | 신규 경로 | 단독 소유 |
 | --- | --- |
 | `docs/demo/d0-03-contract-v1.md`, `docs/demo/d0-03-g0-acceptance.md`, `docs/adr/0013-demo-isolation-and-keyless-provider.md` | #190; 제품 파일 소유 없음 |
-| `src/demo/database.py`, `src/demo/visitors.py` | #191 |
-| `src/demo/lifecycle.py`, `tests/test_demo_d1_02_lifecycle.py`, `docs/demo/d1-02-lifecycle-evidence.md` | #192 |
-| `src/api/routes/demo.py`, `src/demo/session.py` | #193 |
+| `src/demo/database.py`, `src/demo/visitors.py` | #191; visitors.py가 VisitorState/transition lock·handle/guard·bootstrap admission의 유일 권위, database.py는 물리 DB 수명 |
+| `src/demo/lifecycle.py`, `tests/test_demo_d1_02_lifecycle.py`, `docs/demo/d1-02-lifecycle-evidence.md` | #192; TaskControl/token/registry/cancel/drain, guard는 #191 위임 |
+| `src/api/routes/demo.py`, `src/demo/session.py` | #193; 제어 HTTP/receipt·role orchestration/서버 TourFacts, 최종 tour map은 #199 |
 | `tests/test_demo_config.py` | #194 |
 | 새로운 번호의 migration(착수 시 번호 확정), 신규 demo_metadata 모델, `tests/test_demo_d2_01_schema.py`, `docs/demo/d2-01-schema-evidence.md` | #195; 모델의 정확한 신규 파일은 `src/models/demo_metadata.py`로 제안 |
 | `src/demo/provider.py`, `src/demo/output_binding.py`, `tests/test_demo_provider.py` | #196 |
 | `src/demo/seed.py`, `src/demo/fixtures/`(내부 `manifest.json` 포함) | #197 |
 | `tests/test_demo_d2_04_calls.py`, `docs/demo/d2-04-calls-evidence.md` | #198 |
-| `static/js/demo-tour.js`, `static/css/demo-tour.css`, `tests/browser_demo_d3_01_ui.mjs`, `docs/demo/d3-01-ui-evidence.md`, `docs/demo/d3-01-evidence/` | #199 |
+| `static/js/demo-tour.js`, `static/css/demo-tour.css`, `tests/browser_demo_d3_01_ui.mjs`, `docs/demo/d3-01-ui-evidence.md`, `docs/demo/d3-01-evidence/` | #199; 최종 tour_steps·관찰 보관/합성·tour 다운로드의 단독 소유 |
 | `docs/demo/d3-02-endpoint-policy.md`, `tests/test_demo_d3_02_guards.py`, `tests/test_demo_d3_02_exports.py`, `docs/demo/d3-02-guards-evidence.md`, `docs/demo/d3-02-evidence/` | #200 |
 | `tests/browser_demo_d3_03_recovery.mjs`, `docs/demo/d3-03-recovery-evidence.md`, `docs/demo/d3-03-evidence/` | #201 |
 | `tests/browser_demo_d3_04_smoke.mjs`, `docs/demo/d3-04-integration-evidence.md`, `docs/demo/d3-04-integration-manifest.json`, `docs/demo/d3-04-evidence/` | #202; 통합 branch `demo/d3-04-integration`, 제품 공동 소유 없음 |
@@ -571,7 +724,7 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 | C28 #190답2·3/계획9.2·9.3·9.5·10 | §27/G0기록 | #191–206 | G1–G5 | 고정 후보·소비자·독립/maintainer 승인·변경 영향/재검토 기록 확인 |
 | C29 #203/#204/#206/계획10·11 | §28 | #203–206 | G4/G5 | 실제 서버·CSRF·독립 보안/E2E, 후보 tuple·운영 인계 기대값 대조 |
 
-계약을 바꾸면 #190 소유자가 변경 이유·기존/새 버전·C-item·소비 이슈·SHA·무효 evidence 범위를 기록한다. 의미가 바뀌는 필드/오류/기본값/소유/버전 조합은 `d0-03-v2` 이상으로 올리고 manifest 참조도 갱신한다. 의미 없는 오탈자만 v1 유지 가능하나 후보 SHA는 갱신한다. 영향받는 소비자와 독립 reviewer가 다시 검토하고 @DomineYH가 해당 후보의 G0 변경을 승인한다. 관련 없는 작업을 일괄 중지하지 않는다. 앱/DB/보안 공통 계약 변경은 해당 G1/G2/G3 및 G4/G5 증거 유효성을 다시 평가한다. 구현자가 자기 파일에서 계약값을 조용히 바꾸지 않는다.
+계약을 바꾸면 #190 소유자가 변경 이유·기존/새 버전·C-item·소비 이슈·SHA·무효 evidence 범위를 기록한다. G0 승인 전 후보 정정은 이번 `d0-03-v1-r2`처럼 revision을 올린다. 승인 후 의미가 바뀌는 필드/오류/기본값/소유/버전 조합은 `d0-03-v2` 이상으로 올리고 manifest 참조도 갱신한다. 의미 없는 오탈자만 v1 유지 가능하나 후보 SHA는 갱신한다. 영향받는 소비자와 독립 reviewer가 다시 검토하고 @DomineYH가 해당 후보의 G0 변경을 승인한다. 관련 없는 작업을 일괄 중지하지 않는다. 앱/DB/보안 공통 계약 변경은 해당 G1/G2/G3 및 G4/G5 증거 유효성을 다시 평가한다. 구현자가 자기 파일에서 계약값을 조용히 바꾸지 않는다.
 
 ## 28. 독립 검증·운영 인계 계약 (C29)
 
@@ -597,3 +750,22 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 리허설 실패 시 신규 start 차단·demo 중단·진행 작업 취소/drain/dispose 후 승인된 이전 동일 tuple로 복구한다. 첫 배포라 이전 tuple이 없으면 중단 상태를 정상 복구 목표로 기록한다. normal DB/설정은 변경하지 않는다. 공개는 별도 승인과 동일 후보의 smoke 뒤 수행하며 코드가 같다는 이유로 두 서비스를 자동 동시 갱신하지 않는다.
 
 후속 구현 검사는 README의 targeted pytest/관련 integration을 우선하고 G5에서 고정 최종 후보의 전체 `uv run --frozen python -m pytest -q`, `uv run --frozen ruff check .`, `uv run --frozen black --check .`, `npm run test:browser`, `uv run --frozen python tests/check_student_live.py`와 normal/demo 검증을 연결한다. passed/failed/not run·이유/환경/SHA를 분리하고 승인 시 main 변경에 영향받은 증거를 재검사한다. 이번 문서 작성에서는 이 명령·앱·migration·브라우저·네트워크를 실행하지 않았으며 이 계약 자체는 격리/egress0/reset 안전성 증거가 아니다.
+
+## 29. 후보 r2 변경 기록·재검토 범위
+
+`d0-03-v1` 후보 `83f7ec0fff0895aed872114ad4e5d66ce3b38a5c`에 대한 1차 독립 검토 뒤, conditional_repair impl-190-r2로 **`d0-03-v1-r2`**를 작성했다. 아래는 설계 정정이며 구현/실행 증거가 아니다. 실제 수정 commit은 G0 기록과 REPORT-impl-190에서 고정하고 재검토/maintainer 승인은 pending이다. 기존79 소유 배정·ADR-0001/0005·CSV27/20+5·비교 제외·mode 전환 금지·session/CSRF 수명 분리는 유지한다.
+
+| repair / 검토 finding | 규범·관찰 기대값 위치 | 영향을 받는 소비자·단독 구현 소유 |
+| --- | --- | --- |
+| R1 / DB-01 | §5.1 transition handle/mark/publish/fail/expire·commit-first/mark-first | #191 권위, #192/#193/#194/#198/#200 소비; #203 검증 |
+| R2 / DB-02/V2/F1 | §5.1/6 guard(ctx)의 epoch·role/register/CRUD 양쪽 순서·동일역할 no-op | #191/#192/#193, #194/#198/#200 연결, #203/#204 검증 |
+| R3 / DB-03 | §6 TaskControl/ExecutionToken/lease/normal=None·SSE/Task·drain 예 | #192 API, #194/#198/#200 소비, #203 검증 |
+| R4 / DB-04 | §7.1 preparing/prepare_failed/expiry·quota/재시도/응답 유실 | #191/#193/#194, #199/#201 안내, #203/#204 검증 |
+| R5 / DB-05 | §7.1/9.1/10 bootstrap unique/admission·loser409·cookie 안정 참조 | #191/#193/#194, #199/#201, #203/#204 |
+| R6 / DB-06/V1 | §9.1 전체 replay/CSRF/status/Set-Cookie 표·과거 receipt 비회귀 | #193/#194, #199/#201 복구, #203/#204 검증 |
+| R7 / DB-07/UI-1/UI-2/V3/F2 | §24.1/25 facts와 관찰·단일 대상·단조 map·저장/CSV 중단/refresh 예 | #193 facts, #199 최종 map, #200 export/삭제 facts, #201 이벤트, #202/#204 검사 |
+| R8 / P1 | §15/17.1 exact lookup key/branch/trigger/phase·chunk projection | #196 selector/binder, #197 manifest, #198 전달, #203 검증 |
+| R9 / P2 | §16.1 exact projection·679-byte canonical vector/digest·편집 예 | #195 공유 helper, #196/#197/#198 재사용, #203 검증 |
+| R10 / F3 | §3 lease-before-User·거절 해제 | #194 resolver, #191/#192 lease, #203 검증 |
+
+r1 리뷰에서 위 인터페이스/여정에 걸린 미결 판정은 재검토로 해소해야 하며 r1의 긍정 검토를 r2 승인으로 재사용하지 않는다. G1/G2/G3의 source API 및 G4/G5 검사 입력은 새 계약 버전을 소비한다. G0 기록의 1차 리뷰 판정은 보존하고 r2 재검토 행은 pending으로 남긴다.

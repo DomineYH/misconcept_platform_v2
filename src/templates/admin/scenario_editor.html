@@ -54,7 +54,7 @@
     <p id="review-publication-status" role="status"></p>
   </section>
   {% endif %}
-  {% if editor.id %}<p><a class="btn btn-primary" href="/admin/model-comparison?scenario_id={{ editor.id }}">{{ t('admin.compare_the_saved_scenario_across_all_roles') }}</a></p>{% endif %}
+  {% if editor.id %}<p><a class="btn btn-secondary" href="/admin/model-comparison?scenario_id={{ editor.id }}">{{ t('admin.compare_the_saved_scenario_across_all_roles') }}</a></p>{% endif %}
   <p>{{ t('admin.the_legacy_individual_role_comparison_is_below_start_whole_model_comparisons_from_a_saved_scenario') }}</p>
   <button type="button" id="open-comparison" class="btn btn-secondary" aria-expanded="false" aria-controls="scenario-comparison">{{ t('admin.open_model_comparison') }}</button>
   <section id="scenario-comparison" aria-label="{{ t('admin.model_comparison_with_common_context') }}" hidden></section>
@@ -64,7 +64,7 @@
   <div class="scenario-layout">
     <nav class="scenario-steps" aria-label="{{ t('admin.authoring_steps') }}">
       {% for label in [t('admin.basic_information'), t('admin.problem_situation'), t('admin.student'), t('admin.mentor'), t('admin.post_session_analysis')] %}
-      <button type="button" data-step="{{ loop.index0 }}" aria-controls="step-{{ loop.index0 }}">{{ loop.index }}. {{ label }} <span data-errors="{{ loop.index0 }}" hidden></span></button>
+      <button type="button" class="btn btn-secondary" data-step="{{ loop.index0 }}" aria-controls="step-{{ loop.index0 }}">{{ loop.index }}. {{ label }} <span data-errors="{{ loop.index0 }}" hidden></span></button>
       {% endfor %}
     </nav>
     <form id="scenario-form" novalidate>

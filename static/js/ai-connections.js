@@ -106,9 +106,9 @@ function form(title, onSubmit) {
   return form;
 }
 
-function finish(form, label) {
+function finish(form, label, role = 'primary') {
   editorBaseline = editorValues();
-  form.append(node('button', label, {type:'submit'}), button(uiLanguage.t('admin.close'), closeEditor));
+  form.append(node('button', label, {type:'submit', class:`btn-${role}`}), button(uiLanguage.t('admin.close'), closeEditor, false, 'secondary'));
   (form.querySelector('input, select') || form.querySelector('button')).focus();
   editor.scrollIntoView({block:'nearest'});
 }
@@ -129,7 +129,7 @@ const actions = {
     f.append(node('p', uiLanguage.t('admin.affected_items')), impact);
     if (operation === 'key') field(f, 'api_key', uiLanguage.t('admin.new_api_key'), '', {type:'password', required:'', autocomplete:'off'});
     field(f, 'current_password', uiLanguage.t('admin.current_password'), '', {type:'password', required:'', autocomplete:'off'});
-    finish(f, uiLanguage.t('admin.submit_change'));
+    finish(f, uiLanguage.t('admin.submit_change'), operation === 'delete' ? 'danger' : 'primary');
   },
   catalog(p) { submit(`providers/${p.provider}/catalog`, {expected_version:p.connection_version}, uiLanguage.t('admin.non_generation_verification_and_catalog_refresh_completed')); },
   register(p, modelId) {

@@ -133,7 +133,9 @@ async def export_selected_sessions(
         )
 
     result = await db.execute(
-        select(Session).where(Session.id.in_(session_ids))
+        select(Session).where(
+            Session.id.in_(session_ids), Session.deleted_at.is_(None)
+        )
     )
     sessions = result.scalars().all()
 
@@ -150,7 +152,7 @@ async def export_selected_sessions(
                 ),
             )
 
-    valid_ids = [s.id for s in sessions if s.deleted_at is None]
+    valid_ids = [s.id for s in sessions]
     if not valid_ids:
         return Response(
             content=translate(

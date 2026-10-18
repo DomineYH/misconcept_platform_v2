@@ -217,6 +217,31 @@ async def test_deleted_session_stays_out_of_lists_and_every_csv_export(
 
 
 @pytest.mark.parametrize("stored_result", ["ok"], indirect=True)
+@pytest.mark.parametrize("deleted", [True, False])
+async def test_selected_export_ignores_deleted_active_sessions(
+    data, export_api, export_history, stored_result, deleted
+):
+    sid = data.session.id
+    data.session.ended_at = None
+    await data.db.commit()
+    if deleted:
+        response = await export_api.post(f"/admin/sessions/{sid}/delete")
+        assert response.status_code == 200, response.text
+
+    response = await download(export_api, "selected", [sid, export_history.id])
+
+    if deleted:
+        rows = csv_rows(response, "selected", sid)
+        assert {row["session_id"] for row in rows} == {str(export_history.id)}
+        assert rows[0]["content"] == '정상 교사, "질문"\n보존'
+    else:
+        assert response.status_code == 400
+        assert response.json() == {
+            "detail": f"세션 {sid}이 진행 중입니다. 종료된 세션만 가능합니다."
+        }
+
+
+@pytest.mark.parametrize("stored_result", ["ok"], indirect=True)
 async def test_deleted_conversation_content_is_not_reachable_by_its_teacher(
     data, export_api, stored_result
 ):

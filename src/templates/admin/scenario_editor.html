@@ -27,7 +27,7 @@
 {% block content %}
 <link rel="stylesheet" href="/static/css/scenario-editor.css">
 <link rel="stylesheet" href="/static/css/scenario-comparison.css">
-<div class="container scenario-editor">
+<div class="container scenario-editor form-density--compact">
   <header class="page-header page-header--workflow">
     <h1>{{ t('admin.scenario_editor') }}</h1>
     {% if editor.comparison_draft_id|default(none) %}<p role="status">{{ t('admin.frozen_comparison_conditions_are_open_in_a_new_draft_a_scenario_is_created_only_when_you_save_or_pub') }}</p>{% endif %}

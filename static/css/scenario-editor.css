@@ -9,8 +9,8 @@
 .scenario-editor form, .scenario-editor section, .scenario-editor fieldset { min-width: 0; }
 .scenario-editor form > section { padding: var(--spacing-md); border: 1px solid var(--color-border-light); border-radius: var(--radius-xl); background: var(--color-bg-surface); }
 .scenario-editor form > section > h2 { margin-bottom: var(--spacing-md); }
-.scenario-editor label { display: block; margin-bottom: .3rem; }
-.scenario-editor input:not([type="checkbox"]), .scenario-editor textarea, .scenario-editor select { width: 100%; padding: .6rem; font: inherit; border: 1px solid var(--color-border-medium); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); }
+.scenario-editor label { display: block; margin-bottom: var(--form-label-gap, .3rem); }
+.scenario-editor input:not([type="checkbox"]), .scenario-editor textarea, .scenario-editor select { width: 100%; padding: var(--form-control-padding-y, .6rem) var(--form-control-padding-x, .6rem); font: inherit; border: 1px solid var(--color-border-medium); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); }
 .scenario-editor textarea { resize: vertical; }
 .scenario-editor fieldset { padding: var(--spacing-md); margin: var(--spacing-md) 0; border: 1px solid var(--color-border-light); border-radius: var(--radius-xl); background: var(--color-bg-surface); }
 .scenario-editor small { display: block; color: var(--color-text-secondary); font-size: var(--font-size-sm); line-height: 1.5; }

@@ -11,7 +11,7 @@
   </header>
 
   <div class="filters" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;">
-    <form method="get" class="filter-form" id="filter-form" style="display:flex;align-items:center;gap:0.5rem;margin:0;">
+    <form method="get" class="filter-form form-density--compact" id="filter-form" style="display:flex;align-items:center;gap:0.5rem;margin:0;">
       <select name="teacher_id" aria-label="{{ t('admin.teacher_filter') }}" onchange="submitFilters()">
         <option value="">{{ t('admin.all_teachers') }}</option>
         {% for teacher in teachers %}

@@ -30,7 +30,7 @@ function renderRubric() {
       input.addEventListener('input', () => { row[key] = input.value || (key === 'level' ? null : ''); });
       const errorId = `${input.dataset.field}-error`;
       input.setAttribute('aria-describedby', errorId);
-      container.append(node('p', null, {id:errorId, class:'scenario-error', hidden:''}));
+      input.parentElement.append(node('p', null, {id:errorId, class:'scenario-error', hidden:''}));
     }
     container.append(button(`${uiLanguage.t('admin.classification')} ${index + 1} ${uiLanguage.t('admin.delete')}`, () => {
       if ((row.id || row.name || row.criteria) && !window.confirm(uiLanguage.t('admin.delete_this_rubric_item'))) return;

@@ -3744,7 +3744,7 @@ body > header nav h1 { flex: 0 1 auto; min-width: 0; margin-right: 1rem; }
 #ai-page .ai-verification-succeeded { color: var(--color-success-text); }
 #ai-page .ai-verification-failed { color: var(--color-danger-text); }
 #ai-page .ai-verification-stale { color: var(--color-warning-text); }
-#ai-page fieldset { padding: var(--spacing-md); margin-bottom: var(--spacing-md); min-width: 0; }
+#ai-page fieldset { padding: var(--spacing-md); margin-bottom: var(--spacing-md); min-width: 0; border: 1px solid var(--color-border-light); border-radius: var(--radius-xl); background: var(--color-bg-surface); }
 #ai-page button, #ai-page input, #ai-page select { max-width: 100%; }
 #ai-page button { white-space: normal; overflow-wrap: anywhere; }
 #ai-editor { max-width: 600px; }

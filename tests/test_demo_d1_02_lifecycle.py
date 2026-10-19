@@ -641,7 +641,7 @@ async def test_reset_handoff_releases_own_request_but_not_other_live_request():
     async with visitors.transition(ctx.verified_visitor) as handle:
         visitors.generation += 1
         visitors.state = "resetting"
-    # #194 closes/rolls back its DB before this authority release.
+    # Lease-only evidence; #193/#194 own request-DB handoff/cleanup ordering.
     async with visitors.transition(ctx.verified_visitor) as handle:
         handle.release_lease(ctx.lease)
     assert registry.cancel_scope(scope) == 0
@@ -682,12 +682,24 @@ async def test_drain_timeout_includes_waiting_for_transition():
     visitors = Visitors()
     ctx = visitors.context()
     registry = Lifecycle(visitors)
+    scope = (ctx.visitor_id, ctx.generation)
+    token = await registry.register(
+        ctx, "analysis", "id", TaskControl(lambda: None, asyncio.Event())
+    )
+    await visitors.release_lease(ctx.lease)
+    token.task_control.done.set()
     async with visitors.transition(ctx.verified_visitor):
         result = await asyncio.wait_for(
-            registry.drain((ctx.visitor_id, 1), 0.01), 1
+            asyncio.create_task(registry.drain(scope, 0.01)), 1
         )
-    assert result == {"drained": False, "remaining": 1}
-    assert len(visitors.leases) == 1
+        assert result == {"drained": False, "remaining": 1}
+        assert registry.lookup(*token.key) is token
+        assert not token.registry_lease.released
+        assert visitors.lease_count(scope) == 1
+    assert await registry.drain(scope, 1) == {"drained": True, "remaining": 0}
+    assert registry.lookup(*token.key) is None
+    assert token.registry_lease.released
+    assert visitors.lease_count(scope) == 0
 
 
 @pytest.mark.parametrize("reset_first", [False, True])
@@ -1509,3 +1521,93 @@ async def test_owned_execution_propagates_original_demo_error(
         await call
     assert error.value is rejected
     assert released == ([True] if operation == "probe" else [])
+
+
+@pytest.mark.parametrize("kind", ["analysis", "probe"])
+async def test_cancelled_shutdown_owns_real_finalizer_until_session_close(
+    real_lifecycle, monkeypatch, kind
+):
+    from types import SimpleNamespace
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.services import analysis_runs, probe_execution
+
+    fixture = real_lifecycle
+    ctx = await fixture.context()
+    module = analysis_runs if kind == "analysis" else probe_execution
+    stop = module.stop_analyses if kind == "analysis" else module.stop_probes
+    monkeypatch.setattr(module, "cleanup_tasks", set())
+    monkeypatch.setattr(
+        module, "active_analyses" if kind == "analysis" else "active_probes", {}
+    )
+    close_started, close_release, close_finished = (
+        asyncio.Event(),
+        asyncio.Event(),
+        asyncio.Event(),
+    )
+    original_close = AsyncSession.close
+
+    async def held_close(session):
+        close_started.set()
+        await close_release.wait()
+        try:
+            await original_close(session)
+        finally:
+            close_finished.set()
+
+    monkeypatch.setattr(AsyncSession, "close", held_close)
+    shutdown = None
+    released = []
+    try:
+        if kind == "analysis":
+            token = await analysis_runs.start_scoped_analysis(
+                ctx, {"run_id": str(uuid4())}, registry=fixture.lifecycle
+            )
+        else:
+            permit = SimpleNamespace(
+                task=None, release=lambda: released.append(True)
+            )
+            token = await probe_execution.start_scoped_probe(
+                ctx, 7, permit, registry=fixture.lifecycle
+            )
+        token.request_cancel()  # No scheduling point before pre-start cancel.
+        await fixture.visitors.release_lease(ctx.lease)
+        await asyncio.wait_for(close_started.wait(), 5)
+        assert ctx.factory.engine.pool.checkedout() == 1
+        shutdown = asyncio.create_task(stop())
+        await asyncio.sleep(0)  # Shutdown now waits for the held finalizer.
+        for _ in range(2):
+            shutdown.cancel()
+            await asyncio.sleep(0)
+        result = await fixture.lifecycle.drain(ctx.scope, 0.01)
+        assert not token.completed
+        assert fixture.lifecycle.lookup(*token.key) is token
+        assert fixture.visitors.lease_count(ctx.scope) == 1
+        assert result == {"drained": False, "remaining": 1}
+        assert not close_finished.is_set()
+        assert ctx.factory.engine.pool.checkedout() == 1
+        assert not shutdown.done()
+        assert module.cleanup_tasks
+        close_release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(asyncio.shield(shutdown), 5)
+        assert close_finished.is_set()
+        assert ctx.factory.engine.pool.checkedout() == 0
+        assert token.completed
+        assert fixture.lifecycle.lookup(*token.key) is None
+        assert fixture.visitors.lease_count(ctx.scope) == 0
+        assert await fixture.lifecycle.drain(ctx.scope, 0) == {
+            "drained": True,
+            "remaining": 0,
+        }
+        assert not module.cleanup_tasks
+        assert released == ([True] if kind == "probe" else [])
+    finally:
+        close_release.set()
+        await asyncio.wait_for(close_finished.wait(), 5)
+        if shutdown is not None:
+            await asyncio.wait_for(
+                asyncio.gather(shutdown, return_exceptions=True), 5
+            )
+        await stop()

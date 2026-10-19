@@ -106,7 +106,7 @@ real #191 matrix and supersedes its earlier integration gaps.
 | U07/U10 | request_child_and_shield_leases_prevent_drain; child_context_changes_only_lease_and_releases_after_retirement; child_release_finishes_under_repeated_cancellation_and_contended_transition | request/child/shield counts and captured factory/epoch |
 | U08 | resource_reservations_are_scoped_and_serialized; drain_waits_without_holding_transition; drain_timeout_includes_waiting_for_transition | independent resources and bounded wait |
 | U09/U12 | write_guard_serializes_commit_with_reset; role_change_first_rejects_old_write_guard_without_writes; write_guard_first_commits_before_role_change; late_owned_callbacks_never_open_factory; authority_errors_preserved_and_no_lease_retained | role-first rejects STALE_ROLE409/write0; guard-first commits before role change; owned callback guard rejects before factory; real SQL/reset/role matrix #191/#194/#198 |
-| U13/U14 | reset_handoff_releases_own_request_but_not_other_live_request | consumes retired scope/early release; real mark/handoff/rollback/receipt/disconnect #193/#194 |
+| U13/U14 | reset_handoff_releases_own_request_but_not_other_live_request | lease release/drain only; U14 request-DB ordering unit evidence incomplete — #193/#194 |
 | U15/U16/U17 | authority_errors_preserved_and_no_lease_retained; namespace_identity_and_retired_cleanup; drain_timeout_includes_waiting_for_transition; existing orphan/probe regressions | authority error and release semantics; actual TTL/shutdown/budget #191/#194 |
 | U18 | authority_errors_preserved_and_no_lease_retained; invalid_scope_is_rejected; namespace_identity_and_retired_cleanup | lifecycle BUSY409/INVALID422; authority errors propagated; HTTP/SSE terminal mapping #198/#201 |
 | U19 | probe/comparison/analysis/student/mentor/transaction regressions; normal_never_calls_demo_authority; legacy_view_is_normal_only_and_shares_token_registry | normal factory, guards, cancellation, reservations, analysis retention |
@@ -153,7 +153,7 @@ outbound sockets blocked by existing conftest. No paid calls, production DB,
 
 | Gate | Status | Owner / required follow-up |
 |---|---|---|
-| #192 unit/normal regression | passed: 2262 full; 287 combined targeted; 108 impact | current merged source 62d60a6 |
+| #192 unit/normal regression | R2: 289 combined targeted; 108 impact; 2262 full reused from a595349 under R2 rule | finalizer-only delta; results below |
 | #191 real binding | passed at 12f8bf5; 124 unchanged authority cases plus real #192 matrix | capability/guard/retain/release/public counts |
 | #194 G1 | not run | inject lifecycle into resolver/middleware/lifespan; no normal startup orphan scan in demo; configure drain timeout |
 | #198 G3 | not run | pass ctx/registry through call admission, student/mentor ASGI cleanup, pipeline/chunk/ledger/shield, all final DML; scope cancel_connection |
@@ -214,7 +214,8 @@ consumer callback barriers without claiming application integration:
 | U03/U18 | real_concurrent_registration_has_one_token_and_child; real_registration_failure_releases_retained_lease | duplicate BUSY; one token/count 2; failed construction leaves token 0/count 1 |
 | U05/U10 | real_busy_excludes_request_leases_and_includes_execution_child; real_registration_first_blocks_role_change_but_same_role_is_noop | two plain requests are idle; execution child is busy; current same-role no-op; different role BUSY; after child exit role changes |
 | U07/U08/U10/U16/U17 | real_drain_waits_for_every_lease_kind; real_drain_reaps_token_completed_during_lease_wait | live request/generic/execution lease times out with remaining 1; release gives drained/0; token completion during wait is reaped, no transition held while waiting |
-| U09/U12/U13/U14 | real_write_guard_and_reset_serialize_sql_without_late_writes | guard-first commit precedes mark; mark-first denies stale SQL; captured factory remains fixed; new generation stays fictional before/after late-write denial |
+| U09/U12/U13 | real_write_guard_and_reset_serialize_sql_without_late_writes | guard-first commit precedes mark; mark-first denies stale SQL; captured factory remains fixed; new generation stays fictional before/after late-write denial |
+| U14 | request-DB handoff ordering | unit evidence incomplete — #193/#194: mark → handoff → unlock → rollback/close/release → cancel/drain, and post-handoff old-context/auto-commit refusal need their request-DB seam |
 | U05/U09/U12/U18 | real_role_and_write_guard_serialize_sql_without_stale_dml | role-first STALE_ROLE; guard-first commit precedes role transition; stale SQL rejected and stored body preserved |
 | U12/U18 | owned_execution_propagates_original_demo_error | analysis/probe/cleanup propagate the identical shared error; no generic failure write; probe permit released |
 
@@ -275,3 +276,62 @@ The final report records the evidence commit HEAD. No dependency API changes,
 paid calls, production data, configuration changes or source edits followed the
 completed full suite. The earlier restart/sandbox interruption is resolved;
 the original branch and coordinator report directory are writable.
+
+
+## Repair R2 — finalizer cancellation ownership
+
+Reviewed input: `a595349f5f7225099e631e184ed1d7d447dcb43b`.
+The real-factory regression reproduced both analysis and probe premature release:
+2 failed because done became true while SQLAlchemy session close was held.
+`stop_analyses` and `stop_probes` now shield their existing finalizer tasks and
+wait for each gather to settle despite repeated shutdown cancellation. Only
+after finalizers finish do they re-raise cancellation. Finalizer callbacks keep
+their existing close-before-done/pop order; shutdown no longer interrupts it.
+No execution body, admission, reservation, write guard or first-phase task
+cancellation behavior changed.
+
+U02/U07/U15/U16: `test_cancelled_shutdown_owns_real_finalizer_until_session_close` runs both
+consumers with real #191 VisitorRegistry/GenerationFactory and SQLAlchemy session
+close, held by an Event. Before releasing close, two shutdown cancellations leave
+done false, token present, lease count 1, pool checkout count 1 and drain false/1.
+After close, shutdown raises CancelledError; done is true, token absent, leases
+and checked-out connections are 0, and drain is true/0. No event-loop timer hack.
+Focused green run including existing completed-cleanup and transition-timeout
+checks: 5 passed in 8.66 seconds. The worker's two gap checks: 2 passed in 2.47s.
+
+`test_drain_timeout_includes_waiting_for_transition` now creates a completed token,
+releases its request lease, and drains from another task while transition is held.
+Timeout preserves the token and its registry lease; unlock permits pop and drain.
+U14's request-DB sequence remains **unit evidence incomplete — #193/#194**.
+The current lease-only fixture supplies no handoff/rollback/close/auto-commit API;
+a locally invented orchestrator would only test itself. Its narrower lease
+observations remain valid, and the acceptance tables above now state this gap.
+
+The empty `src/demo/__init__.py` package marker is explicitly coordinator-authorized
+by `wo-192-repair2.md`; it has no exports or runtime behavior.
+
+
+R2 validation uses the same frozen `/tmp/w192-resume-venv` environment.
+The full suite is not rerun under the repair order's conditional rule: only the
+finalizer-wait portions of stop_analyses/stop_probes changed (and probe's anyio
+import). AST comparison confirms all other module definitions/statements match
+a595349 after excluding those functions/import. Execution bodies, admission,
+reservation, guards, models, schema, configuration and shared lifecycle APIs are
+unchanged. Reuse **a595349's 2262-pass / 1340-warning full run**, with the new
+real-finalizer regressions and required affected checks covering this delta.
+Read-only worker review found no concrete gap in finalizer ownership or the
+regression. HTTP request handoff ordering, G1/G3/G5 and browser/live remain open.
+
+
+R2 mandatory checks, all exit 0 (the commands are the Binding B six-file targeted
+command and complete twelve-file impact command recorded in the worker report):
+
+- Lifecycle/probe/comparison plus unchanged #191 tests: **289 passed**, 17 warnings,
+  161.96 seconds. The new finalizer cases account for the two additional tests.
+- Impact list: **108 passed**, 66 warnings, 360.19 seconds; no missing filenames.
+- `uv run --frozen ruff check .`: passed.
+- `uv run --frozen black --check .`: passed, 360 files unchanged.
+- `git diff --check`: passed. R2 edits only analysis_runs.py, probe_execution.py,
+  the dedicated lifecycle test and this evidence file. No #191 file changed.
+- Full suite: not rerun, for the finalizer-only scope reason above. Browser/live:
+  not run (CI). No final failures or unrelated-failure reruns.

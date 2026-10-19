@@ -527,10 +527,20 @@ async def stop_analyses():
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
-    while cleanup_tasks:
-        pending = tuple(cleanup_tasks)
-        await asyncio.gather(*pending, return_exceptions=True)
-        cleanup_tasks.difference_update(pending)
+    cancelled = False
+    with anyio.CancelScope(shield=True):
+        while cleanup_tasks:
+            pending = tuple(cleanup_tasks)
+            settled = asyncio.gather(*pending, return_exceptions=True)
+            while not settled.done():
+                try:
+                    await asyncio.shield(settled)
+                except asyncio.CancelledError:
+                    cancelled = True
+            settled.result()
+            cleanup_tasks.difference_update(pending)
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 async def request_analysis(

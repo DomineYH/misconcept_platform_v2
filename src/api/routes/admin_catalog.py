@@ -7,12 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.api.dependencies import get_admin_user, get_db_session
+from src.api.dependencies import get_db_session
 from src.api.routes.admin_models import commit_configuration
 from src.api.routes.admin_providers import (
     CredentialRoute,
     Provider,
     changed_connection,
+    demo_read_only,
 )
 from src.models.provider_connection import ProviderConnection, now
 from src.models.user import User
@@ -32,7 +33,7 @@ class CatalogRefresh(BaseModel):
 async def refresh_catalog(
     provider: Provider,
     data: CatalogRefresh,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     if provider not in ("openai", "anthropic", "google"):

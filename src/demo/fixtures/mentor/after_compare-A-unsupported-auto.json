@@ -1,0 +1,19 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/mentor/after_compare/A/unsupported/auto/none",
+  "role": "mentor",
+  "content_state": "after_compare",
+  "branch": "A",
+  "input_kind": "unsupported",
+  "trigger": "auto",
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "should_intervene": false,
+    "feedback": "",
+    "reason_summary": "지원 범위 밖 입력이므로 교육적 코칭을 생성하지 않는다."
+  },
+  "partial_text": null
+}

@@ -676,3 +676,83 @@ async def test_total_deadline_cancellation_keeps_timeout_code(prepared):
             p.request, None, {}, deadline=deadline
         )
     assert result.type == "error" and result.error_code == "timeout_total"
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_owned_deadline_bounds_preparation(prepared, streaming):
+    import asyncio
+
+    class WaitingVisitors:
+        async def check(self, context):
+            await asyncio.Event().wait()
+
+    p = prepared
+    p.provider.visitors = WaitingVisitors()
+
+    async def invoke():
+        if streaming:
+            return [
+                event
+                async for event in p.provider.stream_text(
+                    p.request, None, {"student_total": 0.01}
+                )
+            ]
+        return [
+            await p.provider.generate_text(
+                p.request, None, {"student_total": 0.01}
+            )
+        ]
+
+    events = await asyncio.wait_for(invoke(), timeout=0.1)
+    assert [(event.type, event.error_code) for event in events] == [
+        ("error", "timeout_total")
+    ]
+    assert not events[0].response_received
+
+
+async def test_final_currentness_check_cannot_outlive_deadline(prepared):
+    p = prepared
+    p.configure(dict(p.envelope, text="짧은 응답"))
+    now = [1]
+    p.provider.clock = lambda: now[0]
+    deadline = SimpleNamespace(ends=2, first_ends=None)
+    events = p.provider.stream_text(p.request, None, {}, deadline=deadline)
+    assert (await anext(events)).type == "text_delta"
+    original_check = p.visitors.check
+
+    async def finish_check(context):
+        await original_check(context)
+        now[0] = 3
+
+    p.visitors.check = finish_check
+    terminal = await anext(events)
+    assert terminal.type == "error" and terminal.error_code == "timeout_total"
+    assert terminal.response_received
+    with pytest.raises(StopAsyncIteration):
+        await anext(events)
+
+
+async def test_owned_deadline_bounds_final_await(prepared):
+    import asyncio
+
+    p = prepared
+    p.configure(dict(p.envelope, text="짧은 응답"))
+
+    class WaitingVisitors:
+        async def check(self, context):
+            await asyncio.Event().wait()
+
+    async def invoke():
+        events = []
+        async for event in p.provider.stream_text(
+            p.request, None, {"student_total": 0.1}
+        ):
+            events.append(event)
+            if event.type == "text_delta":
+                p.provider.visitors = WaitingVisitors()
+        return events
+
+    events = await asyncio.wait_for(invoke(), timeout=0.5)
+    assert [event.type for event in events] == ["text_delta", "error"]
+    assert events[-1].error_code == "timeout_total"
+    assert events[-1].response_received

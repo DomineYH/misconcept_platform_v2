@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import re
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from uuid import UUID
@@ -616,45 +617,49 @@ class DemoProvider:
 
     async def stream_text(self, request, secret, timeouts, *, deadline=None):
         received = False
+        owned = deadline is None
         try:
-            envelope, _ = await self._prepare(request, secret)
             if request.role != "student":
                 raise InvocationError("INVALID_REQUEST")
             deadline = deadline or CallDeadline(timeouts, request.role)
-            body = (
-                envelope["partial_text"]
-                if envelope["terminal"] == "interrupted"
-                else (
-                    envelope["text"]
-                    if envelope["terminal"] == "completed"
-                    else ""
+            async with deadline.total() if owned else nullcontext():
+                envelope, _ = await self._prepare(request, secret)
+                body = (
+                    envelope["partial_text"]
+                    if envelope["terminal"] == "interrupted"
+                    else (
+                        envelope["text"]
+                        if envelope["terminal"] == "completed"
+                        else ""
+                    )
                 )
-            )
-            for offset in range(0, len(body or ""), 32):
+                for offset in range(0, len(body or ""), 32):
+                    self._timeout(deadline, first=not received)
+                    await asyncio.sleep(0)
+                    await self.visitors.check(request.demo_context)
+                    self._timeout(deadline, first=not received)
+                    received = True
+                    yield CallEvent(
+                        "text_delta",
+                        text=body[offset : offset + 32],
+                        response_received=True,
+                    )
                 self._timeout(deadline, first=not received)
-                await asyncio.sleep(0)
                 await self.visitors.check(request.demo_context)
                 self._timeout(deadline, first=not received)
-                received = True
-                yield CallEvent(
-                    "text_delta",
-                    text=body[offset : offset + 32],
-                    response_received=True,
+                terminal = CallEvent(
+                    envelope["terminal"],
+                    text=(
+                        envelope["text"]
+                        if envelope["terminal"] == "completed"
+                        else ""
+                    ),
+                    usage=empty_usage(),
+                    error_code=envelope["error_code"],
+                    response_received=received
+                    or envelope["terminal"] in ("completed", "refused"),
                 )
-            self._timeout(deadline, first=not received)
-            await self.visitors.check(request.demo_context)
-            yield CallEvent(
-                envelope["terminal"],
-                text=(
-                    envelope["text"]
-                    if envelope["terminal"] == "completed"
-                    else ""
-                ),
-                usage=empty_usage(),
-                error_code=envelope["error_code"],
-                response_received=received
-                or envelope["terminal"] in ("completed", "refused"),
-            )
+            yield terminal
         except asyncio.CancelledError:
             now = (
                 self.clock()
@@ -666,6 +671,13 @@ class DemoProvider:
                 "error" if expired else "interrupted",
                 usage=empty_usage(),
                 error_code="timeout_total" if expired else "interrupted",
+                response_received=received,
+            )
+        except TimeoutError:
+            yield CallEvent(
+                "error",
+                usage=empty_usage(),
+                error_code="timeout_total",
                 response_received=received,
             )
         except (InvocationError, DemoError) as error:

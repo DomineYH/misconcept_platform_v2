@@ -11,8 +11,8 @@ an educational quality certification.
 | PR | Branch / head | Scope |
 | --- | --- | --- |
 | #223 (merged, main `3b967f19be0cdbc361877addbf46ec9f7582b889`) | `feat/195-migration`, `e116df7` | migration 037, `demo_metadata`, ORM, guarded installer |
-| #224 (open) | `feat/195-mode`, `ba539225e952cc6c3c65e23b2ec37b8cff9d3b4a` (review repair on `f4afe15`) | explicit `app_mode`, demo model/options/limits, role evidence, caller pass-through |
-| PR3 | `feat/195-projection` (on top of #224) | §16.1 helper, this page |
+| [#224](https://github.com/DomineYH/misconcept_platform_v2/pull/224) (open) | `feat/195-mode`, `ba539225e952cc6c3c65e23b2ec37b8cff9d3b4a` (review repair on `f4afe15`) | explicit `app_mode`, demo model/options/limits, role evidence, caller pass-through |
+| [#232](https://github.com/DomineYH/misconcept_platform_v2/pull/232) (open) | `feat/195-projection` (on top of #224), tested tree `7b0cce91d0a41d71c2ad72146b1d085022297fc4`, doc-only successors `bcf789a` and later | §16.1 helper, this page |
 
 ## Migration handoff for #197 (§12, §17)
 
@@ -86,14 +86,58 @@ regenerated; it is never patched by hand.
 
 ## Checks
 
-All pytest runs were serial with one worker, on Python 3.12.3 and frozen
-`uv.lock`. Logs are under `_coord/reports/logs-w195/`.
+All pytest runs were serial with one worker (no xdist), on Python 3.12.3,
+pytest 8.4.2 and `uv run --frozen` (frozen `uv.lock`, dev extra). Log paths are
+under `/mnt/d/dev/mp2-wt/_coord/reports/logs-w195/` on the implementation host.
 
-| PR | Tested revision | Command / scope | Result |
-| --- | --- | --- | --- |
-| #223 | `dcd7c5e`, then integration `e116df7` | schema/migration/startup/D1/S4/comparison-migration targeted and affected; full `pytest -q` | affected 521 passed; full 2640 passed (local, e116df7); CI on PR |
-| #224 | `f4afe15`; repair `ba53922` | f4afe15: `tests/test_demo_d2_01_mode.py` + schema/migration/provider (105 passed); model/options/connections/limits/admission/snapshots/drafts/publication (235 passed); 85 files importing edited callers (all passed after rerunning 6 files that hit `/tmp` ENOSPC, 87/87). ba53922: mode tests + the same model/admission suites (295 passed) | full pytest, browser and live: **CI on PR head** |
-| PR3 | see worker report | `tests/test_demo_d2_01_projection.py` + `tests/test_demo_d2_01_*.py`, `tests/test_scenario_*.py`, `tests/test_model_management.py`, `tests/test_lesson_snapshots.py` | full regression: **CI on PR** |
+**#223 (PR1).** Tested revision `e116df7` (integration onto main), venv
+`/tmp/w195-venv`.
+
+- Affected:
+  `UV_PROJECT_ENVIRONMENT=/tmp/w195-venv uv run --frozen python -m pytest -q tests/test_demo_d1_0*.py tests/test_demo_d2_01_schema.py tests/test_migrations.py tests/test_provider_startup.py tests/test_s4_cutover.py tests/test_comparison_conversation_migration.py`
+  gave 521 collected/executed, 521 passed, 223.23 s.
+- Full suite:
+  `flock /tmp/mp2-heavy.lock -c 'UV_PROJECT_ENVIRONMENT=/tmp/w195-venv uv run --frozen python -m pytest -q'`
+  gave 2640 collected/executed, 2640 passed, 1878.30 s, exit 0. Log:
+  `int/full.log`.
+
+**#224 (PR2).** Tested revisions `f4afe15` and review repair `ba53922`.
+
+- `f4afe15` targeted A:
+  `pytest -q tests/test_demo_d2_01_mode.py tests/test_demo_d2_01_schema.py tests/test_migrations.py tests/test_provider_migration.py tests/test_provider_startup.py`
+  gave 105/105 passed, 53.0 s (`s2-targeted1.log`).
+- `f4afe15` targeted B:
+  `pytest -q tests/test_model_management.py tests/test_model_native_options.py tests/test_provider_connections.py tests/test_google_capabilities.py tests/test_analysis_limits.py tests/test_call_admission.py tests/test_lesson_snapshots.py tests/test_scenario_drafts.py tests/test_scenario_publication.py`
+  gave 235/235 passed, 328.0 s (`s2-targeted2.log`).
+- `f4afe15` affected: the 85 test files that import an edited module.
+  - The first run was invalid: the `/tmp` tmpfs ran out of space (ENOSPC), which
+    broke 6 late files (`s2-affected.log`).
+  - Those 6 files were rerun on clean `f4afe15` with venv
+    `/home/dominelinux/.cache/mp2-venvs/w195` and
+    `TMPDIR=/home/dominelinux/.cache/mp2-tmp/w195`: 87/87 passed, 192.2 s
+    (`s2-rerun2.log`).
+  - The other 79 files had passed before the disk filled.
+- `ba53922`:
+  `uv run --frozen python -m pytest -q -p no:cacheprovider --basetemp=$TMPDIR/pt tests/test_demo_d2_01_mode.py tests/test_model_management.py tests/test_model_native_options.py tests/test_provider_connections.py tests/test_google_capabilities.py tests/test_analysis_limits.py tests/test_call_admission.py tests/test_lesson_snapshots.py tests/test_scenario_drafts.py tests/test_scenario_publication.py`
+  gave 295 collected/executed, 295 passed, 380.7 s, exit 0.
+- Full pytest, browser and live: **CI on
+  [PR #224](https://github.com/DomineYH/misconcept_platform_v2/pull/224)**. Not
+  run locally.
+
+**#232 (PR3).** Tested tree `7b0cce91d0a41d71c2ad72146b1d085022297fc4`. This is
+`ba53922` plus the exact PR3 diff, which was then committed unchanged.
+
+- Environment: venv `UV_PROJECT_ENVIRONMENT=/home/dominelinux/.cache/mp2-venvs/w195`,
+  `TMPDIR=/home/dominelinux/.cache/mp2-tmp/w195`.
+- Command:
+  `uv run --frozen python -m pytest -q -p no:cacheprovider --basetemp=$TMPDIR/pt tests/test_demo_d2_01_projection.py tests/test_demo_d2_01_mode.py tests/test_demo_d2_01_schema.py tests/test_model_management.py tests/test_lesson_snapshots.py tests/test_scenario_*.py`
+- Result: 410 collected/executed, 410 passed, 559.84 s, exit 0. Log:
+  `s3-targeted.log`.
+- Successor `bcf789a` and this evidence repair change only this page, so no code
+  differs from the tested tree.
+- Full pytest, browser and live: **CI on
+  [PR #232](https://github.com/DomineYH/misconcept_platform_v2/pull/232)**. Not
+  run locally.
 
 `ruff check .` and `black --check .` pass on each head. `conftest` uses
 `TESTING=true` and ORM `create_all`, so the migration preservation evidence
@@ -101,5 +145,5 @@ comes only from the official runner on temporary databases
 (`tests/test_demo_d2_01_schema.py`). It is not evidence of a non-test startup.
 
 Not run locally: full `npm run test:browser` and `tests/check_student_live.py`
-for #224 and PR3 (Addendum H1: CI). No real provider, network, production DB or
+for #224 and #232 (Addendum H1: CI). No real provider, network, production DB or
 secret was used.

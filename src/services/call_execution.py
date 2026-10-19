@@ -7,6 +7,9 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
+from src.config import config
+from src.demo.provider import DemoProvider, Selection
+from src.demo.visitors import DemoContext
 from src.models.provider_connection import now
 from src.services import (
     anthropic_catalog,
@@ -33,8 +36,8 @@ PROVIDER_ADAPTERS = {
 }
 
 
-async def sdk_events(permit, request, kind, deadline):
-    catalog, generation = PROVIDER_ADAPTERS[permit.provider]
+async def sdk_events(permit, request, kind, deadline, adapters):
+    catalog, generation = adapters[permit.provider]
     if kind == "catalog":
         try:
             models = await catalog.list_models(
@@ -107,6 +110,8 @@ async def execute_call(
     run_id=None,
     session_id=None,
     usage_scope=None,
+    app_mode=None,
+    demo_adapter=None,
 ):
     """Consume with aclosing; admission is never a queued or reusable token."""
     entry_id = None
@@ -117,8 +122,35 @@ async def execute_call(
     invocation_id = str(uuid4())
     wait_ms = None
     try:
+        adapters = PROVIDER_ADAPTERS
+        # Either the server or the caller saying demo keeps external SDKs shut.
+        if "demo" in (config.APP_MODE, app_mode):
+            context = getattr(request, "demo_context", None)
+            if (
+                not isinstance(demo_adapter, DemoProvider)
+                or demo_adapter.mode != "demo"
+                or permit.provider != "demo"
+                or permit.secret is not None
+                or permit.operation in ("model_list", "probe")
+                or probe_step is not None
+                or usage_scope == "comparison"
+                or not isinstance(context, DemoContext)
+                or context.app_mode != "demo"
+                or context.lease.released
+                or not isinstance(request.demo_selection, Selection)
+            ):
+                raise InvocationError("configuration_unavailable")
+            adapters = {"demo": (None, demo_adapter)}
+        elif demo_adapter is not None or (
+            request is not None
+            and (
+                request.demo_context is not None
+                or request.demo_selection is not None
+            )
+        ):
+            raise InvocationError("configuration_unavailable")
         if (
-            permit.provider not in PROVIDER_ADAPTERS
+            permit.provider not in adapters
             or permit not in registered_calls
             or permit.task is not asyncio.current_task()
         ):
@@ -223,7 +255,7 @@ async def execute_call(
                 raise InvocationError("timeout_total")
             async with deadline.total():
                 async with aclosing(
-                    sdk_events(permit, request, kind, deadline)
+                    sdk_events(permit, request, kind, deadline, adapters)
                 ) as events:
                     async for event in events:
                         if event.usage is not None:

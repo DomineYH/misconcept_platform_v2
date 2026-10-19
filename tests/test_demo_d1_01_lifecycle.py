@@ -1,6 +1,7 @@
 """TTL, quota, cancellation, retirement and reset races at the public API."""
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -334,6 +335,13 @@ async def test_cancel_waits_through_repeated_caller_cancellation_and_reclaims_la
 
     async def uncooperative_clone(visitor_id, generation, **kwargs):
         captured["signal"] = kwargs["cancel_event"]
+        actual_set = captured["signal"].set
+
+        def signal_cancel():
+            actual_set()
+            cancel_entered.set()
+
+        monkeypatch.setattr(captured["signal"], "set", signal_cancel)
         entered.set()
         await finish.wait()
         candidate = await actual_clone(
@@ -348,7 +356,6 @@ async def test_cancel_waits_through_repeated_caller_cancellation_and_reclaims_la
     reserved = visitors.reserved_bytes
 
     async def cancel():
-        cancel_entered.set()
         return await visitors.cancel_preparation(start.operation)
 
     cancelling = asyncio.create_task(cancel())
@@ -369,10 +376,11 @@ async def test_cancel_waits_through_repeated_caller_cancellation_and_reclaims_la
         await cancelling
     with pytest.raises(DemoError, match="DEMO_STALE_GENERATION"):
         await preparing
-    assert visitors.reserved_bytes == 0
+    assert visitors.reserved_bytes == reserved
     result = await visitors.cleanup_retired()
     assert result.pending == 0
     assert not captured["candidate"].path.exists()
+    assert visitors.reserved_bytes == 0
 
 
 async def test_cancelling_published_operation_preserves_ready_factory(
@@ -382,6 +390,9 @@ async def test_cancelling_published_operation_preserves_ready_factory(
 
     visitors, _, _ = await make_visitors()
     _, ready, ctx = await ready_context(visitors)
+    async with visitors.transition(ready.verified_visitor):
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            await visitors.cancel_preparation(ready.operation)
     await visitors.cancel_preparation(ready.operation)
     assert (
         await visitors.resolve_visit(ready.verified_visitor, 1)
@@ -392,6 +403,168 @@ async def test_cancelling_published_operation_preserves_ready_factory(
         ).scalar_one() == "fictional"
     await visitors.release_lease(ctx.lease)
     assert (await visitors.cleanup_retired()).removed == 0
+
+
+@pytest.mark.parametrize(
+    "entrypoint,boundary",
+    [("prepare", 1), ("create_visit", 1), ("create_visit", 2)],
+)
+@pytest.mark.parametrize("repeat_cancel", [False, True])
+async def test_cancel_after_clone_keeps_candidate_owned_until_unlink(
+    make_visitors, monkeypatch, entrypoint, boundary, repeat_cancel
+):
+    visitors, _, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("post-clone-cancellation-bootstrap")
+    request_id = str(uuid4())
+    actual_clone = visitors.root.clone
+    actual_transition = visitors.transition
+    captured = {}
+    waiting = asyncio.Event()
+    allow_lock = asyncio.Event()
+    lock_attempted = asyncio.Event()
+    cancellation_started = asyncio.Event()
+    cleanup_waiting = asyncio.Event()
+    caller = asyncio.current_task()
+    transitions = 0
+    preparing = None
+
+    async def clone(*args, **kwargs):
+        captured["candidate"] = await actual_clone(*args, **kwargs)
+        return captured["candidate"]
+
+    @asynccontextmanager
+    async def transition(verified):
+        nonlocal transitions
+        if (
+            cancellation_started.is_set()
+            and asyncio.current_task() is not caller
+        ):
+            cleanup_waiting.set()
+        if asyncio.current_task() is preparing and "candidate" in captured:
+            transitions += 1
+            if transitions == boundary:
+                waiting.set()
+                await allow_lock.wait()
+                lock_attempted.set()
+        async with actual_transition(verified) as handle:
+            yield handle
+
+    monkeypatch.setattr(visitors.root, "clone", clone)
+    monkeypatch.setattr(visitors, "transition", transition)
+    if entrypoint == "prepare":
+        start = await visitors.reserve_start(bootstrap, request_id, "admin")
+        operation = visitors.prepare(start.operation)
+    else:
+        operation = visitors.create_visit(bootstrap, request_id, "admin")
+    preparing = asyncio.create_task(operation)
+    await waiting.wait()
+    verified = visitors.visitor_for_bootstrap(bootstrap)
+    async with actual_transition(verified):
+        allow_lock.set()
+        await lock_attempted.wait()
+        cancellation_started.set()
+        preparing.cancel()
+        if repeat_cancel:
+            await cleanup_waiting.wait()
+            preparing.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await preparing
+    assert (await visitors.snapshot(verified)).state == "prepare_failed"
+    candidate = captured["candidate"]
+    assert candidate.factory.retired
+    assert visitors.root.owns(candidate) and candidate.path.exists()
+    reserved = visitors.reserved_bytes
+    assert reserved == visitors.settings.max_db_bytes
+    actual_cleanup = visitors.root.cleanup
+
+    async def locked(ref):
+        raise DemoError("DB_LOCKED")
+
+    monkeypatch.setattr(visitors.root, "cleanup", locked)
+    blocked = await visitors.cleanup_retired()
+    assert (blocked.pending, blocked.failure_codes) == (1, ("DEMO_DB_LOCKED",))
+    assert visitors.reserved_bytes == reserved
+    assert candidate.path.exists()
+    monkeypatch.setattr(visitors.root, "cleanup", actual_cleanup)
+    cleaned = await visitors.cleanup_retired()
+    assert (cleaned.removed, cleaned.pending, cleaned.failure_codes) == (
+        1,
+        0,
+        (),
+    )
+    assert not candidate.path.exists()
+    assert visitors.reserved_bytes == 0
+
+
+@pytest.mark.parametrize("action", ["fail", "expire", "keep_preparing"])
+async def test_completed_clone_accounting_before_candidate_transfer(
+    make_visitors, monkeypatch, action
+):
+    visitors, _, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("untransferred-candidate-bootstrap")
+    start = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    actual_clone = visitors.root.clone
+    actual_transition = visitors.transition
+    captured = {}
+    waiting = asyncio.Event()
+    proceed = asyncio.Event()
+
+    async def clone(*args, **kwargs):
+        captured["candidate"] = await actual_clone(*args, **kwargs)
+        return captured["candidate"]
+
+    @asynccontextmanager
+    async def transition(verified):
+        if asyncio.current_task() is preparing and "candidate" in captured:
+            waiting.set()
+            await proceed.wait()
+        async with actual_transition(verified) as handle:
+            yield handle
+
+    monkeypatch.setattr(visitors.root, "clone", clone)
+    monkeypatch.setattr(visitors, "transition", transition)
+    preparing = asyncio.create_task(visitors.prepare(start.operation))
+    await waiting.wait()
+    candidate = captured["candidate"]
+    try:
+        async with actual_transition(start.verified_visitor) as handle:
+            if action == "fail":
+                assert handle.fail(start.operation, "PREPARE_FAILED")
+                assert candidate.factory.retired
+            elif action == "expire":
+                handle.expire()
+        assert visitors.reserved_bytes == visitors.settings.max_db_bytes
+        cleanup = await visitors.cleanup_retired()
+        if action == "keep_preparing":
+            assert (
+                cleanup.removed,
+                cleanup.pending,
+                cleanup.failure_codes,
+            ) == (0, 0, ())
+            assert visitors.reserved_bytes == visitors.settings.max_db_bytes
+            assert not candidate.factory.retired
+            assert candidate.path.exists()
+        else:
+            assert (
+                cleanup.removed,
+                cleanup.pending,
+                cleanup.failure_codes,
+            ) == (1, 0, ())
+            assert not candidate.path.exists()
+            assert visitors.reserved_bytes == 0
+    finally:
+        proceed.set()
+        result = (await asyncio.gather(preparing, return_exceptions=True))[0]
+    if action == "keep_preparing":
+        async with actual_transition(start.verified_visitor) as handle:
+            assert handle.publish(start.operation, result).state == "ready"
+    else:
+        assert isinstance(result, DemoError)
+        assert result.code == (
+            "DEMO_EXPIRED" if action == "expire" else "DEMO_STALE_GENERATION"
+        )
+        later = await visitors.cleanup_retired()
+        assert (later.removed, later.pending, later.failure_codes) == (0, 0, ())
 
 
 async def test_cleanup_retains_capacity_and_bytes_until_lease_and_unlink(
@@ -475,12 +648,34 @@ async def test_receipts_and_tombstones_expire_at_absolute_deadline(
     assert visitors.reserved_visitors == 0
     assert visitors.visitor_for_bootstrap(bootstrap) is ready.verified_visitor
     clock.advance(visitors.settings.absolute_ttl_seconds)
-    await visitors.cleanup_tick()
+    second = await visitors.cleanup_tick()
+    assert (second.removed, second.pending, second.failure_codes) == (0, 0, ())
     renewed_bootstrap = visitors.verify_bootstrap(bootstrap.bootstrap_nonce)
     assert visitors.visitor_for_bootstrap(renewed_bootstrap) is None
     assert not await visitors.release_lease(ctx.lease)
     with pytest.raises(DemoError, match="DEMO_SESSION_REQUIRED"):
         await visitors.resolve_visit(ready.verified_visitor, 1)
+
+
+@pytest.mark.parametrize("retired_limit", [1, 32])
+async def test_repeated_cleanup_ticks_do_not_requeue_removed_candidate(
+    make_visitors, retired_limit
+):
+    from src.demo.visitors import DemoSettings
+
+    visitors, clock, _ = await make_visitors(
+        DemoSettings(max_retired_generations=retired_limit)
+    )
+    bootstrap, _, ctx = await ready_context(visitors)
+    await visitors.release_lease(ctx.lease)
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    first = await visitors.cleanup_tick()
+    assert (first.removed, first.pending, first.failure_codes) == (1, 0, ())
+    for _ in range(3):
+        later = await visitors.cleanup_tick()
+        assert (later.removed, later.pending, later.failure_codes) == (0, 0, ())
+    fresh = await visitors.create_visit(bootstrap, str(uuid4()), "admin")
+    assert fresh.snapshot.state == "ready"
 
 
 async def test_backlog_blocks_new_work_but_keeps_ready_reads_and_releases(

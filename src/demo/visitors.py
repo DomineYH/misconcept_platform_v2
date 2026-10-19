@@ -881,6 +881,23 @@ class VisitorRegistry:
             and state.state in ("preparing", "resetting")
         )
 
+    def _reclaim_builder(self, state, builder):
+        if not builder.task.done():
+            return
+        try:
+            candidate = builder.task.result()
+        except (Exception, asyncio.CancelledError):
+            candidate = None
+        builder.candidate = candidate
+        if (
+            candidate is not None
+            and candidate is not state.ref
+            and self.root.owns(candidate)
+        ):
+            self._retire(state.verified, candidate, needs_drain=False)
+        elif builder.op.op_id not in self.root.pending_operations:
+            self._reservations.pop(builder.op.op_id, None)
+
     async def prepare(self, op):
         """Clone outside transition; cancellation waits for the SQLite builder."""
         state = self._states.get(getattr(op, "visitor_id", None))
@@ -938,37 +955,51 @@ class VisitorRegistry:
                 self._builders[op.op_id] = builder
         try:
             candidate = await asyncio.shield(builder.task)
+            async with self.transition(state.verified) as handle:
+                builder.candidate = candidate
+                if self._due(state):
+                    handle.expire("ttl")
+                if not self._valid_op(state, op) or builder.cancelled:
+                    self._reclaim_builder(state, builder)
+                    code = (
+                        "EXPIRED"
+                        if state.state in ("expired", "closing")
+                        else "STALE_GENERATION"
+                    )
+                    raise self._error(state, code)
+                return candidate
         except asyncio.CancelledError:
             await self.cancel_preparation(op)
             raise
         except Exception:
             async with self.transition(state.verified):
-                if op.op_id not in self.root.pending_operations:
+                if builder.task.done():
+                    self._reclaim_builder(state, builder)
+                elif op.op_id not in self.root.pending_operations:
                     self._reservations.pop(op.op_id, None)
             raise
-        async with self.transition(state.verified) as handle:
-            builder.candidate = candidate
-            if self._due(state):
-                handle.expire("ttl")
-            if not self._valid_op(state, op) or builder.cancelled:
-                if candidate is not state.ref:
-                    self._retire(state.verified, candidate, needs_drain=False)
-                self._reservations.pop(op.op_id, None)
-                code = (
-                    "EXPIRED"
-                    if state.state in ("expired", "closing")
-                    else "STALE_GENERATION"
-                )
-                raise self._error(state, code)
-            return candidate
 
     async def cancel_preparation(self, op):
         state = self._states.get(getattr(op, "visitor_id", None))
         if (
             state is None
             or getattr(op, "_authority", None) is not self._authority
+            or state.owner is asyncio.current_task()
         ):
             raise DemoError("INVALID_REQUEST")
+        # Keep ownership settlement alive even if its initial lock wait is cancelled.
+        task = asyncio.create_task(self._cancel_preparation(state, op))
+        cancelled = False
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                cancelled = True
+        task.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
+    async def _cancel_preparation(self, state, op):
         async with self.transition(state.verified) as handle:
             builder = self._builders.get(op.op_id)
             if state.state == "ready" and state.operation is op:
@@ -996,17 +1027,9 @@ class VisitorRegistry:
                 cancelled = True
             except Exception:
                 break
-        try:
-            candidate = builder.task.result()
-        except (Exception, asyncio.CancelledError):
-            candidate = None
         # No await between settlement and ownership transfer: repeated caller
         # cancellation cannot orphan a completed SQLite backup.
-        if candidate is not None and candidate is not state.ref:
-            builder.candidate = candidate
-            self._retire(state.verified, candidate, needs_drain=False)
-        if op.op_id not in self.root.pending_operations:
-            self._reservations.pop(op.op_id, None)
+        self._reclaim_builder(state, builder)
         if cancelled:
             raise asyncio.CancelledError
 
@@ -1022,6 +1045,9 @@ class VisitorRegistry:
             async with self.transition(reservation.verified_visitor) as handle:
                 snapshot = handle.publish(op, candidate)
             return replace(reservation, snapshot=snapshot)
+        except asyncio.CancelledError:
+            await self.cancel_preparation(op)
+            raise
         except Exception as error:
             code = (
                 error.code if isinstance(error, DemoError) else "PREPARE_FAILED"
@@ -1050,12 +1076,9 @@ class VisitorRegistry:
             codes = list(pending_result["codes"])
             removed = pending_result["removed"]
             for op_id, builder in self._builders.items():
-                if (
-                    builder.task.done()
-                    and op_id not in self.root.pending_operations
-                ):
-                    if builder.cancelled or builder.candidate is None:
-                        self._reservations.pop(op_id, None)
+                state = self._states[builder.op.visitor_id]
+                if builder.cancelled or not self._valid_op(state, builder.op):
+                    self._reclaim_builder(state, builder)
             for key, retired in list(self._retired.items()):
                 retired.state = "draining"
                 try:
@@ -1081,6 +1104,12 @@ class VisitorRegistry:
                     continue
                 self._retired.pop(key, None)
                 removed += 1
+                for op_id, builder in self._builders.items():
+                    if (
+                        builder.candidate is retired.ref
+                        and op_id not in self.root.pending_operations
+                    ):
+                        self._reservations.pop(op_id, None)
             for state in self._states.values():
                 if state.state not in ("expired", "closing"):
                     continue
@@ -1429,13 +1458,9 @@ class TransitionHandle:
         receipt.error_code = error.code
         receipt.snapshot = self.snapshot()
         builder = registry._builders.get(op.op_id)
-        if (
-            builder is None or builder.task.done()
-        ) and op.op_id not in registry.root.pending_operations:
-            if builder is not None and builder.candidate is not None:
-                registry._retire(
-                    state.verified, builder.candidate, needs_drain=False
-                )
+        if builder is not None:
+            registry._reclaim_builder(state, builder)
+        elif op.op_id not in registry.root.pending_operations:
             registry._reservations.pop(op.op_id, None)
         return True
 

@@ -3,6 +3,7 @@
 from fastapi import HTTPException
 from sqlalchemy import text
 
+from src.demo.lifecycle import NORMAL_SCOPE, lifecycle
 from src.models import GenerationRun
 from src.services.comparison_state import (
     comparison_snapshot,
@@ -10,12 +11,18 @@ from src.services.comparison_state import (
     owned_comparison,
     utcnow,
 )
-from src.services.generation_lifecycle import active_runs
 from src.services.generation_runs import conflict
 
 
 async def stop_comparison(
-    factory, comparison_id, owner_id, targets, *, all_panels=False
+    factory,
+    comparison_id,
+    owner_id,
+    targets,
+    *,
+    all_panels=False,
+    scope=NORMAL_SCOPE,
+    registry=lifecycle,
 ):
     async with factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
@@ -35,8 +42,7 @@ async def stop_comparison(
                 ) from None
             raise
         for run_id in stopped:
-            if signal := active_runs.get(run_id):
-                signal.set()
+            registry.cancel(scope, "run", run_id)
         return result
 
 

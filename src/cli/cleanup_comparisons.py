@@ -4,16 +4,27 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import URL, event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from src.services.comparison_retention import cleanup_comparisons
+
+def require_normal(app_mode):
+    if app_mode != "normal":
+        raise ValueError(
+            "DEMO_ACTION_FORBIDDEN"
+            if app_mode == "demo"
+            else "DEMO_CONFIGURATION_INVALID"
+        )
 
 
-async def run(database, execute):
+async def run(database, execute, *, app_mode):
+    require_normal(app_mode)
+    from src.services.comparison_retention import cleanup_comparisons
+
     engine = create_async_engine(
         URL.create(
             "sqlite+aiosqlite",
@@ -36,7 +47,15 @@ async def run(database, execute):
         await engine.dispose()
 
 
-def main():
+def main(*, app_mode=None):
+    app_mode = (
+        os.environ.get("APP_MODE", "normal") if app_mode is None else app_mode
+    )
+    try:
+        require_normal(app_mode)
+    except ValueError as error:
+        print(json.dumps(dict(code=str(error), exit_status=1)))
+        return 1
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", type=Path, required=True)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -45,7 +64,9 @@ def main():
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
-        counts = asyncio.run(run(args.database, args.execute))
+        counts = asyncio.run(
+            run(args.database, args.execute, app_mode=app_mode)
+        )
     except Exception:
         counts = dict(targets=0, deleted=0, failed=1, skipped_running=0)
     exit_status = int(counts["failed"] > 0)

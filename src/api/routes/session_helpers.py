@@ -6,10 +6,10 @@ from fastapi import HTTPException
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.demo.lifecycle import NormalContext, lifecycle, scope_for
 from src.i18n import translate
 from src.models import GenerationRun, Scenario, Session, User
 from src.models.scenario_group import ScenarioGroup
-from src.services.generation_lifecycle import active_runs
 
 
 def require_native_session(session, *, language="ko"):
@@ -72,7 +72,13 @@ async def load_session(
 
 
 async def mark_session_ended(
-    session: Session, db: AsyncSession, *, force: bool = False, language="ko"
+    session: Session,
+    db: AsyncSession,
+    *,
+    force: bool = False,
+    language="ko",
+    ctx=None,
+    registry=lifecycle,
 ) -> tuple[datetime, bool]:
     """Mark session as ended by setting ended_at timestamp.
 
@@ -87,45 +93,50 @@ async def mark_session_ended(
     Raises:
         HTTPException: 400 if already ended and force=False
     """
-    require_native_session(session, language=language)
-    # Release auth reads, then serialize with reservation/finalization.
-    await db.commit()
-    await db.execute(text("BEGIN IMMEDIATE"))
-    await db.refresh(session, ["ended_at"])
-    if session.ended_at:
-        if not force:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "session_ended",
-                    "message": translate(
-                        "teacher.conversation_ended", language
-                    ),
-                },
-            )
-        await db.commit()
-        return session.ended_at, True
+    ctx = ctx if ctx is not None else NormalContext(db.bind)
+    async with registry.write_guard(ctx):
+        try:
+            require_native_session(session, language=language)
+            # Release auth reads, then serialize with reservation/finalization.
+            await db.commit()
+            await db.execute(text("BEGIN IMMEDIATE"))
+            await db.refresh(session, ["ended_at"])
+            if session.ended_at:
+                if not force:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "code": "session_ended",
+                            "message": translate(
+                                "teacher.conversation_ended", language
+                            ),
+                        },
+                    )
+                await db.commit()
+                return session.ended_at, True
 
-    session.ended_at = datetime.now(timezone.utc)
-    cancelled = (
-        await db.scalars(
-            update(GenerationRun)
-            .where(
-                GenerationRun.session_id == session.id,
-                GenerationRun.status == "running",
-            )
-            .values(
-                status="cancelled",
-                error_code="session_ended",
-                finished_at=session.ended_at,
-            )
-            .returning(GenerationRun.id)
-        )
-    ).all()
-    await db.commit()  # End state survives a later analysis failure.
+            session.ended_at = datetime.now(timezone.utc)
+            cancelled = (
+                await db.scalars(
+                    update(GenerationRun)
+                    .where(
+                        GenerationRun.session_id == session.id,
+                        GenerationRun.status == "running",
+                    )
+                    .values(
+                        status="cancelled",
+                        error_code="session_ended",
+                        finished_at=session.ended_at,
+                    )
+                    .returning(GenerationRun.id)
+                )
+            ).all()
+            await db.commit()  # End state survives a later analysis failure.
+        except BaseException:
+            await db.rollback()
+            raise
     for run_id in cancelled:
-        if run_id in active_runs:
-            active_runs[run_id].set()
+        registry.cancel(scope_for(ctx), "run", run_id)
 
     return session.ended_at, False
 

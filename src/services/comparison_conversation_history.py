@@ -6,11 +6,11 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import and_, delete, or_, select, text
 
+from src.demo.lifecycle import NORMAL_SCOPE, lifecycle
 from src.models import ComparisonConversation, ComparisonRun, GenerationRun
 from src.services.comparison_conversations import owned_conversation
 from src.services.comparison_history import delete_contents, running_content
 from src.services.comparison_state import utcnow
-from src.services.generation_lifecycle import active_runs
 from src.services.generation_runs import conflict
 
 
@@ -67,19 +67,28 @@ async def list_conversations(db, user_id, cursor=None):
     )
 
 
-async def aggregate_busy(db, identifier):
+async def aggregate_busy(
+    db, identifier, *, scope=NORMAL_SCOPE, registry=lifecycle
+):
     ids = select(ComparisonRun.id).where(
         ComparisonRun.conversation_id == identifier
     )
     running = await db.scalar(
         select(ComparisonRun.id).where(
-            ComparisonRun.id.in_(ids), running_content()
+            ComparisonRun.id.in_(ids),
+            running_content(scope=scope, registry=registry),
         )
     )
     attempts = await db.scalars(
         select(GenerationRun.id).where(GenerationRun.comparison_run_id.in_(ids))
     )
-    return bool(running or any(run_id in active_runs for run_id in attempts))
+    return bool(
+        running
+        or any(
+            registry.lookup(scope, "run", run_id) is not None
+            for run_id in attempts
+        )
+    )
 
 
 async def delete_aggregate(db, identifier):
@@ -98,11 +107,13 @@ async def delete_aggregate(db, identifier):
     )
 
 
-async def delete_conversation(db, identifier, owner_id):
+async def delete_conversation(
+    db, identifier, owner_id, *, scope=NORMAL_SCOPE, registry=lifecycle
+):
     await db.rollback()
     await db.execute(text("BEGIN IMMEDIATE"))
     await owned_conversation(db, identifier, owner_id)
-    if await aggregate_busy(db, identifier):
+    if await aggregate_busy(db, identifier, scope=scope, registry=registry):
         conflict("comparison_busy")
     await delete_aggregate(db, identifier)
     await db.commit()

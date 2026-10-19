@@ -1,0 +1,1296 @@
+"""TTL, quota, cancellation, retirement and reset races at the public API."""
+
+import asyncio
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+import pytest
+from test_demo_d1_01_database import make_root
+from test_demo_d1_01_visitors import ready_context
+
+from src.demo.database import DemoError
+from src.demo.visitors import ControlContext, VisitorRegistry
+
+
+class FakeClock:
+    def __init__(self):
+        self.elapsed = 0
+        self.start = datetime(2026, 10, 19, tzinfo=timezone.utc)
+
+    def monotonic(self):
+        return self.elapsed
+
+    def utcnow(self):
+        return self.start + timedelta(seconds=self.elapsed)
+
+    def advance(self, seconds):
+        self.elapsed += seconds
+
+
+class LifecycleDouble:
+    """#192 cancellation/drain boundary; never substitutes for real integration."""
+
+    def __init__(self):
+        self.visitors = None
+        self.events = []
+        self.blocked = False
+
+    def cancel_scope(self, scope):
+        self.events.append(("cancel", scope))
+        return 0
+
+    async def drain(self, scope, timeout_seconds):
+        self.events.append(("drain", scope))
+        remaining = self.visitors.lease_count(scope)
+        return {
+            "drained": not self.blocked and remaining == 0,
+            "remaining": remaining,
+        }
+
+
+@pytest.fixture
+async def make_visitors(tmp_path):
+    stores = []
+
+    async def make(settings=None):
+        path = tmp_path / str(uuid4())
+        path.mkdir()
+        root = await make_root(path)
+        clock = FakeClock()
+        lifecycle = LifecycleDouble()
+        visitors = VisitorRegistry(
+            root, lifecycle=lifecycle, settings=settings, clock=clock
+        )
+        lifecycle.visitors = visitors
+        stores.append(visitors)
+        return visitors, clock, lifecycle
+
+    yield make
+    for visitors in stores:
+        await visitors.shutdown()
+        visitors.root.close()
+
+
+async def test_reset_self_lease_handoff_and_separate_child_timeout(
+    make_visitors,
+):
+    visitors, _, lifecycle = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    child = await visitors.retain_lease(ctx.lease)
+    from sqlalchemy import text
+
+    request_db = ctx.factory()
+    await request_db.execute(text("SELECT 1"))
+    reset = await visitors.reset_visit(ctx, str(uuid4()))
+    assert reset.snapshot.state == "resetting"
+    old = ready.snapshot.ref
+    # #193/#194 owned task: rollback -> session close -> own release -> drain.
+    order = []
+    await request_db.rollback()
+    order.append("rollback")
+    await request_db.close()
+    order.append("close")
+    await visitors.release_lease(ctx.lease)
+    order.append("release")
+    with pytest.raises(DemoError, match="DEMO_DRAIN_TIMEOUT"):
+        await visitors.prepare(reset.operation)
+    assert old.path.exists()
+    assert not old.factory.disposed
+    async with visitors.transition(ready.verified_visitor) as handle:
+        assert handle.fail(reset.operation, "DRAIN_TIMEOUT")
+    control = ControlContext(ready.verified_visitor, 2, 2)
+    retry = await visitors.reset_visit(control, str(uuid4()))
+    assert (retry.snapshot.generation, retry.snapshot.auth_epoch) == (2, 2)
+    assert retry.operation.attempt_no == reset.operation.attempt_no + 1
+    await visitors.release_lease(child)
+    candidate = await visitors.prepare(retry.operation)
+    assert old.factory.disposed
+    async with visitors.transition(ready.verified_visitor) as handle:
+        new = handle.publish(retry.operation, candidate)
+    assert new.state == "ready"
+    assert new.role == "admin"
+    assert order == ["rollback", "close", "release"]
+    assert lifecycle.events[0][0] == "cancel"
+    assert lifecycle.events[1][0] == "drain"
+    cleanup = await visitors.cleanup_retired()
+    assert cleanup.removed == 1
+    assert not old.path.exists()
+
+
+async def test_role_receipts_share_idempotency_and_id_limit(make_visitors):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    async with visitors.transition(ready.verified_visitor) as handle:
+        changed = handle.change_role(
+            ctx, "teacher", False, user_id=2, request_id=request_id
+        )
+        replay = handle.change_role(
+            ctx, "teacher", False, user_id=2, request_id=request_id
+        )
+        assert replay is changed
+        with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+            handle.change_role(
+                ctx, "admin", False, user_id=1, request_id=request_id
+            )
+    receipt = await visitors.receipt(ready.verified_visitor, request_id)
+    assert receipt.operation == "role"
+    assert receipt.result.auth_epoch == 2
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_body_aware_replay_precedes_context_and_detects_conflicts(
+    make_visitors,
+):
+    visitors, clock, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    verified = ready.verified_visitor
+    before = await visitors.snapshot(verified)
+    assert (
+        await visitors.replay(verified, "role", str(uuid4()), ("teacher", 1, 1))
+        is None
+    )
+    start = await visitors.replay(
+        verified, "start", ready.operation.request_id, ("admin",)
+    )
+    assert start == await visitors.receipt(verified, ready.operation.request_id)
+    request_id = str(uuid4())
+    async with visitors.transition(verified) as handle:
+        changed = handle.change_role(
+            ctx, "teacher", False, user_id=2, request_id=request_id
+        )
+        role = handle.replay("role", request_id, ("teacher", 1, 1))
+        assert role.result is changed
+        assert role.current.auth_epoch == 2
+        assert not role.historical
+        for operation, body in [
+            ("role", ("teacher", 1, 2)),
+            ("reset", ("teacher", 1, 1)),
+        ]:
+            with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+                handle.replay(operation, request_id, body)
+        with pytest.raises(DemoError, match="DEMO_STALE_ROLE"):
+            handle.check(ctx)
+        current_lease = handle.acquire_lease(changed.ref, 2)
+        current = handle.context(current_lease, user_id=2)
+        handle.change_role(current, "admin", False, user_id=1)
+        handle.release_lease(current_lease)
+    clock.advance(10)
+    historical = await visitors.replay(
+        verified, "role", request_id, ("teacher", 1, 1)
+    )
+    assert historical.result is changed
+    assert historical.historical
+    assert historical.current.auth_epoch == 3
+    assert historical.error_code is None
+    after = await visitors.snapshot(verified)
+    assert after.last_activity_at == before.last_activity_at
+    assert after.expires_at == before.expires_at
+    assert visitors.reserved_bytes == 0
+    await visitors.release_lease(ctx.lease)
+
+
+@pytest.mark.parametrize("code", ["BUSY", "ROLE_DELETED"])
+async def test_accepted_role_failure_replays_original_result(
+    make_visitors, code
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    body = ("teacher", 1, 1)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_" + code):
+            handle.change_role(
+                ctx,
+                "teacher",
+                code == "BUSY",
+                user_id=None,
+                request_id=request_id,
+            )
+        failed = handle.replay("role", request_id, body)
+        assert failed.error_code == "DEMO_" + code
+        assert (failed.status_code, failed.retry_after) == (409, None)
+        assert failed.result.auth_epoch == failed.current.auth_epoch == 1
+        with pytest.raises(DemoError, match="DEMO_" + code):
+            handle.change_role(
+                ctx, "teacher", False, user_id=2, request_id=request_id
+            )
+        handle.change_role(ctx, "teacher", False, user_id=2)
+        historical = handle.replay("role", request_id, body)
+        assert historical.result is failed.result
+        assert historical.historical
+        assert historical.current.auth_epoch == 2
+        assert historical.error_code == failed.error_code
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_consumer_role_failure_receipt_copies_original_error_metadata(
+    make_visitors,
+):
+    from dataclasses import FrozenInstanceError
+
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    body = ("teacher", 1, 1)
+    error = DemoError("DB_LOCKED", retry_after=7)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        handle.check(ctx)
+        stored = handle.record_role_failure(request_id, body, error)
+        error.retry_after = 99
+        error.status_code = 599
+        replay = handle.record_role_failure(request_id, body, DemoError("BUSY"))
+        assert replay == stored
+        assert replay.result.auth_epoch == replay.current.auth_epoch == 1
+        assert (replay.error_code, replay.status_code, replay.retry_after) == (
+            "DEMO_DB_LOCKED",
+            503,
+            7,
+        )
+        with pytest.raises(FrozenInstanceError):
+            replay.retry_after = 8
+        with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+            handle.record_role_failure(
+                request_id, ("teacher", 1, 2), DemoError("BUSY")
+            )
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as replayed_error:
+            handle.change_role(
+                ctx, "teacher", False, user_id=2, request_id=request_id
+            )
+        assert (
+            replayed_error.value.status_code,
+            replayed_error.value.retry_after,
+        ) == (503, 7)
+    assert (
+        await visitors.replay(ready.verified_visitor, "role", request_id, body)
+        == stored
+    )
+    await visitors.release_lease(ctx.lease)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "CSRF_INVALID",
+        "INVALID_REQUEST",
+        "UNSUPPORTED_CONFIGURATION",
+        "STALE_GENERATION",
+        "STALE_ROLE",
+        "LIMIT_REACHED",
+    ],
+)
+async def test_preacceptance_role_errors_do_not_create_receipts(
+    make_visitors, code
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    body = ("teacher", 1, 1)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_" + code):
+            handle.record_role_failure(request_id, body, DemoError(code))
+        assert handle.replay("role", request_id, body) is None
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_new_role_validation_and_stale_context_do_not_accept_id(
+    make_visitors,
+):
+    from dataclasses import replace
+
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    cases = [
+        (ctx, "other", False, 2, "INVALID_REQUEST"),
+        (ctx, "teacher", 1, 2, "INVALID_REQUEST"),
+        (ctx, "teacher", False, -1, "INVALID_REQUEST"),
+        (replace(ctx, generation=2), "teacher", False, 2, "STALE_GENERATION"),
+        (replace(ctx, auth_epoch=2), "teacher", False, 2, "STALE_ROLE"),
+    ]
+    async with visitors.transition(ready.verified_visitor) as handle:
+        for context, role, busy, user_id, code in cases:
+            request_id = str(uuid4())
+            with pytest.raises(DemoError, match="DEMO_" + code):
+                handle.change_role(
+                    context, role, busy, user_id=user_id, request_id=request_id
+                )
+            assert (
+                handle.replay(
+                    "role",
+                    request_id,
+                    (role, context.generation, context.auth_epoch),
+                )
+                is None
+            )
+        assert handle.snapshot().auth_epoch == 1
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_role_failure_receipts_share_cap_without_evicting_owned_results(
+    make_visitors,
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    body = ("teacher", 1, 1)
+    ids = [str(uuid4()) for _ in range(255)]
+    async with visitors.transition(ready.verified_visitor) as handle:
+        for request_id in ids:
+            handle.record_role_failure(request_id, body, DemoError("DB_LOCKED"))
+        overflow_id = str(uuid4())
+        with pytest.raises(DemoError, match="DEMO_LIMIT_REACHED"):
+            handle.record_role_failure(overflow_id, body, DemoError("BUSY"))
+        with pytest.raises(DemoError, match="DEMO_LIMIT_REACHED"):
+            handle.change_role(ctx, "teacher", True, request_id=overflow_id)
+        assert handle.replay("role", overflow_id, body) is None
+        for request_id in (ids[0], ids[-1]):
+            stored = handle.record_role_failure(
+                request_id, body, DemoError("BUSY")
+            )
+            assert (
+                stored.error_code,
+                stored.status_code,
+                stored.retry_after,
+            ) == ("DEMO_DB_LOCKED", 503, 1)
+        assert (
+            handle.replay(
+                "start", ready.operation.request_id, ("admin",)
+            ).result
+            is ready.snapshot
+        )
+        with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+            handle.replay("reset", ids[0], body)
+    await visitors.release_lease(ctx.lease)
+
+
+@pytest.mark.parametrize("operation", ["start", "reset"])
+async def test_control_failure_receipt_preserves_dynamic_retry_after(
+    make_visitors, monkeypatch, operation
+):
+    visitors, _, _ = await make_visitors()
+    request_id = str(uuid4())
+    if operation == "reset":
+        _, ready, ctx = await ready_context(visitors)
+        reset = await visitors.reset_visit(ctx, request_id)
+        await visitors.release_lease(ctx.lease)
+        verified = ready.verified_visitor
+        body = (1, 1)
+    else:
+        bootstrap = visitors.verify_bootstrap(
+            "dynamic-start-failure-bootstrap00"
+        )
+        body = ("admin",)
+
+    async def locked(*args, **kwargs):
+        raise DemoError("DB_LOCKED", retry_after=7)
+
+    monkeypatch.setattr(visitors.root, "clone", locked)
+    if operation == "start":
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as failed:
+            await visitors.create_visit(bootstrap, request_id, "admin")
+        verified = visitors.visitor_for_bootstrap(bootstrap)
+        assert failed.value.retry_after == 7
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as repeated:
+            await visitors.reserve_start(bootstrap, request_id, "admin")
+        assert repeated.value.retry_after == 7
+    else:
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as failed:
+            await visitors.prepare(reset.operation)
+        async with visitors.transition(verified) as handle:
+            assert handle.fail(reset.operation, "DB_LOCKED", error=failed.value)
+            assert not handle.fail(reset.operation, "PREPARE_FAILED")
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as repeated:
+            await visitors.reset_visit(ctx, request_id)
+        assert repeated.value.retry_after == 7
+    stored = await visitors.replay(verified, operation, request_id, body)
+    assert (stored.error_code, stored.status_code, stored.retry_after) == (
+        "DEMO_DB_LOCKED",
+        503,
+        7,
+    )
+    assert stored.result.state == (
+        "prepare_failed" if operation == "start" else "reset_failed"
+    )
+    assert await visitors.receipt(verified, request_id) == stored
+
+
+async def test_reset_replay_returns_accepted_result_before_new_context(
+    make_visitors,
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    reset = await visitors.reset_visit(ctx, request_id)
+    pending = await visitors.replay(
+        ready.verified_visitor, "reset", request_id, (1, 1)
+    )
+    assert pending.result == reset.snapshot
+    assert pending.result.state == "resetting"
+    await visitors.release_lease(ctx.lease)
+    candidate = await visitors.prepare(reset.operation)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        completed = handle.publish(reset.operation, candidate)
+        lease = handle.acquire_lease(candidate, 2)
+        current = handle.context(lease, user_id=1)
+        handle.change_role(current, "teacher", False, user_id=2)
+        replay = handle.replay("reset", request_id, (1, 1))
+        assert replay.result is completed
+        assert replay.historical and replay.current.auth_epoch == 3
+        assert pending.result.state == "resetting"
+        with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+            handle.replay("reset", request_id, (2, 2))
+        handle.release_lease(lease)
+
+
+async def test_replay_uses_opaque_hashable_bodies_and_handle_lifetime(
+    make_visitors,
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    body = frozenset({("role", "teacher"), ("generation", 1), ("epoch", 1)})
+    async with visitors.transition(ready.verified_visitor) as handle:
+        stored = handle.record_role_failure(
+            request_id, body, DemoError("DB_LOCKED")
+        )
+        assert handle.replay("role", request_id, frozenset(body)) == stored
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            handle.replay("role", str(uuid4()), [])
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            handle.replay("unknown", str(uuid4()), ())
+    with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+        handle.replay("role", request_id, body)
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_prepare_failure_replay_retry_and_historical_receipt(
+    make_visitors,
+):
+    visitors, clock, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("f" * 32)
+    request_id = str(uuid4())
+    first = await visitors.reserve_start(bootstrap, request_id, "teacher")
+    async with visitors.transition(first.verified_visitor) as handle:
+        assert handle.fail(first.operation, "PREPARE_FAILED")
+    deadline = (await visitors.snapshot(first.verified_visitor)).expires_at
+    clock.advance(50)
+    with pytest.raises(DemoError, match="DEMO_PREPARE_FAILED"):
+        await visitors.create_visit(bootstrap, request_id, "teacher")
+    with pytest.raises(DemoError, match="DEMO_PREPARE_FAILED"):
+        await visitors.resolve_visit(first.verified_visitor, 1)
+    retry = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    assert retry.verified_visitor is first.verified_visitor
+    assert (retry.snapshot.generation, retry.snapshot.auth_epoch) == (1, 1)
+    assert retry.operation.attempt_no == 2
+    assert retry.snapshot.expires_at == deadline
+    async with visitors.transition(first.verified_visitor) as handle:
+        assert not handle.fail(first.operation, "STORAGE_LIMIT")
+    candidate = await visitors.prepare(retry.operation)
+    async with visitors.transition(first.verified_visitor) as handle:
+        ready = handle.publish(retry.operation, candidate)
+    assert ready.role == "admin"
+    failed = await visitors.receipt(first.verified_visitor, request_id)
+    assert failed.error_code == "DEMO_PREPARE_FAILED"
+    assert failed.result.state == "prepare_failed"
+    assert visitors.reserved_visitors == 1
+
+
+async def test_receipt_cap_preserves_existing_ids_and_never_reclones(
+    make_visitors,
+):
+    visitors, _, _ = await make_visitors()
+    bootstrap, ready, ctx = await ready_context(visitors)
+    for _ in range(255):
+        replay = await visitors.reserve_start(
+            bootstrap, str(uuid4()), "teacher"
+        )
+        assert replay.snapshot.ref is ready.snapshot.ref
+        assert replay.snapshot.role == "admin"
+    with pytest.raises(DemoError, match="DEMO_LIMIT_REACHED"):
+        await visitors.reserve_start(bootstrap, str(uuid4()), "teacher")
+    replay = await visitors.create_visit(
+        bootstrap, ready.operation.request_id, "admin"
+    )
+    assert replay.snapshot.ref is ready.snapshot.ref
+    await visitors.release_lease(ctx.lease)
+
+
+@pytest.mark.parametrize(
+    "state",
+    ["preparing", "prepare_failed", "ready", "resetting", "reset_failed"],
+)
+async def test_ttl_expires_all_states_without_extending_deadlines(
+    make_visitors, state
+):
+    visitors, clock, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("t" * 32)
+    if state in ("preparing", "prepare_failed"):
+        reservation = await visitors.reserve_start(
+            bootstrap, str(uuid4()), "teacher"
+        )
+        verified = reservation.verified_visitor
+        if state == "prepare_failed":
+            async with visitors.transition(verified) as handle:
+                handle.fail(reservation.operation, "PREPARE_FAILED")
+        ctx = None
+    else:
+        _, reservation, ctx = await ready_context(visitors)
+        verified = reservation.verified_visitor
+        if state in ("resetting", "reset_failed"):
+            reservation = await visitors.reset_visit(ctx, str(uuid4()))
+            if state == "reset_failed":
+                async with visitors.transition(verified) as handle:
+                    handle.fail(reservation.operation, "RESET_FAILED")
+    before = await visitors.snapshot(verified)
+    assert before.state == state
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    expired = await visitors.snapshot(verified)
+    assert expired.state == "expired"
+    assert (expired.generation, expired.auth_epoch) == (
+        before.generation + 1,
+        before.auth_epoch + 1,
+    )
+    assert expired.ref is None
+    await visitors.expire_visit(verified)
+    assert (await visitors.snapshot(verified)).generation == expired.generation
+    if ctx is not None:
+        with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+            await visitors.check(ctx)
+        await visitors.release_lease(ctx.lease)
+    await visitors.cleanup_tick()
+    assert visitors.reserved_visitors == 0
+
+
+async def test_foreground_touch_only_idle_and_absolute_wins_publish(
+    make_visitors,
+):
+    visitors, clock, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    absolute = ready.snapshot.absolute_expires_at
+    clock.advance(100)
+    assert (
+        await visitors.snapshot(ready.verified_visitor)
+    ).last_activity_at == ready.snapshot.last_activity_at
+    touched = await visitors.touch(ctx)
+    assert (
+        touched.idle_expires_at
+        == ready.snapshot.idle_expires_at + timedelta(seconds=100)
+    )
+    assert touched.absolute_expires_at == absolute
+    reset = await visitors.reset_visit(ctx, str(uuid4()))
+    await visitors.release_lease(ctx.lease)
+    candidate = await visitors.prepare(reset.operation)
+    clock.advance(visitors.settings.absolute_ttl_seconds)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+            handle.publish(reset.operation, candidate)
+        assert not handle.fail(reset.operation, "RESET_FAILED")
+    assert (
+        await visitors.snapshot(ready.verified_visitor)
+    ).absolute_expires_at == absolute
+    result = await visitors.cleanup_tick()
+    assert result.pending == 0
+    assert not candidate.path.exists()
+
+
+async def test_final_capacity_slot_and_failed_reservation_wait_for_cleanup(
+    make_visitors,
+):
+    from src.demo.visitors import DemoSettings
+
+    visitors, clock, _ = await make_visitors(DemoSettings(max_visitors=1))
+    bootstraps = [visitors.verify_bootstrap(str(i) * 32) for i in (1, 2)]
+    gate = asyncio.Event()
+
+    async def start(bootstrap):
+        await gate.wait()
+        try:
+            return await visitors.reserve_start(
+                bootstrap, str(uuid4()), "admin"
+            )
+        except DemoError as error:
+            return error
+
+    tasks = [asyncio.create_task(start(bootstrap)) for bootstrap in bootstraps]
+    gate.set()
+    results = await asyncio.gather(*tasks)
+    winner = next(
+        result for result in results if not isinstance(result, DemoError)
+    )
+    loser = next(result for result in results if isinstance(result, DemoError))
+    assert loser.code == "DEMO_CAPACITY"
+    assert loser.retry_after == 30
+    async with visitors.transition(winner.verified_visitor) as handle:
+        handle.fail(winner.operation, "PREPARE_FAILED")
+    assert visitors.reserved_visitors == 1
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    await visitors.cleanup_tick()
+    assert visitors.reserved_visitors == 0
+    winner_bootstrap = visitors.verify_bootstrap(
+        "1" * 32
+        if winner.verified_visitor
+        is visitors.visitor_for_bootstrap(bootstraps[0])
+        else "2" * 32
+    )
+    fresh = await visitors.reserve_start(
+        winner_bootstrap, str(uuid4()), "teacher"
+    )
+    assert fresh.snapshot.visitor_id != winner.snapshot.visitor_id
+    assert fresh.snapshot.browser_scope_id != winner.snapshot.browser_scope_id
+    assert (fresh.snapshot.generation, fresh.snapshot.auth_epoch) == (1, 1)
+    with pytest.raises(DemoError, match="DEMO_PREPARE_FAILED"):
+        await visitors.reserve_start(
+            winner_bootstrap, winner.operation.request_id, "admin"
+        )
+
+
+async def test_cancel_waits_through_repeated_caller_cancellation_and_reclaims_late_candidate(
+    make_visitors, monkeypatch
+):
+    visitors, _, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("c" * 32)
+    start = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    entered = asyncio.Event()
+    finish = asyncio.Event()
+    cancel_entered = asyncio.Event()
+    actual_clone = visitors.root.clone
+    captured = {}
+
+    async def uncooperative_clone(visitor_id, generation, **kwargs):
+        captured["signal"] = kwargs["cancel_event"]
+        actual_set = captured["signal"].set
+
+        def signal_cancel():
+            actual_set()
+            cancel_entered.set()
+
+        monkeypatch.setattr(captured["signal"], "set", signal_cancel)
+        entered.set()
+        await finish.wait()
+        candidate = await actual_clone(
+            visitor_id, generation, operation_id=kwargs["operation_id"]
+        )
+        captured["candidate"] = candidate
+        return candidate
+
+    monkeypatch.setattr(visitors.root, "clone", uncooperative_clone)
+    preparing = asyncio.create_task(visitors.prepare(start.operation))
+    await entered.wait()
+    reserved = visitors.reserved_bytes
+
+    async def cancel():
+        return await visitors.cancel_preparation(start.operation)
+
+    cancelling = asyncio.create_task(cancel())
+    await cancel_entered.wait()
+    assert captured["signal"].is_set()
+    cancelling.cancel()
+    assert visitors.reserved_bytes == reserved
+    assert not cancelling.done()
+
+    # The second cancellation is delivered before the builder is allowed to exit.
+    async def cancel_again():
+        cancelling.cancel()
+
+    await asyncio.create_task(cancel_again())
+    assert visitors.reserved_bytes == reserved
+    finish.set()
+    with pytest.raises(asyncio.CancelledError):
+        await cancelling
+    with pytest.raises(DemoError, match="DEMO_STALE_GENERATION"):
+        await preparing
+    assert visitors.reserved_bytes == reserved
+    result = await visitors.cleanup_retired()
+    assert result.pending == 0
+    assert not captured["candidate"].path.exists()
+    assert visitors.reserved_bytes == 0
+
+
+async def test_cancelling_published_operation_preserves_ready_factory(
+    make_visitors,
+):
+    from sqlalchemy import text
+
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    async with visitors.transition(ready.verified_visitor):
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            await visitors.cancel_preparation(ready.operation)
+    await visitors.cancel_preparation(ready.operation)
+    assert (
+        await visitors.resolve_visit(ready.verified_visitor, 1)
+    ) is ready.snapshot.ref
+    async with ctx.factory() as db:
+        assert (
+            await db.execute(text("SELECT body FROM synthetic_record"))
+        ).scalar_one() == "fictional"
+    await visitors.release_lease(ctx.lease)
+    assert (await visitors.cleanup_retired()).removed == 0
+
+
+@pytest.mark.parametrize(
+    "entrypoint,boundary",
+    [("prepare", 1), ("create_visit", 1), ("create_visit", 2)],
+)
+@pytest.mark.parametrize("repeat_cancel", [False, True])
+async def test_cancel_after_clone_keeps_candidate_owned_until_unlink(
+    make_visitors, monkeypatch, entrypoint, boundary, repeat_cancel
+):
+    visitors, _, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("post-clone-cancellation-bootstrap")
+    request_id = str(uuid4())
+    actual_clone = visitors.root.clone
+    actual_transition = visitors.transition
+    captured = {}
+    waiting = asyncio.Event()
+    allow_lock = asyncio.Event()
+    lock_attempted = asyncio.Event()
+    cancellation_started = asyncio.Event()
+    cleanup_waiting = asyncio.Event()
+    caller = asyncio.current_task()
+    transitions = 0
+    preparing = None
+
+    async def clone(*args, **kwargs):
+        captured["candidate"] = await actual_clone(*args, **kwargs)
+        return captured["candidate"]
+
+    @asynccontextmanager
+    async def transition(verified):
+        nonlocal transitions
+        if (
+            cancellation_started.is_set()
+            and asyncio.current_task() is not caller
+        ):
+            cleanup_waiting.set()
+        if asyncio.current_task() is preparing and "candidate" in captured:
+            transitions += 1
+            if transitions == boundary:
+                waiting.set()
+                await allow_lock.wait()
+                lock_attempted.set()
+        async with actual_transition(verified) as handle:
+            yield handle
+
+    monkeypatch.setattr(visitors.root, "clone", clone)
+    monkeypatch.setattr(visitors, "transition", transition)
+    if entrypoint == "prepare":
+        start = await visitors.reserve_start(bootstrap, request_id, "admin")
+        operation = visitors.prepare(start.operation)
+    else:
+        operation = visitors.create_visit(bootstrap, request_id, "admin")
+    preparing = asyncio.create_task(operation)
+    await waiting.wait()
+    verified = visitors.visitor_for_bootstrap(bootstrap)
+    async with actual_transition(verified):
+        allow_lock.set()
+        await lock_attempted.wait()
+        cancellation_started.set()
+        preparing.cancel()
+        if repeat_cancel:
+            await cleanup_waiting.wait()
+            preparing.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await preparing
+    assert (await visitors.snapshot(verified)).state == "prepare_failed"
+    candidate = captured["candidate"]
+    assert candidate.factory.retired
+    assert visitors.root.owns(candidate) and candidate.path.exists()
+    reserved = visitors.reserved_bytes
+    assert reserved == visitors.settings.max_db_bytes
+    actual_cleanup = visitors.root.cleanup
+
+    async def locked(ref):
+        raise DemoError("DB_LOCKED")
+
+    monkeypatch.setattr(visitors.root, "cleanup", locked)
+    blocked = await visitors.cleanup_retired()
+    assert (blocked.pending, blocked.failure_codes) == (1, ("DEMO_DB_LOCKED",))
+    assert visitors.reserved_bytes == reserved
+    assert candidate.path.exists()
+    monkeypatch.setattr(visitors.root, "cleanup", actual_cleanup)
+    cleaned = await visitors.cleanup_retired()
+    assert (cleaned.removed, cleaned.pending, cleaned.failure_codes) == (
+        1,
+        0,
+        (),
+    )
+    assert not candidate.path.exists()
+    assert visitors.reserved_bytes == 0
+
+
+@pytest.mark.parametrize("action", ["fail", "expire", "keep_preparing"])
+async def test_completed_clone_accounting_before_candidate_transfer(
+    make_visitors, monkeypatch, action
+):
+    visitors, _, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("untransferred-candidate-bootstrap")
+    start = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    actual_clone = visitors.root.clone
+    actual_transition = visitors.transition
+    captured = {}
+    waiting = asyncio.Event()
+    proceed = asyncio.Event()
+
+    async def clone(*args, **kwargs):
+        captured["candidate"] = await actual_clone(*args, **kwargs)
+        return captured["candidate"]
+
+    @asynccontextmanager
+    async def transition(verified):
+        if asyncio.current_task() is preparing and "candidate" in captured:
+            waiting.set()
+            await proceed.wait()
+        async with actual_transition(verified) as handle:
+            yield handle
+
+    monkeypatch.setattr(visitors.root, "clone", clone)
+    monkeypatch.setattr(visitors, "transition", transition)
+    preparing = asyncio.create_task(visitors.prepare(start.operation))
+    await waiting.wait()
+    candidate = captured["candidate"]
+    try:
+        async with actual_transition(start.verified_visitor) as handle:
+            if action == "fail":
+                assert handle.fail(start.operation, "PREPARE_FAILED")
+                assert candidate.factory.retired
+            elif action == "expire":
+                handle.expire()
+        assert visitors.reserved_bytes == visitors.settings.max_db_bytes
+        cleanup = await visitors.cleanup_retired()
+        if action == "keep_preparing":
+            assert (
+                cleanup.removed,
+                cleanup.pending,
+                cleanup.failure_codes,
+            ) == (0, 0, ())
+            assert visitors.reserved_bytes == visitors.settings.max_db_bytes
+            assert not candidate.factory.retired
+            assert candidate.path.exists()
+        else:
+            assert (
+                cleanup.removed,
+                cleanup.pending,
+                cleanup.failure_codes,
+            ) == (1, 0, ())
+            assert not candidate.path.exists()
+            assert visitors.reserved_bytes == 0
+    finally:
+        proceed.set()
+        result = (await asyncio.gather(preparing, return_exceptions=True))[0]
+    if action == "keep_preparing":
+        async with actual_transition(start.verified_visitor) as handle:
+            assert handle.publish(start.operation, result).state == "ready"
+    else:
+        assert isinstance(result, DemoError)
+        assert result.code == (
+            "DEMO_EXPIRED" if action == "expire" else "DEMO_STALE_GENERATION"
+        )
+        later = await visitors.cleanup_retired()
+        assert (later.removed, later.pending, later.failure_codes) == (0, 0, ())
+
+
+async def test_cleanup_retains_capacity_and_bytes_until_lease_and_unlink(
+    make_visitors, monkeypatch
+):
+    from src.demo.visitors import DemoSettings
+
+    visitors, _, _ = await make_visitors(DemoSettings(max_visitors=1))
+    _, ready, ctx = await ready_context(visitors)
+    old = ready.snapshot.ref
+    await visitors.expire_visit(ready.verified_visitor)
+    blocked = await visitors.cleanup_retired()
+    assert blocked.pending == 1
+    assert blocked.failure_codes == ("DEMO_DRAIN_TIMEOUT",)
+    assert old.path.exists()
+    assert not old.factory.disposed
+    assert visitors.reserved_visitors == 1
+    await visitors.release_lease(ctx.lease)
+    actual_cleanup = visitors.root.cleanup
+    attempts = 0
+
+    async def locked_once(ref):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise DemoError("DB_LOCKED")
+        return await actual_cleanup(ref)
+
+    monkeypatch.setattr(visitors.root, "cleanup", locked_once)
+    before = visitors.root.bytes_used()
+    locked = await visitors.cleanup_retired()
+    assert locked.pending == 1
+    assert locked.failure_codes == ("DEMO_DB_LOCKED",)
+    assert visitors.root.bytes_used() == before
+    assert visitors.reserved_visitors == 1
+    finished = await visitors.cleanup_retired()
+    assert (finished.removed, finished.pending) == (1, 0)
+    assert visitors.reserved_visitors == 0
+    assert not old.path.exists()
+    assert visitors.root.bytes_used() < before
+
+
+async def test_close_failure_keeps_request_lease_and_blocks_reset(
+    make_visitors, monkeypatch
+):
+    from sqlalchemy import text
+
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    db = ctx.factory()
+    await db.execute(text("SELECT 1"))
+    reset = await visitors.reset_visit(ctx, str(uuid4()))
+    actual_close = db.close
+
+    async def fail_close():
+        raise DemoError("DB_LOCKED")
+
+    monkeypatch.setattr(db, "close", fail_close)
+    await db.rollback()
+    with pytest.raises(DemoError, match="DEMO_DB_LOCKED"):
+        await db.close()
+        await visitors.release_lease(ctx.lease)
+    assert not ctx.lease.released
+    assert visitors.lease_count(ctx.scope) == 1
+    with pytest.raises(DemoError, match="DEMO_DRAIN_TIMEOUT"):
+        await visitors.prepare(reset.operation)
+    assert ready.snapshot.ref.path.exists()
+    assert not ready.snapshot.ref.factory.disposed
+    await actual_close()
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_receipts_and_tombstones_expire_at_absolute_deadline(
+    make_visitors,
+):
+    visitors, clock, _ = await make_visitors()
+    bootstrap, ready, ctx = await ready_context(visitors)
+    await visitors.release_lease(ctx.lease)
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    await visitors.cleanup_tick()
+    assert visitors.reserved_visitors == 0
+    assert visitors.visitor_for_bootstrap(bootstrap) is ready.verified_visitor
+    clock.advance(visitors.settings.absolute_ttl_seconds)
+    second = await visitors.cleanup_tick()
+    assert (second.removed, second.pending, second.failure_codes) == (0, 0, ())
+    renewed_bootstrap = visitors.verify_bootstrap(bootstrap.bootstrap_nonce)
+    assert visitors.visitor_for_bootstrap(renewed_bootstrap) is None
+    assert not await visitors.release_lease(ctx.lease)
+    with pytest.raises(DemoError, match="DEMO_SESSION_REQUIRED"):
+        await visitors.resolve_visit(ready.verified_visitor, 1)
+
+
+@pytest.mark.parametrize("retired_limit", [1, 32])
+async def test_repeated_cleanup_ticks_do_not_requeue_removed_candidate(
+    make_visitors, retired_limit
+):
+    from src.demo.visitors import DemoSettings
+
+    visitors, clock, _ = await make_visitors(
+        DemoSettings(max_retired_generations=retired_limit)
+    )
+    bootstrap, _, ctx = await ready_context(visitors)
+    await visitors.release_lease(ctx.lease)
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    first = await visitors.cleanup_tick()
+    assert (first.removed, first.pending, first.failure_codes) == (1, 0, ())
+    for _ in range(3):
+        later = await visitors.cleanup_tick()
+        assert (later.removed, later.pending, later.failure_codes) == (0, 0, ())
+    fresh = await visitors.create_visit(bootstrap, str(uuid4()), "admin")
+    assert fresh.snapshot.state == "ready"
+
+
+async def test_backlog_blocks_new_work_but_keeps_ready_reads_and_releases(
+    make_visitors, monkeypatch
+):
+    from sqlalchemy import text
+
+    from src.demo.visitors import DemoSettings
+
+    visitors, _, _ = await make_visitors(
+        DemoSettings(max_retired_generations=1)
+    )
+    _, ready, ctx = await ready_context(visitors)
+    reset = await visitors.reset_visit(ctx, str(uuid4()))
+    await visitors.release_lease(ctx.lease)
+    candidate = await visitors.prepare(reset.operation)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        current = handle.publish(reset.operation, candidate)
+    other_bootstrap = visitors.verify_bootstrap("o" * 32)
+    with pytest.raises(DemoError, match="DEMO_CLEANUP_BACKLOG") as error:
+        await visitors.reserve_start(other_bootstrap, str(uuid4()), "admin")
+    assert error.value.retry_after == visitors.settings.cleanup_interval_seconds
+    ref = await visitors.resolve_visit(ready.verified_visitor, 2)
+    lease = await visitors.acquire_lease(ref, 2)
+    current_ctx = await visitors.make_context(
+        ready.verified_visitor, lease, user_id=1
+    )
+    async with ref.factory() as db:
+        assert (
+            await db.execute(text("SELECT body FROM synthetic_record"))
+        ).scalar_one() == "fictional"
+    with pytest.raises(DemoError, match="DEMO_CLEANUP_BACKLOG"):
+        await visitors.reset_visit(current_ctx, str(uuid4()))
+    assert (await visitors.snapshot(ready.verified_visitor)) == current
+    await visitors.release_lease(lease)
+    assert (await visitors.cleanup_retired()).removed == 1
+
+
+async def test_restart_queues_verified_orphan_and_never_resumes_old_reference(
+    make_visitors,
+):
+    from src.demo.database import DatabaseRoot
+
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    await visitors.release_lease(ctx.lease)
+    old = ready.snapshot.ref
+    await old.factory.dispose()
+    visitors.root.close()
+    root = DatabaseRoot(visitors.root.path).open()
+    root.validate_seed(visitors.root._seed)
+    clock = FakeClock()
+    lifecycle = LifecycleDouble()
+    restarted = VisitorRegistry(root, lifecycle=lifecycle, clock=clock)
+    lifecycle.visitors = restarted
+    try:
+        with pytest.raises(DemoError, match="DEMO_SESSION_REQUIRED"):
+            await restarted.resolve_visit(ready.verified_visitor, 1)
+        assert restarted.reserved_visitors == 1
+        result = await restarted.cleanup_retired()
+        assert result.removed == 1
+        assert restarted.reserved_visitors == 0
+        assert not old.path.exists()
+    finally:
+        root.close()
+        # Restore the original test-store lock for fixture shutdown.
+        visitors.root.open()
+
+
+async def test_check_error_priority_and_reset_receipts(make_visitors):
+    from dataclasses import replace
+
+    visitors, clock, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    reset = await visitors.reset_visit(ctx, request_id)
+    replay = await visitors.reset_visit(ctx, request_id)
+    assert replay.operation is reset.operation
+    assert (replay.snapshot.generation, replay.snapshot.auth_epoch) == (2, 2)
+    with pytest.raises(DemoError, match="DEMO_RESET_IN_PROGRESS"):
+        await visitors.reset_visit(ctx, str(uuid4()))
+    with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+        await visitors.reset_visit(
+            ControlContext(ready.verified_visitor, 2, 2), request_id
+        )
+    with pytest.raises(DemoError, match="DEMO_STALE_GENERATION"):
+        await visitors.check(replace(ctx, auth_epoch=99))
+    with pytest.raises(DemoError, match="DEMO_RESET_IN_PROGRESS"):
+        await visitors.check(replace(ctx, generation=2, auth_epoch=99))
+    async with visitors.transition(ready.verified_visitor) as handle:
+        handle.fail(reset.operation, "DB_LOCKED")
+    with pytest.raises(DemoError, match="DEMO_DB_LOCKED"):
+        await visitors.reset_visit(ctx, request_id)
+    with pytest.raises(DemoError, match="DEMO_RESET_FAILED"):
+        await visitors.check(replace(ctx, generation=2, auth_epoch=99))
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+        await visitors.check(replace(ctx, generation=99, auth_epoch=99))
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_foreign_candidate_never_retires_another_ready_visit(
+    make_visitors,
+):
+    from sqlalchemy import text
+
+    visitors, _, _ = await make_visitors()
+    _, other, other_ctx = await ready_context(visitors)
+    bootstrap = visitors.verify_bootstrap("foreign-candidate-test-bootstrap")
+    first = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    async with visitors.transition(first.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_VERSION_MISMATCH"):
+            handle.publish(first.operation, other.snapshot.ref)
+        handle.fail(first.operation, "VERSION_MISMATCH")
+    await visitors.cleanup_retired()
+    async with other_ctx.factory() as db:
+        assert (
+            await db.execute(text("SELECT body FROM synthetic_record"))
+        ).scalar_one() == "fictional"
+    assert (
+        await visitors.resolve_visit(other.verified_visitor, 1)
+    ) is other.snapshot.ref
+    await visitors.release_lease(other_ctx.lease)
+
+
+@pytest.mark.parametrize(
+    "code,status,retryable,recovery,retry_after",
+    [
+        ("SESSION_REQUIRED", 401, False, "start_required", None),
+        ("EXPIRED", 410, False, "expired", None),
+        ("STALE_GENERATION", 409, False, "stale_generation", None),
+        ("STALE_ROLE", 409, False, "stale_role", None),
+        ("START_IN_PROGRESS", 409, False, "preparing", None),
+        ("RESET_IN_PROGRESS", 409, False, "resetting", None),
+        ("PREPARE_FAILED", 503, True, "prepare_failed", None),
+        ("RESET_FAILED", 503, True, "reset_failed", None),
+        ("DRAIN_TIMEOUT", 503, True, "reset_failed", None),
+        ("DB_LOCKED", 503, True, "retry_later", 1),
+        ("ROLE_DELETED", 409, False, "role_deleted", None),
+        ("BUSY", 409, True, "wait_or_stop", None),
+        ("LIMIT_REACHED", 429, False, "limit_reached", None),
+        ("CAPACITY", 503, True, "capacity", 30),
+        ("STORAGE_LIMIT", 507, False, "storage_limit", None),
+        ("CLEANUP_BACKLOG", 503, True, "retry_later", 17),
+        ("VERSION_MISMATCH", 503, False, "unavailable", None),
+        ("CONFIGURATION_INVALID", 503, False, "unavailable", None),
+        ("INVALID_REQUEST", 422, False, "check_input", None),
+        ("REQUEST_CONFLICT", 409, False, "refresh_state", None),
+    ],
+)
+def test_demo_error_transport_contract(
+    code, status, retryable, recovery, retry_after
+):
+    error = DemoError(code, retry_after=retry_after)
+    assert error.code == "DEMO_" + code
+    assert error.status_code == error.status == status
+    assert error.retryable is retryable
+    assert error.recovery == "demo." + recovery
+    assert error.retry_after == retry_after
+    assert error.detail["generation"] is error.detail["auth_epoch"] is None
+    assert str(error) == error.code
+
+
+async def test_historical_start_replay_checks_new_visit_ttl_under_transition(
+    make_visitors,
+):
+    visitors, clock, _ = await make_visitors()
+    bootstrap, first, ctx = await ready_context(visitors)
+    await visitors.release_lease(ctx.lease)
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    await visitors.cleanup_tick()
+    second = await visitors.create_visit(bootstrap, str(uuid4()), "teacher")
+    assert second.verified_visitor is not first.verified_visitor
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+        await visitors.reserve_start(
+            bootstrap, first.operation.request_id, "admin"
+        )
+    assert (await visitors.snapshot(second.verified_visitor)).state == "expired"
+
+
+async def test_failed_staging_cleanup_keeps_slot_and_reservation_until_actual_unlink(
+    make_visitors, monkeypatch
+):
+    from dataclasses import replace
+    from pathlib import Path
+
+    visitors, clock, _ = await make_visitors()
+    spec = visitors.root._seed
+    actual_verify = spec.verify_content
+
+    def fail_destination(db, manifest):
+        actual_verify(db, manifest)
+        if (
+            db.execute("SELECT kind FROM demo_metadata").fetchone()[0]
+            == "demo_visitor"
+        ):
+            raise DemoError("VERSION_MISMATCH")
+
+    visitors.root.validate_seed(replace(spec, verify_content=fail_destination))
+    actual_unlink = Path.unlink
+
+    def locked_unlink(path, *args, **kwargs):
+        if path.parent == visitors.root.path and path.suffix == ".staging":
+            raise PermissionError("fictional locked candidate")
+        return actual_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", locked_unlink)
+    bootstrap = visitors.verify_bootstrap("locked-staging-reservation-test00")
+    request_id = str(uuid4())
+    with pytest.raises(DemoError, match="DEMO_DB_LOCKED"):
+        await visitors.create_visit(bootstrap, request_id, "admin")
+    assert visitors.reserved_visitors == 1
+    assert visitors.reserved_bytes == visitors.settings.max_db_bytes
+    assert len(visitors.root.pending_operations) == 1
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    blocked = await visitors.cleanup_tick()
+    assert blocked.pending == 1
+    assert visitors.reserved_visitors == 1
+    assert visitors.reserved_bytes == visitors.settings.max_db_bytes
+    monkeypatch.setattr(Path, "unlink", actual_unlink)
+    finished = await visitors.cleanup_tick()
+    assert finished.pending == 0
+    assert visitors.reserved_visitors == visitors.reserved_bytes == 0
+    assert not list(visitors.root.path.glob("*.staging"))
+
+
+async def test_expired_pending_start_receipt_stays_terminal_after_new_visit(
+    make_visitors,
+):
+    visitors, clock, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("expired-pending-start-bootstrap00")
+    first = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    clock.advance(visitors.settings.idle_ttl_seconds)
+    await visitors.cleanup_tick()
+    second = await visitors.create_visit(bootstrap, str(uuid4()), "teacher")
+    assert second.snapshot.state == "ready"
+    with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+        await visitors.reserve_start(
+            bootstrap, first.operation.request_id, "admin"
+        )
+
+
+async def test_shutdown_blocks_other_visits_while_waiting_for_cancelled_builder(
+    make_visitors, monkeypatch
+):
+    visitors, _, lifecycle = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("shutdown-cancel-builder-bootstrap")
+    first = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    _, ready, ctx = await ready_context(visitors)
+    await visitors.release_lease(ctx.lease)
+    entered = asyncio.Event()
+    finish = asyncio.Event()
+    closing = asyncio.Event()
+    actual_clone = visitors.root.clone
+    actual_cancel = lifecycle.cancel_scope
+
+    async def delayed_clone(visitor_id, generation, **kwargs):
+        entered.set()
+        await finish.wait()
+        return await actual_clone(visitor_id, generation, **kwargs)
+
+    def cancel_scope(scope):
+        closing.set()
+        return actual_cancel(scope)
+
+    monkeypatch.setattr(visitors.root, "clone", delayed_clone)
+    monkeypatch.setattr(lifecycle, "cancel_scope", cancel_scope)
+    preparing = asyncio.create_task(visitors.prepare(first.operation))
+    await entered.wait()
+    shutdown = asyncio.create_task(visitors.shutdown())
+    await closing.wait()
+    try:
+        with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+            await visitors.acquire_lease(
+                ready.snapshot.ref, ready.snapshot.auth_epoch
+            )
+    finally:
+        finish.set()
+        await shutdown
+        with pytest.raises(DemoError):
+            await preparing
+
+
+async def test_publish_rejects_retired_candidate_factory(make_visitors):
+    visitors, _, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("retired-candidate-bootstrap-test0")
+    start = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    candidate = await visitors.prepare(start.operation)
+    candidate.factory.retire()
+    async with visitors.transition(start.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_VERSION_MISMATCH"):
+            handle.publish(start.operation, candidate)
+        assert handle.snapshot().state == "preparing"
+        handle.fail(start.operation, "VERSION_MISMATCH")

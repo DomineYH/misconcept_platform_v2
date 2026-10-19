@@ -68,6 +68,12 @@ async def demo_health_check(request: Request) -> JSONResponse:
                 )
             ) as db:
                 db.execute("SELECT 1").fetchone()
+                # SELECT 1 never reads the file; the seed marker proves it is usable.
+                row = db.execute(
+                    "SELECT kind FROM demo_metadata WHERE id=1"
+                ).fetchone()
+                if row != ("demo_seed",):
+                    raise DemoError("VERSION_MISMATCH")
 
         await asyncio.to_thread(check_files)
         # The visitor cap alone keeps readiness; the cleanup hard cap does not.

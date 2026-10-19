@@ -6,7 +6,6 @@ import logging
 import math
 import secrets
 import time
-from datetime import timezone
 from functools import wraps
 from typing import AsyncGenerator
 from urllib.parse import urlencode, urlsplit
@@ -28,8 +27,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.config import config
 from src.db.connection import AsyncSessionLocal
 from src.demo.database import DemoError
-from src.demo.session import CONTENT_VERSION, CONTRACT_VERSION, FIXTURE_VERSION
-from src.demo.visitors import ControlContext, DemoContext
+from src.demo.session import (
+    CONTENT_VERSION,
+    CONTRACT_VERSION,
+    FIXTURE_VERSION,
+    DemoState,
+    public_state,
+)
+from src.demo.visitors import ControlContext
 from src.i18n import display_language, t, translate, ui_strings
 
 
@@ -38,39 +43,28 @@ def demo_template_context(request: Request) -> dict:
     public_url = config.DEMO_PUBLIC_URL or None
     if config.APP_MODE == "normal":
         return {"demo_config": {"mode": "normal", "public_url": public_url}}
-    ctx = getattr(request.state, "demo_context", None)
-    ready = isinstance(ctx, DemoContext)
-    return {
-        "demo_config": {
-            "mode": "demo",
+    # Only a snapshot taken under a passing currentness check names a namespace.
+    display = getattr(request.state, "demo_display", None)
+    if display is None:
+        fields = dict.fromkeys(DemoState.model_fields) | {
             "contract_version": CONTRACT_VERSION,
             "content_version": CONTENT_VERSION,
             "fixture_version": FIXTURE_VERSION,
-            "state": "ready" if ready else None,
-            "browser_scope_id": ctx.browser_scope_id if ready else None,
-            "generation": ctx.generation if ready else None,
-            "auth_epoch": ctx.auth_epoch if ready else None,
-            "role": ctx.role if ready else None,
-            "expires_at": (
-                ctx.expires_at.astimezone(timezone.utc)
-                .isoformat()
-                .replace("+00:00", "Z")
-                if ready
-                else None
-            ),
-            "idle_ttl_seconds": config.DEMO_IDLE_TTL_SECONDS,
-            "absolute_ttl_seconds": config.DEMO_ABSOLUTE_TTL_SECONDS,
-            "active": False,
-            "last_error": None,
+            "csrf_cookie_name": "demo_csrftoken",
+            "csrf_header_name": "x-csrf-token",
+        }
+    else:
+        fields = display.model_dump(mode="json")
+    return {
+        "demo_config": {
+            "mode": "demo",
+            **fields,
             "start_url": "/demo/start",
             "role_url": "/demo/role",
             "reset_url": "/demo/reset",
             "state_url": "/demo/state",
             "public_url": public_url,
-            "csrf_cookie_name": "demo_csrftoken",
-            "csrf_header_name": "x-csrf-token",
             "ui_language": display_language(request),
-            "tour_facts": None,
         }
     }
 
@@ -160,7 +154,8 @@ async def get_current_user(
         ctx = getattr(request.state, "demo_context", None)
         if ctx is None or ctx.db is not db:
             raise DemoError("CONFIGURATION_INVALID")
-        await ctx._request_db.check()
+        request.state.demo_display = None
+        request.state.demo_display = await ctx._request_db.display()
         return ctx.user
 
     # Get user_id from session
@@ -318,6 +313,18 @@ class _RequestDBState:
             await self.runtime.visitors.check(self.ctx)
         if write:
             self.wrote = True
+
+    async def display(self):
+        """Public state for templates, read under the same currentness check."""
+        self.ensure_open()
+        if self.handle is not None:
+            await self.check()
+            return public_state(self.handle.snapshot())
+        async with self.runtime.visitors.transition(
+            self.ctx.verified_visitor
+        ) as handle:
+            handle.check(self.ctx)
+            return public_state(handle.snapshot())
 
     async def end_guard(self):
         if self.guard is not None:
@@ -724,17 +731,18 @@ def demo_request_handler(handler):
                     and "request_id" not in request.query_params
                 ),
             )
+            if request.method not in ("GET", "HEAD", "OPTIONS"):
+                await security.verify_csrf(request, bootstrap)
+            await _namespace(request)
+            if request.state.demo_invalid_selector:
+                raise DemoError("INVALID_REQUEST")
+            # Rejected signature/CSRF/selector requests consume no quota.
             visitor = runtime.visitors.visitor_for_bootstrap(bootstrap)
             if visitor is not None:
                 runtime.rate_limit(
                     ("visitor", visitor.visitor_id),
                     runtime.settings.DEMO_REQUESTS_PER_MINUTE,
                 )
-            if request.method not in ("GET", "HEAD", "OPTIONS"):
-                await security.verify_csrf(request, bootstrap)
-            await _namespace(request)
-            if request.state.demo_invalid_selector:
-                raise DemoError("INVALID_REQUEST")
             if request.method == "POST" and request.url.path == "/demo/start":
                 # Counts signed, CSRF-valid starts by the ASGI client, which only
                 # a trusted proxy (server --forwarded-allow-ips) may rewrite.

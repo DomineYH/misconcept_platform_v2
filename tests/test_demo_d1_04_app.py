@@ -167,6 +167,34 @@ async def test_normal_mode_serves_no_demo_paths():
     assert context["demo_config"] == {"mode": "normal", "public_url": None}
 
 
+async def test_demo_cleanup_tick_retries_demo_errors_and_stops_otherwise(
+    caplog,
+):
+    from src.demo.database import DemoError
+    from src.demo.visitors import CleanupResult
+    from src.main import _demo_cleanup
+
+    calls = []
+
+    class Visitors:
+        async def cleanup_tick(self):
+            calls.append(len(calls))
+            if len(calls) == 1:
+                raise DemoError("DB_LOCKED")
+            if len(calls) == 2:
+                return CleanupResult(1, 0, ())
+            raise OSError("/real/demo/root/visitor.db")
+
+    with pytest.raises(OSError):
+        await _demo_cleanup(Visitors(), 0)
+    # §8 retry on the next tick, recovery, then a dead task (/health → 503).
+    assert len(calls) == 3
+    codes = [getattr(record, "code", None) for record in caplog.records]
+    assert "DEMO_DB_LOCKED" in codes and "OSError" in codes
+    assert [getattr(r, "removed", None) for r in caplog.records].count(1) == 1
+    assert "/real/demo/root" not in caplog.text
+
+
 # --------------------------------------------------------------------------
 # Subprocess cases (APP_MODE=demo, TESTING=false, isolated environment).
 
@@ -556,6 +584,27 @@ async def case_requests(tmp):
             assert "session_id" not in response_client.cookies
             assert "csrftoken" not in response_client.cookies
 
+        # Every visitor route crosses the request-DB boundary exactly once.
+        import inspect
+
+        from fastapi.routing import APIRoute
+
+        from src.api.dependencies import demo_request_handler
+
+        boundary = demo_request_handler(None).__code__
+        routes = [route for route in app.routes if isinstance(route, APIRoute)]
+        assert any(route.path.startswith("/demo") for route in routes)
+        for route in routes:
+            handler = inspect.getclosurevars(route.app).nonlocals["f"]
+            depth = 0
+            while hasattr(handler, "__wrapped__"):
+                assert handler.__code__ is boundary, route.path
+                handler, depth = handler.__wrapped__, depth + 1
+            direct = route.path == "/health" or (
+                route.path in ("/login", "/logout") and "POST" in route.methods
+            )
+            assert depth == (0 if direct else 1), (route.path, depth)
+
 
 async def case_errors(tmp):
     from uuid import uuid4
@@ -634,14 +683,26 @@ async def case_errors(tmp):
 
 
 async def case_template(tmp):
-    from fastapi import Depends, Request
+    from uuid import uuid4
+
+    from fastapi import Depends, HTTPException, Request
     from fastapi.routing import request_response
 
     from src import main
     from src.api import dependencies as deps
+    from src.demo.session import DemoState
 
     app = main.app
     install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    captured = []
+    render = deps.templates.TemplateResponse
+
+    def spy(*args, **kwargs):
+        response = render(*args, **kwargs)
+        captured.append(response.context["demo_config"])
+        return response
+
+    deps.templates.TemplateResponse = spy
 
     @app.get("/probe-template")
     async def probe_template(
@@ -651,10 +712,65 @@ async def case_template(tmp):
             request, "error.html", {"user": user, "status_code": 404}
         ).context["demo_config"]
 
-    route = app.routes[-1]
-    route.app = request_response(
-        deps.demo_request_handler(route.get_route_handler())
+    @app.get("/probe-error")
+    async def probe_error(
+        request: Request, user=Depends(deps.get_current_user)
+    ):
+        ctx = request.state.demo_context
+        visitors = app.state.demo_request_db.visitors
+        mode = request.query_params["mode"]
+        if mode == "reset":
+            await visitors.reset_visit(ctx, str(uuid4()))
+        elif mode == "expire":
+            await visitors.expire_visit(ctx.verified_visitor, "ttl")
+        elif mode == "role":
+            async with visitors.transition(ctx.verified_visitor) as handle:
+                handle.change_role(ctx, "teacher", False)
+        raise HTTPException(status_code=404)
+
+    for route in app.routes[-2:]:
+        route.app = request_response(
+            deps.demo_request_handler(route.get_route_handler())
+        )
+    # §9:227/§24:565: every public DemoState field plus the control URLs.
+    keys = set(DemoState.model_fields) | {
+        "mode",
+        "start_url",
+        "role_url",
+        "reset_url",
+        "state_url",
+        "public_url",
+        "ui_language",
+    }
+    namespace_keys = (
+        "state",
+        "browser_scope_id",
+        "generation",
+        "auth_epoch",
+        "role",
+        "expires_at",
+        "next_url",
+        "provenance",
+        "active",
     )
+
+    def assert_safe(value):
+        assert set(value) == keys, set(value) ^ keys
+        assert value["mode"] == "demo"
+        assert value["contract_version"] == "d0-03-v1-r3"
+        assert value["csrf_cookie_name"] == "demo_csrftoken"
+        assert value["csrf_header_name"] == "x-csrf-token"
+        assert value["start_url"] == "/demo/start"
+        assert value["state_url"] == "/demo/state"
+        assert value["public_url"] is None and value["tour_facts"] is None
+        text = json.dumps(value)
+        assert not any(secret in text for secret in (*SECRETS, str(tmp)))
+
+    def assert_unbound(value):
+        assert_safe(value)
+        assert all(value[key] is None for key in namespace_keys), value
+
+    html = {"accept": "text/html"}
     async with app.router.lifespan_context(app):
         client = client_for(app)
         state = await start(client, "teacher")
@@ -665,49 +781,57 @@ async def case_template(tmp):
         )
         assert response.status_code == 200, response.text
         value = response.json()
-        assert value == {
-            "mode": "demo",
-            "contract_version": "d0-03-v1-r3",
-            "content_version": "d0-02-v1",
-            "fixture_version": "demo-fixture-v1",
-            "state": "ready",
-            "browser_scope_id": state["browser_scope_id"],
-            "generation": state["generation"],
-            "auth_epoch": state["auth_epoch"],
-            "role": "teacher",
-            "expires_at": state["expires_at"],
-            "idle_ttl_seconds": 1800,
-            "absolute_ttl_seconds": 7200,
-            "active": False,
-            "last_error": None,
-            "start_url": "/demo/start",
-            "role_url": "/demo/role",
-            "reset_url": "/demo/reset",
-            "state_url": "/demo/state",
-            "public_url": None,
-            "csrf_cookie_name": "demo_csrftoken",
-            "csrf_header_name": "x-csrf-token",
-            "ui_language": "en",
-            "tour_facts": None,
-        }
+        assert_safe(value)
+        # The same snapshot the state endpoint publishes for this namespace.
+        assert {key: value[key] for key in state} == state
+        assert value["state"] == "ready" and value["role"] == "teacher"
+        assert value["provenance"]["response_source"] == "prepared_example"
+        assert value["next_url"].startswith("/scenarios?ds=")
+        assert value["ui_language"] == "en"
+
+        # Error pages: only a context passing the currentness check names a namespace.
+        captured.clear()
+        response = await client.get(
+            "/probe-error",
+            params={**namespace(state), "mode": "none"},
+            headers=html,
+        )
+        assert response.status_code == 404
+        assert_safe(captured[-1])
+        assert captured[-1]["generation"] == state["generation"]
+        assert captured[-1]["state"] == "ready"
+        for index, mode in enumerate(("reset", "expire", "role")):
+            visit = client_for(app, f"10.0.1.{index}")
+            visit_state = await start(visit, "admin")
+            captured.clear()
+            response = await visit.get(
+                "/probe-error",
+                params={**namespace(visit_state), "mode": mode},
+                headers=html,
+            )
+            assert response.status_code == 404, response.text
+            assert "nav-username" not in response.text
+            assert len(captured) == 1
+            assert_unbound(captured[0])
+        captured.clear()
+        response = await client.get("/nope", headers=html)
+        assert response.status_code == 404
+        assert_unbound(captured[0])
+        assert captured[0]["ui_language"] == "ko"
+
         # A request without a current visit carries no namespace.
         request = Request(
             {"type": "http", "path": "/", "headers": [], "app": app}
         )
-        value = deps.templates.TemplateResponse(
+        value = render(
             request, "error.html", {"user": None, "status_code": 404}
         ).context["demo_config"]
-        assert value["mode"] == "demo" and value["state"] is None
-        assert value["browser_scope_id"] is None and value["role"] is None
-        assert value["ui_language"] == "ko"
+        assert_unbound(value)
         # The error handler's legacy call style receives the same context.
-        legacy = deps.templates.TemplateResponse(
+        legacy = render(
             "error.html", {"request": request, "user": None, "status_code": 404}
         ).context["demo_config"]
         assert legacy == value
-        assert not any(
-            secret in json.dumps(value) for secret in (*SECRETS, str(tmp))
-        )
 
 
 async def case_health(tmp):
@@ -752,6 +876,15 @@ async def case_health(tmp):
         spec.path.rename(moved)
         await health(degraded)
         moved.rename(spec.path)
+        await health(healthy)
+
+        # SELECT 1 alone accepts any bytes; the seed marker must be readable.
+        original = spec.path.read_bytes()
+        spec.path.write_bytes(b"not a database".ljust(len(original), b"x"))
+        await health(degraded)
+        spec.path.write_bytes(original[:100])
+        await health(degraded)
+        spec.path.write_bytes(original)
         await health(healthy)
 
         marker = runtime.visitors.root.path / ".demo-root.json"
@@ -833,8 +966,40 @@ async def case_limits(tmp):
         response = await a.get("/metrics", params=namespace(state_a))
         assert code(response) == "DEMO_RATE_LIMITED"
         assert 1 <= int(response.headers["retry-after"]) <= 60
+
+        async def without_csrf(client, state):
+            from uuid import uuid4
+
+            response = await client.post(
+                "/demo/reset",
+                json={
+                    "request_id": str(uuid4()),
+                    "expected_generation": state["generation"],
+                    "expected_auth_epoch": state["auth_epoch"],
+                    "confirm": True,
+                },
+                headers={"origin": "https://demo.test"},
+            )
+            return code(response)
+
+        async def selector(client, state):
+            response = await client.get(
+                "/metrics", params={**namespace(state), "visitor_id": "x"}
+            )
+            return code(response)
+
+        # Exhausted window: CSRF and selector errors still take precedence.
+        assert await without_csrf(a, state_a) == "DEMO_CSRF_INVALID"
+        assert await selector(a, state_a) == "DEMO_INVALID_REQUEST"
+        # Shared IP, other visitor; rejected requests consume none of its quota.
+        for _ in range(3):
+            assert await without_csrf(b, state_b) == "DEMO_CSRF_INVALID"
+            assert await selector(b, state_b) == "DEMO_INVALID_REQUEST"
+        for _ in range(9):
+            response = await b.get("/metrics", params=namespace(state_b))
+            assert response.status_code == 200, response.text
         response = await b.get("/metrics", params=namespace(state_b))
-        assert response.status_code == 200, response.text
+        assert code(response) == "DEMO_RATE_LIMITED"
         clock.offset += 61
         response = await a.get("/metrics", params=namespace(state_a))
         assert response.status_code == 200, response.text

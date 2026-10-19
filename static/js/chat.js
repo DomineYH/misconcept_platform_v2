@@ -89,7 +89,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // ========================================
   // Info Tab Switching (Scenario Panel)
   // ========================================
-  const infoTabKey = uiLanguage.storageKey(`chat-info-tab-${chatConfig.sessionId}`);
+  const infoTabKey = `chat-info-tab-${chatConfig.sessionId}`;
   document.querySelectorAll('.info-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       // Update active tab

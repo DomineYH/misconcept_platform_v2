@@ -98,5 +98,12 @@ export default async function check(page) {
   assert.equal(await after(['demo:expired', {browser_scope_id:'scope-a', generation:8, auth_epoch:8}]), 'demo:scope-a:4:0:k');
   assert.equal(await after(['demo:role-changed', {browser_scope_id:'scope-a', generation:4, auth_epoch:1}]), 'demo:scope-a:4:1:k');
   assert.equal(await page.evaluate(() => uiLanguage.headers('/x').get('X-Demo-Generation')), '4');
+
+  // The content-free info-tab preference keeps its un-prefixed key across an auth_epoch change.
+  await page.evaluate(() => document.querySelector('.info-tab[data-tab="guide"]').click());
+  await open(page, base, {...DEMO, auth_epoch:3});
+  assert.equal(await page.evaluate(() => uiLanguage.storageKey('k')), 'demo:scope-a:3:3:k');
+  assert.equal(await page.evaluate(id => sessionStorage.getItem(`chat-info-tab-${id}`), id), 'guide');
+  assert.equal(await page.locator('.info-tab.active').getAttribute('data-tab'), 'guide');
   return {pageErrors:[]};
 }

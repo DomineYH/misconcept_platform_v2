@@ -20,7 +20,10 @@ from src.demo.provider import (
     select_content,
 )
 from src.demo.visitors import DemoContext
-from src.services.analysis_output_contract import UnifiedAnalysisOutput
+from src.services.analysis_output_contract import (
+    MergeAnalysisOutput,
+    UnifiedAnalysisOutput,
+)
 from src.services.invocation_types import (
     InvocationError,
     StructuredRequest,
@@ -1266,6 +1269,62 @@ async def test_structured_analysis_connects_real_binding_and_strict_validation(
     )
 
 
+async def test_c_single_analysis_uses_real_classifications(prepared, visitors):
+    p = prepared
+    template = binding_template()
+    template["message_classifications"][0]["quote"] = BINDING_INPUTS["C"]
+    template["strengths"][0]["quote"] = BINDING_INPUTS["C"]
+    request, _ = await structured_prepared(
+        p, visitors, branch="C", value=template
+    )
+    result = await p.provider.generate_structured(
+        request, None, {"analysis_total": 2}
+    )
+    assert result.type == "completed"
+    assert [
+        (c["message_id"], c["disposition"], c["rubric_id"])
+        for c in result.structured["message_classifications"]
+    ] == [
+        (1, "classified", "r1"),
+        (3, "classified", "r3"),
+        (5, "non_analyzable", None),
+    ]
+    assert request.validation_context["analysis_errors"] == []
+
+
+async def test_structured_merge_preserves_verified_sections(prepared, visitors):
+    p = prepared
+    template = binding_template()
+    template.pop("message_classifications")
+    request, _ = await structured_prepared(
+        p, visitors, phase="merge", value=template
+    )
+    request = replace(request, output_schema=MergeAnalysisOutput)
+    request.validation_context["allowed_evidence"] = [
+        dict(message_id=2, quote="first answer"),
+        dict(message_id=4, quote="second answer"),
+        dict(message_id=1, quote=BINDING_INPUTS["A"]),
+    ]
+    result = await p.provider.generate_structured(
+        request, None, {"analysis_total": 2}
+    )
+    assert result.type == "completed"
+    assert set(result.structured) == {
+        "schema_version",
+        "misconception_findings",
+        "brief_feedback",
+        "strengths",
+        "improvements",
+        "dialogue_coaching",
+    }
+    assert result.structured["misconception_findings"][0]["evidence"] == [
+        dict(message_id=2, quote="first answer"),
+        dict(message_id=4, quote="second answer"),
+    ]
+    assert result.structured["strengths"][0]["message_id"] == 1
+    assert request.validation_context["analysis_errors"] == []
+
+
 async def test_analysis_partial_retains_validated_sections_and_error(
     prepared, visitors
 ):
@@ -1578,3 +1637,47 @@ async def test_slow_consumer_receives_timeout_terminal_without_cancellation(
         ("error", "timeout_total"),
     ]
     assert events[-1].response_received
+
+
+async def test_owned_text_deadline_bounds_real_visitor_lock(prepared, visitors):
+    import asyncio
+
+    p = prepared
+    _, _, context = await ready_context(visitors, "teacher")
+    p.provider.visitors = visitors
+    request = replace(p.request, demo_context=context)
+    try:
+        async with visitors.transition(context.verified_visitor):
+            async with asyncio.timeout(0.1) as watchdog:
+                result = await asyncio.create_task(
+                    p.provider.generate_text(
+                        request, None, {"student_total": 0.01}
+                    )
+                )
+    finally:
+        await visitors.release_lease(context.lease)
+    assert result.type == "error" and result.error_code == "timeout_total"
+    assert not result.response_received
+    assert not watchdog.expired()
+
+
+async def test_owned_structured_deadline_bounds_real_visitor_lock(
+    prepared, visitors
+):
+    import asyncio
+
+    p = prepared
+    request, context = await structured_prepared(p, visitors)
+    try:
+        async with visitors.transition(context.verified_visitor):
+            async with asyncio.timeout(0.1) as watchdog:
+                result = await asyncio.create_task(
+                    p.provider.generate_structured(
+                        request, None, {"analysis_total": 0.01}
+                    )
+                )
+    finally:
+        await visitors.release_lease(context.lease)
+    assert result.type == "error" and result.error_code == "timeout_total"
+    assert not result.response_received
+    assert not watchdog.expired()

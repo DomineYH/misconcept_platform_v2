@@ -719,69 +719,72 @@ class DemoProvider:
         self, request, secret, timeouts, *, deadline=None
     ):
         received = False
+        owned = deadline is None
         try:
             if not isinstance(request, StructuredRequest):
                 raise InvocationError("INVALID_REQUEST")
-            envelope, _ = await self._prepare(request, secret)
-            selection = request.demo_selection
-            schema = (
-                MentorOutput
-                if selection.role == "mentor"
-                else (
-                    MergeAnalysisOutput
-                    if selection.analysis_phase == "merge"
-                    else UnifiedAnalysisOutput
-                )
-            )
-            if (
-                request.role not in ("mentor", "analysis")
-                or request.output_schema is not schema
-            ):
+            if request.role not in ("mentor", "analysis"):
                 raise InvocationError("VERSION_MISMATCH")
             deadline = deadline or CallDeadline(timeouts, request.role)
-            self._timeout(deadline, first=True)
-            if envelope["terminal"] != "completed":
-                return CallEvent(
-                    envelope["terminal"],
-                    usage=empty_usage(),
-                    error_code=envelope["error_code"],
-                    response_received=envelope["terminal"] == "refused",
-                )
-            received = True
-            bound = await bind_output(
-                envelope["structured"],
-                context=request.demo_context,
-                visitors=self.visitors,
-                session_id=self.session_id,
-                selection=selection,
-                validation_context=request.validation_context,
-                inputs=self.inputs,
-            )
-            if request.role == "mentor":
-                expected = (
-                    selection.trigger == "manual"
-                    or selection.input_kind in ("A", "B", "C")
-                )
-                if (
-                    bound.get("should_intervene") is not expected
-                    or request.validation_context.get(
-                        "trigger", selection.trigger
+            async with deadline.total() if owned else nullcontext():
+                envelope, _ = await self._prepare(request, secret)
+                selection = request.demo_selection
+                schema = (
+                    MentorOutput
+                    if selection.role == "mentor"
+                    else (
+                        MergeAnalysisOutput
+                        if selection.analysis_phase == "merge"
+                        else UnifiedAnalysisOutput
                     )
-                    != selection.trigger
-                ):
-                    raise InvocationError("invalid_output")
-            await asyncio.sleep(0)
-            await self.visitors.check(request.demo_context)
-            self._timeout(deadline, first=True)
-            return structured_event(
-                request,
-                CallEvent(
-                    "completed",
-                    text=json.dumps(bound, ensure_ascii=False, allow_nan=False),
-                    usage=empty_usage(),
-                    response_received=True,
-                ),
-            )
+                )
+                if request.output_schema is not schema:
+                    raise InvocationError("VERSION_MISMATCH")
+                self._timeout(deadline, first=True)
+                if envelope["terminal"] != "completed":
+                    return CallEvent(
+                        envelope["terminal"],
+                        usage=empty_usage(),
+                        error_code=envelope["error_code"],
+                        response_received=envelope["terminal"] == "refused",
+                    )
+                received = True
+                bound = await bind_output(
+                    envelope["structured"],
+                    context=request.demo_context,
+                    visitors=self.visitors,
+                    session_id=self.session_id,
+                    selection=selection,
+                    validation_context=request.validation_context,
+                    inputs=self.inputs,
+                )
+                if request.role == "mentor":
+                    expected = (
+                        selection.trigger == "manual"
+                        or selection.input_kind in ("A", "B", "C")
+                    )
+                    if (
+                        bound.get("should_intervene") is not expected
+                        or request.validation_context.get(
+                            "trigger", selection.trigger
+                        )
+                        != selection.trigger
+                    ):
+                        raise InvocationError("invalid_output")
+                await asyncio.sleep(0)
+                await self.visitors.check(request.demo_context)
+                self._timeout(deadline, first=True)
+                return structured_event(
+                    request,
+                    CallEvent(
+                        "completed",
+                        text=json.dumps(
+                            bound, ensure_ascii=False, allow_nan=False
+                        ),
+                        usage=empty_usage(),
+                        response_received=True,
+                    ),
+                )
         except asyncio.CancelledError:
             now = (
                 self.clock()
@@ -793,6 +796,13 @@ class DemoProvider:
                 "error" if expired else "interrupted",
                 usage=empty_usage(),
                 error_code="timeout_total" if expired else "interrupted",
+                response_received=received,
+            )
+        except TimeoutError:
+            return CallEvent(
+                "error",
+                usage=empty_usage(),
+                error_code="timeout_total",
                 response_received=received,
             )
         except (InvocationError, DemoError) as error:

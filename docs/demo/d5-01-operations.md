@@ -2,9 +2,9 @@
 
 상태: **초안(PR1)**. 확정(PR2)은 #205가 `docs/demo/d4-03-release-acceptance.md`에
 G5 승인 후보와 검사 결과를 기록한 뒤에 한다(계약 §27:714, §28:769).
-기준: main `3b967f19be0cdbc361877addbf46ec9f7582b889`, 계약 `d0-03-v1-r3` 의미
+기준: main `2dc7840963e6ca700915c2c63cff7729ca54afa9`(#224/#225/#227 병합 후),
+계약 `d0-03-v1-r3` 의미
 (`docs/demo/d0-03-contract-v1.md`). 인용 `파일:행`은 이 기준의 main이다.
-`[#225 병합 후 재확인]` 표시는 미병합 `feat/194-app`(PR #225, `eba0735`) 기준이다.
 
 이 문서에는 실제 host, origin, URL, 경로, mount, secret, 용량을 적지 않는다.
 그 값은 모두 D5-02(#207, `docs/demo/d5-02-approval.md`) 승인 입력이다.
@@ -18,7 +18,7 @@ G5 승인 후보와 검사 결과를 기록한 뒤에 한다(계약 §27:714, §
   userinfo/path/query/fragment, wildcard `*`, 쉼표 다중 origin은 거절된다
   (`src/config.py:79-96`). production은 HTTPS만, development만 loopback HTTP를 허용한다.
 - demo에서는 CORS middleware와 normal Session/CSRF middleware를 붙이지 않는다
-  (`feat/194-app` `src/main.py:500-542`) `[#225 병합 후 재확인]`.
+  (`src/main.py:500-542`).
 - 쿠키 이름은 고정이며 바꾸는 설정이 없다(§10:257). 발급: `src/api/routes/demo.py:161-177`.
   - `demo_session_id`: host-only(Domain 없음), Path=/, HttpOnly, SameSite=Lax,
     production Secure, Max-Age=28800.
@@ -42,23 +42,22 @@ G5 승인 후보와 검사 결과를 기록한 뒤에 한다(계약 §27:714, §
   `--workers 1`(기본값)으로 실행하고 `WEB_CONCURRENCY`를 설정하지 않는다.
   uvicorn 0.38.0의 `--workers` 기본값은 `$WEB_CONCURRENCY` 또는 1이다.
   worker가 둘이면 둘째의 lock 획득이 실패한다. `--reload`는 개발 전용이다.
-- 프록시: start의 IP별 한도는 ASGI client 주소를 쓴다(`feat/194-app`
-  `src/api/dependencies.py:746-752`). `--forwarded-allow-ips`에는 실제 프록시 주소만
-  넣고 `*`를 쓰지 않는다. 실제 프록시 주소는 D5-02 입력이다 `[#225 병합 후 재확인]`.
+- 프록시: start의 IP별 한도는 ASGI client 주소를 쓴다
+  (`src/api/dependencies.py:746-752`). `--forwarded-allow-ips`에는 실제 프록시 주소만 넣고 `*`를 쓰지 않는다. 실제 프록시 주소는 D5-02 입력이다.
 - 접근 로그: 자료 URL에는 `ds`/`dg`/`da` query가 들어간다(§10:265). uvicorn 접근 로그는
   query를 포함한 경로를 출력한다(uvicorn 0.38.0 `protocols/utils.py:52-56`).
   `--no-access-log`로 끄거나 마스킹한다. 앞단 프록시의 접근 로그도 같다(§4:74).
-  앱의 `LoggingMiddleware`는 path만 기록한다(`feat/194-app` `src/main.py:92-104`).
+  앱의 `LoggingMiddleware`는 path만 기록한다(`src/main.py:92-104`).
 
-## 3. 시작·종료·재시작 (§4:67-68) `[#225 병합 후 재확인]`
+## 3. 시작·종료·재시작 (§4:67-68)
 
 - import 시점의 설정 검증(`src/config.py:153-259`)이 실패하면 프로세스가 시작되지 않는다.
-- 시작(`feat/194-app` `src/main.py:233-279`): root open과 lock → seed 검증
+- 시작(`src/main.py:233-279`): root open과 lock → seed 검증
   (`root.validate_seed`) → registry/session 구성 → cleanup 작업 시작. 일반 `init_db`,
   admin bootstrap, 운영 orphan 검색은 호출하지 않는다. 실패는 경로 없는 code로만 보고한다.
-- 현재 `demo_seed()`는 fail-closed다(`feat/194-app` `src/main.py:200-206`). #194 4단계가
+- 현재 `demo_seed()`는 fail-closed다(`src/main.py:200-206`). #194 4단계가
   #197 seed에 연결하기 전까지 demo는 시작을 거절한다. seed 위치는 D5-02 입력이다.
-- 종료(`src/main.py:280-301`, branch): cleanup 취소 → session 종료 → 모든 방문 공간을
+- 종료(`src/main.py:280-301`): cleanup 취소 → session 종료 → 모든 방문 공간을
   `shutdown`으로 만료하고 범위별로 최대 `DEMO_DRAIN_SECONDS` drain → 정리 → lock 해제
   (`src/demo/visitors.py:1214-1222`).
 - 재시작: 이전 공간을 이어 붙이지 않는다. root의 남은 세대는 orphan으로 정리 queue에
@@ -89,18 +88,19 @@ G5 승인 후보와 검사 결과를 기록한 뒤에 한다(계약 §27:714, §
 
 - 교차 검증: `max_disk ≥ seed + 2 × max_db`, `seed ≤ max_db`, absolute ≥ idle이 아니면
   부팅 거절(`src/demo/visitors.py:62-69`, seed 크기 재검사 `src/demo/database.py:262-267`).
-- 디스크 admission: 새 공간은 `max_db` 만큼 미리 예약하고 root 사용량+예약이 `max_disk`를
-  넘으면 507이다(`src/demo/visitors.py:507-525`). 상태 코드: `src/demo/database.py:28-50`.
+- 디스크 admission: 새 공간은 `max_db` 만큼 미리 예약한다. root 사용량 + root 밖 seed 크기 +
+  기존·신규 예약이 `max_disk`를 넘으면 507이다(`src/demo/visitors.py:507-525`).
+  상태 코드: `src/demo/database.py:28-50`.
 - cleanup: `DEMO_CLEANUP_INTERVAL_SECONDS`마다 만료 공간을 정리한다
   (`src/demo/visitors.py:1206-1212`). 잠긴 DB는 `locked`로 남겨 다음 tick에 재시도하고,
   해제 없이 삭제하지 않는다(`src/demo/visitors.py:1110-1135`). 대기 세대가 상한에 닿으면
   새 start/reset은 503 CLEANUP_BACKLOG다(`src/demo/visitors.py:499-505`).
 
-## 5. health와 metrics (§4:64-66) `[#225 병합 후 재확인]`
+## 5. health와 metrics (§4:64-66)
 
 - `GET /health`는 쿠키·방문객 DB 없이 root 표식/lock, manifest hash, seed의 read-only
-  조회, cleanup 작업 상태와 대기 세대 수를 검사한다(`feat/194-app`
-  `src/api/routes/health.py:50-98`). 정상이면 200 `status=healthy`, 아니면 503
+  조회, cleanup 작업 상태와 대기 세대 수를 검사한다
+  (`src/api/routes/health.py:50-98`). 정상이면 200 `status=healthy`, 아니면 503
   `status=degraded, database=unhealthy`. 경로·방문객 수·secret은 내보내지 않는다.
 - 방문객 상한 도달만으로는 readiness를 내리지 않는다. seed 실패, cleanup hard cap, root
   오류는 503이다. 별도 readiness URL은 없다.
@@ -121,9 +121,10 @@ G5 승인 후보와 검사 결과를 기록한 뒤에 한다(계약 §27:714, §
 - demo secret 두 개는 32자 이상, 서로 다르고, normal `SESSION_SECRET`과도 다르며, 금지
   패턴이 없어야 한다(`src/config.py:224-234`, 패턴 `src/config.py:27-36`). 값과 hash는
   어떤 문서·증거에도 기록하지 않는다. settings hash에는 주입 참조/버전만 넣는다(§28:767).
-- demo 환경에 `DATABASE_URL`, `DEMO_FORBIDDEN_ENV`(`src/config.py:38-61`)의 키,
-  `TESTING=true`, `BOOTSTRAP_ADMIN_ON_STARTUP=true`가 있으면 부팅 거절이다
-  (`src/config.py:162-167, 213`). 운영 DB URL·mount·normal secret을 demo에 주입하지 않는다.
+- demo 환경에 값이 비어 있지 않은 `DATABASE_URL` 또는 `DEMO_FORBIDDEN_ENV`
+  (`src/config.py:38-61`)의 키, `TESTING=true`, `BOOTSTRAP_ADMIN_ON_STARTUP=true`가
+  있으면 부팅 거절이다(`src/config.py:162-167, 213`). 빈 값은 통과하지만 운영 DB URL·
+  mount·normal secret·운영 자격 증명은 빈 값으로도 demo에 주입하지 않는다.
 - 외부 AI 시도는 0이어야 한다(§14:353). 인프라 outbound allowlist와 운영 mount 부재의
   증명은 D5-02 범위다. 이 문서는 인프라를 바꾸지 않는다.
 

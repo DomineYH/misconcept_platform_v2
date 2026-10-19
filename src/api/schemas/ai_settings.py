@@ -19,6 +19,8 @@ class CallLimits(SettingsValue):
     anthropic: StrictInt = Field(ge=2)
     google: StrictInt = Field(ge=2)
     admin: StrictInt = Field(ge=1, le=3)
+    # Stored documents without this field read the compatibility value.
+    demo: StrictInt = Field(default=2, ge=2)
 
     @model_validator(mode="after")
     def preserve_classroom_capacity(self):

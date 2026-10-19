@@ -13,6 +13,7 @@ from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
 )
+from src.config import config
 from src.i18n import translate
 from src.models import (
     AppSetting,
@@ -187,7 +188,10 @@ async def _reserve_student(
         try:
             lesson = read_lesson_snapshot(session, language=language)
             connection, model, options = await resolve_frozen_model(
-                db, lesson.config.student.resolved_model_config, "student"
+                db,
+                lesson.config.student.resolved_model_config,
+                "student",
+                app_mode=config.APP_MODE,
             )
         except (InvocationError, HTTPException):
             raise HTTPException(

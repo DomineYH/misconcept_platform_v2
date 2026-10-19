@@ -15,6 +15,7 @@ from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
 )
+from src.config import config
 from src.i18n import translate
 from src.models import (
     ApiUsageLog,
@@ -67,7 +68,10 @@ async def load_analysis_lesson(db, session_id, actor_id, *, language="ko"):
     snapshot = read_lesson_snapshot(session, language=language)
     try:
         await resolve_frozen_model(
-            db, snapshot.config.analysis.resolved_model_config, "analysis"
+            db,
+            snapshot.config.analysis.resolved_model_config,
+            "analysis",
+            app_mode=config.APP_MODE,
         )
     except InvocationError:
         raise configuration_error() from None

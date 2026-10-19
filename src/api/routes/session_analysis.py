@@ -37,9 +37,13 @@ router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 
-def demo_context(request):
-    """The request's fixed demo context (§3); None keeps normal unchanged."""
-    return getattr(request.state, "demo_context", None)
+def demo_scope(request):
+    """The request's demo ctx and its bound registry; normal keeps defaults."""
+    ctx = getattr(request.state, "demo_context", None)
+    if ctx is None:
+        return {}
+    # The module-level lifecycle has no visitors; demo uses the runtime's one.
+    return dict(ctx=ctx, registry=request.app.state.demo_request_db.lifecycle)
 
 
 @router.post("/sessions/{session_id}/end")
@@ -75,7 +79,7 @@ async def end_session(
         request_id,
         plan_hash=body.plan_hash if body else None,
         language=display_language(request),
-        ctx=demo_context(request),
+        **demo_scope(request),
     )
 
 
@@ -97,7 +101,7 @@ async def analyze_session_endpoint(
         body.request_id,
         plan_hash=body.plan_hash,
         language=display_language(request),
-        ctx=demo_context(request),
+        **demo_scope(request),
     )
 
 
@@ -281,5 +285,5 @@ async def cancel_analysis_run(
         run_id,
         user.id,
         language=display_language(request),
-        ctx=demo_context(request),
+        **demo_scope(request),
     )

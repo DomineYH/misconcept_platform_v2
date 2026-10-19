@@ -372,6 +372,12 @@ async def execute_analysis(factory, execution, *, ctx=None, registry=lifecycle):
                 if execution["plan"]["mode"] == "chunked"
                 else analysis_pipeline.run_llm_pipeline
             )
+            # Demo only: the normal pipeline call stays unchanged (§6).
+            demo = {}
+            if scope_for(ctx) != NORMAL_SCOPE:
+                demo = dict(ctx=ctx, registry=registry)
+                if "demo_adapter" in execution:
+                    demo["demo_adapter"] = execution["demo_adapter"]
             result = await pipeline(
                 execution["session_id"],
                 execution["all_messages"],
@@ -387,6 +393,7 @@ async def execute_analysis(factory, execution, *, ctx=None, registry=lifecycle):
                     if execution["plan"]["mode"] == "chunked"
                     else {}
                 ),
+                **demo,
             )
             async with registry.write_guard(ctx), factory() as db:
                 await save_analysis(

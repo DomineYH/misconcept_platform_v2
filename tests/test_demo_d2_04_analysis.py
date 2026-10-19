@@ -571,7 +571,15 @@ async def test_saved_provenance_reaches_run_and_analysis_json(
     assert demo_response["provenance"] == PROVENANCE
 
 
+RUNTIME_LIFECYCLE = Lifecycle()
+
+
 def route_request(ctx):
+    app = SimpleNamespace(
+        state=SimpleNamespace(
+            demo_request_db=SimpleNamespace(lifecycle=RUNTIME_LIFECYCLE)
+        )
+    )
     return Request(
         dict(
             type="http",
@@ -579,17 +587,20 @@ def route_request(ctx):
             path="/",
             headers=[],
             query_string=b"",
+            app=app,
             state={} if ctx is None else dict(demo_context=ctx),
         )
     )
 
 
 @pytest.mark.parametrize("ctx", [None, object()], ids=["normal", "demo"])
-async def test_teacher_routes_pass_the_request_ctx(monkeypatch, ctx):
+async def test_teacher_routes_pass_the_request_ctx_and_bound_registry(
+    monkeypatch, ctx
+):
     calls = []
 
     async def capture(*args, **kwargs):
-        calls.append(kwargs["ctx"])
+        calls.append({k: kwargs[k] for k in ("ctx", "registry") if k in kwargs})
         return {}
 
     async def load_session(*args, **kwargs):
@@ -614,7 +625,88 @@ async def test_teacher_routes_pass_the_request_ctx(monkeypatch, ctx):
     await session_analysis.cancel_analysis_run(
         route_request(ctx), 1, "run", user, None
     )
-    assert calls == [ctx, ctx, ctx]
+    # Normal keeps #192's defaults; demo pairs ctx with the runtime registry
+    # (the module-level lifecycle is unbound to any visitor registry).
+    expected = {} if ctx is None else dict(ctx=ctx, registry=RUNTIME_LIFECYCLE)
+    assert calls == [expected] * 3
+
+
+@pytest.mark.parametrize("mode", ["single", "chunked"])
+@pytest.mark.parametrize("scope", ["normal", "demo"])
+async def test_execute_analysis_forwards_demo_ctx_registry_and_adapter(
+    monkeypatch, mode, scope
+):
+    from contextlib import asynccontextmanager
+
+    from src.services import analysis_runs
+
+    received = []
+
+    async def pipeline(*args, **kwargs):
+        received.append(kwargs)
+        return "result"
+
+    async def save_analysis(*args, **kwargs):
+        return None
+
+    class Registry:
+        async def assert_current(self, ctx):
+            return None
+
+        @asynccontextmanager
+        async def write_guard(self, ctx):
+            yield None
+
+    class Database:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    monkeypatch.setattr(analysis_pipeline, "run_llm_pipeline", pipeline)
+    monkeypatch.setattr(analysis_runs, "chunk_executor", pipeline)
+    monkeypatch.setattr(analysis_runs, "save_analysis", save_analysis)
+    registry, adapter = Registry(), object()
+    ctx = (
+        NormalContext(Database)
+        if scope == "normal"
+        else SimpleNamespace(
+            app_mode="demo",
+            visitor_id="00000000-0000-4000-8000-000000000001",
+            generation=1,
+            auth_epoch=1,
+            lease=object(),
+            factory=Database,
+        )
+    )
+    execution = dict(
+        run_id="run",
+        session_id=1,
+        all_messages=[],
+        teacher_messages=[],
+        snapshot=None,
+        owner_id=2,
+        actor_id=2,
+        request_id="request",
+        regenerate=False,
+        started_at=now(),
+        plan=dict(mode=mode),
+        demo_adapter=adapter,
+    )
+    await analysis_runs.execute_analysis(
+        Database, execution, ctx=ctx, registry=registry
+    )
+    [kwargs] = received
+    extra = {
+        k: kwargs[k] for k in ("ctx", "registry", "demo_adapter") if k in kwargs
+    }
+    assert extra == (
+        {}
+        if scope == "normal"
+        else dict(ctx=ctx, registry=registry, demo_adapter=adapter)
+    )
+    assert ("plan" in kwargs) == (mode == "chunked")
 
 
 CSV_CASE = pytest.mark.parametrize(

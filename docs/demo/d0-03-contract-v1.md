@@ -2,7 +2,7 @@
 
 ## 1. 기준·범위와 읽는 법
 
-현재 편집본은 **`d0-03-v2` 변경 후보**다. 승인된 기준은 `d0-03-v1-r3`, 입력 `f6551482fb895da7af90a4bd481c3e25fd9d5c19`, 후보 `d6455d10c2d75acde811f85a53143be086d67545`이며 소비자·독립 재검토 ACCEPT와 maintainer G0 승인이 완료되었다. 이 승인은 그대로 유효하며 v2 변경 후보에 자동 이전하지 않는다. v2는 §31의 C14/C27 패치 필요성 정정만 제안하고, 해당 변경의 재검토·G0 변경 승인은 pending이다. 구현 완료를 뜻하지 않는다. 승인 기록은 [G0 기록](d0-03-g0-acceptance.md), 설계 이유는 [ADR-0013](../adr/0013-demo-isolation-and-keyless-provider.md)에 둔다. 용어는 [GLOSSARY](../../GLOSSARY.md)를 따른다.
+현재 편집본은 **`d0-03-v2` 승인 개정안**이다. 승인된 기준은 `d0-03-v1-r3`, 입력 `f6551482fb895da7af90a4bd481c3e25fd9d5c19`, 후보 `d6455d10c2d75acde811f85a53143be086d67545`이며 소비자·독립 재검토 ACCEPT와 maintainer G0 승인이 완료되었다. v1-r3 승인은 그대로 유효하다. v2는 §31의 C14/C27 패치 필요성 정정에 한정하며 정확한 변경 후보에 대한 별도 검토 대체·G0 변경 승인은 §31에 기록한다. 구현 완료를 뜻하지 않는다. 승인 기록은 [G0 기록](d0-03-g0-acceptance.md), 설계 이유는 [ADR-0013](../adr/0013-demo-isolation-and-keyless-provider.md)에 둔다. 용어는 [GLOSSARY](../../GLOSSARY.md)를 따른다.
 
 | 고정 입력 | merge SHA | 파일 버전·최종 파일 commit·blob |
 | --- | --- | --- |
@@ -704,7 +704,7 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 
 | gate | 소유/승인과 통과 증거 |
 | --- | --- |
-| G0 | #190의 고정 입력·계약에 DB/provider/UI/검증 소비자 리뷰와 작성자와 별도 reviewer 결과, 결함 해결, @DomineYH 명시 승인. 기록은 G0 문서 §3–5. v1-r3 재검토 ACCEPT·승인 완료; §31의 v2 변경은 별도 재검토·변경 승인 pending |
+| G0 | #190의 고정 입력·계약에 DB/provider/UI/검증 소비자 리뷰와 작성자와 별도 reviewer 결과, 결함 해결, @DomineYH 명시 승인. 기록은 G0 문서 §3–5. v1-r3 재검토 ACCEPT·승인 완료; §31의 v2 변경은 보조 독립 검토 ACCEPT·명시 workflow 예외·maintainer 변경 승인 완료; CI/통합은 별도 확인 |
 | G1 | #194: #191–193 lifecycle/실제 DB resolver/middleware/no-context/CSRF 연결. 작은 테스트 seed 허용, 실제 AI 저장 성공은 G3에서 검사 |
 | G2 | #195: 실제 새 migration/FK·인덱스·자료 보존, 명시적 mode의 keyless/schema/model/evidence. G1과 상대 병합 순서는 독립 |
 | G3 | #198: G1+G2+#196+#197의 실제 학생/멘토/분석·원장·최종 저장/reset race/egress 0 |
@@ -808,10 +808,17 @@ r1 리뷰에서 위 인터페이스/여정에 걸린 미결 판정은 재검토�
 
 ## 31. D0 마감 변경 후보 — C14/C27 정정
 
-§27 변경관리에 따라 승인된 `d0-03-v1-r3`에서 `d0-03-v2`를 제안한다. 확인 기준 main은 `427890033d206a4f043ffc946009bd8ce6a437c2`다. 승인된 입력·후보 SHA와 G0 기록 §1–5는 변경하지 않는다. 이 절은 새 승인이나 기존 승인 취소가 아니다.
+§27 변경관리에 따라 승인된 `d0-03-v1-r3`에서 `d0-03-v2`로 C14/C27을 정정한다. 확인 기준 main은 `427890033d206a4f043ffc946009bd8ce6a437c2`다. 승인된 입력·후보 SHA와 G0 기록 §1–5는 변경하지 않는다. 기존 승인은 취소하지 않으며 새 변경 승인은 아래 정확한 후보에 별도로 기록한다.
 
 - 이유/변경: §14/26이 파서 `src/utils/openai_helpers.py`와 저장 보고서 reader `src/utils/session_feedback.py`를 SDK 직접 생성 경계로 잘못 분류했다. 두 파일의 불필요한 SDK guard 패치 요구만 제거한다. 실제 SDK/admission/execution 차단과 외부 fallback 금지, 방문객 DB·접근/삭제 보호는 유지한다
 - C-item/소비자: C14/C27, #198 및 독립 검증 #203/#205. C03의 `s6_credentials.py` 조사 보완은 이미 승인된 #194 소유·CLI 차단을 재확인하며 배정을 바꾸지 않는다
 - 무효 evidence 범위: v1-r3의 ACCEPT·승인은 그 정확한 후보에 보존한다. 이를 이 v2 변경의 승인 증거로 재사용하지 않는다. §14/26 패치 필요성 판단은 영향 소비자와 독립 reviewer가 변경 후보 전체 SHA로 다시 검토해야 한다. 다른 인터페이스·오류·기본값·보안 불변식의 의미는 바꾸지 않는다
 - SHA/결과: 실제 변경 후보 전체 SHA·PR·검사 결과는 게시 후 #182/#190에 기록한다. 자기 참조 SHA를 만들지 않는다. 영향 소비자·지정 독립 reviewer 재검토, @DomineYH의 정확한 v2 후보 G0 변경 승인, 이후 대상 branch 통합 확인 전에는 이 변경을 승인된 구현 입력으로 승격하지 않는다
 - manifest: 후속 구현에서 v2를 소비하려면 위 승인 후 `contract_version/contract_commit`을 함께 갱신한다. 이 문서 정리에서는 제품·manifest·D1 구현·배포를 수행하지 않는다
+
+### 31.1 정확한 변경 후보 승인
+
+- 승인 대상: 입력/main `427890033d206a4f043ffc946009bd8ce6a437c2`, `d0-03-v2` 변경 후보 `e9610b532216ff29259e0bd274883c19693c1166`, PR #213의 문서 4개
+- 검토: 작성자와 별도 보조 독립 검토 ACCEPT, 지적 없음. 지정 `agy/gemini-4-argon/high` 실행은 불가하여 maintainer가 이번 문서 변경에 한해 이 보조 검토로 대체하는 workflow 예외를 명시 승인했다. 지정 도구를 실행했다고 주장하지 않는다
+- 승인: @DomineYH, 2026-10-19 UTC, [승인 기록](https://github.com/DomineYH/misconcept_platform_v2/pull/213#issuecomment-6257186149). C14/C27 개정안 및 CI 통과 후 PR 병합·#182 완료 처리 승인. 제품 코드·D1·배포 승인으로 확대하지 않는다
+- 후속 상태: 이 승인 상태 기록만 반영하는 후속 head도 정확한 CI를 확인한다. 최종 head/통합 SHA·post-merge CI 결과는 #182/PR #213에 기록하며 통합 확인 전 완료 처리하지 않는다

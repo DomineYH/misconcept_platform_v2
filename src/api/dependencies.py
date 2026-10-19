@@ -2,6 +2,8 @@
 
 import asyncio
 import hmac
+import logging
+import math
 import secrets
 import time
 from functools import wraps
@@ -25,11 +27,52 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.config import config
 from src.db.connection import AsyncSessionLocal
 from src.demo.database import DemoError
+from src.demo.session import (
+    CONTENT_VERSION,
+    CONTRACT_VERSION,
+    FIXTURE_VERSION,
+    DemoState,
+    public_state,
+)
 from src.demo.visitors import ControlContext
 from src.i18n import display_language, t, translate, ui_strings
 
+
+def demo_template_context(request: Request) -> dict:
+    """§24 `demo_config`: display-safe fields only, never factories/paths/secrets."""
+    public_url = config.DEMO_PUBLIC_URL or None
+    if config.APP_MODE == "normal":
+        return {"demo_config": {"mode": "normal", "public_url": public_url}}
+    # Only a snapshot taken under a passing currentness check names a namespace.
+    display = getattr(request.state, "demo_display", None)
+    if display is None:
+        fields = dict.fromkeys(DemoState.model_fields) | {
+            "contract_version": CONTRACT_VERSION,
+            "content_version": CONTENT_VERSION,
+            "fixture_version": FIXTURE_VERSION,
+            "csrf_cookie_name": "demo_csrftoken",
+            "csrf_header_name": "x-csrf-token",
+        }
+    else:
+        fields = display.model_dump(mode="json")
+    return {
+        "demo_config": {
+            "mode": "demo",
+            **fields,
+            "start_url": "/demo/start",
+            "role_url": "/demo/role",
+            "reset_url": "/demo/reset",
+            "state_url": "/demo/state",
+            "public_url": public_url,
+            "ui_language": display_language(request),
+        }
+    }
+
+
 # Shared Jinja2Templates instance
-templates = Jinja2Templates(directory="src/templates")
+templates = Jinja2Templates(
+    directory="src/templates", context_processors=[demo_template_context]
+)
 templates.env.globals.update(
     t=t, display_language=display_language, ui_strings=ui_strings
 )
@@ -111,7 +154,8 @@ async def get_current_user(
         ctx = getattr(request.state, "demo_context", None)
         if ctx is None or ctx.db is not db:
             raise DemoError("CONFIGURATION_INVALID")
-        await ctx._request_db.check()
+        request.state.demo_display = None
+        request.state.demo_display = await ctx._request_db.display()
         return ctx.user
 
     # Get user_id from session
@@ -270,6 +314,18 @@ class _RequestDBState:
         if write:
             self.wrote = True
 
+    async def display(self):
+        """Public state for templates, read under the same currentness check."""
+        self.ensure_open()
+        if self.handle is not None:
+            await self.check()
+            return public_state(self.handle.snapshot())
+        async with self.runtime.visitors.transition(
+            self.ctx.verified_visitor
+        ) as handle:
+            handle.check(self.ctx)
+            return public_state(handle.snapshot())
+
     async def end_guard(self):
         if self.guard is not None:
             guard = self.guard
@@ -348,6 +404,24 @@ class DemoRequestDB:
         self.csrf_signer = URLSafeTimedSerializer(
             settings.DEMO_CSRF_SECRET.get_secret_value(), salt="demo-csrf-v1"
         )
+        self._windows = {}
+
+    def rate_limit(self, key, limit):
+        """§8 fixed 60-second window; Retry-After is the window's remainder."""
+        now = self.visitors.clock.monotonic()
+        if key not in self._windows:
+            for stale in [
+                k for k, v in self._windows.items() if now >= v[0] + 60
+            ]:
+                del self._windows[stale]
+        start, count = self._windows.get(key, (now, 0))
+        if now >= start + 60:
+            start, count = now, 0
+        if count >= limit:
+            raise DemoError(
+                "RATE_LIMITED", retry_after=max(1, math.ceil(start + 60 - now))
+            )
+        self._windows[key] = (start, count + 1)
 
     async def validate_namespace(
         self, request, bootstrap, generation=None, epoch=None
@@ -662,6 +736,20 @@ def demo_request_handler(handler):
             await _namespace(request)
             if request.state.demo_invalid_selector:
                 raise DemoError("INVALID_REQUEST")
+            # Rejected signature/CSRF/selector requests consume no quota.
+            visitor = runtime.visitors.visitor_for_bootstrap(bootstrap)
+            if visitor is not None:
+                runtime.rate_limit(
+                    ("visitor", visitor.visitor_id),
+                    runtime.settings.DEMO_REQUESTS_PER_MINUTE,
+                )
+            if request.method == "POST" and request.url.path == "/demo/start":
+                # Counts signed, CSRF-valid starts by the ASGI client, which only
+                # a trusted proxy (server --forwarded-allow-ips) may rewrite.
+                runtime.rate_limit(
+                    ("ip", request.client.host if request.client else ""),
+                    runtime.settings.DEMO_STARTS_PER_IP_PER_MINUTE,
+                )
             # Controls resolve namespace only after their receipt/replay lookup.
             if request.url.path != "/demo" and not request.url.path.startswith(
                 "/demo/"
@@ -677,6 +765,17 @@ def demo_request_handler(handler):
             response = error_response(error)
         except RequestValidationError:
             response = error_response(DemoError("INVALID_REQUEST"))
+        except StarletteHTTPException as error:
+            # Render while this request's lease is live; error pages read no other DB.
+            response = await request.app.exception_handlers[
+                StarletteHTTPException
+            ](request, error)
+        except Exception as error:
+            # §11: unknown failures become a safe code; text may carry real paths.
+            logging.getLogger(__name__).error(
+                "Demo request failed", extra={"code": type(error).__name__}
+            )
+            response = error_response(DemoError("CONFIGURATION_INVALID"))
         finally:
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and runtime is not None:

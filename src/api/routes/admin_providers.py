@@ -171,7 +171,7 @@ async def provider_state(
         for c in (await db.scalars(select(ProviderConnection))).all()
     }
     configuration = await configuration_state(
-        db, connections, display_language(request)
+        db, connections, display_language(request), app_mode=config.APP_MODE
     )
     scenarios = (
         await db.execute(

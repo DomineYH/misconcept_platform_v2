@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_admin_user, get_db_session
+from src.api.dependencies import get_db_session
 from src.api.routes.admin_models import commit_configuration
-from src.api.routes.admin_providers import CredentialRoute
+from src.api.routes.admin_providers import CredentialRoute, demo_read_only
 from src.api.schemas.ai_settings import SettingsUpdate
 from src.models.model_config import AppSetting, ModelConfig
 from src.models.provider_connection import ProviderConnection, now
@@ -20,7 +20,7 @@ router = APIRouter(tags=["Admin AI Settings"], route_class=CredentialRoute)
 @router.post("/admin/ai/settings/update")
 async def update_settings(
     data: SettingsUpdate,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     async with execution_lock():

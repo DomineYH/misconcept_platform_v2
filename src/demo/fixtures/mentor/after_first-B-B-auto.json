@@ -1,0 +1,19 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/mentor/after_first/B/B/auto/none",
+  "role": "mentor",
+  "content_state": "after_first",
+  "branch": "B",
+  "input_kind": "B",
+  "trigger": "auto",
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "should_intervene": true,
+    "feedback": "크기 관계를 알려 주었지만 학생봇은 이유를 설명하지 못했습니다. 같은 전체에서 등분 수와 한 조각의 크기를 연결해 묻는 질문을 해 보세요.",
+    "reason_summary": "정답을 들은 뒤에도 크기의 이유를 설명하지 못해 비교 질문을 제안한다."
+  },
+  "partial_text": null
+}

@@ -1,0 +1,15 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/student/after_first/C/unsupported/none/none",
+  "role": "student",
+  "content_state": "after_first",
+  "branch": "C",
+  "input_kind": "unsupported",
+  "trigger": null,
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": "이 데모는 준비된 예시 응답만 보여 줍니다. 지금은 같은 크기의 종이띠에서 1/4과 1/8을 비교하는 추천 입력을 선택해 주세요.",
+  "structured": null,
+  "partial_text": null
+}

@@ -1,0 +1,88 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/analysis/after_compare/B/common/none/chunk",
+  "role": "analysis",
+  "content_state": "after_compare",
+  "branch": "B",
+  "input_kind": "common",
+  "trigger": null,
+  "analysis_phase": "chunk",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "schema_version": 2,
+    "message_classifications": [
+      {
+        "message_id": "@teacher_first",
+        "quote": "이 답을 기억해 봐.",
+        "disposition": "classified",
+        "rubric_id": "r2",
+        "reason": "크기 관계를 먼저 제시하며 학생봇에게 이유 설명을 요구하지 않았다."
+      },
+      {
+        "message_id": "@teacher_common",
+        "quote": "조각 수가 늘면 한 조각의 크기는 어떻게 될까?",
+        "disposition": "classified",
+        "rubric_id": "r3",
+        "reason": "같은 전체의 등분 수와 한 조각 크기를 연결해 설명하도록 요구했다."
+      }
+    ],
+    "misconception_findings": [
+      {
+        "kind": "maintained",
+        "claim": "첫 학생봇 응답에서 분모가 큰 쪽을 크게 보는 생각이 남아 있다.",
+        "evidence": [
+          {
+            "message_id": "@student_first",
+            "quote": "8이 더 큰 수라서 왜 1/8이 더 작은지는 모르겠어요."
+          }
+        ]
+      },
+      {
+        "kind": "changed",
+        "claim": "뒤의 학생봇 응답에서는 같은 전체와 한 조각 크기를 연결하는 표현이 나타난다.",
+        "evidence": [
+          {
+            "message_id": "@student_first",
+            "quote": "8이 더 큰 수라서 왜 1/8이 더 작은지는 모르겠어요."
+          },
+          {
+            "message_id": "@student_common",
+            "quote": "조각 수가 많아지면 한 조각은 더 작아져요."
+          }
+        ]
+      }
+    ],
+    "brief_feedback": [
+      "정답을 먼저 제시한 뒤, 같은 전체에서 한 조각의 크기를 비교하도록 질문했습니다.",
+      "학생봇의 설명 표현이 달라지는 준비된 예시입니다. 실제 학생의 이해나 질문의 교육 효과를 입증하지 않습니다."
+    ],
+    "strengths": [
+      {
+        "message_id": "@teacher_common",
+        "quote": "어느 쪽 조각이 더 크고, 조각 수가 늘면 한 조각의 크기는 어떻게 될까?",
+        "reason": "크기 판단과 이유 설명을 함께 요구했다."
+      }
+    ],
+    "improvements": [
+      {
+        "message_id": "@teacher_first",
+        "quote": "이 답을 기억해 봐.",
+        "missed_reason": "처음 생각의 이유를 확인하기 전에 정답을 제시했다.",
+        "alternative_question": "1/8이 1/4보다 크다고 생각한 이유를 말해 줄래?",
+        "alternative_reason": "학생봇이 어떤 기준으로 비교하는지 먼저 드러낼 수 있다."
+      }
+    ],
+    "dialogue_coaching": [
+      {
+        "message_id": "@student_first",
+        "quote": "왜 1/8이 더 작은지는 모르겠어요.",
+        "role": "student",
+        "marker": "key_clue",
+        "note": "정답을 들었다는 말과 이유를 설명하는 말을 구분해 볼 단서다."
+      }
+    ]
+  },
+  "partial_text": null
+}

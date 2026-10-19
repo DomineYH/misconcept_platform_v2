@@ -1,0 +1,19 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/mentor/after_compare/A/common/auto/none",
+  "role": "mentor",
+  "content_state": "after_compare",
+  "branch": "A",
+  "input_kind": "common",
+  "trigger": "auto",
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "should_intervene": false,
+    "feedback": "",
+    "reason_summary": "같은 전체와 한 조각 크기를 연결하는 표현이 나와 추가 자동 코칭을 생략한다."
+  },
+  "partial_text": null
+}

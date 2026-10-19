@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readdir} from 'node:fs/promises';
 import {createServer} from 'node:net';
+import {performance} from 'node:perf_hooks';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
@@ -51,6 +52,9 @@ try {
   assert(ready, `Browser server did not serve /chat within 30s: ${serverLog}`);
   browser = await chromium.launch({headless: true});
   for (const file of files) {
+    const startedAt = performance.now();
+    let status = 'FAIL';
+    console.log(`START ${file}`);
     let context, page;
     try {
       context = await browser.newContext();
@@ -62,12 +66,20 @@ try {
       const result = await check(page);
       assert(!result?.pageErrors?.length, `pageErrors: ${JSON.stringify(result.pageErrors)}`);
       assert(errors.length === 0, `Uncaught page errors: ${errors.join('; ')}`);
+      status = 'PASS';
       console.log(`PASS ${file}`);
     } catch (error) {
       console.error(`FAIL ${file}: ${String(error.message ?? error).replace(/\s+/g, ' ')}`);
       process.exitCode = 1;
     } finally {
-      await context?.close();
+      try {
+        await context?.close();
+      } catch (error) {
+        status = 'FAIL';
+        throw error;
+      } finally {
+        console.log(`END ${file} status=${status} elapsed_ms=${(performance.now() - startedAt).toFixed(1)}`);
+      }
     }
   }
 } catch (error) {

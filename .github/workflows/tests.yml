@@ -1,15 +1,24 @@
 name: Regression tests
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen --extra dev --python 3.12
       - run: uv run --frozen ruff check .
       - run: uv run --frozen black --check .
-      - run: uv run --frozen python -m pytest -q
+      - run: uv run --frozen python -m pytest -q --durations=30
       - run: uv run --frozen python tests/check_student_live.py
   browser:
     runs-on: ubuntu-latest

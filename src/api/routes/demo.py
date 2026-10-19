@@ -11,12 +11,11 @@ from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.demo.database import ERRORS, DemoError
 from src.demo.session import (
-    ERRORS,
     ControlContext,
     ControlResult,
     DemoContext,
-    DemoError,
     DemoSession,
     ResetCommand,
     RoleCommand,
@@ -70,7 +69,7 @@ def error_response(error: DemoError) -> JSONResponse:
     headers = {"Cache-Control": "no-store"}
     if error.retry_after is not None:
         headers["Retry-After"] = str(error.retry_after)
-    return JSONResponse(error.envelope.model_dump(), error.status, headers)
+    return JSONResponse({"detail": error.detail}, error.status_code, headers)
 
 
 class DemoRoute(APIRoute):

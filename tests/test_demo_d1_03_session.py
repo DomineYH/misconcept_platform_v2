@@ -2,15 +2,18 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
+from shutil import copyfile
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from src.api.routes.demo import (
     CookieValues,
@@ -18,13 +21,12 @@ from src.api.routes.demo import (
     get_demo_session,
     router,
 )
+from src.demo.database import DatabaseRoot
 from src.demo.session import (
     DemoError,
     DemoSession,
-    StartReservation,
-    StoredResult,
-    public_state,
 )
+from src.demo.visitors import ControlContext, VisitorRegistry
 
 
 @pytest.mark.asyncio
@@ -92,317 +94,243 @@ def uid():
     return str(uuid4())
 
 
-class VisitorsDouble:
-    """#191 state/admission/lock/receipt double, confined to this test file."""
+async def make_root(tmp_path, *, max_db_bytes=None):
+    """A tiny synthetic seed, using the official explicit-engine installer."""
+    import hashlib
+    import json
+    import sqlite3
 
-    def __init__(self, factory):
-        self.factory = factory
-        self.lock = asyncio.Lock()
-        self.records = {}
-        self.by_op = {}
-        self.clones = 0
-        self.cancelled = 0
+    from src.db.migrations.migrate import run_all_migrations
+    from src.demo.database import SeedSpec
+
+    root = DatabaseRoot(
+        tmp_path / "demo", initialize=True, max_db_bytes=max_db_bytes
+    ).open()
+    seed = root.path / "seed.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{seed}")
+    await run_all_migrations(db_engine=engine)
+    await engine.dispose()
+    manifest = dict(
+        manifest_version=1,
+        contract_version="d0-03-v1-r3",
+        content_version="d0-02-v1",
+        fixture_version="demo-fixture-v1",
+        db_schema_version="unit_demo_metadata.sql",
+        migration_set_sha256="a" * 64,
+        scenario_config_schema_version=1,
+        analysis_schema_version=2,
+        provider="demo",
+        model_id="demo-classroom-v1",
+        capability_definition_version="demo-cap-v1",
+        role_contract_versions=dict(
+            student="s1-v1", mentor="s3-v1", analysis="s4-v2"
+        ),
+        scenario_ref="unit-fraction-v1",
+        supported_config_sha256="b" * 64,
+        seed_version="demo-seed-v1",
+        seed_timestamp="2026-10-18T00:00:00Z",
+        seed_refs=dict(
+            admin=1,
+            teacher=2,
+            group=1,
+            scenario=1,
+            completed_session=1,
+            model=1,
+            connection=1,
+        ),
+        files=[],
+        lookup_version=1,
+        responses={},
+        seed_provenance=dict(
+            source="synthetic",
+            generator="src/demo/seed.py",
+            content_version="d0-02-v1",
+        ),
+    )
+    manifest_path = root.path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    with sqlite3.connect(seed) as db:
+        db.executemany(
+            "INSERT INTO user(id,username,nickname,password_hash,role,created_at) VALUES(?,?,?,?,?,?)",
+            [
+                (
+                    1,
+                    "fictional-admin",
+                    "Fictional admin",
+                    "!login-disabled",
+                    "admin",
+                    "2026-10-18 00:00:00",
+                ),
+                (
+                    2,
+                    "fictional-teacher",
+                    "Fictional teacher",
+                    "!login-disabled",
+                    "teacher",
+                    "2026-10-18 00:00:00",
+                ),
+            ],
+        )
+        for table in (
+            "session_summary",
+            "session_feedback_report",
+            "generation_run",
+            "message",
+            "session",
+        ):
+            db.execute('DROP TABLE "' + table + '"')
+        for ddl in (
+            'CREATE TABLE "session" (id INTEGER PRIMARY KEY, deleted_at TEXT, ended_at TEXT, config_snapshot_json TEXT, config_hash TEXT, snapshot_origin TEXT, source_scenario_version INTEGER, snapshot_created_at TEXT)',
+            "CREATE TABLE message (id INTEGER PRIMARY KEY, session_id INTEGER, role TEXT, content TEXT, turn_id TEXT, turn_index INTEGER, generation_run_id TEXT)",
+            "CREATE TABLE generation_run (id TEXT PRIMARY KEY, session_id INTEGER, turn_id TEXT, operation TEXT, status TEXT, result_kind TEXT, mentor_trigger TEXT, accepted_report_id INTEGER, accepted_report_version INTEGER)",
+            "CREATE TABLE session_summary (id INTEGER PRIMARY KEY, session_id INTEGER)",
+            "CREATE TABLE session_feedback_report (id INTEGER PRIMARY KEY, session_id INTEGER, version INTEGER, status TEXT, payload_json TEXT)",
+        ):
+            db.execute(ddl)
+        # G2 owns production metadata DDL; this models that explicit boundary only.
+        db.execute(
+            "CREATE TABLE demo_metadata (id INTEGER PRIMARY KEY, kind TEXT, contract_version TEXT, content_version TEXT, fixture_version TEXT, db_schema_version TEXT, manifest_sha256 TEXT, visitor_id TEXT, generation INTEGER)"
+        )
+        db.execute(
+            "INSERT INTO demo_metadata VALUES (1,'demo_seed','d0-03-v1-r3','d0-02-v1','demo-fixture-v1','unit_demo_metadata.sql',?,NULL,NULL)",
+            (digest,),
+        )
+        db.execute(
+            "INSERT INTO _migrations(filename) VALUES ('unit_demo_metadata.sql')"
+        )
+        db.execute(
+            "CREATE TABLE synthetic_record(id INTEGER PRIMARY KEY, body TEXT NOT NULL)"
+        )
+        db.execute("INSERT INTO synthetic_record VALUES(1,'fictional')")
+        history = tuple(
+            row[0]
+            for row in db.execute(
+                "SELECT filename FROM _migrations ORDER BY id"
+            )
+        )
+
+    def verify_content(db, manifest):
+        if (
+            db.execute(
+                "SELECT body FROM synthetic_record WHERE id=1"
+            ).fetchone()[0]
+            != "fictional"
+        ):
+            raise DemoError("VERSION_MISMATCH")
+
+    root.validate_seed(
+        SeedSpec(
+            seed,
+            manifest_path,
+            "unit_demo_metadata.sql",
+            "a" * 64,
+            history,
+            verify_content,
+        )
+    )
+    return root
+
+
+class SyntheticClock:
+    def __init__(self):
+        self.elapsed = 0
+        self.initial = datetime(2026, 10, 19, tzinfo=timezone.utc)
+
+    def monotonic(self):
+        return self.elapsed
+
+    def utcnow(self):
+        from datetime import timedelta
+
+        return self.initial + timedelta(seconds=self.elapsed)
+
+
+class ObservedRegistry(VisitorRegistry):
+    """Real #191 authority; gates and trace only observe its operations."""
+
+    def __init__(self, root, *, lifecycle):
+        super().__init__(root, lifecycle=lifecycle, clock=SyntheticClock())
+        self.clones = self.cancelled = 0
+        self.cancelled_operations = set()
         self.clone_started = asyncio.Event()
         self.clone_continue = asyncio.Event()
         self.clone_continue.set()
-        self.clone_error = None
+        self.clone_error = self.admission_error = None
         self.calls = []
-        self.limit = 256
-        self.admission_error = None
         self.child_leases = {}
+        self.bootstraps = {
+            name: self.verify_bootstrap(name * 32) for name in ("A", "B")
+        }
+        clone = root.clone
 
-    async def lookup(self, bootstrap):
-        if bootstrap not in self.records:
-            raise DemoError("SESSION_REQUIRED")
-        return bootstrap
+        async def observed_clone(*args, **kwargs):
+            assert not self.lock.locked()
+            self.clones += 1
+            self.clone_started.set()
+            while not self.clone_continue.is_set():
+                if kwargs["cancel_event"].is_set():
+                    raise DemoError("PREPARE_FAILED")
+                try:
+                    await asyncio.wait_for(self.clone_continue.wait(), 0.05)
+                except TimeoutError:
+                    pass
+            if self.clone_error:
+                raise self.clone_error
+            self.calls.append("clone")
+            return await clone(*args, **kwargs)
 
-    def record_for(self, visitor):
-        if not isinstance(visitor, str):
-            visitor = self.by_op[visitor.op_id]
-        return self.records[visitor]
+        root.clone = observed_clone
+
+    def bootstrap(self, value):
+        return self.bootstraps[value] if isinstance(value, str) else value
+
+    def verified(self, value):
+        if isinstance(value, str) or hasattr(value, "bootstrap_nonce"):
+            return self.visitor_for_bootstrap(self.bootstrap(value))
+        return value
+
+    @property
+    def records(self):
+        return {
+            name: self._state(visitor)
+            for name, bootstrap in self.bootstraps.items()
+            if (visitor := self.visitor_for_bootstrap(bootstrap)) is not None
+        }
+
+    @property
+    def lock(self):
+        state = self.records.get("A")
+        return state.lock if state else self._admission
 
     @asynccontextmanager
     async def transition(self, visitor):
-        async with self.lock:
+        async with super().transition(self.verified(visitor)) as handle:
             self.calls.append("lock")
+            for name in ("mark_reset", "change_role", "retain_lease"):
+                original = getattr(handle, name)
+
+                def observe(*args, _name=name, _original=original, **kwargs):
+                    self.calls.append(_name)
+                    return _original(*args, **kwargs)
+
+                setattr(handle, name, observe)
             try:
-                yield HandleDouble(self, self.record_for(visitor))
+                yield handle
             finally:
                 self.calls.append("unlock")
 
-    async def reserve_start(self, bootstrap, request_id, role):
-        async with self.lock:
-            if self.admission_error:
-                raise self.admission_error
-            if bootstrap not in self.records:
-                self.records[bootstrap] = SimpleNamespace(
-                    browser_scope_id=f"scope-{bootstrap}",
-                    state="preparing",
-                    generation=1,
-                    auth_epoch=1,
-                    role=None,
-                    expires_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
-                    idle_ttl_seconds=1800,
-                    absolute_ttl_seconds=7200,
-                    current_ref=None,
-                    operation=None,
-                    last_error=None,
-                    receipts={},
-                    bodies={},
-                    reserved_role=role,
-                    attempt=0,
-                    csrf_revision=1,
-                    active_leases=0,
-                )
-            record = self.records[bootstrap]
-            handle = HandleDouble(self, record)
-            body = {"request_id": request_id, "role": role}
-            stored = handle.replay(request_id, "start", body)
-            if stored is not None:
-                return StartReservation(record, replay=stored)
-            handle.check_control_state("start")
-            if record.state == "ready":
-                record.bodies[request_id] = ("start", body)
-                result = public_state(handle.snapshot()).model_copy(
-                    update={"request_id": request_id}
-                )
-                record.receipts[request_id] = StoredResult(
-                    "start",
-                    request_id,
-                    result,
-                    record.browser_scope_id,
-                    record.generation,
-                    record.auth_epoch,
-                )
-                return StartReservation(record)
-            record.bodies[request_id] = ("start", body)
-            record.reserved_role = role
-            op = self.operation(bootstrap, record, request_id, "start")
-            record.state = "preparing"
-            return StartReservation(record, op)
-
-    def operation(self, bootstrap, record, request_id, operation):
-        record.attempt += 1
-        op = SimpleNamespace(
-            op_id=uid(),
-            visitor_id=bootstrap,
-            generation=record.generation,
-            attempt_no=record.attempt,
-            operation=operation,
-            request_id=request_id,
-        )
-        record.operation = op
-        self.by_op[op.op_id] = bootstrap
-        return op
-
-    async def clone(self, op):
-        assert not self.lock.locked()
-        self.clones += 1
-        self.clone_started.set()
-        await self.clone_continue.wait()
-        if self.clone_error:
-            raise self.clone_error
-        self.calls.append("clone")
-        return SimpleNamespace(
-            seed_refs=SimpleNamespace(
-                admin=1,
-                teacher=2,
-                completed_session=1,
-            )
-        )
+    async def reserve_start(self, *args):
+        if self.admission_error:
+            raise self.admission_error
+        return await super().reserve_start(*args)
 
     async def cancel_preparation(self, op):
-        assert not self.lock.locked()
-        self.cancelled += 1
+        if op.op_id not in self.cancelled_operations:
+            self.cancelled_operations.add(op.op_id)
+            self.cancelled += 1
         self.calls.append("cancel_preparation")
-
-
-class HandleDouble:
-    def __init__(self, visitors, record):
-        self.visitors = visitors
-        self.visit = record
-
-    def snapshot(self):
-        record = self.visit
-        if datetime.now(timezone.utc) >= record.expires_at:
-            record.state = "expired"
-        return SimpleNamespace(**vars(record))
-
-    def error(self, code):
-        return DemoError(
-            code,
-            generation=self.visit.generation,
-            auth_epoch=self.visit.auth_epoch,
-        )
-
-    def replay(self, request_id, operation=None, body=None):
-        record = self.visit
-        if self.snapshot().state in ("expired", "closing"):
-            raise self.error("EXPIRED")
-        self.visitors.calls.append("replay")
-        if request_id in record.bodies:
-            if operation is not None and record.bodies[request_id] != (
-                operation,
-                body,
-            ):
-                raise self.error("REQUEST_CONFLICT")
-            if request_id in record.receipts:
-                return record.receipts[request_id]
-            if record.operation and record.operation.request_id == request_id:
-                return public_state(self.snapshot())
-            return None
-        if operation is not None and len(record.bodies) >= self.visitors.limit:
-            raise self.error("LIMIT_REACHED")
-        return None
-
-    def check_control_state(self, operation):
-        state = self.snapshot().state
-        if state in ("expired", "closing"):
-            raise self.error("EXPIRED")
-        if state == "preparing" and self.visit.operation is not None:
-            raise self.error(
-                "START_IN_PROGRESS"
-                if operation == "start"
-                else "SESSION_REQUIRED"
-            )
-        if state == "resetting":
-            raise self.error("RESET_IN_PROGRESS")
-        if state == "prepare_failed" and operation != "start":
-            raise self.error("PREPARE_FAILED")
-        if state == "reset_failed" and operation != "reset":
-            raise self.error("RESET_FAILED")
-
-    def check(self, ctx):
-        record = self.visit
-        if self.snapshot().state in ("expired", "closing"):
-            raise self.error("EXPIRED")
-        if ctx.generation != record.generation:
-            raise self.error("STALE_GENERATION")
-        self.check_control_state("role")
-        if ctx.auth_epoch != record.auth_epoch:
-            raise self.error("STALE_ROLE")
-        if getattr(ctx, "released", False):
-            raise self.error("STALE_GENERATION")
-
-    def retain_lease(self, lease):
-        assert self.visitors.lock.locked()
-        self.check(lease)
-        child = SimpleNamespace(
-            lease_id=uid(),
-            visitor_id=lease.visitor_id,
-            generation=lease.generation,
-            auth_epoch=lease.auth_epoch,
-            released=False,
-        )
-        self.visitors.child_leases[child.lease_id] = child
-        self.visitors.calls.append("retain_lease")
-        return child
-
-    def release_lease(self, lease):
-        assert self.visitors.lock.locked()
-        if self.visitors.child_leases.pop(lease.lease_id, None) is not None:
-            lease.released = True
-
-    def record(self, operation, command, result, status):
-        record = self.visit
-        self.replay(command.request_id, operation, command.model_dump())
-        record.bodies[command.request_id] = (operation, command.model_dump())
-        if result is not None:
-            record.receipts[command.request_id] = StoredResult(
-                operation,
-                command.request_id,
-                result,
-                record.browser_scope_id,
-                record.generation,
-                record.auth_epoch,
-                status,
-            )
-
-    def change_role(self, ctx, role, busy):
-        self.visitors.calls.append("change_role")
-        self.check(ctx)
-        if role != self.visit.role:
-            if busy:
-                raise self.error("BUSY")
-            self.visit.role = role
-            self.visit.auth_epoch += 1
-            self.visit.csrf_revision += 1
-        return self.snapshot()
-
-    def mark_reset(self, ctx, request_id):
-        record = self.visit
-        if self.snapshot().state in ("expired", "closing"):
-            raise self.error("EXPIRED")
-        if ctx.generation != record.generation:
-            raise self.error("STALE_GENERATION")
-        self.check_control_state("reset")
-        if ctx.auth_epoch != record.auth_epoch:
-            raise self.error("STALE_ROLE")
-        if record.state == "ready":
-            self.check(ctx)
-            record.retired_scope = (ctx.visitor_id, record.generation)
-            record.generation += 1
-            record.auth_epoch += 1
-        record.state = "resetting"
-        record.role = None
-        record.current_ref = None
-        op = self.visitors.operation(
-            ctx.visitor_id, record, request_id, "reset"
-        )
-        self.visitors.calls.append("mark_reset")
-        return op, record.retired_scope
-
-    def publish(self, op, candidate):
-        record = self.visit
-        if self.snapshot().state in ("expired", "closing"):
-            raise self.error("EXPIRED")
-        if record.operation != op:
-            raise self.error("STALE_GENERATION")
-        record.current_ref = candidate
-        record.state = "ready"
-        record.role = (
-            record.reserved_role if op.operation == "start" else "admin"
-        )
-        record.csrf_revision += 1
-        record.last_error = None
-        result = public_state(self.snapshot())
-        record.receipts[op.request_id] = StoredResult(
-            op.operation,
-            op.request_id,
-            result,
-            record.browser_scope_id,
-            record.generation,
-            record.auth_epoch,
-        )
-        record.operation = None
-        return self.snapshot()
-
-    def fail(self, op, code, *, retry_after=None):
-        record = self.visit
-        if (
-            self.snapshot().state in ("expired", "closing")
-            or record.operation != op
-        ):
-            return False
-        record.state = (
-            "prepare_failed" if op.operation == "start" else "reset_failed"
-        )
-        record.current_ref = None
-        record.role = None
-        record.last_error = code
-        error = self.error(code)
-        record.receipts[op.request_id] = StoredResult(
-            op.operation,
-            op.request_id,
-            error.envelope,
-            record.browser_scope_id,
-            record.generation,
-            record.auth_epoch,
-            error.status,
-            error.retry_after if error.retry_after is not None else retry_after,
-        )
-        record.operation = None
-        return True
+        return await super().cancel_preparation(op)
 
 
 class LifecycleDouble:
@@ -423,8 +351,9 @@ class LifecycleDouble:
             handle.check(ctx)
             key = ((ctx.visitor_id, ctx.generation), kind, resource_id)
             if key in self.tokens:
-                raise handle.error("BUSY")
+                raise DemoError("BUSY")
             child = handle.retain_lease(ctx.lease)
+            self.visitors.child_leases[child.lease_id] = child
             token = SimpleNamespace(
                 token_id=uid(),
                 key=key,
@@ -450,7 +379,7 @@ class LifecycleDouble:
             )
         )
 
-    async def cancel_scope(self, scope):
+    def cancel_scope(self, scope):
         assert not self.visitors.lock.locked()
         self.scopes.append(scope)
         self.visitors.calls.append("cancel_scope")
@@ -458,7 +387,7 @@ class LifecycleDouble:
 
     async def drain(self, scope, timeout_seconds):
         assert not self.visitors.lock.locked()
-        assert self.visitors.records[scope[0]].active_leases == 0
+        assert self.visitors.lease_count(scope) == 0
         self.visitors.calls.append("drain")
         return SimpleNamespace(
             drained=self.remaining == 0, remaining=self.remaining
@@ -474,7 +403,7 @@ class RequestDBDouble:
 
     def handoff_request_db(self, ctx):
         assert self.visitors.lock.locked()
-        ctx.handoff = True
+        object.__setattr__(ctx, "handoff", True)
         self.visitors.calls.append("handoff")
 
     async def release_request_db(self, ctx):
@@ -488,37 +417,45 @@ class RequestDBDouble:
                 raise DemoError("DB_LOCKED")
             await ctx.db.close()
             self.visitors.calls.append("close")
-            self.visitors.records[ctx.visitor_id].active_leases -= 1
-        ctx.released = True
-        ctx.lease.released = True
+            await self.visitors.release_lease(ctx.lease)
+        object.__setattr__(ctx, "released", True)
         self.visitors.calls.append("release_lease")
 
 
 class SecurityDouble:
-    def __init__(self, visitors, factory):
+    """Signature/CSRF and request-DB injection; all contexts and leases are #191."""
+
+    def __init__(self, visitors):
         self.visitors = visitors
-        self.factory = factory
         self.contexts = []
         self.verify_calls = 0
 
     async def verified_bootstrap(self, request, *, issue):
         value = request.cookies.get("demo_session_id")
         if value is None and issue:
-            return "A"
-        if value not in ("A", "B"):
+            value = "A"
+        if value not in self.visitors.bootstraps:
             raise DemoError("SESSION_REQUIRED")
-        return value
+        return self.visitors.bootstraps[value]
+
+    def cookie_identity(self, bootstrap):
+        bootstrap = self.visitors.bootstrap(bootstrap)
+        name = next(
+            key
+            for key, item in self.visitors.bootstraps.items()
+            if item is bootstrap
+        )
+        record = self.visitors.records.get(name)
+        return name, record.csrf_revision if record else 0
 
     async def cookies(self, bootstrap):
-        record = self.visitors.records.get(bootstrap)
-        revision = record.csrf_revision if record else 1
-        return CookieValues(bootstrap, f"{bootstrap}-{revision}", True)
+        name, revision = self.cookie_identity(bootstrap)
+        return CookieValues(name, f"{name}-{revision}", True)
 
     async def verify_csrf(self, request, bootstrap):
         self.verify_calls += 1
-        record = self.visitors.records.get(bootstrap)
-        revision = record.csrf_revision if record else 1
-        token = f"{bootstrap}-{revision}"
+        name, revision = self.cookie_identity(bootstrap)
+        token = f"{name}-{revision}"
         origin = request.headers.get("origin")
         referer = request.headers.get("referer", "")
         if (
@@ -534,62 +471,79 @@ class SecurityDouble:
     async def context(
         self, request, bootstrap, expected_generation, expected_auth_epoch
     ):
-        record = self.visitors.records[bootstrap]
-        # A context captures client expectations; the handle remains authority.
-        HandleDouble(self.visitors, record).check_control_state(
-            "reset" if request.url.path.endswith("reset") else "role"
-        )
-        ctx = SimpleNamespace(
-            verified_visitor=bootstrap,
-            visitor_id=bootstrap,
-            browser_scope_id=record.browser_scope_id,
-            generation=expected_generation or record.generation,
-            auth_epoch=expected_auth_epoch or record.auth_epoch,
-            role=record.role,
-            user_id=1 if record.role == "admin" else 2,
-            factory=self.factory,
-            lease=SimpleNamespace(
-                visitor_id=bootstrap,
-                generation=expected_generation or record.generation,
-                auth_epoch=expected_auth_epoch or record.auth_epoch,
-                released=False,
-            ),
-            released=False,
-            handoff=False,
-            db=None,
-        )
-        if record.state == "ready":
-            ctx.db = self.factory()
+        visitor = self.visitors.verified(bootstrap)
+        snapshot = await self.visitors.snapshot(visitor)
+        if snapshot.state == "preparing":
+            raise DemoError("SESSION_REQUIRED")
+        generation = expected_generation or snapshot.generation
+        epoch = expected_auth_epoch or snapshot.auth_epoch
+        if snapshot.state == "reset_failed" and request.url.path.endswith(
+            "reset"
+        ):
+            ctx = ControlContext(visitor, generation, epoch)
+        else:
+            ref = await self.visitors.resolve_visit(visitor, generation)
+            lease = await self.visitors.acquire_lease(ref, epoch)
+            try:
+                ctx = await self.visitors.make_context(
+                    visitor, lease, user_id=1 if snapshot.role == "admin" else 2
+                )
+            except BaseException:
+                await self.visitors.release_lease(lease)
+                raise
+            object.__setattr__(ctx, "db", ctx.factory())
             await ctx.db.execute(text("SELECT 1"))
-            record.active_leases += 1
+        object.__setattr__(ctx, "released", False)
+        object.__setattr__(ctx, "handoff", False)
         self.contexts.append(ctx)
         return ctx
 
 
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def seed_template(tmp_path_factory):
+    root = await make_root(tmp_path_factory.mktemp("control-seed"))
+    try:
+        yield root._seed
+    finally:
+        root.close()
+
+
 @pytest.fixture
-async def harness(tmp_path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'demo.db'}")
-    async with engine.begin() as conn:
-        await conn.exec_driver_sql(
-            'CREATE TABLE "user" (id INTEGER PRIMARY KEY, role TEXT)'
-        )
-        await conn.exec_driver_sql(
-            "INSERT INTO \"user\" VALUES (1, 'admin'), (2, 'teacher')"
-        )
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    visitors = VisitorsDouble(factory)
-    lifecycle = LifecycleDouble(visitors)
+async def harness(tmp_path, seed_template):
+    root = DatabaseRoot(tmp_path / "demo", initialize=True).open()
+    seed_path = root.path / "seed.db"
+    manifest_path = root.path / "manifest.json"
+    copyfile(seed_template.path, seed_path)
+    copyfile(seed_template.manifest_path, manifest_path)
+    root.validate_seed(
+        replace(seed_template, path=seed_path, manifest_path=manifest_path)
+    )
+    lifecycle = LifecycleDouble(None)
+    visitors = ObservedRegistry(root, lifecycle=lifecycle)
+    lifecycle.visitors = visitors
     request_db = RequestDBDouble(visitors)
-    session = DemoSession(visitors, lifecycle, request_db)
-    security = SecurityDouble(visitors, factory)
+    session = DemoSession(
+        visitors, lifecycle, request_db, tour_content=TourContentDouble()
+    )
+    security = SecurityDouble(visitors)
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_demo_security] = lambda: security
     app.dependency_overrides[get_demo_session] = lambda: session
+
+    class Harness(SimpleNamespace):
+        @property
+        def factory(self):
+            return visitors.records["A"].ref.factory
+
+        @property
+        def engine(self):
+            return self.factory.engine
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="https://demo.test"
     ) as client:
-        item = SimpleNamespace(
+        item = Harness(
             app=app,
             client=client,
             visitors=visitors,
@@ -597,19 +551,23 @@ async def harness(tmp_path):
             request_db=request_db,
             session=session,
             security=security,
-            factory=factory,
-            engine=engine,
+            root=root,
         )
         try:
             await client.get("/demo")
+            visitors.calls.clear()
             yield item
         finally:
+            visitors.clone_continue.set()
             await session.shutdown()
             for ctx in security.contexts:
                 request_db.close_error = False
                 await request_db.release_request_db(ctx)
+            for child in tuple(visitors.child_leases.values()):
+                await visitors.release_lease(child)
+            await visitors.shutdown()
             app.dependency_overrides.clear()
-            await engine.dispose()
+            root.close()
 
 
 def headers(client):
@@ -660,7 +618,10 @@ async def test_start_schema_replay_and_current_cookie_sync(harness):
     assert state["role"] == "teacher"
     assert state["generation"] == state["auth_epoch"] == 1
     assert state["tour_facts"] is None
-    assert state["next_url"] == "/scenarios?ds=scope-A&dg=1&da=1"
+    assert (
+        state["next_url"]
+        == f"/scenarios?ds={state['browser_scope_id']}&dg=1&da=1"
+    )
     assert state["provenance"]["external_ai_called"] is False
     assert "set-cookie" not in response.headers
     assert not any(
@@ -776,7 +737,7 @@ async def test_prepare_failure_replay_then_new_attempt(harness, code, status):
     assert retry.status_code == 201
     assert retry.json()["generation"] == retry.json()["auth_epoch"] == 1
     assert retry.json()["expires_at"] == deadline
-    assert h.visitors.records["A"].attempt == 2
+    assert h.visitors.records["A"].attempt_no == 2
 
 
 async def test_role_busy_noop_stale_and_deleted_teacher(harness):
@@ -831,7 +792,7 @@ async def test_role_busy_noop_stale_and_deleted_teacher(harness):
     )
     assert response.status_code == 200
     await h.client.get("/demo/state")
-    async with h.factory() as db:
+    async with setup_db(h) as db:
         await db.execute(text('DELETE FROM "user" WHERE id=2'))
         await db.commit()
     response = await h.client.post(
@@ -888,7 +849,9 @@ async def test_reset_handoff_order_and_replay(harness):
         < calls.index("drain")
         < calls.index("clone")
     )
-    assert h.lifecycle.scopes == [("A", 1)]
+    assert set(h.lifecycle.scopes) == {
+        (h.visitors.records["A"].verified.visitor_id, 1)
+    }
     await h.client.get("/demo/state")
     # Replay is looked up before this stale g/epoch could resolve a DB context.
     contexts = len(h.security.contexts)
@@ -920,7 +883,7 @@ async def test_reset_disconnect_keeps_task_and_in_progress_receipt(harness):
     observed = await h.client.get(f"/demo/state?request_id={request_id}")
     assert observed.status_code == 202
     assert "set-cookie" not in observed.headers
-    other = await reset(h)
+    other = await reset(h, generation=2, epoch=2)
     assert other.json()["detail"]["code"] == "DEMO_RESET_IN_PROGRESS"
     h.visitors.clone_continue.set()
     await asyncio.gather(*h.session._tasks.values())
@@ -956,7 +919,7 @@ async def test_live_other_lease_times_out_without_clone_then_retries_reserved_ge
     retry = await reset(h, generation=2, epoch=2)
     assert retry.status_code == 200
     assert retry.json()["generation"] == retry.json()["auth_epoch"] == 2
-    assert h.visitors.records["A"].attempt == 3
+    assert h.visitors.records["A"].attempt_no == 3
 
 
 async def test_reset_close_failure_preserves_lease_and_fails_closed(harness):
@@ -971,7 +934,10 @@ async def test_reset_close_failure_preserves_lease_and_fails_closed(harness):
     assert response.headers["retry-after"] == "1"
     assert "release_lease" not in h.visitors.calls
     assert "cancel_scope" not in h.visitors.calls
-    assert h.visitors.records["A"].active_leases == 1
+    assert (
+        h.visitors.lease_count((h.visitors.records["A"].verified.visitor_id, 1))
+        == 1
+    )
     assert h.visitors.clones == 1
 
 
@@ -1148,6 +1114,7 @@ async def test_historical_reset_receipt_cannot_restore_old_mapping(harness):
 class TourContentDouble:
     """Verified #195/#197 hash/content boundary; facts themselves are real SQL."""
 
+    seed_refs = {"admin": 1, "teacher": 2, "completed_session": 1}
     first_inputs = frozenset({"A", "B", "C"})
     common_input = "common"
 
@@ -1158,21 +1125,24 @@ class TourContentDouble:
         )
 
 
+@asynccontextmanager
+async def setup_db(h):
+    """Fixture SQL bypasses the guarded application factory explicitly."""
+    engine = create_async_engine(f"sqlite+aiosqlite:///{h.factory.path}")
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            yield db
+    finally:
+        await engine.dispose()
+
+
 async def tour_tables(h):
-    async with h.engine.begin() as conn:
-        for ddl in (
-            'CREATE TABLE "session" (id INTEGER PRIMARY KEY, deleted_at TEXT, ended_at TEXT, config_snapshot_json TEXT, config_hash TEXT, snapshot_origin TEXT, source_scenario_version INTEGER, snapshot_created_at TEXT)',
-            "CREATE TABLE message (id INTEGER PRIMARY KEY, session_id INTEGER, role TEXT, content TEXT, turn_id TEXT, turn_index INTEGER, generation_run_id TEXT)",
-            "CREATE TABLE generation_run (id TEXT PRIMARY KEY, session_id INTEGER, turn_id TEXT, operation TEXT, status TEXT, result_kind TEXT, mentor_trigger TEXT, accepted_report_id INTEGER, accepted_report_version INTEGER)",
-            "CREATE TABLE session_summary (id INTEGER PRIMARY KEY, session_id INTEGER)",
-            "CREATE TABLE session_feedback_report (id INTEGER PRIMARY KEY, session_id INTEGER, version INTEGER, status TEXT, payload_json TEXT)",
-        ):
-            await conn.exec_driver_sql(ddl)
-    h.visitors.records["A"].current_ref.tour_content = TourContentDouble()
+    # Synthetic tour rows use the same physical generation as every HTTP path.
+    assert h.factory is h.visitors.records["A"].ref.factory
 
 
 async def tour_session(h, sid, *, supported=True, deleted=False, ended=False):
-    async with h.factory() as db:
+    async with setup_db(h) as db:
         await db.execute(
             text(
                 "INSERT INTO \"session\" VALUES (:id, :deleted, :ended, :snapshot, :hash, 'native', 1, '2026-01-01')"
@@ -1193,7 +1163,7 @@ async def tour_turn(
 ):
     turn = uid()
     student_run, mentor_run = uid(), uid()
-    async with h.factory() as db:
+    async with setup_db(h) as db:
         for role, content, run in (
             ("teacher", teacher, None),
             ("student", "prepared reply", student_run),
@@ -1251,7 +1221,7 @@ async def tour_turn(
 
 async def tour_analysis(h, sid, status="ok", adopted=True):
     run_id = uid()
-    async with h.factory() as db:
+    async with setup_db(h) as db:
         await db.execute(
             text("INSERT INTO session_summary (session_id) VALUES (:sid)"),
             {"sid": sid},
@@ -1297,7 +1267,7 @@ async def test_tour_schema_seed_exclusion_and_pinned_first_session(harness):
     initial = await facts(h)
     assert initial == {
         "schema_version": 1,
-        "browser_scope_id": "scope-A",
+        "browser_scope_id": h.visitors.records["A"].browser_scope_id,
         "generation": 1,
         "auth_epoch": 1,
         "journey_session_id": None,
@@ -1324,7 +1294,7 @@ async def test_tour_schema_seed_exclusion_and_pinned_first_session(harness):
     current = await facts(h)
     assert current["dialogue_complete"] is True
     assert current["analysis_ready"] is False
-    async with h.factory() as db:
+    async with setup_db(h) as db:
         await db.execute(
             text("UPDATE \"session\" SET ended_at='2026-01-02' WHERE id=2")
         )
@@ -1402,7 +1372,7 @@ async def test_tour_teacher_history_survives_role_changes_and_cache_clears_on_re
     assert current["auth_epoch"] == 3
     response = await reset(h, epoch=3)
     assert response.status_code == 200
-    h.visitors.records["A"].current_ref.tour_content = TourContentDouble()
+    h.session.tour_content = TourContentDouble()
     current = await facts(h)
     assert current["generation"] == 2
     assert current["teacher_entered"] is False
@@ -1426,24 +1396,28 @@ async def test_tour_capture_retain_deletion_and_rollback_without_body_reads(
     ctx = await h.security.context(request, "A", 1, 1)
     try:
         async with h.visitors.transition("A") as handle:
-            projection = await capture_tour_facts(ctx, handle)
+            projection = await capture_tour_facts(
+                ctx, handle, h.session.tour_content
+            )
             assert projection.analysis_ready
             # Capture itself retains nothing, including on a rollback path.
-            async with h.factory() as db:
+            async with setup_db(h) as db:
                 await db.execute(
                     text(
                         "UPDATE \"session\" SET deleted_at='2026-01-02' WHERE id=2"
                     )
                 )
                 await db.rollback()
-            async with h.factory() as db:
+            async with setup_db(h) as db:
                 await db.execute(
                     text(
                         "UPDATE \"session\" SET deleted_at='2026-01-02' WHERE id=2"
                     )
                 )
                 await db.commit()
-            tombstone = await capture_tour_facts(ctx, handle)
+            tombstone = await capture_tour_facts(
+                ctx, handle, h.session.tour_content
+            )
             assert tombstone.journey_session_id == 2
             assert tombstone.scenario_created is False
             assert tombstone.dialogue_complete is False
@@ -1473,7 +1447,7 @@ async def test_tour_capture_retain_deletion_and_rollback_without_body_reads(
         )
     finally:
         event.remove(h.engine.sync_engine, "before_cursor_execute", observe)
-    async with h.factory() as db:
+    async with setup_db(h) as db:
         await db.execute(text('DELETE FROM "user" WHERE id=2'))
         await db.commit()
     current = await facts(h)
@@ -1540,9 +1514,7 @@ async def test_expired_and_257th_new_id_keep_old_receipts_and_cookie_policy(
     replay = await h.client.get(f"/demo/state?request_id={first}")
     assert replay.status_code == 200
     assert len(h.visitors.records["A"].receipts) == 256
-    h.visitors.records["A"].expires_at = datetime(
-        2000, 1, 1, tzinfo=timezone.utc
-    )
+    h.visitors.clock.elapsed += 7201
     response = await h.client.get(f"/demo/state?request_id={first}")
     assert response.status_code == 410
     assert set(response.json()) == {"detail"}
@@ -1559,7 +1531,7 @@ async def test_scope_ownership_unknown_id_and_state_get_do_not_acquire_db(
     request_id = uid()
     await start(h, request_id=request_id)
     await h.client.get("/demo/state")
-    deadline = h.visitors.records["A"].expires_at
+    deadline = (await h.visitors.snapshot(h.visitors.verified("A"))).expires_at
     for path, status in (
         ("/demo/state", 200),
         (f"/demo/state?request_id={uid()}", 404),
@@ -1569,10 +1541,12 @@ async def test_scope_ownership_unknown_id_and_state_get_do_not_acquire_db(
         assert response.status_code == status
         assert ("set-cookie" in response.headers) is (path == "/demo/state")
     assert not h.security.contexts
-    assert h.visitors.records["A"].expires_at == deadline
+    assert (
+        await h.visitors.snapshot(h.visitors.verified("A"))
+    ).expires_at == deadline
     h.client.cookies.clear()
     h.client.cookies.set("demo_session_id", "B", domain="demo.test", path="/")
-    h.client.cookies.set("demo_csrftoken", "B-1", domain="demo.test", path="/")
+    h.client.cookies.set("demo_csrftoken", "B-0", domain="demo.test", path="/")
     await start(h, "admin")
     response = await h.client.get(f"/demo/state?request_id={request_id}")
     assert response.status_code == 404
@@ -1588,12 +1562,12 @@ async def test_prepare_expiry_wins_before_publish_and_late_fail_cannot_overwrite
     caller = asyncio.create_task(start(h, request_id=request_id))
     await h.visitors.clone_started.wait()
     record = h.visitors.records["A"]
-    record.expires_at = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    h.visitors.clock.elapsed += 7201
     h.visitors.clone_continue.set()
     response = await caller
     assert response.status_code == 410
     assert record.state == "expired"
-    assert record.current_ref is None
+    assert record.ref is None
 
 
 @pytest.mark.parametrize(
@@ -1618,8 +1592,6 @@ async def test_new_operation_state_matrix_never_creates_work(
     await h.client.get("/demo/state")
     record = h.visitors.records["A"]
     record.state = state
-    if state == "preparing":
-        record.operation = SimpleNamespace(request_id=uid())
     if operation == "start":
         response = await start(h)
     elif operation == "reset":
@@ -1695,7 +1667,7 @@ async def test_shutdown_during_reset_context_does_not_mark_or_leak_lease(
     response = await caller
     assert response.status_code == 503
     assert h.visitors.records["A"].generation == 1
-    assert h.visitors.records["A"].active_leases == 0
+    assert len(h.visitors.records["A"].leases) == 0
     assert h.visitors.clones == 1
     assert not h.session._tasks
 
@@ -1711,15 +1683,27 @@ async def test_role_sqlite_locked_failure_replays_retry_after(harness):
         "expected_generation": 1,
         "expected_auth_epoch": 1,
     }
-    async with h.engine.connect() as locker:
-        await locker.exec_driver_sql("BEGIN EXCLUSIVE")
+    async with h.engine.connect() as connection:
+        # Configure the fixture connection for an actual exclusive-reader lock.
+        raw = await connection.get_raw_connection()
+        cursor = await raw.driver_connection.execute(
+            "PRAGMA journal_mode=DELETE"
+        )
+        await cursor.close()
+    async with setup_db(h) as locker:
+        await locker.execute(text("BEGIN EXCLUSIVE"))
         response = await h.client.post(
             "/demo/role", json=command, headers=headers(h.client)
         )
-        assert response.status_code == 503
-        assert response.json()["detail"]["code"] == "DEMO_DB_LOCKED"
-        assert response.headers["retry-after"] == "1"
         await locker.rollback()
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "DEMO_DB_LOCKED"
+    assert response.headers["retry-after"] == "1"
+    async with setup_db(h) as db:
+        assert (
+            await db.scalar(text('SELECT role FROM "user" WHERE id=2'))
+            == "teacher"
+        )
     response = await h.client.post(
         "/demo/role", json=command, headers=headers(h.client)
     )
@@ -1727,10 +1711,29 @@ async def test_role_sqlite_locked_failure_replays_retry_after(harness):
     assert response.headers["retry-after"] == "1"
     assert h.visitors.records["A"].auth_epoch == 1
 
+    receipt = await h.visitors.receipt(h.visitors.verified("A"), request_id)
+    assert receipt.error_code == "DEMO_DB_LOCKED"
+    assert receipt.status_code == 503
+    assert receipt.retry_after == 1
+    assert response.json()["result"]["detail"]["code"] == "DEMO_DB_LOCKED"
 
-async def test_operation_failure_receipt_preserves_dynamic_retry_after(harness):
+
+async def test_operation_failure_receipt_preserves_dynamic_retry_after(
+    harness, monkeypatch
+):
     h = harness
-    h.visitors.clone_error = DemoError("CLEANUP_BACKLOG", retry_after=23)
+    from src.demo.visitors import TransitionHandle
+
+    fail = TransitionHandle.fail
+    observed = []
+
+    def strict_fail(handle, op, code, *, error=None):
+        observed.append((code, error))
+        return fail(handle, op, code, error=error)
+
+    monkeypatch.setattr(TransitionHandle, "fail", strict_fail)
+    failure = DemoError("CLEANUP_BACKLOG", retry_after=23)
+    h.visitors.clone_error = failure
     request_id = uid()
     response = await start(h, request_id=request_id)
     assert response.status_code == 503
@@ -1740,6 +1743,12 @@ async def test_operation_failure_receipt_preserves_dynamic_retry_after(harness):
     assert response.status_code == 503
     assert response.headers["retry-after"] == "23"
     assert h.visitors.clones == 1
+    assert observed == [("DEMO_CLEANUP_BACKLOG", failure)]
+    receipt = await h.visitors.receipt(h.visitors.verified("A"), request_id)
+    assert receipt.error_code == "DEMO_CLEANUP_BACKLOG"
+    assert receipt.status_code == 503
+    assert receipt.retry_after == 23
+    assert receipt.result.state == "prepare_failed"
 
 
 async def test_busy_precedes_deleted_target_and_noop_keeps_revision(harness):
@@ -1748,7 +1757,7 @@ async def test_busy_precedes_deleted_target_and_noop_keeps_revision(harness):
     await h.client.get("/demo/state")
     record = h.visitors.records["A"]
     revision = record.csrf_revision
-    async with h.factory() as db:
+    async with setup_db(h) as db:
         await db.execute(text('DELETE FROM "user" WHERE id=2'))
         await db.commit()
     h.lifecycle.busy = True
@@ -1781,17 +1790,23 @@ async def test_reset_rolls_back_pending_request_transaction_and_duplicate_releas
     await h.client.get("/demo/state")
     context = h.security.context
 
-    async def pending(*args):
-        ctx = await context(*args)
-        await ctx.db.execute(
-            text("INSERT INTO \"user\" VALUES (99, 'teacher')")
-        )
-        return ctx
+    async with setup_db(h) as pending_db:
 
-    h.security.context = pending
-    response = await reset(h)
+        async def pending(*args):
+            ctx = await context(*args)
+            await ctx.db.close()
+            object.__setattr__(ctx, "db", pending_db)
+            await ctx.db.execute(
+                text(
+                    "INSERT INTO \"user\" (id,username,nickname,password_hash,role,created_at) VALUES (99, 'pending', 'Pending', '!disabled', 'teacher', '2026-10-19')"
+                )
+            )
+            return ctx
+
+        h.security.context = pending
+        response = await reset(h)
     assert response.status_code == 200
-    async with h.factory() as db:
+    async with setup_db(h) as db:
         assert (
             await db.scalar(text('SELECT id FROM "user" WHERE id=99')) is None
         )
@@ -1879,7 +1894,7 @@ async def test_receipt_wins_if_context_becomes_stale_after_preflight(
     async def delayed(request, bootstrap, generation, epoch):
         entered.set()
         await release.wait()
-        record = h.visitors.records[bootstrap]
+        record = h.visitors._state(h.visitors.verified(bootstrap))
         if record.generation != generation:
             raise DemoError("STALE_GENERATION")
         if record.auth_epoch != epoch:
@@ -1959,7 +1974,7 @@ async def test_registration_first_blocks_role_and_preserves_token(harness):
         request_cancel=cancel_requested.set, done=asyncio.Event()
     )
     resource_id = uid()
-    key = (("A", 1), "run", resource_id)
+    key = ((ctx.visitor_id, 1), "run", resource_id)
     transition = h.visitors.transition
     role_waiting = asyncio.Event()
     registration = role = None
@@ -2014,7 +2029,12 @@ async def test_registration_first_blocks_role_and_preserves_token(harness):
         assert "retain_lease" not in h.visitors.calls
         assert "busy_locked" in h.visitors.calls
         assert "change_role" not in h.visitors.calls
-        assert h.visitors.records["A"].active_leases == 1
+        assert (
+            h.visitors.lease_count(
+                (h.visitors.records["A"].verified.visitor_id, 1)
+            )
+            == 2
+        )
     finally:
         h.lifecycle.registration_continue.set()
         await asyncio.wait_for(
@@ -2101,7 +2121,12 @@ async def test_role_first_rejects_old_registration_without_token_or_child(
         assert not h.lifecycle.registered.is_set()
         assert not h.lifecycle.tokens
         assert not h.visitors.child_leases
-        assert h.visitors.records["A"].active_leases == 1
+        assert (
+            h.visitors.lease_count(
+                (h.visitors.records["A"].verified.visitor_id, 1)
+            )
+            == 1
+        )
         change = h.visitors.calls.index("change_role")
         assert h.visitors.calls[change - 1 : change + 1] == [
             "busy_locked",
@@ -2124,3 +2149,163 @@ async def test_role_first_rejects_old_registration_without_token_or_child(
                 handle.release_lease(child)
         h.lifecycle.tokens.clear()
         await h.request_db.release_request_db(old_ctx)
+
+
+async def test_preacceptance_errors_never_create_control_receipts(harness):
+    h = harness
+    await start(h, "admin")
+    await h.client.get("/demo/state")
+    state = h.visitors.records["A"]
+    initial = dict(state.receipts)
+    base = {
+        "request_id": uid(),
+        "role": "teacher",
+        "expected_generation": 1,
+        "expected_auth_epoch": 1,
+    }
+    for changes, status, code, csrf in (
+        ({}, 403, "CSRF_INVALID", False),
+        ({"extra": True}, 422, "INVALID_REQUEST", True),
+        ({"expected_generation": 2}, 409, "STALE_GENERATION", True),
+        ({"expected_auth_epoch": 2}, 409, "STALE_ROLE", True),
+    ):
+        request_id = uid()
+        response = await h.client.post(
+            "/demo/role",
+            json={**base, "request_id": request_id, **changes},
+            headers=(
+                headers(h.client) if csrf else {"origin": "https://demo.test"}
+            ),
+        )
+        assert response.status_code == status
+        assert response.json()["detail"]["code"] == f"DEMO_{code}"
+        assert request_id not in state.receipts
+        assert state.receipts == initial
+    for _ in range(255):
+        assert (await start(h, "admin")).status_code == 200
+    request_id = uid()
+    response = await h.client.post(
+        "/demo/role",
+        json={**base, "request_id": request_id},
+        headers=headers(h.client),
+    )
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "DEMO_LIMIT_REACHED"
+    assert request_id not in state.receipts
+    assert len(state.receipts) == 256
+
+
+async def test_start_nonleader_rechecks_receipt_after_concurrent_role_change(
+    harness,
+):
+    h = harness
+    reserve = h.visitors.reserve_start
+    entered, allow_reserve = asyncio.Event(), asyncio.Event()
+    reserved, allow_return = asyncio.Event(), asyncio.Event()
+    first_call = True
+    request_id = uid()
+    caller = None
+
+    async def delayed_reserve(*args):
+        nonlocal first_call
+        if not first_call:
+            return await reserve(*args)
+        first_call = False
+        entered.set()
+        await allow_reserve.wait()
+        reservation = await reserve(*args)
+        assert not reservation.leader
+        reserved.set()
+        await allow_return.wait()
+        return reservation
+
+    h.visitors.reserve_start = delayed_reserve
+    try:
+        caller = asyncio.create_task(start(h, "teacher", request_id))
+        await asyncio.wait_for(entered.wait(), 10)
+        completed = await start(h, "teacher", request_id)
+        assert completed.status_code == 201
+        allow_reserve.set()
+        await asyncio.wait_for(reserved.wait(), 10)
+        await h.client.get("/demo/state")
+        changed = await h.client.post(
+            "/demo/role",
+            json={
+                "request_id": uid(),
+                "role": "admin",
+                "expected_generation": 1,
+                "expected_auth_epoch": 1,
+            },
+            headers=headers(h.client),
+        )
+        assert changed.status_code == 200
+        assert changed.json()["auth_epoch"] == 2
+        allow_return.set()
+        response = await asyncio.wait_for(caller, 10)
+        assert response.status_code == 200
+        receipt = response.json()
+        assert receipt["historical"] is True
+        assert receipt["result"]["role"] == "teacher"
+        assert receipt["result"]["auth_epoch"] == 1
+        assert receipt["result"]["next_url"] is None
+        assert receipt["current"]["role"] == "admin"
+        assert receipt["current"]["auth_epoch"] == 2
+        assert h.visitors.clones == 1
+        assert "set-cookie" not in response.headers
+    finally:
+        allow_reserve.set()
+        allow_return.set()
+        if caller is not None:
+            await asyncio.wait_for(
+                asyncio.gather(caller, return_exceptions=True), 10
+            )
+        h.visitors.reserve_start = reserve
+
+
+async def test_start_failure_settled_before_reserve_returns_recorded_receipt(
+    harness,
+):
+    h = harness
+    reserve = h.visitors.reserve_start
+    entered, release = asyncio.Event(), asyncio.Event()
+    first_call = True
+    request_id = uid()
+    caller = None
+    h.visitors.clone_error = DemoError("DB_LOCKED", retry_after=7)
+
+    async def delayed_reserve(*args):
+        nonlocal first_call
+        if first_call:
+            first_call = False
+            entered.set()
+            await release.wait()
+        return await reserve(*args)
+
+    h.visitors.reserve_start = delayed_reserve
+    try:
+        caller = asyncio.create_task(start(h, "teacher", request_id))
+        await asyncio.wait_for(entered.wait(), 10)
+        failed = await start(h, "teacher", request_id)
+        assert failed.status_code == 503
+        assert failed.json()["detail"]["code"] == "DEMO_DB_LOCKED"
+        assert failed.headers["retry-after"] == "7"
+        release.set()
+        response = await asyncio.wait_for(caller, 10)
+        assert response.status_code == 503
+        assert response.headers["retry-after"] == "7"
+        receipt = response.json()
+        assert receipt["operation"] == "start"
+        assert receipt["request_id"] == request_id
+        assert receipt["historical"] is False
+        assert receipt["result"]["detail"]["code"] == "DEMO_DB_LOCKED"
+        assert receipt["current"]["state"] == "prepare_failed"
+        assert h.visitors.clones == 1
+        assert len(h.visitors.records["A"].receipts) == 1
+        assert "set-cookie" not in response.headers
+    finally:
+        release.set()
+        if caller is not None:
+            await asyncio.wait_for(
+                asyncio.gather(caller, return_exceptions=True), 10
+            )
+        h.visitors.reserve_start = reserve

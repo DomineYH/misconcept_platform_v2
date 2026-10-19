@@ -42,7 +42,7 @@ def model_choices(language="ko"):
                 connection_available=True,
                 capabilities=capabilities(provider, model_id, language),
                 default_options=validate_model_and_options(
-                    provider, model_id, options
+                    provider, model_id, options, app_mode="normal"
                 ),
                 verification_state={
                     role: dict(status="succeeded")

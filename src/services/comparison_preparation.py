@@ -158,6 +158,7 @@ async def prepare_comparison(db, body):
                     panel.selection.provider,
                     panel.selection.model_id,
                     panel.selection.options.model_dump(exclude_unset=True),
+                    app_mode="normal",
                 )
             except ValueError:
                 raise_input_error(
@@ -165,7 +166,7 @@ async def prepare_comparison(db, body):
                 )
         try:
             connection, model, options = await resolve_frozen_model(
-                db, panel.selection, role
+                db, panel.selection, role, app_mode="normal"
             )
             call = settings.build_request(body, history, panel, options)
             budget, reserve, version = input_budget(call)

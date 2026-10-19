@@ -27,7 +27,8 @@ def estimate_input(request):
     envelope = dict(
         system_instruction=request.system_instruction, messages=request.messages
     )
-    if isinstance(request, StructuredRequest):
+    # The local demo adapter sends no provider schema payload.
+    if isinstance(request, StructuredRequest) and request.provider != "demo":
         envelope["output_schema"] = provider_schema(request)
     encoded = json.dumps(
         envelope, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -40,15 +41,19 @@ def input_budget(request):
     definition = capabilities(request.provider, request.model_id)
     if definition is None:
         raise InvocationError("configuration_unavailable")
-    parameters = provider_parameters(request)
-    if request.provider == "anthropic":
-        reserve = parameters["max_tokens"]
+    if request.provider == "demo":
+        # Fixed local adapter: no provider parameters and no thinking reserve.
+        reserve = request.validated_options.get(
+            "max_output_tokens", definition["max_output_tokens"]
+        )
+    elif request.provider == "anthropic":
+        reserve = provider_parameters(request)["max_tokens"]
     elif request.provider == "google":
-        reserve = parameters["config"].get(
+        reserve = provider_parameters(request)["config"].get(
             "max_output_tokens", definition["max_output_tokens"]
         )
     else:
-        reserve = parameters.get(
+        reserve = provider_parameters(request).get(
             "max_output_tokens", definition["max_output_tokens"]
         )
     limits = []

@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+from contextlib import nullcontext
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -14,6 +16,8 @@ from src.api.routes.session_helpers import (
     validate_scenario_access,
 )
 from src.config import config
+from src.demo.database import DemoError
+from src.demo.provider import DemoProvider, Selection, select_content
 from src.i18n import translate
 from src.models import (
     AppSetting,
@@ -42,6 +46,86 @@ def digest(value):
 
 def conflict(code, **extra):
     raise HTTPException(409, detail={"code": code, **extra})
+
+
+@dataclass(frozen=True)
+class DemoBinding:
+    """Server-owned demo call inputs, built by the route from app state.
+
+    ctx is the run's DemoContext holding its registry lease; inputs is
+    #197's A/B/C/common mapping and supported_config_sha256 #195's helper.
+    """
+
+    ctx: object
+    registry: object
+    seed: object
+    inputs: dict
+    supported_config_sha256: object
+
+    def guard(self):
+        return self.registry.write_guard(self.ctx)
+
+    def error(self, code):
+        return DemoError(
+            code, generation=self.ctx.generation, auth_epoch=self.ctx.auth_epoch
+        )
+
+    def supported(self, session):
+        """§16: refuse an unsupported snapshot before any turn or call."""
+        raw = self.seed.manifest_path.read_bytes()
+        envelope = session.config_snapshot_json
+        try:
+            supported = (
+                self.supported_config_sha256(
+                    envelope["schema_version"], envelope["config"]
+                )
+                == json.loads(raw)["supported_config_sha256"]
+            )
+        except (KeyError, TypeError, ValueError):
+            supported = False
+        if not supported:
+            raise self.error("UNSUPPORTED_CONFIGURATION")
+        return hashlib.sha256(raw).hexdigest()
+
+    def selection(self, manifest_sha256, history, current, *, role, **fields):
+        """The server's own derivation; the adapter re-derives and compares."""
+        state, branch, kind = select_content(
+            [{"teacher": {"content": m["content"]}} for m in history[0::2]],
+            current,
+            self.inputs,
+        )
+        if kind in ("A", "B", "C"):
+            branch = kind
+            if role == "mentor":
+                state = "after_first"
+        elif kind == "common" and role == "mentor":
+            state = "after_compare"
+        return Selection(
+            role=role,
+            content_state=state,
+            branch=branch,
+            input_kind=kind,
+            manifest_sha256=manifest_sha256,
+            **fields,
+        )
+
+    def bind(self, request, selection):
+        return replace(request, demo_context=self.ctx, demo_selection=selection)
+
+    def adapter(self, session):
+        envelope = session.config_snapshot_json
+        return DemoProvider(
+            self.seed.manifest_path,
+            visitors=self.registry.visitors,
+            mode="demo",
+            session_id=session.id,
+            config_schema_version=envelope["schema_version"],
+            config=envelope["config"],
+            inputs=self.inputs,
+            supported_config_sha256=self.supported_config_sha256,
+            db_schema_version=self.seed.db_schema_version,
+            migration_set_sha256=self.seed.migration_set_sha256,
+        )
 
 
 async def snapshot(db, run):
@@ -89,15 +173,25 @@ async def snapshot(db, run):
     }
 
 
-async def reserve_student(factory, session_id, user, request, *, language="ko"):
+async def reserve_student(
+    factory, session_id, user, request, *, language="ko", demo=None, run_id=None
+):
     async with execution_lock():
-        return await _reserve_student(
-            factory, session_id, user, request, language=language
-        )
+        # Lock order: admission, then the visitor transition, then the DB.
+        async with demo.guard() if demo else nullcontext():
+            return await _reserve_student(
+                factory,
+                session_id,
+                user,
+                request,
+                language=language,
+                demo=demo,
+                run_id=run_id,
+            )
 
 
 async def _reserve_student(
-    factory, session_id, user, request, *, language="ko"
+    factory, session_id, user, request, *, language="ko", demo=None, run_id=None
 ):
     input_hash = digest(
         {
@@ -133,6 +227,8 @@ async def _reserve_student(
         )
         if existing:
             if existing.input_hash != input_hash:
+                if demo:
+                    raise demo.error("REQUEST_CONFLICT")
                 conflict("request_conflict")
             return await snapshot(db, existing), None
         if request.turn_id:
@@ -148,6 +244,8 @@ async def _reserve_student(
                     404, detail=translate("teacher.turn_not_found", language)
                 )
             if teacher.content != request.content:
+                if demo:
+                    raise demo.error("REQUEST_CONFLICT")
                 conflict("request_conflict")
             completed = await db.scalar(
                 select(GenerationRun).where(
@@ -185,13 +283,14 @@ async def _reserve_student(
         )
         if busy:
             conflict("student_busy", run_id=busy.id)
+        manifest_sha256 = demo.supported(session) if demo else None
         try:
             lesson = read_lesson_snapshot(session, language=language)
             connection, model, options = await resolve_frozen_model(
                 db,
                 lesson.config.student.resolved_model_config,
                 "student",
-                app_mode=config.APP_MODE,
+                app_mode="demo" if demo else config.APP_MODE,
             )
         except (InvocationError, HTTPException):
             raise HTTPException(
@@ -256,8 +355,15 @@ async def _reserve_student(
                     "message": translate("teacher.shorten_question", language),
                 },
             ) from None
+        if demo:
+            call = demo.bind(
+                call,
+                demo.selection(
+                    manifest_sha256, history, request.content, role="student"
+                ),
+            )
         run = GenerationRun(
-            id=str(uuid4()),
+            id=run_id or str(uuid4()),
             owner_id=user.id,
             session_id=session_id,
             turn_id=teacher.turn_id,
@@ -286,6 +392,8 @@ async def _reserve_student(
                 operation="student",
                 role="student",
                 admin=False,
+                ctx=demo and demo.ctx,
+                registry=demo and demo.registry,
             )
         except InvocationError as error:
             raise HTTPException(
@@ -306,7 +414,10 @@ async def _reserve_student(
         except BaseException:
             permit.release()
             raise
-        return accepted, {"request": call, "permit": permit}
+        execution = {"request": call, "permit": permit}
+        if demo:
+            execution["demo_adapter"] = demo.adapter(session)
+        return accepted, execution
 
 
 async def finish_student(
@@ -318,8 +429,10 @@ async def finish_student(
     partial_text=None,
     error_code=None,
     first_output_at=None,
+    demo=None,
 ):
-    async with factory() as db:
+    # Late saves stay on the run's own factory and fail its guard when stale.
+    async with demo.guard() if demo else nullcontext(), factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
         run = await db.get(GenerationRun, run_id)
         if run.status != "running":

@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from weakref import WeakKeyDictionary
 
 from src.config import config
+from src.demo.lifecycle import NORMAL_SCOPE, scope_for
+from src.demo.visitors import DemoContext
 from src.models import AppSetting, ModelConfig, ModelProbe, ProviderConnection
 from src.services.invocation_types import InvocationError
 from src.services.model_capabilities import capabilities, metadata_conflict
@@ -54,6 +56,13 @@ class CallPermit:
     capability_version: str | None = None
     contract_version: str | None = None
     model_options: dict | None = None
+    # Demo only: the run's fixed DemoContext and its Lifecycle authority.
+    ctx: object = None
+    registry: object = None
+
+    @property
+    def scope(self):
+        return NORMAL_SCOPE if self.ctx is None else scope_for(self.ctx)
 
     def release_slot(self):
         active_calls.discard(self)
@@ -64,9 +73,35 @@ class CallPermit:
         self.secret = None
 
 
+def demo_mode(ctx):
+    """Either the server or a demo context makes a call demo-only."""
+    return config.APP_MODE == "demo" or isinstance(ctx, DemoContext)
+
+
 def approve_call(
-    factory, connection, setting, *, owner_id, operation, role=None, admin=True
+    factory,
+    connection,
+    setting,
+    *,
+    owner_id,
+    operation,
+    role=None,
+    admin=True,
+    ctx=None,
+    registry=None,
 ):
+    demo = demo_mode(ctx)
+    if (connection.provider == "demo") != demo or (
+        demo
+        and (
+            not isinstance(ctx, DemoContext)
+            or registry is None
+            or factory is not ctx.factory
+            or operation in ("model_list", "probe")
+            or connection.encrypted_key is not None
+        )
+    ):
+        raise InvocationError("configuration_unavailable")
     limits, timeouts = settings_values(setting)
     total = len(active_calls)
     provider = sum(c.provider == connection.provider for c in active_calls)
@@ -80,7 +115,8 @@ def approve_call(
     if not connection.enabled:
         raise InvocationError("configuration_unavailable")
     try:
-        secret = decrypt_key(connection)
+        # Demo connections hold no key material and never reach decryption.
+        secret = None if demo else decrypt_key(connection)
     except ProviderSecretUnavailableError:
         raise InvocationError("configuration_unavailable") from None
     permit = CallPermit(
@@ -97,6 +133,8 @@ def approve_call(
         asyncio.get_running_loop().time(),
         asyncio.current_task(),
         connection.connection_version,
+        ctx=ctx if demo else None,
+        registry=registry if demo else None,
     )
     active_calls.add(permit)
     registered_calls.add(permit)
@@ -116,7 +154,10 @@ async def admit_call(
     expected_model_version=None,
     probe_id=None,
     model_options=None,
+    ctx=None,
+    registry=None,
 ):
+    app_mode = "demo" if demo_mode(ctx) else "normal"
     async with execution_lock():
         permit = None
         try:
@@ -153,7 +194,7 @@ async def admit_call(
                             connection,
                             role,
                             options=model_options,
-                            app_mode=config.APP_MODE,
+                            app_mode=app_mode,
                         )
                     ):
                         raise InvocationError("configuration_unavailable")
@@ -167,6 +208,8 @@ async def admit_call(
                     operation=operation,
                     role=role,
                     admin=admin,
+                    ctx=ctx,
+                    registry=registry,
                 )
                 permit.model_options = model_options
                 permit.model_config_id = model_config_id
@@ -187,9 +230,14 @@ async def admit_call(
             raise
 
 
-def cancel_connection(connection_id):
+def cancel_connection(connection_id, *, scope=NORMAL_SCOPE):
+    # Seed integer IDs repeat across visitor databases; never cross a scope.
     for call in list(registered_calls):
-        if call.connection_id == connection_id and not call.task.done():
+        if (
+            call.connection_id == connection_id
+            and call.scope == scope
+            and not call.task.done()
+        ):
             call.task.cancel()
 
 
@@ -198,13 +246,24 @@ def active_connection_count(provider):
 
 
 async def recheck_call(permit):
+    demo = demo_mode(permit.ctx)
+    app_mode = "demo" if demo else "normal"
     async with execution_lock():
+        if demo:
+            if permit.ctx is None or permit.registry is None:
+                raise InvocationError("configuration_unavailable")
+            await permit.registry.assert_current(permit.ctx)
         async with permit.factory() as db:
             connection = await db.get(ProviderConnection, permit.connection_id)
             if (
                 connection is None
                 or not connection.enabled
-                or not connection.encrypted_key
+                or (connection.provider == "demo") != demo
+                or (
+                    connection.encrypted_key is not None
+                    if demo
+                    else not connection.encrypted_key
+                )
             ):
                 raise InvocationError("configuration_unavailable")
             if permit.probe_id is not None:
@@ -238,7 +297,7 @@ async def recheck_call(permit):
                             connection,
                             permit.role,
                             options=permit.model_options,
-                            app_mode=config.APP_MODE,
+                            app_mode=app_mode,
                         )
                     )
                 ):
@@ -259,6 +318,8 @@ async def readmit_call(permit):
         expected_model_version=permit.config_version,
         probe_id=permit.probe_id,
         model_options=permit.model_options,
+        ctx=permit.ctx,
+        registry=permit.registry,
     )
     current.timeouts = permit.timeouts
     current.admitted_at = permit.admitted_at

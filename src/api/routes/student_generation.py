@@ -1,7 +1,9 @@
 """Authenticated student generation and persisted run lookup."""
 
+import asyncio
+from dataclasses import replace
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -13,14 +15,69 @@ from src.api.dependencies import get_current_user, get_db_session
 from src.api.routes.session_helpers import load_session
 from src.api.routes.session_messages import limiter
 from src.api.schemas import GenerationRequest
+from src.config import config
+from src.demo.lifecycle import TaskControl
 from src.i18n import display_language, translate
 from src.models import GenerationRun, User
-from src.services.generation_runs import reserve_student, snapshot
+from src.services.generation_runs import (
+    DemoBinding,
+    reserve_student,
+    snapshot,
+)
 from src.services.mentor_generation import reserve_mentor
 from src.services.mentor_stream import mentor_response
-from src.services.student_stream import StudentStreamingResponse
+from src.services.student_stream import DemoRun, StudentStreamingResponse
 
 router = APIRouter(tags=["Sessions"])
+
+
+async def register_demo_run(request):
+    """§6: register before reserving so the run's lease outlives the request."""
+    if config.APP_MODE != "demo":
+        return None
+    # ponytail: #197's labeled inputs and #195's §16.1 helper are consumed
+    # from their branches; PR4 verifies them against the merged real seed.
+    from src.demo.seed import INPUTS
+
+    from src.services.model_configuration import supported_config_sha256
+
+    ctx = request.state.demo_context
+    registry = request.app.state.demo_request_db.lifecycle
+    cancelled = asyncio.Event()
+    token = await registry.register(
+        ctx, "run", str(uuid4()), TaskControl(cancelled.set, asyncio.Event())
+    )
+    return DemoRun(
+        DemoBinding(
+            replace(ctx, lease=token.registry_lease),
+            registry,
+            request.app.state.demo_seed,
+            INPUTS,
+            supported_config_sha256,
+        ),
+        token,
+        cancelled,
+    )
+
+
+async def reserve_demo_run(run, reserve, **kwargs):
+    """Reserve with the run's ID; a refusal or replay ends the registration."""
+    try:
+        accepted, execution = await reserve(
+            **kwargs,
+            **(
+                {}
+                if run is None
+                else dict(demo=run.binding, run_id=run.token.key[2])
+            ),
+        )
+    except BaseException:
+        if run is not None:
+            await run.release()
+        raise
+    if execution is None and run is not None:
+        await run.release()
+    return accepted, execution
 
 
 class MentorRequest(GenerationRequest):
@@ -47,23 +104,28 @@ async def mentor_turn(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    factory = async_sessionmaker(
-        db.bind, expire_on_commit=False, autoflush=False
-    )
     await db.close()
-    accepted, execution = await reserve_mentor(
-        factory,
-        session_id,
-        str(turn_id),
-        user,
-        body.request_id,
-        body.trigger,
+    run = await register_demo_run(request)
+    factory = (
+        async_sessionmaker(db.bind, expire_on_commit=False, autoflush=False)
+        if run is None
+        else run.binding.ctx.factory
+    )
+    accepted, execution = await reserve_demo_run(
+        run,
+        reserve_mentor,
+        factory=factory,
+        session_id=session_id,
+        turn_id=str(turn_id),
+        user=user,
+        request_id=body.request_id,
+        trigger=body.trigger,
         language=display_language(request),
     )
     if execution is None:
         return JSONResponse(accepted)
     execution["display_language"] = display_language(request)
-    return mentor_response(factory, accepted, execution)
+    return mentor_response(factory, accepted, execution, demo_run=run)
 
 
 @router.post("/sessions/{session_id}/turns/stream")
@@ -75,18 +137,27 @@ async def student_turn(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    factory = async_sessionmaker(
-        db.bind, expire_on_commit=False, autoflush=False
-    )
     # Authentication's read session is released before reserving or streaming.
     await db.close()
-    accepted, kwargs = await reserve_student(
-        factory, session_id, user, body, language=display_language(request)
+    run = await register_demo_run(request)
+    factory = (
+        async_sessionmaker(db.bind, expire_on_commit=False, autoflush=False)
+        if run is None
+        else run.binding.ctx.factory
+    )
+    accepted, kwargs = await reserve_demo_run(
+        run,
+        reserve_student,
+        factory=factory,
+        session_id=session_id,
+        user=user,
+        request=body,
+        language=display_language(request),
     )
     if kwargs is None:
         return JSONResponse(accepted)
     kwargs["display_language"] = display_language(request)
-    return StudentStreamingResponse(factory, accepted, kwargs)
+    return StudentStreamingResponse(factory, accepted, kwargs, demo_run=run)
 
 
 @router.get("/runs/{run_id}")

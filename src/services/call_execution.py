@@ -123,8 +123,8 @@ async def execute_call(
     wait_ms = None
     try:
         adapters = PROVIDER_ADAPTERS
-        # Either the server or the caller saying demo keeps external SDKs shut.
-        if "demo" in (config.APP_MODE, app_mode):
+        # The server, the caller or the permit saying demo keeps SDKs shut.
+        if "demo" in (config.APP_MODE, app_mode) or permit.ctx is not None:
             context = getattr(request, "demo_context", None)
             if (
                 not isinstance(demo_adapter, DemoProvider)

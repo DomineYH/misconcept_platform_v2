@@ -1,0 +1,52 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/analysis/after_first/A/A/none/merge",
+  "role": "analysis",
+  "content_state": "after_first",
+  "branch": "A",
+  "input_kind": "A",
+  "trigger": null,
+  "analysis_phase": "merge",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "schema_version": 2,
+    "misconception_findings": [
+      {
+        "kind": "maintained",
+        "claim": "첫 학생봇 응답에서 분모가 큰 쪽을 크게 보는 생각이 남아 있다.",
+        "evidence": [
+          {
+            "message_id": "@student_first",
+            "quote": "8이 4보다 크니까 1/8 조각도 더 클 것 같아요."
+          }
+        ]
+      }
+    ],
+    "brief_feedback": [
+      "공통 두 번째 입력은 아직 사용하지 않았습니다.",
+      "준비된 예시입니다. 실제 학생의 이해나 질문의 교육 효과를 입증하지 않습니다."
+    ],
+    "strengths": [],
+    "improvements": [
+      {
+        "message_id": "@teacher_first",
+        "quote": "이유를 말해 줄래?",
+        "missed_reason": "처음 질문 뒤 실제로 비교한 근거까지 확인하면 좋다.",
+        "alternative_question": "같은 크기의 종이띠 두 개를 각각 똑같이 4조각과 8조각으로 나누어 한 조각씩 겹쳐 보자. 어느 쪽 조각이 더 크고, 조각 수가 늘면 한 조각의 크기는 어떻게 될까?",
+        "alternative_reason": "같은 전체 조건과 한 조각 크기를 명시할 수 있다."
+      }
+    ],
+    "dialogue_coaching": [
+      {
+        "message_id": "@student_first",
+        "quote": "8이 4보다 크니까 1/8 조각도 더 클 것 같아요.",
+        "role": "student",
+        "marker": "key_clue",
+        "note": "분모의 크기로 한 조각의 크기를 판단하는 생각이 드러나는 단서다."
+      }
+    ]
+  },
+  "partial_text": null
+}

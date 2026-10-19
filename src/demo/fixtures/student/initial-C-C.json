@@ -1,0 +1,15 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/student/initial/C/C/none/none",
+  "role": "student",
+  "content_state": "initial",
+  "branch": "C",
+  "input_kind": "C",
+  "trigger": null,
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": "8조각이면 더 많으니까 한 조각도 1/8 쪽이 클 것 같아요. 직접 나누어 보지는 않았어요.",
+  "structured": null,
+  "partial_text": null
+}

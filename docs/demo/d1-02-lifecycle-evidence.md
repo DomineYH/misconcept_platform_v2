@@ -3,9 +3,14 @@
 Contract: `d0-03-v1-r3`, G0 approved 2026-10-19. Input base:
 `427890033d206a4f043ffc946009bd8ce6a437c2` (confirmed ancestor of HEAD).
 The implementation is on `feat/192-demo-lifecycle`; commits and final check
-counts are recorded in the worker report. #191 integration target:
-`79d29259e27761ffe75968517cc036d3df31c1f9`, merged without conflicts as
-`d9fd0264da30a17929a3adc07e319ab5ce4af33f`. The five #191 files are unchanged.
+counts are recorded in the worker report. Current #191 integration target:
+`12f8bf57d9e763c19022d41da00173df96108cbf`, merged without conflicts as
+`9b21aec`; main `bca69cc` documentation is merged as `62d60a6`.
+Reviewed main `0115b8c` is included via merge `dab9887`.
+The earlier #191 target `79d2925` was merged as `d9fd026` before the restart.
+#191-owned files match the current target exactly. The prepared merges were
+fast-forwarded into the requested worktree after full access was restored.
+The merged source candidate checked is `62d60a6`.
 
 ## Public boundary and ownership
 
@@ -148,8 +153,8 @@ outbound sockets blocked by existing conftest. No paid calls, production DB,
 
 | Gate | Status | Owner / required follow-up |
 |---|---|---|
-| #192 unit/normal regression | historical counts below; Binding B adds merged-candidate checks | this branch |
-| #191 real binding | integrated at 79d2925; Binding B matrix below | capability/guard/retain/release/public counts |
+| #192 unit/normal regression | passed: 2262 full; 287 combined targeted; 108 impact | current merged source 62d60a6 |
+| #191 real binding | passed at 12f8bf5; 124 unchanged authority cases plus real #192 matrix | capability/guard/retain/release/public counts |
 | #194 G1 | not run | inject lifecycle into resolver/middleware/lifespan; no normal startup orphan scan in demo; configure drain timeout |
 | #198 G3 | not run | pass ctx/registry through call admission, student/mentor ASGI cleanup, pipeline/chunk/ledger/shield, all final DML; scope cancel_connection |
 | #193 reset/role | not run | same-handle busy_locked; mark then handoff then release_request_db then cancel_scope/drain; retain receipt Task |
@@ -186,7 +191,7 @@ With `UV_PROJECT_ENVIRONMENT=/tmp/w192-demo-lifecycle-venv`:
 R1 deferred P2 to Binding B; the capability mismatch is resolved by the concrete
 #191 binding described above and verified below.
 
-## Binding B — real #191 authority
+## Binding B — real #191 authority (pre-restart source 037241c)
 
 Integrated #191 `79d29259e27761ffe75968517cc036d3df31c1f9` via merge
 `d9fd0264da30a17929a3adc07e319ab5ce4af33f`. P2 is resolved using the issued
@@ -229,3 +234,44 @@ Binding B checks use the same frozen environment described above:
 - `uv run --frozen ruff check .`: passed.
 - `uv run --frozen black --check .`: passed, 360 files unchanged.
 - Independent read-only worker review found no concrete binding bug.
+
+## Binding B resume — 12f8bf5 receipts and main documentation
+
+Coordinator order: `/mnt/d/dev/mp2-wt/_coord/wo-192-bind.md`.
+The real authority now includes body-aware receipt replay and accepted-failure
+receipts. Its transition/check/lease/write-guard/lifecycle APIs consumed by #192
+remain compatible. Main's `d0-03-v2` correction changes C14/C27 ownership for
+#198; #191–#193 retain the approved `d0-03-v1-r3` semantics.
+No lifecycle behavior, tests or #191-owned source needed modification for this
+update. The existing real matrix above is rerun on the merged candidate.
+The interrupted pre-restart full run has no completed result and is not counted
+as verification. Resume check counts are recorded below and in the worker report.
+
+The restored environment is Python 3.12.3 with frozen dependencies installed by
+`UV_PROJECT_ENVIRONMENT=/tmp/w192-resume-venv uv sync --frozen --extra dev --python 3.12`
+(79 packages). Targeted checks run in the requested worktree. The completed full
+suite runs in `/tmp/w192-checks`, a registered detached Git worktree at the same
+source commit, to avoid the mounted drive's per-file test delay. Both trees have
+identical tracked Python, tests, migrations, fixtures, configuration and lockfile.
+
+Resume verification results (all exit 0):
+
+- `uv run --frozen python -m pytest -q tests/test_demo_d1_02_lifecycle.py tests/test_probe_lifecycle.py tests/test_comparison_lifecycle.py tests/test_demo_d1_01_database.py tests/test_demo_d1_01_lifecycle.py tests/test_demo_d1_01_visitors.py`:
+  **287 passed**, 17 warnings, 146.28 seconds (163 owned/normal plus 124 #191).
+- Requested 12-file impact command (the same complete list in the report):
+  **108 passed**, 66 warnings, 303.38 seconds. No missing filenames.
+- `uv run --frozen ruff check .`: passed.
+- `uv run --frozen black --check .`: passed, 360 files unchanged.
+- One completed final `uv run --frozen python -m pytest -q`:
+  **2262 passed**, 1340 warnings, 1822.48 seconds (30m22s).
+  No failures, skipped tests or unrelated-failure reruns.
+- `git fetch origin` and `git merge --no-edit origin/main` (with required footer)
+  include `0115b8c` via `dab9887`. Its committed tree is identical
+  to checked source `62d60a6` (tree 61d3b4acf8be5255daaeb55a905bdea5f9699cf1).
+  The final evidence commit changes only this Markdown; test inputs stay fixed.
+- Browser and live streaming: not run (CI). G1/G3/G5 remain other-owner work.
+
+The final report records the evidence commit HEAD. No dependency API changes,
+paid calls, production data, configuration changes or source edits followed the
+completed full suite. The earlier restart/sandbox interruption is resolved;
+the original branch and coordinator report directory are writable.

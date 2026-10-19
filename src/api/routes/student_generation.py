@@ -34,10 +34,9 @@ router = APIRouter(tags=["Sessions"])
 
 def demo_binding(request, ctx):
     """Server-owned demo inputs from app state; registers nothing."""
-    # ponytail: #197's labeled inputs and #195's §16.1 helper are consumed
-    # from their branches; PR4 verifies them against the merged real seed.
+    # Demo only: normal never loads #197's seed inputs or #195's helper.
+    # ponytail: PR4 verifies this binding against the real seed end to end.
     from src.demo.seed import INPUTS
-
     from src.services.model_configuration import supported_config_sha256
 
     return DemoBinding(

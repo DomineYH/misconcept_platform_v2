@@ -695,32 +695,29 @@ class Tour:
     first_inputs: frozenset
     common_input: str
     supported_config_sha256: str
-    helper: object
 
     def supported_snapshot(self, row):
-        # Fail closed until #195 PR3 provides the shared §16.1 helper.
         from src.services.lesson_snapshots import canonical_hash
+        from src.services.model_configuration import supported_config_sha256
 
         try:
             envelope = row["config_snapshot_json"]
             if isinstance(envelope, str):
                 envelope = json.loads(envelope)
             return bool(
-                self.helper is not None
-                and row["snapshot_origin"] == "native"
+                row["snapshot_origin"] == "native"
                 and canonical_hash(envelope) == row["config_hash"]
                 and envelope["schema_version"] == 1
-                and self.helper(1, envelope["config"])
+                and supported_config_sha256(1, envelope["config"])
                 == self.supported_config_sha256
             )
         except (KeyError, TypeError, ValueError):
             return False
 
 
-def load_seed(seed_dir, *, supported_config_sha256=None):
+def load_seed(seed_dir):
     """SeedSpec plus TourContent for a directory written by build()."""
     from src.demo.database import SeedSpec
-    from src.services import model_configuration
 
     manifest, _ = _manifest()
     spec = SeedSpec(
@@ -736,8 +733,6 @@ def load_seed(seed_dir, *, supported_config_sha256=None):
         first_inputs=frozenset(INPUTS[k] for k in "ABC"),
         common_input=INPUTS["common"],
         supported_config_sha256=manifest["supported_config_sha256"],
-        helper=supported_config_sha256
-        or getattr(model_configuration, "supported_config_sha256", None),
     )
     return spec, tour
 

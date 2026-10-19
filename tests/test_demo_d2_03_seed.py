@@ -21,7 +21,7 @@ import pytest_asyncio
 from fastapi import HTTPException
 from sqlalchemy import event, func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from test_demo_d2_03_fixtures import D0_02, supported_config_sha256
+from test_demo_d2_03_fixtures import D0_02
 from test_demo_d2_03_fixtures import INPUTS as FIXTURE_INPUTS
 
 from src.api.routes.admin_session_actions import (
@@ -415,9 +415,7 @@ def test_tour_content_exposes_manifest_refs_and_supported_snapshots(
 ):
     from src.services.lesson_snapshots import canonical_hash
 
-    _, tour = seed.load_seed(
-        built[0], supported_config_sha256=supported_config_sha256
-    )
+    _, tour = seed.load_seed(built[0])
     assert tour.seed_refs == MANIFEST["seed_refs"]
     assert all(type(v) is int and v > 0 for v in tour.seed_refs.values())
     assert tour.first_inputs == frozenset(seed.INPUTS[k] for k in "ABC")
@@ -447,8 +445,6 @@ def test_tour_content_exposes_manifest_refs_and_supported_snapshots(
         row | dict(config_snapshot_json="not json"),
     ):
         assert not tour.supported_snapshot(rejected)
-    # Without #195 PR3's shared helper the tour fails closed.
-    assert not replace(tour, helper=None).supported_snapshot(row)
 
 
 DEMO_ENV = {

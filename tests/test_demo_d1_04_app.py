@@ -662,7 +662,32 @@ async def case_errors(tmp):
     async def probe_crash(user=Depends(deps.get_current_user)):
         raise RuntimeError(os.environ["DEMO_DATA_ROOT"])
 
-    for route in app.routes[-2:]:
+    aborts = []
+
+    @app.get("/probe-owned")
+    async def probe_owned(
+        request: Request, user=Depends(deps.get_current_user)
+    ):
+        from fastapi.responses import PlainTextResponse
+
+        mode = request.query_params["mode"]
+        # Stands in for #198's response that owns a reserved run.
+        response = PlainTextResponse("owned")
+
+        async def demo_abort():
+            aborts.append(mode)
+            if mode == "fail":
+                raise RuntimeError(os.environ["DEMO_DATA_ROOT"])
+
+        response.demo_abort = demo_abort
+        if mode != "send":
+            # Reset lands between the reservation and the boundary's finish.
+            await app.state.demo_request_db.visitors.reset_visit(
+                request.state.demo_context, str(uuid4())
+            )
+        return response
+
+    for route in app.routes[-3:]:
         route.app = request_response(
             deps.demo_request_handler(route.get_route_handler())
         )
@@ -756,6 +781,26 @@ async def case_errors(tmp):
         )
         page(response, "DEMO_CONFIGURATION_INVALID")
         assert "Traceback" not in response.text
+
+        # A discarded owned response is aborted exactly once; a sent one never.
+        client = client_for(app, "10.0.0.4")
+        state = await start(client, "admin")
+        response = await client.get(
+            "/probe-owned", params={**namespace(state), "mode": "send"}
+        )
+        assert response.status_code == 200 and response.text == "owned"
+        assert aborts == []
+        for index, mode in enumerate(("reset", "fail")):
+            client = client_for(app, f"10.0.2.{index}")
+            state = await start(client, "admin")
+            response = await client.get(
+                "/probe-owned", params={**namespace(state), "mode": mode}
+            )
+            assert response.status_code >= 400, response.text
+            assert code(response).startswith("DEMO_")
+            # The abort error is logged by type name only (checked in __main__).
+            assert os.environ["DEMO_DATA_ROOT"] not in response.text
+        assert aborts == ["reset", "fail"]
     assert global_db == []
 
 

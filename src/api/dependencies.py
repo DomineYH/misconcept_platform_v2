@@ -731,7 +731,23 @@ def demo_request_handler(handler):
         from src.api.routes.demo import error_response
 
         runtime = None
-        response = None
+        response = owned = None
+
+        async def discard():
+            # #198: a handler response the boundary will not send aborts its work once.
+            nonlocal owned
+            if owned is None or response is owned:
+                return
+            abort, owned = getattr(owned, "demo_abort", None), None
+            if abort is not None:
+                try:
+                    await abort()
+                except Exception as error:
+                    logging.getLogger(__name__).error(
+                        "Demo abort failed",
+                        extra={"code": type(error).__name__},
+                    )
+
         request.state.demo_boundary = True
         try:
             runtime = _demo_runtime(request)
@@ -768,7 +784,7 @@ def demo_request_handler(handler):
                 "/demo/"
             ):
                 await runtime.validate_namespace(request, bootstrap)
-            response = await handler(request)
+            response = owned = await handler(request)
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and not request.url.path.startswith("/demo/"):
                 if response.status_code < 400:
@@ -789,7 +805,12 @@ def demo_request_handler(handler):
                 "Demo request failed", extra={"code": type(error).__name__}
             )
             response = error_response(DemoError("CONFIGURATION_INVALID"))
+        except BaseException:
+            response = None  # Cancelled: nothing from this request is sent.
+            raise
         finally:
+            # Before release, while the request's lease is still held.
+            await discard()
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and runtime is not None:
                 try:
@@ -833,6 +854,7 @@ def demo_request_handler(handler):
         ):
             if "set-cookie" in response.headers:
                 del response.headers["set-cookie"]
+        await discard()
         return response
 
     return guarded

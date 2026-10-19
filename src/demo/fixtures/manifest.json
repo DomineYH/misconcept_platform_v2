@@ -1,0 +1,544 @@
+{
+  "manifest_version": 1,
+  "contract_version": "d0-03-v1-r3",
+  "content_version": "d0-02-v1",
+  "fixture_version": "demo-fixture-v1",
+  "db_schema_version": "037_demo_provider.sql",
+  "migration_set_sha256": "d245be48d9b05c13264a43b146343388d85d81a43ad199490054ee45f79beec1",
+  "scenario_config_schema_version": 1,
+  "analysis_schema_version": 2,
+  "provider": "demo",
+  "model_id": "demo-classroom-v1",
+  "capability_definition_version": "demo-cap-v1",
+  "role_contract_versions": {
+    "student": "s1-v1",
+    "mentor": "s3-v1",
+    "analysis": "s4-v2"
+  },
+  "scenario_ref": "unit-fraction-v1",
+  "supported_config_sha256": "21dd6c4e9344a4ac150e9d2217c5d7eeb07a85fabc51123b60e5ba99894186c2",
+  "seed_version": "demo-seed-v1",
+  "seed_timestamp": "2026-10-18T00:00:00Z",
+  "seed_refs": {
+    "admin": 1,
+    "teacher": 2,
+    "group": 1,
+    "scenario": 1,
+    "completed_session": 1,
+    "model": 1,
+    "connection": 4
+  },
+  "files": [
+    {
+      "path": "analysis/after_compare-A-common-chunk.json",
+      "sha256": "6ae64ec0dfe2daa3921b654b04986c4a86db23549c36d3c7c7242e0000f0e066",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_compare-A-common-merge.json",
+      "sha256": "3209a5280d643101890e6f47bf24409d91346586ff7d3103b032510e0b1fcab0",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_compare-A-common-single.json",
+      "sha256": "12777caa378ec3581f0a5a609041b8d8c6428a4ec3d1d17ab6961bc51672e688",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_compare-B-common-chunk.json",
+      "sha256": "95b66cb22c1bc548542693c0b941318e6624234a3ebe252ea8c7b25357d07352",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_compare-B-common-merge.json",
+      "sha256": "2b24f7fc51cd61867a9731a119e39e1c6661a3d72a5d0f882d85a3b9d1ba1581",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_compare-B-common-single.json",
+      "sha256": "2e38e0a2a799e226ea79ed4ef5be04799e7c94017e1f6dbd768fcd1b72db0454",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_compare-C-common-chunk.json",
+      "sha256": "68e32ed14bb43aa35a61b4a0eab19f465cab5c94ba9abee353648780b9485a29",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_compare-C-common-merge.json",
+      "sha256": "a09a912bd790e6a3597a7d07a37d78bc244cebec7d2d233f52efc872af980c63",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_compare-C-common-single.json",
+      "sha256": "88ebf720a9e4efc179468ffc9a94ff6078e189b89bda9904786fe8616d822ea4",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-A-A-chunk.json",
+      "sha256": "309a6d29f8dcdab4e9ddc53967aa82e41cde5ca295b59038274184e3295f1409",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-A-A-merge.json",
+      "sha256": "f3c87f85eba212b1f624b27c87274f400e2b2a9c969c37810cfb523ac7868eee",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-A-A-single.json",
+      "sha256": "ca966e99c8f0cf9ef5ccf4c620444073afd6c795080fb7b5f122017613b46842",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-B-B-chunk.json",
+      "sha256": "e1e8b4dc8cefc90928387a11b0c217f7dbe6533ec81e7c58f00d5e7659cd3b47",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-B-B-merge.json",
+      "sha256": "232a94d15f83c210aace325aef8544c8013af608708726ec60b9b63b02accf99",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-B-B-single.json",
+      "sha256": "704bfad11c7c92a91a3cbe79a4afb9e9515ff8e31fb233b6b70d612b0d014e45",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-C-C-chunk.json",
+      "sha256": "48287eba96e784fe90c2c67657bb01e75bc9053da15c4f19fbcc715a82226d1b",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-C-C-merge.json",
+      "sha256": "38e3460175d5ecea118e417f6563ce341b46807a7c9061faf32434b48e244ddc",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/after_first-C-C-single.json",
+      "sha256": "93220266912e8a2ca43d9c9c65818b3f5966a44f05c15232fead844553513a0f",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/initial-none-unsupported-chunk.json",
+      "sha256": "8919b841dce5b7ebe1715dabdeb3d8decfc55dcdeef5e396e99a4948b8244872",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/initial-none-unsupported-merge.json",
+      "sha256": "300e4c9d1e9fa4bcb7da8ce5da1bab47e2c8cdce8d6b2fab23fe4c1dff81894b",
+      "kind": "analysis"
+    },
+    {
+      "path": "analysis/initial-none-unsupported-single.json",
+      "sha256": "21798d8717d5e1049d18dfdf7188e6f0c3fe92e5bc21b4a122b77f8c82c5bf6d",
+      "kind": "analysis"
+    },
+    {
+      "path": "failure/analysis-chunk-analysis_partial.json",
+      "sha256": "bb7863c1f15ce85ef1f0defa72bb70640728195f7dfcd4d40ca577f42c12c7bb",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/analysis-merge-analysis_failed.json",
+      "sha256": "62e877ff744409676ceb5c781e575031043969b7406e683ed8dc2e1f5011f0ac",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/analysis-single-analysis_failed.json",
+      "sha256": "3902be606d6a2aa615ee0443ae32f5051da9f7599e0c19626972dcc28e2f495f",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/analysis-single-analysis_partial.json",
+      "sha256": "5f3343ffcf045987b44215bc9790b957856c631702c3056c00b26f19c7cc42af",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/analysis-single-invalid_json.json",
+      "sha256": "61bf661cf5863535cda71e1445f529e5ae1c2dc5c38e0b034e667d024aa6aa06",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/analysis-single-invalid_output.json",
+      "sha256": "3929c19fbf02da2a9b799d1aa7b35b0d4d4af2e633443be76236fd08b4d3346a",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/analysis-single-invalid_reference.json",
+      "sha256": "8a3c450d30ae6df3ee6597181f477e1b11bee0268d736ea291fcbf2115ef3131",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/analysis-single-timeout_connect.json",
+      "sha256": "bdf4e1b589131e6f10222366dc48fb236f1c877a34fd4c021a7638057e45c369",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/analysis-single-transient.json",
+      "sha256": "dbbe7e66b56d084b50fb3ddc856c4ac3cf99fe6bf7aa438313480f15bf30f5a8",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/mentor-empty_response.json",
+      "sha256": "d12e728a8a979d3f1e43f6e279767dc605a768bd3279780a2ac1d8385ba3275f",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/mentor-invalid_json.json",
+      "sha256": "ad625da2c87c3c397896ccc8814a2afa1d497711e24e5c32f9081e421b1305f3",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/mentor-invalid_output.json",
+      "sha256": "74ed71b16e66074bdee0c4b6466115803a4c3a4b253db9d069b0161d68bb64b9",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/mentor-invalid_reference.json",
+      "sha256": "c1de5d57ba598b417855137e96f30a0d0ea80fce9bb2326b3eb3f94132caecfb",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/mentor-refused.json",
+      "sha256": "0e1c7c8e232c94725f20ed7683405d764f861468f6354c08f97439905738834e",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/mentor-timeout_total.json",
+      "sha256": "c4753079e2e412a0d2906172901f1d76a221f6d4638f948598080a818b17c1d1",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/mentor-transient.json",
+      "sha256": "2c353881a31d56dee37218e647b6c0e6840f08ea3295944645cf2d30a851ab94",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/student-empty_response.json",
+      "sha256": "b79bd2718fcdf9b1977670aacec54d125b03c5c87428a9f482229a4d9330ff9a",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/student-interrupted_after_delta.json",
+      "sha256": "a1ed5cd539419ce8dc881a2a2d613f45aa578dc330d0e73d05df325f87619a97",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/student-refused.json",
+      "sha256": "e3d6e977548e289c29f18e31f4df056615bc5c0bb8814b947fc39860066cd65b",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/student-timeout_connect.json",
+      "sha256": "e652a77c7ad64563e244ad226a02aa5b30d89d4a1e5f87a2eb8116346934be12",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/student-timeout_first_output.json",
+      "sha256": "29038a4cb9bf7eae5c9cf7683af27ccdaa266112c9e32a333c604f7b91c85741",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/student-timeout_total.json",
+      "sha256": "714c2bbdefe15ea329597833552209f2ad780f2b8d75fda63e907b79fc4ec64e",
+      "kind": "failure"
+    },
+    {
+      "path": "failure/student-transient.json",
+      "sha256": "3481cd73cac27439f51c386eb77ce9da658d3d816bdfc61a6a6be39f683d8f39",
+      "kind": "failure"
+    },
+    {
+      "path": "mentor/after_compare-A-common-auto.json",
+      "sha256": "50ad8ccbf2bbc0fa9a83abceac798bfd7a115619f03be17a90569582dbe0921c",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-A-common-manual.json",
+      "sha256": "1b71101716d370bd20d3dee112d913467f045e2b0afa6d3ea9c7ee19eb9f8c52",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-A-unsupported-auto.json",
+      "sha256": "767c62c4e548e0bad2595e6793b13bb352b63e04fe2fa9b86cddb4b1fd420e07",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-A-unsupported-manual.json",
+      "sha256": "8bd01a5cd7fe2e73c554a85191007076b32043ee4cd73dcb6aea39b9c5593ab4",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-B-common-auto.json",
+      "sha256": "e699fb655f4952ad646000e2b00e75da52ec83f34f1cea87d953455d9dfb2cf3",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-B-common-manual.json",
+      "sha256": "0c7d100f49db1946b7221bd508140399065ae4312c7494074e6833e0579b96eb",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-B-unsupported-auto.json",
+      "sha256": "dcc32cf197ea5df2d434e091bc4bddc7439b4f0fedac3640732781e4d893b51f",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-B-unsupported-manual.json",
+      "sha256": "94e71e165a991964ac408e1fbc2d34f7c8ca2df520082f5d34ac14ef478e8104",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-C-common-auto.json",
+      "sha256": "61e0f082fb0b61e26655f097c1c08f3c7cac796a5d71be18dbedfb80ce381c05",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-C-common-manual.json",
+      "sha256": "5304afcf384ecc3beb3e97c571d762e590c287571082d11875d0efa1376dd6a0",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-C-unsupported-auto.json",
+      "sha256": "09071c32f54e5a6e6edf2316cf3bfeaa27697c11d04e8eaa56a454678d04e4b2",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_compare-C-unsupported-manual.json",
+      "sha256": "69b4b7f82d2ca6c7dbc1127972de6f3db1795dabd29ae64af8059b601f9c5807",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-A-A-auto.json",
+      "sha256": "f99d552b95bf1d050fdc8ab6469332286040c542a51c05a6a7a5aa2ed40e85a4",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-A-A-manual.json",
+      "sha256": "cc25f70968c4921fd86c305eed1f3b2d2788a555ee0ef8a170c8c47ad3b5f0a8",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-A-unsupported-auto.json",
+      "sha256": "6ebaf4f212eea76c771a5a219b63d7a4866c6cee93577a69308f9c3dbb8adfa5",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-A-unsupported-manual.json",
+      "sha256": "5836d81798f76bd052e6f2339f33d884d413031ce33e57378c48e355d710ad58",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-B-B-auto.json",
+      "sha256": "88a2a6a384ba40f0e92eca830cb794a965a0bb1e6a82b57021a163686915729f",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-B-B-manual.json",
+      "sha256": "e2b7d7b42d269ee6526396d2b47f259715c99667b451f2e8434f360aafa1280d",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-B-unsupported-auto.json",
+      "sha256": "d887c0f735729f299d50ffc82ac64dde2fce2d3b4b1ab70bb286910b4da36d93",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-B-unsupported-manual.json",
+      "sha256": "12dc8b94212cfa3a836c5583f0ace879e7bb973fd0d0a8e6267d6be680e06709",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-C-C-auto.json",
+      "sha256": "2644ee56f8fa3711043046998399ae15c948e902a5ff17ee4e47b4ba4bdaa8ca",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-C-C-manual.json",
+      "sha256": "a613817bfe757704d03f308e567a50486abfd454ea3dec2c8378473bad97e2ce",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-C-unsupported-auto.json",
+      "sha256": "b1d453b44d1d16c8424a0bcf0b3798dffd48b377f0be0fdd9e5ac7754121cc3f",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/after_first-C-unsupported-manual.json",
+      "sha256": "6528ba2d9694e1c8e7276abb6d18cfec75c7ef688d4711b9551229f813ab598f",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/initial-none-unsupported-auto.json",
+      "sha256": "baa0b18845f5d6a4a610f2e9cdd5ab4e1632aa989b2de3c0c97197c9fc944747",
+      "kind": "mentor"
+    },
+    {
+      "path": "mentor/initial-none-unsupported-manual.json",
+      "sha256": "520baf2459faafc7f68d6b4700a1c9b73836cf6ebf039125781e923881511409",
+      "kind": "mentor"
+    },
+    {
+      "path": "seed/scenario.json",
+      "sha256": "25726c11546b419f1407fde1e151d80e4ff324e3975eb06928f75743537ea41c",
+      "kind": "seed"
+    },
+    {
+      "path": "student/after_compare-A-unsupported.json",
+      "sha256": "f9dfc29c5ebe2652e5cca051efc45d05fa75886f5ad750006219d86c11e70cbd",
+      "kind": "student"
+    },
+    {
+      "path": "student/after_compare-B-unsupported.json",
+      "sha256": "4f37106caca0ddd89b91885c22464ba1c17fbe76a57658c14daa7f6b389844d5",
+      "kind": "student"
+    },
+    {
+      "path": "student/after_compare-C-unsupported.json",
+      "sha256": "f1a02f8075b883a8238339467456dfe27b3cf66d35d3332372606f8e3a260f43",
+      "kind": "student"
+    },
+    {
+      "path": "student/after_first-A-common.json",
+      "sha256": "20036cf46ab7d66f580e0989800685cba13ab2315c77f9ec6fa057a501cd6ec5",
+      "kind": "student"
+    },
+    {
+      "path": "student/after_first-A-unsupported.json",
+      "sha256": "ed2a42c3564b183e31ed90c925ece4f9f76735830536dbc89dcad2f5aa7340b9",
+      "kind": "student"
+    },
+    {
+      "path": "student/after_first-B-common.json",
+      "sha256": "df9585e765eebe5a7248f6c4086c3adff9d5d3cafb22f7c936d7f92be04b9314",
+      "kind": "student"
+    },
+    {
+      "path": "student/after_first-B-unsupported.json",
+      "sha256": "71f3ccdc71145a1734a4e55d66406c2e1e4b3d01d9d2f8dccb1b803d93160659",
+      "kind": "student"
+    },
+    {
+      "path": "student/after_first-C-common.json",
+      "sha256": "14e2978f25b4d124b0c1821aad7fc63b71251bb5190f5880c267d06daa3a213c",
+      "kind": "student"
+    },
+    {
+      "path": "student/after_first-C-unsupported.json",
+      "sha256": "29aa7d4c88b1a37c8be30a386c53a3816da8cbb9776222cfa7a3427c1e993025",
+      "kind": "student"
+    },
+    {
+      "path": "student/initial-A-A.json",
+      "sha256": "94f9ed77e61699d9922e4f3d9e73769c41a771ed3ce4b8ea932f1ee9e42e4b7c",
+      "kind": "student"
+    },
+    {
+      "path": "student/initial-B-B.json",
+      "sha256": "6f44eeb323c6fcbb31b8c7633db3dfa6077151667b1c5018531eb80f53fc339b",
+      "kind": "student"
+    },
+    {
+      "path": "student/initial-C-C.json",
+      "sha256": "69c6f0dde149f7edf1a02dcfd9e76b7d6658b0798d6d8f61ab0c5c5dad105129",
+      "kind": "student"
+    },
+    {
+      "path": "student/initial-none-unsupported.json",
+      "sha256": "8424fcda1ebaa83acca5e7dd9558e3561f4a67d9799c3d67d74eb3e9e4d91c00",
+      "kind": "student"
+    }
+  ],
+  "lookup_version": 1,
+  "responses": {
+    "analysis_failed/analysis/after_compare/B/common/none/merge": "failure/analysis-merge-analysis_failed.json",
+    "analysis_failed/analysis/after_compare/B/common/none/single": "failure/analysis-single-analysis_failed.json",
+    "analysis_partial/analysis/after_compare/B/common/none/chunk": "failure/analysis-chunk-analysis_partial.json",
+    "analysis_partial/analysis/after_compare/B/common/none/single": "failure/analysis-single-analysis_partial.json",
+    "empty_response/mentor/after_first/B/B/auto/none": "failure/mentor-empty_response.json",
+    "empty_response/student/initial/B/B/none/none": "failure/student-empty_response.json",
+    "interrupted_after_delta/student/initial/B/B/none/none": "failure/student-interrupted_after_delta.json",
+    "invalid_json/analysis/after_compare/B/common/none/single": "failure/analysis-single-invalid_json.json",
+    "invalid_json/mentor/after_first/B/B/auto/none": "failure/mentor-invalid_json.json",
+    "invalid_output/analysis/after_compare/B/common/none/single": "failure/analysis-single-invalid_output.json",
+    "invalid_output/mentor/after_first/B/B/auto/none": "failure/mentor-invalid_output.json",
+    "invalid_reference/analysis/after_compare/B/common/none/single": "failure/analysis-single-invalid_reference.json",
+    "invalid_reference/mentor/after_first/B/B/auto/none": "failure/mentor-invalid_reference.json",
+    "normal/analysis/after_compare/A/common/none/chunk": "analysis/after_compare-A-common-chunk.json",
+    "normal/analysis/after_compare/A/common/none/merge": "analysis/after_compare-A-common-merge.json",
+    "normal/analysis/after_compare/A/common/none/single": "analysis/after_compare-A-common-single.json",
+    "normal/analysis/after_compare/B/common/none/chunk": "analysis/after_compare-B-common-chunk.json",
+    "normal/analysis/after_compare/B/common/none/merge": "analysis/after_compare-B-common-merge.json",
+    "normal/analysis/after_compare/B/common/none/single": "analysis/after_compare-B-common-single.json",
+    "normal/analysis/after_compare/C/common/none/chunk": "analysis/after_compare-C-common-chunk.json",
+    "normal/analysis/after_compare/C/common/none/merge": "analysis/after_compare-C-common-merge.json",
+    "normal/analysis/after_compare/C/common/none/single": "analysis/after_compare-C-common-single.json",
+    "normal/analysis/after_first/A/A/none/chunk": "analysis/after_first-A-A-chunk.json",
+    "normal/analysis/after_first/A/A/none/merge": "analysis/after_first-A-A-merge.json",
+    "normal/analysis/after_first/A/A/none/single": "analysis/after_first-A-A-single.json",
+    "normal/analysis/after_first/B/B/none/chunk": "analysis/after_first-B-B-chunk.json",
+    "normal/analysis/after_first/B/B/none/merge": "analysis/after_first-B-B-merge.json",
+    "normal/analysis/after_first/B/B/none/single": "analysis/after_first-B-B-single.json",
+    "normal/analysis/after_first/C/C/none/chunk": "analysis/after_first-C-C-chunk.json",
+    "normal/analysis/after_first/C/C/none/merge": "analysis/after_first-C-C-merge.json",
+    "normal/analysis/after_first/C/C/none/single": "analysis/after_first-C-C-single.json",
+    "normal/analysis/initial/none/unsupported/none/chunk": "analysis/initial-none-unsupported-chunk.json",
+    "normal/analysis/initial/none/unsupported/none/merge": "analysis/initial-none-unsupported-merge.json",
+    "normal/analysis/initial/none/unsupported/none/single": "analysis/initial-none-unsupported-single.json",
+    "normal/mentor/after_compare/A/common/auto/none": "mentor/after_compare-A-common-auto.json",
+    "normal/mentor/after_compare/A/common/manual/none": "mentor/after_compare-A-common-manual.json",
+    "normal/mentor/after_compare/A/unsupported/auto/none": "mentor/after_compare-A-unsupported-auto.json",
+    "normal/mentor/after_compare/A/unsupported/manual/none": "mentor/after_compare-A-unsupported-manual.json",
+    "normal/mentor/after_compare/B/common/auto/none": "mentor/after_compare-B-common-auto.json",
+    "normal/mentor/after_compare/B/common/manual/none": "mentor/after_compare-B-common-manual.json",
+    "normal/mentor/after_compare/B/unsupported/auto/none": "mentor/after_compare-B-unsupported-auto.json",
+    "normal/mentor/after_compare/B/unsupported/manual/none": "mentor/after_compare-B-unsupported-manual.json",
+    "normal/mentor/after_compare/C/common/auto/none": "mentor/after_compare-C-common-auto.json",
+    "normal/mentor/after_compare/C/common/manual/none": "mentor/after_compare-C-common-manual.json",
+    "normal/mentor/after_compare/C/unsupported/auto/none": "mentor/after_compare-C-unsupported-auto.json",
+    "normal/mentor/after_compare/C/unsupported/manual/none": "mentor/after_compare-C-unsupported-manual.json",
+    "normal/mentor/after_first/A/A/auto/none": "mentor/after_first-A-A-auto.json",
+    "normal/mentor/after_first/A/A/manual/none": "mentor/after_first-A-A-manual.json",
+    "normal/mentor/after_first/A/unsupported/auto/none": "mentor/after_first-A-unsupported-auto.json",
+    "normal/mentor/after_first/A/unsupported/manual/none": "mentor/after_first-A-unsupported-manual.json",
+    "normal/mentor/after_first/B/B/auto/none": "mentor/after_first-B-B-auto.json",
+    "normal/mentor/after_first/B/B/manual/none": "mentor/after_first-B-B-manual.json",
+    "normal/mentor/after_first/B/unsupported/auto/none": "mentor/after_first-B-unsupported-auto.json",
+    "normal/mentor/after_first/B/unsupported/manual/none": "mentor/after_first-B-unsupported-manual.json",
+    "normal/mentor/after_first/C/C/auto/none": "mentor/after_first-C-C-auto.json",
+    "normal/mentor/after_first/C/C/manual/none": "mentor/after_first-C-C-manual.json",
+    "normal/mentor/after_first/C/unsupported/auto/none": "mentor/after_first-C-unsupported-auto.json",
+    "normal/mentor/after_first/C/unsupported/manual/none": "mentor/after_first-C-unsupported-manual.json",
+    "normal/mentor/initial/none/unsupported/auto/none": "mentor/initial-none-unsupported-auto.json",
+    "normal/mentor/initial/none/unsupported/manual/none": "mentor/initial-none-unsupported-manual.json",
+    "normal/student/after_compare/A/unsupported/none/none": "student/after_compare-A-unsupported.json",
+    "normal/student/after_compare/B/unsupported/none/none": "student/after_compare-B-unsupported.json",
+    "normal/student/after_compare/C/unsupported/none/none": "student/after_compare-C-unsupported.json",
+    "normal/student/after_first/A/common/none/none": "student/after_first-A-common.json",
+    "normal/student/after_first/A/unsupported/none/none": "student/after_first-A-unsupported.json",
+    "normal/student/after_first/B/common/none/none": "student/after_first-B-common.json",
+    "normal/student/after_first/B/unsupported/none/none": "student/after_first-B-unsupported.json",
+    "normal/student/after_first/C/common/none/none": "student/after_first-C-common.json",
+    "normal/student/after_first/C/unsupported/none/none": "student/after_first-C-unsupported.json",
+    "normal/student/initial/A/A/none/none": "student/initial-A-A.json",
+    "normal/student/initial/B/B/none/none": "student/initial-B-B.json",
+    "normal/student/initial/C/C/none/none": "student/initial-C-C.json",
+    "normal/student/initial/none/unsupported/none/none": "student/initial-none-unsupported.json",
+    "refused/mentor/after_first/B/B/auto/none": "failure/mentor-refused.json",
+    "refused/student/initial/B/B/none/none": "failure/student-refused.json",
+    "timeout_connect/analysis/after_compare/B/common/none/single": "failure/analysis-single-timeout_connect.json",
+    "timeout_connect/student/initial/B/B/none/none": "failure/student-timeout_connect.json",
+    "timeout_first_output/student/initial/B/B/none/none": "failure/student-timeout_first_output.json",
+    "timeout_total/mentor/after_first/B/B/auto/none": "failure/mentor-timeout_total.json",
+    "timeout_total/student/initial/B/B/none/none": "failure/student-timeout_total.json",
+    "transient/analysis/after_compare/B/common/none/single": "failure/analysis-single-transient.json",
+    "transient/mentor/after_first/B/B/auto/none": "failure/mentor-transient.json",
+    "transient/student/initial/B/B/none/none": "failure/student-transient.json"
+  },
+  "seed_provenance": {
+    "source": "synthetic",
+    "generator": "src/demo/seed.py",
+    "content_version": "d0-02-v1"
+  }
+}

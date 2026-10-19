@@ -1,0 +1,15 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "invalid_output/mentor/after_first/B/B/auto/none",
+  "role": "mentor",
+  "content_state": "after_first",
+  "branch": "B",
+  "input_kind": "B",
+  "trigger": "auto",
+  "analysis_phase": "none",
+  "terminal": "error",
+  "error_code": "invalid_output",
+  "text": null,
+  "structured": null,
+  "partial_text": null
+}

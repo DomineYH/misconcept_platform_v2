@@ -1,0 +1,15 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/student/initial/A/A/none/none",
+  "role": "student",
+  "content_state": "initial",
+  "branch": "A",
+  "input_kind": "A",
+  "trigger": null,
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": "8이 4보다 크니까 1/8 조각도 더 클 것 같아요.",
+  "structured": null,
+  "partial_text": null
+}

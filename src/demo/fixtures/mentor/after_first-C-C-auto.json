@@ -1,0 +1,19 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/mentor/after_first/C/C/auto/none",
+  "role": "mentor",
+  "content_state": "after_first",
+  "branch": "C",
+  "input_kind": "C",
+  "trigger": "auto",
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "should_intervene": true,
+    "feedback": "학생봇이 전체 조각 수와 한 조각의 크기를 연결해 생각하고 있습니다. 두 종이띠의 전체 크기가 같다는 조건을 유지하며 한 조각을 겹쳐 비교하게 해 보세요.",
+    "reason_summary": "조각 수와 한 조각 크기를 연결하는 주장이 있어 직접 비교를 제안한다."
+  },
+  "partial_text": null
+}

@@ -3,6 +3,7 @@
 import unicodedata
 from copy import deepcopy
 from datetime import date
+from typing import Literal
 
 from src.i18n import translate
 from src.services import anthropic_capabilities, google_capabilities
@@ -257,7 +258,9 @@ def demo_capabilities(model_id, language):
     )
 
 
-def validate_model_and_options(provider, model_id, options, *, app_mode):
+def validate_model_and_options(
+    provider, model_id, options, *, app_mode: Literal["normal", "demo"]
+):
     # Demo rows never run in normal and external models never run in demo.
     if (provider == "demo") != (app_mode == "demo"):
         raise ValueError("configuration_unavailable")

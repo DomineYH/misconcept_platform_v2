@@ -1,5 +1,7 @@
 """Public model/settings views and revision-aware role availability."""
 
+from typing import Literal
+
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -99,7 +101,9 @@ def connection_impact(
     return impact
 
 
-def public_model(model, connection, language="ko", *, app_mode):
+def public_model(
+    model, connection, language="ko", *, app_mode: Literal["normal", "demo"]
+):
     definition = capabilities(connection.provider, model.model_id, language)
     if definition:
         definition["metadata_conflict"] = metadata_conflict(
@@ -130,7 +134,9 @@ def public_model(model, connection, language="ko", *, app_mode):
     )
 
 
-async def configuration_state(db, connections, language="ko", *, app_mode):
+async def configuration_state(
+    db, connections, language="ko", *, app_mode: Literal["normal", "demo"]
+):
     by_id = {c.id: c for c in connections.values()}
     models = (
         await db.scalars(select(ModelConfig).order_by(ModelConfig.id))

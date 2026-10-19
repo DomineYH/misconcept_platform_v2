@@ -1,12 +1,16 @@
 """Authorize frozen role selections against current S1 registrations."""
 
+from typing import Literal
+
 from src.models import ModelConfig, ProviderConnection
 from src.services.invocation_types import InvocationError
 from src.services.model_capabilities import validate_model_and_options
 from src.services.model_verification import model_available
 
 
-async def resolve_frozen_model(db, selection, role, *, app_mode):
+async def resolve_frozen_model(
+    db, selection, role, *, app_mode: Literal["normal", "demo"]
+):
     """Current registration/role authorization using the saved effective options."""
     model = (
         await db.get(ModelConfig, selection.model_config_id)

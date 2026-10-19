@@ -2,6 +2,7 @@
 
 import inspect
 from types import SimpleNamespace
+from typing import Literal
 
 import pytest
 from pydantic import ValidationError
@@ -163,6 +164,7 @@ def test_app_mode_is_required_keyword_only_without_default(function):
     parameter = inspect.signature(function).parameters["app_mode"]
     assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
     assert parameter.default is inspect.Parameter.empty
+    assert parameter.annotation == Literal["normal", "demo"]
 
 
 def test_missing_app_mode_raises_type_error():
@@ -365,7 +367,16 @@ def test_evidence_tuple_mismatch_is_stale_version_mismatch(role, change):
         state = effective_roles(model, connection, app_mode="demo")[role]
         assert state["status"] == "stale"
         assert not model_available(model, connection, role, app_mode="demo")
-    assert state["error_code"] == "VERSION_MISMATCH"
+        assert state["error_code"] == "VERSION_MISMATCH"
+
+
+def test_disabled_connection_with_matching_tuple_is_not_version_mismatch():
+    states = effective_roles(
+        demo_model(), demo_connection(enabled=False), app_mode="demo"
+    )
+    for role in ROLES:
+        assert states[role]["status"] == "stale"
+        assert "error_code" not in states[role]
 
 
 @pytest.mark.parametrize(

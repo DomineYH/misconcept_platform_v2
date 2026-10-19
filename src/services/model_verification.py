@@ -57,7 +57,7 @@ class RoleVerification(BaseModel):
     ) = None
 
 
-def connection_ready(connection, *, app_mode):
+def connection_ready(connection, *, app_mode: Literal["normal", "demo"]):
     if (connection.provider == "demo") != (
         app_mode == "demo"
     ) or not connection.enabled:
@@ -72,7 +72,7 @@ def connection_ready(connection, *, app_mode):
         return False
 
 
-def effective_roles(model, connection, *, app_mode):
+def effective_roles(model, connection, *, app_mode: Literal["normal", "demo"]):
     definition = capabilities(connection.provider, model.model_id)
     ready = connection_ready(connection, app_mode=app_mode)
     demo = connection.provider == "demo"
@@ -85,9 +85,8 @@ def effective_roles(model, connection, *, app_mode):
         except (ValidationError, AttributeError):
             states[role] = {"status": "unverified"}
             continue
-        if state.status != "unverified" and (
-            not ready
-            or definition is None
+        mismatch = (
+            definition is None
             or model.capability_definition_version
             != definition["definition_version"]
             or state.credential_revision != connection.credential_revision
@@ -102,15 +101,24 @@ def effective_roles(model, connection, *, app_mode):
                 or state.connection_version != 1
                 or state.probe_request_id is not None
             )
-        ):
+        )
+        if state.status != "unverified" and (not ready or mismatch):
             state.status = "stale"
         states[role] = state.model_dump(exclude_none=True)
-        if demo and ready and state.status == "stale":
+        # Readiness (enabled/mode) does not decide the tuple classification.
+        if demo and state.status == "stale" and mismatch:
             states[role]["error_code"] = "VERSION_MISMATCH"
     return states
 
 
-def model_available(model, connection, role, options=None, *, app_mode):
+def model_available(
+    model,
+    connection,
+    role,
+    options=None,
+    *,
+    app_mode: Literal["normal", "demo"],
+):
     if (
         not model.enabled
         or metadata_conflict(model.model_id, connection)

@@ -2309,3 +2309,75 @@ async def test_start_failure_settled_before_reserve_returns_recorded_receipt(
                 asyncio.gather(caller, return_exceptions=True), 10
             )
         h.visitors.reserve_start = reserve
+
+
+async def test_expiry_discards_facts_without_state_poll(harness):
+    import gc
+    import weakref
+
+    from src.demo.session import _tour_cache
+
+    h = harness
+    response = await start(h, "teacher")
+    assert response.status_code == 201
+    scope = response.json()["browser_scope_id"]
+    visitor = h.visitors.verified("A")
+    generation = weakref.ref(h.visitors.records["A"].ref)
+    assert any(
+        facts.browser_scope_id == scope for facts in _tour_cache.values()
+    )
+
+    h.visitors.clock.elapsed = h.visitors.settings.idle_ttl_seconds
+    await h.visitors.cleanup_tick()
+    assert h.visitors.records["A"].state == "expired"
+
+    h.visitors.clock.elapsed = h.visitors.settings.absolute_ttl_seconds
+    await h.visitors.cleanup_tick()
+    assert visitor.visitor_id not in h.visitors._states
+    assert h.visitors.reserved_visitors == 0
+    gc.collect()
+    assert generation() is None
+    assert not any(
+        facts.browser_scope_id == scope for facts in _tour_cache.values()
+    )
+
+
+async def test_expired_generation_cannot_read_retained_facts(harness):
+    from src.demo.session import capture_tour_facts
+
+    h = harness
+    assert (await start(h, "teacher")).status_code == 201
+    request = SimpleNamespace(url=SimpleNamespace(path="/demo/state"))
+    ctx = await h.security.context(request, "A", 1, 1)
+    await h.request_db.release_request_db(ctx)
+    h.visitors.clock.elapsed = h.visitors.settings.idle_ttl_seconds
+    await h.visitors.cleanup_tick()
+    assert ctx.lease._ref.factory.retired
+    async with h.visitors.transition(ctx.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+            await capture_tour_facts(ctx, handle, h.session.tour_content)
+
+
+async def test_expiry_between_context_check_and_facts_lookup_is_canonical(
+    harness,
+):
+    from src.demo.session import capture_tour_facts
+
+    h = harness
+    assert (await start(h, "teacher")).status_code == 201
+    request = SimpleNamespace(url=SimpleNamespace(path="/demo/state"))
+    ctx = await h.security.context(request, "A", 1, 1)
+    try:
+        async with h.visitors.transition(ctx.verified_visitor) as handle:
+            check = handle.check
+
+            def check_then_expire(context):
+                snapshot = check(context)
+                h.visitors.clock.elapsed = h.visitors.settings.idle_ttl_seconds
+                return snapshot
+
+            handle.check = check_then_expire
+            with pytest.raises(DemoError, match="DEMO_EXPIRED"):
+                await capture_tour_facts(ctx, handle, h.session.tour_content)
+    finally:
+        await h.request_db.release_request_db(ctx)

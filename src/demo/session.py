@@ -10,12 +10,13 @@ from datetime import timezone
 from typing import Annotated, Literal, Protocol
 from urllib.parse import urlencode
 from uuid import UUID
+from weakref import WeakKeyDictionary
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from src.demo.database import DemoError
+from src.demo.database import DemoError, GenerationRef
 from src.demo.visitors import (
     ControlContext,
     DemoContext,
@@ -293,7 +294,8 @@ def replay_result(stored: VisitorReceipt) -> ControlResult:
     )
 
 
-_tour_cache: dict[tuple[str, int], TourFacts] = {}
+# Follow #191's generation lifetime, including receipt retention.
+_tour_cache: WeakKeyDictionary[GenerationRef, TourFacts] = WeakKeyDictionary()
 _MILESTONES = (
     "teacher_entered",
     "scenario_created",
@@ -313,11 +315,11 @@ def empty_tour_facts(snapshot: VisitorSnapshot) -> TourFacts:
 
 
 def discard_tour_facts(handle: TransitionHandle) -> None:
-    """#191 expiry and #193 reset call this under the existing handle."""
+    """Discard a visit's facts under its existing transition handle."""
     scope = handle.snapshot().browser_scope_id
-    for key in tuple(_tour_cache):
-        if key[0] == scope:
-            del _tour_cache[key]
+    for ref, facts in tuple(_tour_cache.items()):
+        if facts.browser_scope_id == scope:
+            del _tour_cache[ref]
 
 
 def retain_tour_facts(handle: TransitionHandle, facts: TourFacts) -> TourFacts:
@@ -331,7 +333,9 @@ def retain_tour_facts(handle: TransitionHandle, facts: TourFacts) -> TourFacts:
         raise DemoError("STALE_GENERATION")
     if facts.auth_epoch != snapshot.auth_epoch:
         raise DemoError("STALE_ROLE")
-    key = (facts.browser_scope_id, facts.generation)
+    key = snapshot.ref
+    if key is None:
+        raise DemoError("CONFIGURATION_INVALID")
     previous = _tour_cache.get(key, empty_tour_facts(snapshot))
     if (
         previous.journey_session_id is not None
@@ -354,8 +358,7 @@ def retain_tour_facts(handle: TransitionHandle, facts: TourFacts) -> TourFacts:
 def remember_teacher_entry(handle: TransitionHandle) -> None:
     snapshot = handle.snapshot()
     if snapshot.role == "teacher":
-        key = (snapshot.browser_scope_id, snapshot.generation)
-        previous = _tour_cache.get(key, empty_tour_facts(snapshot))
+        previous = _tour_cache.get(snapshot.ref, empty_tour_facts(snapshot))
         retain_tour_facts(
             handle,
             previous.model_copy(
@@ -385,8 +388,10 @@ async def capture_tour_facts(
     """
     handle.check(ctx)
     snapshot = handle.snapshot()
-    key = (snapshot.browser_scope_id, snapshot.generation)
-    facts = _tour_cache.get(key, empty_tour_facts(snapshot)).model_copy(
+    public_state(snapshot)
+    facts = _tour_cache.get(
+        snapshot.ref, empty_tour_facts(snapshot)
+    ).model_copy(
         update={"auth_epoch": snapshot.auth_epoch},
     )
     refs = content.seed_refs

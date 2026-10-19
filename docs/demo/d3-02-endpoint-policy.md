@@ -1,6 +1,6 @@
 # D3-02 관리자 endpoint demo 정책 대응표 (#200)
 
-상태: PR1(CSV·삭제)·PR2(위험 endpoint guard)는 구현, PR3(허용 CRUD quota)는 구현(사용자 단건 생성·업로드 읽는 도중 차단·지원 표시 context는 결정 대기, §2.6). 이 문서는 정책의 대응표이며 구현 증거(`d3-02-guards-evidence.md`)는 PR4에서 따로 쓴다.
+상태: PR1(CSV·삭제)·PR2(위험 endpoint guard)는 구현, PR3(허용 CRUD quota)는 구현. 추가 표시 key는 없다: #199는 오류 envelope의 recovery key만 표시한다(coordinator 결정, 2026-10-20). 이 문서는 정책의 대응표이며 구현 증거(`d3-02-guards-evidence.md`)는 PR4에서 따로 쓴다.
 
 ## 1. 목적과 규칙
 
@@ -119,10 +119,10 @@
 | method | path | 행위 | 허용 역할(demo) | demo 정책 | 결과/오류 | 구현 위치 | 단계 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/admin/users` | 계정 목록 | 관리자 | READ | 200 | `admin_users.py:list_users` | PR3 |
-| POST | `/admin/users` | 계정 생성 | 관리자 | CRUD. `DEMO_MAX_USERS` | 201 / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:create_user` | 결정 대기(`admin_users.py`가 S3 쓰기 범위 밖) |
+| POST | `/admin/users` | 계정 생성 | 관리자 | CRUD. `DEMO_MAX_USERS` | 201 / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:create_user` | PR3 |
 | POST | `/admin/users/{user_id}/update` | 계정 수정 | 관리자 | CRUD. 기존 중복·권한 검사 유지 | 기존 응답 | `admin_users.py:update_user` | PR3 |
 | GET | `/admin/users/bulk/template` | bulk 템플릿 | 관리자 | 기존 parser/필드 재사용 | 200 CSV | `admin_users.py:download_bulk_template` | PR3 |
-| POST | `/admin/users/bulk/preview` | bulk 미리보기 | 관리자 | 바이트 `DEMO_MAX_UPLOAD_BYTES` 초과 413(현재는 route가 파일을 다 읽은 뒤 `parse_csv`에서 검사; 읽는 도중 차단은 `admin_users.py` 변경 필요, 결정 대기). rows > min(`DEMO_MAX_UPLOAD_ROWS`, 남은 user 수)이면 429 | 200 / 413 `DEMO_UPLOAD_TOO_LARGE` / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:preview_bulk_upload`, `src/services/admin_user_bulk.py` | PR3 |
+| POST | `/admin/users/bulk/preview` | bulk 미리보기 | 관리자 | route가 upload를 64 KiB 단위로 읽다가 `DEMO_MAX_UPLOAD_BYTES`를 넘는 순간 413으로 멈춘다(normal은 같은 bytes를 같은 결과로 읽는다). Starlette multipart 해석이 handler 전에 part를 임시 파일에 받는 점은 그대로다. rows > min(`DEMO_MAX_UPLOAD_ROWS`, 남은 user 수)이면 429 | 200 / 413 `DEMO_UPLOAD_TOO_LARGE` / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:preview_bulk_upload`, `src/services/admin_user_bulk.py` | PR3 |
 | POST | `/admin/users/bulk/register` | bulk 등록 | 관리자 | 최종 transaction에서 같은 min 재검사(count+insert 한 transaction). 초과 요청은 행 등록 없이 전체 429 | 200 / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:register_bulk_users_endpoint`, `src/services/admin_user_bulk.py` | PR3 |
 | GET | `/admin/groups` | 그룹 목록 | 관리자 | READ | 200 | `admin_groups.py:list_groups` | PR3 |
 | POST | `/admin/groups` | 그룹 생성 | 관리자 | CRUD. `DEMO_MAX_GROUPS` | 201 / 429 `DEMO_LIMIT_REACHED` | `admin_groups.py:create_group` | PR3 |

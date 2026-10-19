@@ -123,6 +123,58 @@ async def test_demo_reauthenticate_fails_closed_before_limiter_and_password(
     assert caught.value.status_code == 403
 
 
+@pytest.mark.parametrize("mode", ["demo", "normal"])
+async def test_bulk_preview_reads_the_upload_in_bounded_chunks(
+    mode, monkeypatch
+):
+    """§8: demo stops reading past the limit; normal gets the same bytes."""
+    from src.api.routes import admin_users
+    from src.services import admin_user_bulk
+
+    limit = 3 * admin_users.UPLOAD_CHUNK
+    monkeypatch.setattr(
+        admin_users,
+        "config",
+        SimpleNamespace(APP_MODE=mode, DEMO_MAX_UPLOAD_BYTES=limit),
+    )
+    header = b"username,nickname\n"
+    chunks = [header] + [b"x" * admin_users.UPLOAD_CHUNK] * 5
+    reads = []
+
+    class Upload:
+        async def read(self, size):
+            assert size == admin_users.UPLOAD_CHUNK
+            reads.append(size)
+            return chunks.pop(0) if chunks else b""
+
+    parsed = []
+    monkeypatch.setattr(
+        admin_user_bulk, "parse_csv", lambda content, _: parsed.append(content)
+    )
+
+    async def validated(rows, db, language):
+        return "validated"
+
+    monkeypatch.setattr(admin_user_bulk, "validate_bulk_users", validated)
+    request = SimpleNamespace(state=SimpleNamespace(), cookies={}, headers={})
+    monkeypatch.setattr(admin_users, "display_language", lambda request: "ko")
+    if mode == "demo":
+        with pytest.raises(DemoError) as caught:
+            await admin_users.preview_bulk_upload(
+                Upload(), object(), None, request
+            )
+        assert caught.value.code == "DEMO_UPLOAD_TOO_LARGE"
+        assert len(reads) == 4 and len(chunks) == 2 and parsed == []
+    else:
+        assert (
+            await admin_users.preview_bulk_upload(
+                Upload(), object(), None, request
+            )
+            == "validated"
+        )
+        assert parsed == [header + b"x" * 5 * admin_users.UPLOAD_CHUNK]
+
+
 async def test_demo_read_only_guard_passes_the_admin_in_normal_mode():
     from src.api.routes import admin_providers
     from src.config import config
@@ -867,8 +919,19 @@ async def case_quota(tmp):
         assert response.status_code == 422, response.text
         assert "common_model_required" in response.text
 
-        # Bulk: bytes 413, rows above min(upload rows, users left) 429.
-        users_left = config.DEMO_MAX_USERS - 2
+        # Users: one single create, then bulk bytes 413 and rows above
+        # min(upload rows, users left) 429; a full space refuses both paths.
+        person = {"username": "visitor_one", "nickname": "One"}
+        response = await call(
+            client,
+            state,
+            "POST",
+            "/admin/users",
+            {**person, "password": "fictional-pass"},
+        )
+        assert response.status_code == 201, response.text
+        seeded = 3
+        users_left = config.DEMO_MAX_USERS - seeded
         rows = min(config.DEMO_MAX_UPLOAD_ROWS, users_left)
         oversized = bulk_csv(1) + b"#" * config.DEMO_MAX_UPLOAD_BYTES
         check_error(
@@ -903,13 +966,23 @@ async def case_quota(tmp):
         )
         assert response.status_code == 200, response.text
         assert response.json()["success_count"] == rows
-        assert visitor_rows(root, "SELECT COUNT(*) FROM user") == [(2 + rows,)]
-        if 2 + rows == config.DEMO_MAX_USERS:
+        assert visitor_rows(root, "SELECT COUNT(*) FROM user") == [
+            (seeded + rows,)
+        ]
+        if seeded + rows == config.DEMO_MAX_USERS:
             check_error(
                 await upload(client, state, bulk_csv(1, start=100)),
                 429,
                 "DEMO_LIMIT_REACHED",
             )
+            response = await call(
+                client,
+                state,
+                "POST",
+                "/admin/users",
+                {**person, "username": "visitor_two", "password": "x" * 8},
+            )
+            check_error(response, 429, "DEMO_LIMIT_REACHED")
         spies.clean()
 
 

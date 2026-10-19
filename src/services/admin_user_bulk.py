@@ -66,11 +66,6 @@ def parse_csv(file_content: bytes, language="ko") -> list[dict]:
     Tries UTF-8 first, falls back to EUC-KR.
     Validates file size, required columns, and row count.
     """
-    if (
-        config.APP_MODE == "demo"
-        and len(file_content) > config.DEMO_MAX_UPLOAD_BYTES
-    ):
-        raise DemoError("UPLOAD_TOO_LARGE")
     if len(file_content) > MAX_FILE_SIZE:
         raise ValueError(translate("admin.the_file_exceeds_1mb", language))
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import hmac
+import logging
 import math
 import secrets
 import time
@@ -761,6 +762,12 @@ def demo_request_handler(handler):
             response = await request.app.exception_handlers[
                 StarletteHTTPException
             ](request, error)
+        except Exception as error:
+            # §11: unknown failures become a safe code; text may carry real paths.
+            logging.getLogger(__name__).error(
+                "Demo request failed", extra={"code": type(error).__name__}
+            )
+            response = error_response(DemoError("CONFIGURATION_INVALID"))
         finally:
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and runtime is not None:

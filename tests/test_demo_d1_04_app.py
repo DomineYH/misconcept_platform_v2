@@ -520,13 +520,38 @@ async def case_requests(tmp):
         response = await client.get("/metrics", params=namespace(state))
         assert response.status_code == 200, response.text
 
-        # The normal login policy is not a demo entry point.
-        response = await client.post(
-            "/login",
-            data={"username": "fictional-admin", "password": "x" * 12},
-            headers=headers(client),
+        # The normal login policy is not a demo entry point, visited or not.
+        for login_client in (client, stranger):
+            for path in ("/login", "/logout"):
+                response = await login_client.post(
+                    path,
+                    data={"username": "fictional-admin", "password": "x" * 12},
+                )
+                assert response.status_code == 403
+                assert code(response) == "DEMO_ACTION_FORBIDDEN"
+                assert "set-cookie" not in response.headers
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            assert (await stranger.get(path)).status_code == 404
+        from src.api.routes import (
+            admin_session_actions,
+            auth,
+            session_analysis,
+            session_messages,
+            sessions,
         )
-        assert code(response) == "DEMO_ACTION_FORBIDDEN"
+
+        # §8: shared-IP slowapi limits do not apply in demo.
+        assert not any(
+            module.limiter.enabled
+            for module in (
+                main,
+                auth,
+                sessions,
+                session_messages,
+                session_analysis,
+                admin_session_actions,
+            )
+        )
         for response_client in (client, stranger):
             assert "session_id" not in response_client.cookies
             assert "csrftoken" not in response_client.cookies
@@ -557,10 +582,14 @@ async def case_errors(tmp):
             )
         raise HTTPException(status_code=404)
 
-    route = app.routes[-1]
-    route.app = request_response(
-        deps.demo_request_handler(route.get_route_handler())
-    )
+    @app.get("/probe-crash")
+    async def probe_crash(user=Depends(deps.get_current_user)):
+        raise RuntimeError(os.environ["DEMO_DATA_ROOT"])
+
+    for route in app.routes[-2:]:
+        route.app = request_response(
+            deps.demo_request_handler(route.get_route_handler())
+        )
     html = {"accept": "text/html"}
     async with app.router.lifespan_context(app):
         stranger = client_for(app, "10.0.0.9")
@@ -594,6 +623,13 @@ async def case_errors(tmp):
         assert response.status_code == 404
         assert "nav-username" not in response.text
         assert "Traceback" not in response.text
+        # §11: unknown failures are a safe envelope without exception text.
+        client = client_for(app, "10.0.0.2")
+        state = await start(client, "admin")
+        response = await client.get("/probe-crash", params=namespace(state))
+        assert response.status_code == 503
+        assert code(response) == "DEMO_CONFIGURATION_INVALID"
+        assert os.environ["DEMO_DATA_ROOT"] not in response.text
     assert global_db == []
 
 

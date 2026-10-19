@@ -65,7 +65,7 @@ logger.setLevel(getattr(logging, log_level, logging.INFO))
 # Initialize rate limiter (disabled in test mode)
 limiter = Limiter(
     key_func=get_remote_address,
-    enabled=not config.TESTING,
+    enabled=not config.TESTING and config.APP_MODE == "normal",
 )
 
 
@@ -260,12 +260,16 @@ async def demo_lifespan(app: FastAPI):
             tour_content=tour_content,
             drain_seconds=settings.drain_seconds,
         )
-    except Exception as error:
+    except BaseException as error:
         if root is not None:
             root.close()
+        if not isinstance(error, Exception):
+            raise
         # Chained OS errors would print the real root path in startup logs.
         raise DemoError(
-            getattr(error, "code", "CONFIGURATION_INVALID")
+            error.code
+            if isinstance(error, DemoError)
+            else "CONFIGURATION_INVALID"
         ) from None
     app.state.demo_request_db = request_db
     app.state.demo_session = session
@@ -279,9 +283,11 @@ async def demo_lifespan(app: FastAPI):
         try:
             app.state.demo_cleanup.cancel()
             await asyncio.gather(app.state.demo_cleanup, return_exceptions=True)
-            await session.shutdown()
-            # Each retired scope drains for at most DEMO_DRAIN_SECONDS.
-            result = await visitors.shutdown()
+            try:
+                await session.shutdown()
+            finally:
+                # Each retired scope drains for at most DEMO_DRAIN_SECONDS.
+                result = await visitors.shutdown()
             logger.info(
                 "Demo shutdown",
                 extra={
@@ -332,11 +338,18 @@ async def lifespan(app: FastAPI):
 
 
 # Create FastAPI application
+# Demo serves no unwrapped API docs; every visitor response is no-store.
+docs = (
+    {}
+    if config.APP_MODE == "normal"
+    else dict(docs_url=None, redoc_url=None, openapi_url=None)
+)
 app = FastAPI(
     title="Misconception Dialogue Simulator",
     description=("Three-party dialogue simulator for teacher training"),
     version="0.1.0",
     lifespan=lifespan,
+    **docs,
 )
 
 # Add rate limiting
@@ -570,7 +583,22 @@ if config.APP_MODE == "demo":
     from fastapi.routing import APIRoute, request_response
 
     from src.api import dependencies
-    from src.api.routes import demo
+    from src.api.routes import (
+        demo,
+        session_analysis,
+        session_messages,
+    )
+    from src.api.routes.demo import error_response
+
+    # §8: shared IPs are not visitor identities; the demo boundary limits instead.
+    for module in (
+        auth,
+        sessions,
+        session_messages,
+        session_analysis,
+        admin_session_actions,
+    ):
+        module.limiter.enabled = False
 
     app.include_router(demo.router)
     app.dependency_overrides[demo.get_demo_security] = (
@@ -581,14 +609,16 @@ if config.APP_MODE == "demo":
     )
 
     async def _forbidden(request: Request) -> Response:
-        raise DemoError("ACTION_FORBIDDEN")
+        return error_response(DemoError("ACTION_FORBIDDEN"))
 
     # Every visitor route resolves its DB at this boundary; /health is visit-free.
     for route in app.routes:
-        if isinstance(route, APIRoute) and route.path != "/health":
-            handler = route.get_route_handler()
-            if route.path in ("/login", "/logout") and "POST" in route.methods:
-                handler = _forbidden
+        if not isinstance(route, APIRoute) or route.path == "/health":
+            continue
+        if route.path in ("/login", "/logout") and "POST" in route.methods:
+            # §4: refused before session, CSRF or password parsing.
+            route.app = request_response(_forbidden)
+        else:
             route.app = request_response(
-                dependencies.demo_request_handler(handler)
+                dependencies.demo_request_handler(route.get_route_handler())
             )

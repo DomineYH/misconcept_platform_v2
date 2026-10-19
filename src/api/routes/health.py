@@ -1,5 +1,6 @@
 """Health check and metrics endpoints for monitoring."""
 
+import asyncio
 import hashlib
 import logging
 import sqlite3
@@ -52,19 +53,23 @@ async def demo_health_check(request: Request) -> JSONResponse:
     try:
         visitors = request.app.state.demo_request_db.visitors
         seed = request.app.state.demo_seed
-        # Revalidates the root identity, marker and exclusive lock file.
-        visitors.root.bytes_used()
-        if (
-            hashlib.sha256(seed.manifest_path.read_bytes()).hexdigest()
-            != visitors.root.seed_manifest_sha256
-        ):
-            raise DemoError("VERSION_MISMATCH")
-        with closing(
-            sqlite3.connect(
-                seed.path.as_uri() + "?mode=ro", uri=True, timeout=1
-            )
-        ) as db:
-            db.execute("SELECT 1").fetchone()
+
+        def check_files():
+            # Revalidates the root identity, marker and exclusive lock file.
+            visitors.root.bytes_used()
+            if (
+                hashlib.sha256(seed.manifest_path.read_bytes()).hexdigest()
+                != visitors.root.seed_manifest_sha256
+            ):
+                raise DemoError("VERSION_MISMATCH")
+            with closing(
+                sqlite3.connect(
+                    seed.path.as_uri() + "?mode=ro", uri=True, timeout=1
+                )
+            ) as db:
+                db.execute("SELECT 1").fetchone()
+
+        await asyncio.to_thread(check_files)
         # The visitor cap alone keeps readiness; the cleanup hard cap does not.
         ready = (
             not request.app.state.demo_cleanup.done()

@@ -73,7 +73,9 @@ async def comparison_model(
     panel = find_panel(snapshot, panel_id)
     try:
         selection = ResolvedModelConfig.model_validate(panel["model_config"])
-        await resolve_frozen_model(db, selection, comparison.target_role)
+        await resolve_frozen_model(
+            db, selection, comparison.target_role, app_mode="normal"
+        )
     except (InvocationError, ValueError):
         raise HTTPException(
             422, detail={"code": "configuration_unavailable"}

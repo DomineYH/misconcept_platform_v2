@@ -13,6 +13,7 @@ from openai import (
     AsyncOpenAI,
 )
 
+from src.config import config
 from src.services.call_policy import CallDeadline, retry_after
 from src.services.invocation_types import (
     CallEvent,
@@ -34,7 +35,10 @@ def parameters(request):
         raise InvocationError("invalid_output")
     try:
         options = validate_model_and_options(
-            request.provider, request.model_id, request.validated_options
+            request.provider,
+            request.model_id,
+            request.validated_options,
+            app_mode=config.APP_MODE,
         )
     except ValueError:
         raise InvocationError("configuration_unavailable") from None

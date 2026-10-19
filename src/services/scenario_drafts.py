@@ -3,6 +3,7 @@
 from fastapi import HTTPException
 from sqlalchemy import delete, select, text, update
 
+from src.config import config
 from src.models import (
     ModelConfig,
     ProviderConnection,
@@ -142,6 +143,7 @@ async def save_scenario(db, data, user_id, scenario_id=None):
             connection,
             role,
             selection.options.model_dump(exclude_unset=True),
+            app_mode=config.APP_MODE,
         ):
             raise field_error(
                 f"config.{role}.resolved_model_config", "model_unavailable"

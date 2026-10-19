@@ -622,44 +622,56 @@ class DemoProvider:
             if request.role != "student":
                 raise InvocationError("INVALID_REQUEST")
             deadline = deadline or CallDeadline(timeouts, request.role)
-            async with deadline.total() if owned else nullcontext():
+            self._timeout(deadline, first=True)
+            async with (
+                asyncio.timeout_at(deadline.ends) if owned else nullcontext()
+            ):
                 envelope, _ = await self._prepare(request, secret)
-                body = (
-                    envelope["partial_text"]
-                    if envelope["terminal"] == "interrupted"
-                    else (
-                        envelope["text"]
-                        if envelope["terminal"] == "completed"
-                        else ""
-                    )
+            self._timeout(deadline, first=True)
+            body = (
+                envelope["partial_text"]
+                if envelope["terminal"] == "interrupted"
+                else (
+                    envelope["text"]
+                    if envelope["terminal"] == "completed"
+                    else ""
                 )
-                for offset in range(0, len(body or ""), 32):
-                    self._timeout(deadline, first=not received)
+            )
+            for offset in range(0, len(body or ""), 32):
+                self._timeout(deadline, first=not received)
+                async with (
+                    asyncio.timeout_at(deadline.ends)
+                    if owned
+                    else nullcontext()
+                ):
                     await asyncio.sleep(0)
-                    await self.visitors.check(request.demo_context)
                     self._timeout(deadline, first=not received)
-                    received = True
-                    yield CallEvent(
-                        "text_delta",
-                        text=body[offset : offset + 32],
-                        response_received=True,
-                    )
+                    await self.visitors.check(request.demo_context)
                 self._timeout(deadline, first=not received)
-                await self.visitors.check(request.demo_context)
-                self._timeout(deadline, first=not received)
-                terminal = CallEvent(
-                    envelope["terminal"],
-                    text=(
-                        envelope["text"]
-                        if envelope["terminal"] == "completed"
-                        else ""
-                    ),
-                    usage=empty_usage(),
-                    error_code=envelope["error_code"],
-                    response_received=received
-                    or envelope["terminal"] in ("completed", "refused"),
+                received = True
+                yield CallEvent(
+                    "text_delta",
+                    text=body[offset : offset + 32],
+                    response_received=True,
                 )
-            yield terminal
+            self._timeout(deadline, first=not received)
+            async with (
+                asyncio.timeout_at(deadline.ends) if owned else nullcontext()
+            ):
+                await self.visitors.check(request.demo_context)
+            self._timeout(deadline, first=not received)
+            yield CallEvent(
+                envelope["terminal"],
+                text=(
+                    envelope["text"]
+                    if envelope["terminal"] == "completed"
+                    else ""
+                ),
+                usage=empty_usage(),
+                error_code=envelope["error_code"],
+                response_received=received
+                or envelope["terminal"] in ("completed", "refused"),
+            )
         except asyncio.CancelledError:
             now = (
                 self.clock()

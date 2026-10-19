@@ -756,3 +756,31 @@ async def test_owned_deadline_bounds_final_await(prepared):
     assert [event.type for event in events] == ["text_delta", "error"]
     assert events[-1].error_code == "timeout_total"
     assert events[-1].response_received
+
+
+async def test_slow_consumer_receives_timeout_terminal_without_cancellation(
+    prepared,
+):
+    import asyncio
+    from contextlib import aclosing
+
+    p = prepared
+    p.configure(dict(p.envelope, text="짧은 응답"))
+    events = []
+    async with asyncio.timeout(1) as watchdog:
+        try:
+            async with aclosing(
+                p.provider.stream_text(p.request, None, {"student_total": 0.2})
+            ) as stream:
+                async for event in stream:
+                    events.append(event)
+                    if event.type == "text_delta":
+                        await asyncio.sleep(0.25)
+        except asyncio.CancelledError:
+            pytest.fail("owned stream deadline cancelled the consumer wait")
+    assert not watchdog.expired()
+    assert [(event.type, event.error_code) for event in events] == [
+        ("text_delta", None),
+        ("error", "timeout_total"),
+    ]
+    assert events[-1].response_received

@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from src.demo.database import DemoError, GenerationRef
+from src.demo.lifecycle import Lifecycle
 from src.demo.visitors import (
     ControlContext,
     DemoContext,
@@ -183,19 +184,6 @@ class TourContent(Protocol):
     def supported_snapshot(self, row: Mapping[str, object]) -> bool:
         """Validate native immutable snapshot and approved supported hash."""
         ...
-
-
-class Lifecycle(Protocol):
-    def busy_locked(self, handle: TransitionHandle, scope: object) -> bool: ...
-    def cancel_scope(self, scope: object) -> int: ...
-    async def drain(
-        self, scope: object, timeout_seconds: int
-    ) -> "DrainResult": ...
-
-
-class DrainResult(Protocol):
-    drained: bool
-    remaining: int
 
 
 class RequestDB(Protocol):
@@ -872,7 +860,7 @@ class DemoSession:
             if scope is not None:
                 self.lifecycle.cancel_scope(scope)
                 drained = await self.lifecycle.drain(scope, self.drain_seconds)
-                if not drained.drained:
+                if not drained["drained"]:
                     raise DemoError("DRAIN_TIMEOUT")
             return await self._build(op, visitor)
         except asyncio.CancelledError:

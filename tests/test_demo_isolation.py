@@ -8,6 +8,7 @@ import csv
 import io
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -324,7 +325,13 @@ async def case_isolation(tmp):
                 for page in ("/admin/users", "/admin/groups", "/metrics")
             }
             assert all(r.status_code == 200 for r in pages.values()), pages
-            html = {name: r.text for name, r in pages.items()}
+            # demo-config's sliding idle expiry moves with every request (§8).
+            html = {
+                name: re.sub(
+                    r'"expires_at": "[^"]*"', '"expires_at": ""', r.text
+                )
+                for name, r in pages.items()
+            }
             html["/metrics"] = pages["/metrics"].json()["database"]  # no uptime
             return (
                 {k: state[k] for k in sa if k != "expires_at"},

@@ -68,6 +68,9 @@ def demo_env(tmp_path, **extra):
         DEMO_CSRF_SECRET=SECRETS[1],
         SESSION_SECRET=SECRETS[2],
         PYTHONPATH=str(ROOT),
+        # The CSRF matrix makes ~45 counted requests per visitor; stay clear
+        # of the 60/min default so a slow reset clone cannot turn it into 429.
+        DEMO_REQUESTS_PER_MINUTE="600",
     )
     env.update(extra)
     return env
@@ -111,6 +114,8 @@ FORBIDDEN = {
             "GEMINI_API_KEY",
             "AZURE_OPENAI_API_KEY",
             "PROVIDER_SECRET_ENCRYPTION_KEY",
+            "PROVIDER_SECRET_ENCRYPTION_KEY_VERSION",
+            "GOOGLE_APPLICATION_CREDENTIALS",
         ),
         INJECTED,
     ),
@@ -282,9 +287,10 @@ def test_demo_lifecycle_makes_no_external_calls(tmp_path):
 
 
 @pytest.mark.skip(
-    reason="needs #200: §20 demo admin guards are not merged "
-    "(main: key/catalog/settings/comparisons 422 by body validation, "
-    "POST /admin/ai/models registers a model with 200)"
+    reason="product defect -> #200: §20 guards absent on main; demo admin "
+    "POST /admin/ai/models registers an external model (200 saved, "
+    "src/api/routes/admin_models.py:53), key/catalog/settings/comparisons "
+    "get 422 from body/reauth checks instead of 403 DEMO_ACTION_FORBIDDEN"
 )
 def test_demo_admin_dangerous_endpoints_are_forbidden(tmp_path):
     run_case("dangerous", tmp_path)
@@ -539,6 +545,7 @@ async def case_csrf(tmp):
             headers={"origin": DEMO, "x-csrf-token": "wrong"},
             **delete,
         )
+        assert response.status_code == 403
         assert code(response) == "DEMO_CSRF_INVALID"
         assert_no_cookie(response)
         users = (await a.get("/metrics", params=namespace(state))).json()
@@ -559,8 +566,9 @@ async def case_csrf(tmp):
         for path, body in (("/demo/role", role), ("/demo/reset", reset)):
             await assert_csrf_rejected(a, b, path, body, probe)
 
-        # Pre-rotation token: valid before the role change, dead after the
-        # next current-state GET rotates the revision.
+        # Pre-rotation token: valid before the role change; the role commit
+        # bumps the CSRF revision and the next current-state GET syncs the
+        # cookie (§10). The stale-token 403 loop below is the proof.
         old = a.cookies.get("demo_csrftoken")
         response = await a.post("/demo/role", json=role, headers=headers(a))
         assert response.status_code == 200, response.text
@@ -604,7 +612,8 @@ async def case_csrf(tmp):
         assert response.status_code == 200, response.text
         assert_no_cookie(response)
         response = await a.get("/demo/state", params={"bogus": "1"})
-        assert response.status_code >= 400
+        assert response.status_code == 422
+        assert code(response) == "DEMO_INVALID_REQUEST"
         assert_no_cookie(response)
         response = await a.post(
             "/demo/reset", json=later_reset, headers=headers(a)
@@ -616,7 +625,8 @@ async def case_csrf(tmp):
         response = await a.post(
             "/demo/reset", json=later_reset, headers=headers(a)
         )
-        assert response.status_code in (200, 202)
+        # §9.1: a completed reset replays its stored 200 receipt.
+        assert response.status_code == 200, response.text
         assert_no_cookie(response)
         response = await a.get("/demo/state")
         assert_demo_cookies(response)
@@ -723,7 +733,8 @@ async def case_auth(tmp):
             and code(response) == "DEMO_SESSION_REQUIRED"
         )
 
-        # A valid teacher visit is not elevated by a normal admin login cookie.
+        # A normal admin login cookie is ignored in demo (no normal session
+        # middleware there): it neither authenticates nor elevates (§10).
         teacher = client_for(app, "10.0.0.2")
         state = await start(teacher, "teacher")
         cookies = "; ".join(
@@ -750,7 +761,8 @@ async def case_auth(tmp):
             params=namespace(state),
             headers=headers(admin),
         )
-        assert response.status_code >= 400, response.text
+        # §22 keeps the existing self-delete restriction (400).
+        assert response.status_code == 400, response.text
         assert (await counts()).json()["database"]["users"] == 2
         response = await admin.post(
             "/admin/users/2/delete",
@@ -813,8 +825,7 @@ async def case_dangerous(tmp):
             )
             if (
                 response.status_code != 403
-                or response.json().get("detail", {}).get("code")
-                != "DEMO_ACTION_FORBIDDEN"
+                or code(response) != "DEMO_ACTION_FORBIDDEN"
             ):
                 failures.append(
                     (path, response.status_code, response.text[:120])

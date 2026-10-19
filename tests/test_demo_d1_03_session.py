@@ -109,6 +109,7 @@ class VisitorsDouble:
         self.calls = []
         self.limit = 256
         self.admission_error = None
+        self.child_leases = {}
 
     async def lookup(self, bootstrap):
         if bootstrap not in self.records:
@@ -283,6 +284,25 @@ class HandleDouble:
         if getattr(ctx, "released", False):
             raise self.error("STALE_GENERATION")
 
+    def retain_lease(self, lease):
+        assert self.visitors.lock.locked()
+        self.check(lease)
+        child = SimpleNamespace(
+            lease_id=uid(),
+            visitor_id=lease.visitor_id,
+            generation=lease.generation,
+            auth_epoch=lease.auth_epoch,
+            released=False,
+        )
+        self.visitors.child_leases[child.lease_id] = child
+        self.visitors.calls.append("retain_lease")
+        return child
+
+    def release_lease(self, lease):
+        assert self.visitors.lock.locked()
+        if self.visitors.child_leases.pop(lease.lease_id, None) is not None:
+            lease.released = True
+
     def record(self, operation, command, result, status):
         record = self.visit
         self.replay(command.request_id, operation, command.model_dump())
@@ -391,11 +411,44 @@ class LifecycleDouble:
         self.busy = False
         self.remaining = 0
         self.scopes = []
+        self.tokens = {}
+        self.registration_attempted = asyncio.Event()
+        self.registered = asyncio.Event()
+        self.registration_continue = asyncio.Event()
+        self.registration_continue.set()
+
+    async def register(self, ctx, kind, resource_id, control):
+        self.registration_attempted.set()
+        async with self.visitors.transition(ctx.verified_visitor) as handle:
+            handle.check(ctx)
+            key = ((ctx.visitor_id, ctx.generation), kind, resource_id)
+            if key in self.tokens:
+                raise handle.error("BUSY")
+            child = handle.retain_lease(ctx.lease)
+            token = SimpleNamespace(
+                token_id=uid(),
+                key=key,
+                captured_auth_epoch=ctx.auth_epoch,
+                task_control=control,
+                registry_lease=child,
+            )
+            self.tokens[key] = token
+            self.visitors.calls.append("register")
+            self.registered.set()
+            await self.registration_continue.wait()
+            return token
 
     def busy_locked(self, handle, scope):
         assert self.visitors.lock.locked()
         self.visitors.calls.append("busy_locked")
-        return self.busy
+        return (
+            self.busy
+            or any(key[0] == scope for key in self.tokens)
+            or any(
+                (lease.visitor_id, lease.generation) == scope
+                for lease in self.visitors.child_leases.values()
+            )
+        )
 
     async def cancel_scope(self, scope):
         assert not self.visitors.lock.locked()
@@ -437,6 +490,7 @@ class RequestDBDouble:
             self.visitors.calls.append("close")
             self.visitors.records[ctx.visitor_id].active_leases -= 1
         ctx.released = True
+        ctx.lease.released = True
         self.visitors.calls.append("release_lease")
 
 
@@ -494,7 +548,12 @@ class SecurityDouble:
             role=record.role,
             user_id=1 if record.role == "admin" else 2,
             factory=self.factory,
-            lease=object(),
+            lease=SimpleNamespace(
+                visitor_id=bootstrap,
+                generation=expected_generation or record.generation,
+                auth_epoch=expected_auth_epoch or record.auth_epoch,
+                released=False,
+            ),
             released=False,
             handoff=False,
             db=None,
@@ -744,6 +803,7 @@ async def test_role_busy_noop_stale_and_deleted_teacher(harness):
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "DEMO_BUSY"
     h.lifecycle.busy = False
+    h.visitors.calls.clear()
     response = await h.client.post(
         "/demo/role",
         data={**command, "request_id": uid(), "role": "teacher"},
@@ -751,10 +811,12 @@ async def test_role_busy_noop_stale_and_deleted_teacher(harness):
     )
     assert response.status_code == 200
     assert response.json()["auth_epoch"] == 2
-    assert (
-        h.visitors.calls[-3:-1] == ["change_role", "replay"]
-        or "change_role" in h.visitors.calls
-    )
+    change = h.visitors.calls.index("change_role")
+    assert h.visitors.calls[change - 1 : change + 1] == [
+        "busy_locked",
+        "change_role",
+    ]
+    assert h.visitors.calls.count("change_role") == 1
     await h.client.get("/demo/state")
     response = await h.client.post(
         "/demo/role",
@@ -1884,3 +1946,181 @@ async def test_in_progress_receipt_wins_if_context_observes_resetting(harness):
         release.set()
         h.visitors.clone_continue.set()
         await asyncio.gather(first, owner, return_exceptions=True)
+
+
+async def test_registration_first_blocks_role_and_preserves_token(harness):
+    h = harness
+    await start(h, "admin")
+    await h.client.get("/demo/state")
+    request = SimpleNamespace(url=SimpleNamespace(path="/demo/role"))
+    ctx = await h.security.context(request, "A", 1, 1)
+    cancel_requested = asyncio.Event()
+    control = SimpleNamespace(
+        request_cancel=cancel_requested.set, done=asyncio.Event()
+    )
+    resource_id = uid()
+    key = (("A", 1), "run", resource_id)
+    transition = h.visitors.transition
+    role_waiting = asyncio.Event()
+    registration = role = None
+    h.lifecycle.registration_continue.clear()
+
+    @asynccontextmanager
+    async def observe_role_waiting(visitor):
+        role_waiting.set()
+        async with transition(visitor) as handle:
+            yield handle
+
+    try:
+        registration = asyncio.create_task(
+            h.lifecycle.register(ctx, "run", resource_id, control)
+        )
+        await asyncio.wait_for(h.lifecycle.registered.wait(), 10)
+        token = h.lifecycle.tokens[key]
+        child = token.registry_lease
+        assert h.visitors.child_leases == {child.lease_id: child}
+        assert h.visitors.lock.locked()
+        assert h.visitors.calls.count("retain_lease") == 1
+        h.visitors.calls.clear()
+        h.visitors.transition = observe_role_waiting
+        role = asyncio.create_task(
+            h.client.post(
+                "/demo/role",
+                json={
+                    "request_id": uid(),
+                    "role": "teacher",
+                    "expected_generation": 1,
+                    "expected_auth_epoch": 1,
+                },
+                headers=headers(h.client),
+            )
+        )
+        await asyncio.wait_for(role_waiting.wait(), 10)
+        assert h.visitors.lock.locked()
+        h.lifecycle.registration_continue.set()
+        assert await asyncio.wait_for(registration, 10) is token
+        response = await asyncio.wait_for(role, 10)
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "DEMO_BUSY"
+        assert h.visitors.records["A"].role == "admin"
+        assert h.visitors.records["A"].auth_epoch == 1
+        assert h.lifecycle.tokens == {key: token}
+        assert h.lifecycle.tokens[key] is token
+        assert h.visitors.child_leases == {child.lease_id: child}
+        assert not child.released
+        assert not control.done.is_set()
+        assert not cancel_requested.is_set()
+        assert h.lifecycle.scopes == []
+        assert "retain_lease" not in h.visitors.calls
+        assert "busy_locked" in h.visitors.calls
+        assert "change_role" not in h.visitors.calls
+        assert h.visitors.records["A"].active_leases == 1
+    finally:
+        h.lifecycle.registration_continue.set()
+        await asyncio.wait_for(
+            asyncio.gather(
+                *(task for task in (registration, role) if task is not None),
+                return_exceptions=True,
+            ),
+            10,
+        )
+        h.visitors.transition = transition
+        async with transition("A") as handle:
+            for child in tuple(h.visitors.child_leases.values()):
+                handle.release_lease(child)
+        h.lifecycle.tokens.clear()
+        await h.request_db.release_request_db(ctx)
+
+
+async def test_role_first_rejects_old_registration_without_token_or_child(
+    harness,
+):
+    h = harness
+    await start(h, "admin")
+    await h.client.get("/demo/state")
+    request = SimpleNamespace(url=SimpleNamespace(path="/demo/role"))
+    old_ctx = await h.security.context(request, "A", 1, 1)
+    control = SimpleNamespace(
+        request_cancel=asyncio.Event().set, done=asyncio.Event()
+    )
+    transition, context = h.visitors.transition, h.security.context
+    role_locked, release_role = asyncio.Event(), asyncio.Event()
+    role = registration = None
+    pause_role = True
+
+    @asynccontextmanager
+    async def hold_role_handle(visitor):
+        nonlocal pause_role
+        async with transition(visitor) as handle:
+            if pause_role:
+                pause_role = False
+                role_locked.set()
+                await release_role.wait()
+            yield handle
+
+    async def role_context(*args):
+        ctx = await context(*args)
+        h.visitors.transition = hold_role_handle
+        return ctx
+
+    try:
+        assert not h.visitors.child_leases
+        assert not h.lifecycle.tokens
+        h.security.context = role_context
+        h.visitors.calls.clear()
+        role = asyncio.create_task(
+            h.client.post(
+                "/demo/role",
+                json={
+                    "request_id": uid(),
+                    "role": "teacher",
+                    "expected_generation": 1,
+                    "expected_auth_epoch": 1,
+                },
+                headers=headers(h.client),
+            )
+        )
+        await asyncio.wait_for(role_locked.wait(), 10)
+        assert h.visitors.lock.locked()
+        registration = asyncio.create_task(
+            h.lifecycle.register(old_ctx, "run", uid(), control)
+        )
+        await asyncio.wait_for(h.lifecycle.registration_attempted.wait(), 10)
+        assert not h.lifecycle.tokens
+        assert not h.visitors.child_leases
+        release_role.set()
+        response = await asyncio.wait_for(role, 10)
+        assert response.status_code == 200
+        assert response.json()["role"] == "teacher"
+        assert response.json()["auth_epoch"] == 2
+        with pytest.raises(DemoError) as error:
+            await asyncio.wait_for(registration, 10)
+        assert error.value.code == "DEMO_STALE_ROLE"
+        assert "retain_lease" not in h.visitors.calls
+        assert "register" not in h.visitors.calls
+        assert not h.lifecycle.registered.is_set()
+        assert not h.lifecycle.tokens
+        assert not h.visitors.child_leases
+        assert h.visitors.records["A"].active_leases == 1
+        change = h.visitors.calls.index("change_role")
+        assert h.visitors.calls[change - 1 : change + 1] == [
+            "busy_locked",
+            "change_role",
+        ]
+        assert h.visitors.calls.count("change_role") == 1
+    finally:
+        release_role.set()
+        await asyncio.wait_for(
+            asyncio.gather(
+                *(task for task in (role, registration) if task is not None),
+                return_exceptions=True,
+            ),
+            10,
+        )
+        h.visitors.transition = transition
+        h.security.context = context
+        async with transition("A") as handle:
+            for child in tuple(h.visitors.child_leases.values()):
+                handle.release_lease(child)
+        h.lifecycle.tokens.clear()
+        await h.request_db.release_request_db(old_ctx)

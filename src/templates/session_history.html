@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% set i18n_areas = ['teacher'] %}
+{% set demo_ns = {'ds': demo_config.browser_scope_id, 'dg': demo_config.generation, 'da': demo_config.auth_epoch}|urlencode if demo_config is defined and demo_config and demo_config.mode == 'demo' and demo_config.browser_scope_id else '' %}
 {% block title %}{{ scenario_title }} - {{ t('teacher.history_title') }}{% endblock %}
 {% block content %}
 <div class="container session-history">
@@ -9,8 +10,8 @@
   {% endif %}
   {% include "partials/snapshot_provenance.html" %}
   <p>{{ t('teacher.started') }} {{ session.started_at }} · {{ t('teacher.ended') }} {{ session.ended_at or t('teacher.no_end_record') }}</p>
-  <a href="/sessions/{{ session.id }}/export.csv" class="btn btn-primary">{{ t('teacher.download_csv') }}</a>
-  {% if session.ended_at %}<a href="/sessions/{{ session.id }}/analysis_page" class="btn btn-secondary">{{ t('teacher.view_existing_analysis') }}</a>{% endif %}
+  <a href="/sessions/{{ session.id }}/export.csv{% if demo_ns %}?{{ demo_ns }}{% endif %}" class="btn btn-primary">{{ t('teacher.download_csv') }}</a>
+  {% if session.ended_at %}<a href="/sessions/{{ session.id }}/analysis_page{% if demo_ns %}?{{ demo_ns }}{% endif %}" class="btn btn-secondary">{{ t('teacher.view_existing_analysis') }}</a>{% endif %}
   <a href="/scenarios" class="btn btn-secondary">{{ t('teacher.choose_new_practice') }}</a>
   {% if analysis_result_url is defined %}
   {% set analysis_transcript_open = true %}

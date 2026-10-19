@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% set i18n_areas = ['admin'] %}
+{% set csrf_cookie = demo_config.csrf_cookie_name if demo_config is defined and demo_config and demo_config.mode == 'demo' and demo_config.csrf_cookie_name else 'csrftoken' %}
 
 {% block title %}{{ t('admin.user_management_admin') }}{% endblock %}
 
@@ -318,7 +319,7 @@ const createBaseline = formValues(document.getElementById('create-form'));
 let editBaseline;
 // CSRF token helper
 function getCsrfToken() {
-  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+  const match = document.cookie.match(/(?:^|;\s*){{ csrf_cookie }}=([^;]*)/);
   return match ? match[1] : '';
 }
 

@@ -140,6 +140,329 @@ async def test_role_receipts_share_idempotency_and_id_limit(make_visitors):
     await visitors.release_lease(ctx.lease)
 
 
+async def test_body_aware_replay_precedes_context_and_detects_conflicts(
+    make_visitors,
+):
+    visitors, clock, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    verified = ready.verified_visitor
+    before = await visitors.snapshot(verified)
+    assert (
+        await visitors.replay(verified, "role", str(uuid4()), ("teacher", 1, 1))
+        is None
+    )
+    start = await visitors.replay(
+        verified, "start", ready.operation.request_id, ("admin",)
+    )
+    assert start == await visitors.receipt(verified, ready.operation.request_id)
+    request_id = str(uuid4())
+    async with visitors.transition(verified) as handle:
+        changed = handle.change_role(
+            ctx, "teacher", False, user_id=2, request_id=request_id
+        )
+        role = handle.replay("role", request_id, ("teacher", 1, 1))
+        assert role.result is changed
+        assert role.current.auth_epoch == 2
+        assert not role.historical
+        for operation, body in [
+            ("role", ("teacher", 1, 2)),
+            ("reset", ("teacher", 1, 1)),
+        ]:
+            with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+                handle.replay(operation, request_id, body)
+        with pytest.raises(DemoError, match="DEMO_STALE_ROLE"):
+            handle.check(ctx)
+        current_lease = handle.acquire_lease(changed.ref, 2)
+        current = handle.context(current_lease, user_id=2)
+        handle.change_role(current, "admin", False, user_id=1)
+        handle.release_lease(current_lease)
+    clock.advance(10)
+    historical = await visitors.replay(
+        verified, "role", request_id, ("teacher", 1, 1)
+    )
+    assert historical.result is changed
+    assert historical.historical
+    assert historical.current.auth_epoch == 3
+    assert historical.error_code is None
+    after = await visitors.snapshot(verified)
+    assert after.last_activity_at == before.last_activity_at
+    assert after.expires_at == before.expires_at
+    assert visitors.reserved_bytes == 0
+    await visitors.release_lease(ctx.lease)
+
+
+@pytest.mark.parametrize("code", ["BUSY", "ROLE_DELETED"])
+async def test_accepted_role_failure_replays_original_result(
+    make_visitors, code
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    body = ("teacher", 1, 1)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_" + code):
+            handle.change_role(
+                ctx,
+                "teacher",
+                code == "BUSY",
+                user_id=None,
+                request_id=request_id,
+            )
+        failed = handle.replay("role", request_id, body)
+        assert failed.error_code == "DEMO_" + code
+        assert (failed.status_code, failed.retry_after) == (409, None)
+        assert failed.result.auth_epoch == failed.current.auth_epoch == 1
+        with pytest.raises(DemoError, match="DEMO_" + code):
+            handle.change_role(
+                ctx, "teacher", False, user_id=2, request_id=request_id
+            )
+        handle.change_role(ctx, "teacher", False, user_id=2)
+        historical = handle.replay("role", request_id, body)
+        assert historical.result is failed.result
+        assert historical.historical
+        assert historical.current.auth_epoch == 2
+        assert historical.error_code == failed.error_code
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_consumer_role_failure_receipt_copies_original_error_metadata(
+    make_visitors,
+):
+    from dataclasses import FrozenInstanceError
+
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    body = ("teacher", 1, 1)
+    error = DemoError("DB_LOCKED", retry_after=7)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        handle.check(ctx)
+        stored = handle.record_role_failure(request_id, body, error)
+        error.retry_after = 99
+        error.status_code = 599
+        replay = handle.record_role_failure(request_id, body, DemoError("BUSY"))
+        assert replay == stored
+        assert replay.result.auth_epoch == replay.current.auth_epoch == 1
+        assert (replay.error_code, replay.status_code, replay.retry_after) == (
+            "DEMO_DB_LOCKED",
+            503,
+            7,
+        )
+        with pytest.raises(FrozenInstanceError):
+            replay.retry_after = 8
+        with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+            handle.record_role_failure(
+                request_id, ("teacher", 1, 2), DemoError("BUSY")
+            )
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as replayed_error:
+            handle.change_role(
+                ctx, "teacher", False, user_id=2, request_id=request_id
+            )
+        assert (
+            replayed_error.value.status_code,
+            replayed_error.value.retry_after,
+        ) == (503, 7)
+    assert (
+        await visitors.replay(ready.verified_visitor, "role", request_id, body)
+        == stored
+    )
+    await visitors.release_lease(ctx.lease)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "CSRF_INVALID",
+        "INVALID_REQUEST",
+        "UNSUPPORTED_CONFIGURATION",
+        "STALE_GENERATION",
+        "STALE_ROLE",
+        "LIMIT_REACHED",
+    ],
+)
+async def test_preacceptance_role_errors_do_not_create_receipts(
+    make_visitors, code
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    body = ("teacher", 1, 1)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_" + code):
+            handle.record_role_failure(request_id, body, DemoError(code))
+        assert handle.replay("role", request_id, body) is None
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_new_role_validation_and_stale_context_do_not_accept_id(
+    make_visitors,
+):
+    from dataclasses import replace
+
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    cases = [
+        (ctx, "other", False, 2, "INVALID_REQUEST"),
+        (ctx, "teacher", 1, 2, "INVALID_REQUEST"),
+        (ctx, "teacher", False, -1, "INVALID_REQUEST"),
+        (replace(ctx, generation=2), "teacher", False, 2, "STALE_GENERATION"),
+        (replace(ctx, auth_epoch=2), "teacher", False, 2, "STALE_ROLE"),
+    ]
+    async with visitors.transition(ready.verified_visitor) as handle:
+        for context, role, busy, user_id, code in cases:
+            request_id = str(uuid4())
+            with pytest.raises(DemoError, match="DEMO_" + code):
+                handle.change_role(
+                    context, role, busy, user_id=user_id, request_id=request_id
+                )
+            assert (
+                handle.replay(
+                    "role",
+                    request_id,
+                    (role, context.generation, context.auth_epoch),
+                )
+                is None
+            )
+        assert handle.snapshot().auth_epoch == 1
+    await visitors.release_lease(ctx.lease)
+
+
+async def test_role_failure_receipts_share_cap_without_evicting_owned_results(
+    make_visitors,
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    body = ("teacher", 1, 1)
+    ids = [str(uuid4()) for _ in range(255)]
+    async with visitors.transition(ready.verified_visitor) as handle:
+        for request_id in ids:
+            handle.record_role_failure(request_id, body, DemoError("DB_LOCKED"))
+        overflow_id = str(uuid4())
+        with pytest.raises(DemoError, match="DEMO_LIMIT_REACHED"):
+            handle.record_role_failure(overflow_id, body, DemoError("BUSY"))
+        with pytest.raises(DemoError, match="DEMO_LIMIT_REACHED"):
+            handle.change_role(ctx, "teacher", True, request_id=overflow_id)
+        assert handle.replay("role", overflow_id, body) is None
+        for request_id in (ids[0], ids[-1]):
+            stored = handle.record_role_failure(
+                request_id, body, DemoError("BUSY")
+            )
+            assert (
+                stored.error_code,
+                stored.status_code,
+                stored.retry_after,
+            ) == ("DEMO_DB_LOCKED", 503, 1)
+        assert (
+            handle.replay(
+                "start", ready.operation.request_id, ("admin",)
+            ).result
+            is ready.snapshot
+        )
+        with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+            handle.replay("reset", ids[0], body)
+    await visitors.release_lease(ctx.lease)
+
+
+@pytest.mark.parametrize("operation", ["start", "reset"])
+async def test_control_failure_receipt_preserves_dynamic_retry_after(
+    make_visitors, monkeypatch, operation
+):
+    visitors, _, _ = await make_visitors()
+    request_id = str(uuid4())
+    if operation == "reset":
+        _, ready, ctx = await ready_context(visitors)
+        reset = await visitors.reset_visit(ctx, request_id)
+        await visitors.release_lease(ctx.lease)
+        verified = ready.verified_visitor
+        body = (1, 1)
+    else:
+        bootstrap = visitors.verify_bootstrap(
+            "dynamic-start-failure-bootstrap00"
+        )
+        body = ("admin",)
+
+    async def locked(*args, **kwargs):
+        raise DemoError("DB_LOCKED", retry_after=7)
+
+    monkeypatch.setattr(visitors.root, "clone", locked)
+    if operation == "start":
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as failed:
+            await visitors.create_visit(bootstrap, request_id, "admin")
+        verified = visitors.visitor_for_bootstrap(bootstrap)
+        assert failed.value.retry_after == 7
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as repeated:
+            await visitors.reserve_start(bootstrap, request_id, "admin")
+        assert repeated.value.retry_after == 7
+    else:
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as failed:
+            await visitors.prepare(reset.operation)
+        async with visitors.transition(verified) as handle:
+            assert handle.fail(reset.operation, "DB_LOCKED", error=failed.value)
+            assert not handle.fail(reset.operation, "PREPARE_FAILED")
+        with pytest.raises(DemoError, match="DEMO_DB_LOCKED") as repeated:
+            await visitors.reset_visit(ctx, request_id)
+        assert repeated.value.retry_after == 7
+    stored = await visitors.replay(verified, operation, request_id, body)
+    assert (stored.error_code, stored.status_code, stored.retry_after) == (
+        "DEMO_DB_LOCKED",
+        503,
+        7,
+    )
+    assert stored.result.state == (
+        "prepare_failed" if operation == "start" else "reset_failed"
+    )
+    assert await visitors.receipt(verified, request_id) == stored
+
+
+async def test_reset_replay_returns_accepted_result_before_new_context(
+    make_visitors,
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    reset = await visitors.reset_visit(ctx, request_id)
+    pending = await visitors.replay(
+        ready.verified_visitor, "reset", request_id, (1, 1)
+    )
+    assert pending.result == reset.snapshot
+    assert pending.result.state == "resetting"
+    await visitors.release_lease(ctx.lease)
+    candidate = await visitors.prepare(reset.operation)
+    async with visitors.transition(ready.verified_visitor) as handle:
+        completed = handle.publish(reset.operation, candidate)
+        lease = handle.acquire_lease(candidate, 2)
+        current = handle.context(lease, user_id=1)
+        handle.change_role(current, "teacher", False, user_id=2)
+        replay = handle.replay("reset", request_id, (1, 1))
+        assert replay.result is completed
+        assert replay.historical and replay.current.auth_epoch == 3
+        assert pending.result.state == "resetting"
+        with pytest.raises(DemoError, match="DEMO_REQUEST_CONFLICT"):
+            handle.replay("reset", request_id, (2, 2))
+        handle.release_lease(lease)
+
+
+async def test_replay_uses_opaque_hashable_bodies_and_handle_lifetime(
+    make_visitors,
+):
+    visitors, _, _ = await make_visitors()
+    _, ready, ctx = await ready_context(visitors)
+    request_id = str(uuid4())
+    body = frozenset({("role", "teacher"), ("generation", 1), ("epoch", 1)})
+    async with visitors.transition(ready.verified_visitor) as handle:
+        stored = handle.record_role_failure(
+            request_id, body, DemoError("DB_LOCKED")
+        )
+        assert handle.replay("role", request_id, frozenset(body)) == stored
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            handle.replay("role", str(uuid4()), [])
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            handle.replay("unknown", str(uuid4()), ())
+    with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+        handle.replay("role", request_id, body)
+    await visitors.release_lease(ctx.lease)
+
+
 async def test_prepare_failure_replay_retry_and_historical_receipt(
     make_visitors,
 ):

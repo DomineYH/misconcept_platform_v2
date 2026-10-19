@@ -22,6 +22,7 @@
 - session cookie는 Max-Age=28800이고 CSRF cookie는 별도 이름·서명·session 수명이다. 별도 origin/host-only 쿠키와 실제 CSRF를 유지한다. 일반 서비스의 demo 링크는 URL 연결일 뿐 인증·DB·제공자 전환 기능이 아니다.
 - 비교 실행·응답 채택은 MVP에 추가하지 않는다. 위험 endpoint는 직접 요청도 거절하며 자유 탐색은 허용된 허구 자료 수정과 기존 조회에 한정한다.
 - 예시 콘텐츠/fixture/schema/역할 계약 버전이 불일치하면 시작/실행을 거절한다. 사용량 미측정은 unknown이며 화면·CSV에서 준비된 예시/외부 호출 없음·콘텐츠 버전·seed/신규 자료 출처를 식별한다.
-- 계약 문서는 실행 증거가 아니다. 소비자·별도 reviewer의 G0 검토와 @DomineYH 승인, 이후 실제 DB/AI/CSRF/브라우저 격리·경합·무호출 검증이 필요하다. 실제 host/origin/URL/용량·quota·최종 TTL은 D5-02 승인 입력이다.
+- 계약 문서는 실행 증거가 아니다. v1-r3 소비자·별도 reviewer의 G0 검토와 @DomineYH 승인은 완료되었고, 이후 실제 DB/AI/CSRF/브라우저 격리·경합·무호출 검증은 별도로 필요하다. 실제 host/origin/URL/용량·quota·최종 TTL은 D5-02 승인 입력이다.
 
-결정 근거: #190 Agent Brief C01–C29와 maintainer 위임 답변, [D0-01](../demo/d0-01-boundary-survey.md) §6–7, [D0-02](../demo/d0-02-experience-spec.md) §11, 계획 §2/4.1/5/9.2/9.5. 동작 규범은 [d0-03-v1-r3](../demo/d0-03-contract-v1.md), G0 승인 상태는 [별도 기록](../demo/d0-03-g0-acceptance.md)을 따른다. 이 ADR은 승인 후보이며 G0 통과를 선언하지 않는다.
+결정 근거: #190 Agent Brief C01–C29와 maintainer 위임 답변, [D0-01](../demo/d0-01-boundary-survey.md) §6–7, [D0-02](../demo/d0-02-experience-spec.md) §11, 계획 §2/4.1/5/9.2/9.5. 승인된 동작 규범은 [d0-03-v1-r3 고정 후보](https://github.com/DomineYH/misconcept_platform_v2/blob/d6455d10c2d75acde811f85a53143be086d67545/docs/demo/d0-03-contract-v1.md), G0 승인 상태는 [별도 기록](../demo/d0-03-g0-acceptance.md)을 따른다. v1-r3 G0 승인은 완료되었다. [현재 계약 편집본 §31](../demo/d0-03-contract-v1.md#31-d0-마감-변경-후보--c14c27-정정)의 v2 개정은 파서·reader 패치 필요성 정정에 한정하며 정확한 후보의 보조 검토 ACCEPT·명시 workflow 예외·G0 변경 승인은 해당 절 §31.1에 기록한다. 이 ADR의 격리·keyless 결정은 바꾸지 않는다.
+

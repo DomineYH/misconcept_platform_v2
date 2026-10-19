@@ -763,3 +763,16 @@ async def test_shutdown_blocks_other_visits_while_waiting_for_cancelled_builder(
         await shutdown
         with pytest.raises(DemoError):
             await preparing
+
+
+async def test_publish_rejects_retired_candidate_factory(make_visitors):
+    visitors, _, _ = await make_visitors()
+    bootstrap = visitors.verify_bootstrap("retired-candidate-bootstrap-test0")
+    start = await visitors.reserve_start(bootstrap, str(uuid4()), "admin")
+    candidate = await visitors.prepare(start.operation)
+    candidate.factory.retire()
+    async with visitors.transition(start.verified_visitor) as handle:
+        with pytest.raises(DemoError, match="DEMO_VERSION_MISMATCH"):
+            handle.publish(start.operation, candidate)
+        assert handle.snapshot().state == "preparing"
+        handle.fail(start.operation, "VERSION_MISMATCH")

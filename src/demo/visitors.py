@@ -1369,6 +1369,7 @@ class TransitionHandle:
                 raise registry._error(state, "STALE_GENERATION")
             if (
                 not registry.root.owns(candidate_ref)
+                or candidate_ref.factory.retired
                 or candidate_ref.visitor_id != op.visitor_id
                 or candidate_ref.generation != op.generation
                 or candidate_ref.manifest_sha256

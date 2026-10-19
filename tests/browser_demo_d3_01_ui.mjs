@@ -62,10 +62,22 @@ const ROUTES = {
   reset: url => url.pathname === '/demo/reset',
   download: url => /^\/admin\/sessions\/\d+\/download$/.test(url.pathname)
 };
+// Mirrors the server: selectors are validated only for an include_tour GET of a ready visit,
+// and tour_facts are returned only there; a plain GET is bound to the bootstrap alone.
+function serverState(req, env) {
+  const cur = env.current;
+  if (req.query.include_tour !== 'true' || cur.state !== 'ready') return {json: {...cur, tour_facts: null}};
+  const [scope, g, e] = ['x-demo-scope', 'x-demo-generation', 'x-demo-auth-epoch'].map(k => req.headers[k]);
+  if ([scope, g, e].some(v => v !== undefined)) {
+    if (scope !== cur.browser_scope_id || g !== String(cur.generation)) return {status: 409, json: envelope('DEMO_STALE_GENERATION', 'demo.stale_generation')};
+    if (e !== String(cur.auth_epoch)) return {status: 409, json: envelope('DEMO_STALE_ROLE', 'demo.stale_role')};
+  }
+  return {json: cur};
+}
 const defaults = {
   state: (req, env) => req.query.request_id
     ? {status: 404, json: envelope('DEMO_RESOURCE_NOT_FOUND', 'demo.not_found')}
-    : {json: env.current}
+    : serverState(req, env)
 };
 
 async function until(fn, message, timeout = 10000) {
@@ -168,11 +180,15 @@ async function normalMode(page, base) {
 async function firstStateGet(page, base) {
   await scenario(page, base, async env => {
     const p = await env.open('/fixtures/demo/page');
+    // §9.1: a bootstrap-bound current-state GET first (no selectors, no facts) ...
     const first = env.reqs('state', p)[0];
-    assert.equal(first.query.include_tour, 'true');
-    assert.equal(first.headers['x-demo-scope'], 'scope-a');
-    assert.equal(first.headers['x-demo-generation'], '1');
-    assert.equal(first.headers['x-demo-auth-epoch'], '1');
+    assert.equal(first.query.include_tour, undefined);
+    for (const h of ['x-demo-scope', 'x-demo-generation', 'x-demo-auth-epoch']) assert.equal(first.headers[h], undefined, h);
+    // ... then the tour facts with the namespace it confirmed.
+    const tour = await until(() => env.reqs('state', p).find(r => r.query.include_tour === 'true'), 'facts GET');
+    assert.equal(tour.headers['x-demo-scope'], 'scope-a');
+    assert.equal(tour.headers['x-demo-generation'], '1');
+    assert.equal(tour.headers['x-demo-auth-epoch'], '1');
     await expectMap(p, 'C X P P P P');
     assert.equal(await p.locator('.demo-tour-steps li[aria-current="step"]').count(), 1);
     assert.equal(await p.locator('li[data-demo-step="scenario"]').getAttribute('aria-current'), 'step');
@@ -246,8 +262,9 @@ async function observationsAndStorage(page, base) {
     assert(!/session_id,scenario_id|csrf-v1/.test(raw), 'no CSV text or CSRF value in storage');
     assert.equal(await p.evaluate(() => Object.keys(localStorage).filter(k => k.endsWith(':tour-v1')).join()), KEY, 'key has no auth_epoch');
 
+    const sent = env.reqs('state', p).length;
     await p.reload();
-    await until(() => env.reqs('state', p).length >= 2, 'state GET after reload');
+    await until(() => env.reqs('state', p).length > sent, 'state GET after reload');
     await expectMap(p, 'C C C C X P');
 
     const second = await env.open('/fixtures/demo/page');
@@ -304,7 +321,7 @@ async function lostResponse(page, base) {
     };
     env.handlers.state = (req, e) => req.query.request_id
       ? {json: receipt('role', req.query.request_id, e.current)}
-      : {json: e.current};
+      : serverState(req, e);
     const p = await env.open('/fixtures/demo/page');
     await p.click('[data-demo-action="role"][data-demo-role="admin"]');
     const [post] = await until(() => env.posts('role').length && env.posts('role'), 'role POST');
@@ -348,15 +365,15 @@ async function resetFlow(page, base) {
     env.current = state({role: 'admin', tour_facts: deletedFacts()});
     env.handlers.reset = (req, e) => {
       resetId = req.json.request_id;
-      e.current = state({state: 'resetting', role: 'admin', request_id: resetId, tour_facts: deletedFacts()});
+      e.current = state({state: 'resetting', generation: 2, auth_epoch: 2, role: 'admin', request_id: resetId, tour_facts: null});
       return {status: 202, json: e.current};
     };
     env.handlers.state = (req, e) => {
-      if (!req.query.request_id) return {json: e.current};
+      if (!req.query.request_id) return serverState(req, e);
       polls.push(e.events.some(x => x.name === 'demo:reset-completed'));
       if (polls.length === 1) return {status: 202, json: e.current};
-      e.current = state({generation: 2, role: 'admin', next_url: '/fixtures/demo/page?g=2&role=admin',
-        tour_facts: facts({generation: 2, teacher_entered: false})});
+      e.current = state({generation: 2, auth_epoch: 2, role: 'admin', next_url: '/fixtures/demo/page?g=2&e=2&role=admin',
+        tour_facts: facts({generation: 2, auth_epoch: 2, teacher_entered: false})});
       return {json: receipt('reset', req.query.request_id, e.current)};
     };
     const p = await env.open('/fixtures/demo/page?role=admin');
@@ -402,6 +419,10 @@ async function resetFlow(page, base) {
     // accepted confirm -> POST, 202, polls, ready g2
     p.once('dialog', dialog => dialog.accept());
     await p.click('[data-demo-action="reset"]');
+    // While resetting (generation 2 reserved), the previous journey is kept, never completed.
+    await until(() => env.eventsOf(p, 'demo:reset-started').length, 'demo:reset-started');
+    assert.equal(await domMap(p), 'C C C C C X', 'resetting is not a reset success');
+    assert.notEqual(await stored(p), null, 'old journey kept while the reset is pending');
     await until(() => env.eventsOf(p, 'demo:reset-completed').length, 'demo:reset-completed', 20000);
     assert.equal(env.posts('reset').length, 1);
     const post = env.posts('reset')[0];
@@ -432,7 +453,7 @@ async function resetFlow(page, base) {
     assert.equal(await p.getAttribute('#demo-tour', 'data-stale'), 'true');
     assert.equal(await stored(p), null, 'old generation key removed');
     // ... and the new space starts over: restart opens the server-made next_url.
-    await Promise.all([p.waitForURL('**/fixtures/demo/page?g=2&role=admin'), p.click('[data-demo-action="restart"]')]);
+    await Promise.all([p.waitForURL('**/fixtures/demo/page?g=2&e=2&role=admin'), p.click('[data-demo-action="restart"]')]);
     await expectMap(p, 'X P P P P P');
     assert.deepEqual((await snap(p)).observations, [], 'new generation starts with no observations');
   });
@@ -460,6 +481,7 @@ async function lowerGenerationIgnored(page, base) {
 async function stateCheckEvent(page, base) {
   await scenario(page, base, async env => {
     const p = await env.open('/fixtures/demo/page');
+    await expectMap(p, 'C X P P P P'); // the initial facts GET has landed
     const gets = env.reqs('state').length;
     env.current = state({role: 'admin', auth_epoch: 2, tour_facts: facts({auth_epoch: 2})});
     await p.evaluate(() => document.dispatchEvent(new CustomEvent('demo:state-check', {detail: {reason: 'DEMO_STALE_GENERATION'}})));
@@ -468,6 +490,62 @@ async function stateCheckEvent(page, base) {
     assert.equal(event.role, 'admin');
     assert.equal(event.auth_epoch, 2);
     assert.equal(event.reason, null, 'the check reason is never applied as state');
+    const after = env.reqs('state').slice(gets);
+    assert.equal(after[0].query.include_tour, undefined, 'first a plain current-state GET');
+    assert.equal(after[0].headers['x-demo-auth-epoch'], undefined, 'without the old selectors');
+    const tour = await until(() => env.reqs('state').slice(gets).find(r => r.query.include_tour === 'true'), 'facts GET');
+    assert.equal(tour.headers['x-demo-auth-epoch'], '2', 'facts use the confirmed namespace');
+    await until(async () => (await snap(p)).facts?.auth_epoch === 2, 'facts of the confirmed namespace applied');
+  });
+}
+
+// ---- 8b: a reset that fails is never shown as done; a new attempt gets a new ID -
+async function resetFailure(page, base) {
+  await scenario(page, base, async env => {
+    const ids = [];
+    env.current = state({role: 'admin', tour_facts: deletedFacts()});
+    const failed = () => state({state: 'reset_failed', generation: 2, auth_epoch: 2, role: null, last_error: 'DEMO_RESET_FAILED', tour_facts: null});
+    env.handlers.reset = (req, e) => {
+      ids.push(req.json.request_id);
+      if (ids.length === 1) {
+        e.current = state({state: 'resetting', generation: 2, auth_epoch: 2, role: 'admin', request_id: req.json.request_id, tour_facts: null});
+        return {status: 202, json: e.current};
+      }
+      e.current = failed();
+      return {status: 503, json: envelope('DEMO_RESET_FAILED', 'demo.reset_failed', true)};
+    };
+    env.handlers.state = (req, e) => {
+      if (!req.query.request_id) return serverState(req, e);
+      e.current = failed();
+      return {status: 503, json: envelope('DEMO_RESET_FAILED', 'demo.reset_failed', true)};
+    };
+    const p = await env.open('/fixtures/demo/page?role=admin');
+    for (const kind of ['history_viewed', 'admin_record_viewed', 'csv_received']) await observe(p, ob(kind));
+    await expectMap(p, 'C C C C C X');
+    p.on('dialog', dialog => dialog.accept());
+
+    // Polled reset ends in reset_failed: no success, no completion, the old journey stays.
+    await p.click('[data-demo-action="reset"]');
+    await until(async () => (await snap(p)).state.state === 'reset_failed', 'reset_failed applied', 15000);
+    assert.equal(env.eventsOf(p, 'demo:reset-completed').length, 0);
+    assert.equal(await domMap(p), 'C C C C C X', 'reset_failed never freezes completion');
+    assert.notEqual(await stored(p), null);
+    assert.equal(await p.evaluate(() => sessionStorage.getItem('demo:control-v1')), null, 'finished failure retires its ID');
+
+    // A direct finished failure: state GET + same-ID receipt lookup, then the ID is retired.
+    const before = env.requests.length;
+    await p.click('[data-demo-action="reset"]');
+    await until(() => env.posts('reset').length === 2, 'second reset POST');
+    const second = env.posts('reset')[1].json;
+    assert.notEqual(second.request_id, ids[0], 'a new attempt gets a new ID');
+    assert(isUuid(second.request_id));
+    assert.equal(second.expected_generation, 2, 'with the current generation');
+    assert.equal(second.expected_auth_epoch, 2, 'and the current epoch');
+    const later = () => env.requests.slice(before).filter(r => r.name === 'state');
+    await until(() => later().some(r => !r.query.request_id) && later().some(r => r.query.request_id === second.request_id), 'resync and receipt lookup');
+    await until(async () => (await p.evaluate(() => sessionStorage.getItem('demo:control-v1'))) === null, 'retired');
+    assert.equal(env.eventsOf(p, 'demo:reset-completed').length, 0);
+    assert.equal(await domMap(p), 'C C C C C X');
   });
 }
 
@@ -476,6 +554,7 @@ async function tabNotification(page, base) {
   await scenario(page, base, async env => {
     const a = await env.open('/fixtures/demo/page');
     const b = await env.open('/fixtures/demo/page');
+    for (const tab of [a, b]) await expectMap(tab, 'C X P P P P'); // initial facts GETs have landed
     const message = o => ({browser_scope_id: 'scope-a', generation: 2, auth_epoch: 1, state: 'ready', role: 'teacher', contract_version: 'd0-03-v1-r3', content_version: 'd0-02-v1', fixture_version: 'demo-fixture-v1', reason: null, ...o});
     const send = detail => a.evaluate(d => {
       const channel = new BroadcastChannel('misconcept-demo-v1');
@@ -502,8 +581,13 @@ async function tourCsv(page, base) {
       const echo = req.headers['x-demo-export-request-id'];
       if (mode === 'status') return {status: 500, json: envelope('DEMO_DB_LOCKED', 'demo.retry_later', true)};
       const csv = buildCsv({journey: mode === 'session' ? 8 : JOURNEY, origin: mode === 'origin' ? 'seed_prepared' : 'visitor_generated', dropLast: mode === 'columns'});
+      // One raw 0xff byte inside a message cell: structure stays valid, UTF-8 does not.
+      const at = csv.text.indexOf('plain');
+      const body = mode === 'utf8'
+        ? Buffer.concat([Buffer.from(csv.text.slice(0, at)), Buffer.from([0xff]), Buffer.from(csv.text.slice(at))])
+        : csv.text;
       return {
-        body: csv.text,
+        body,
         headers: {
           'content-type': 'text/csv; charset=utf-8',
           'content-disposition': 'attachment; filename=demo_d0-02-v1_admin_7.csv',
@@ -525,7 +609,7 @@ async function tourCsv(page, base) {
       await p.locator('#demo-tour-csv').waitFor({state: 'visible'});
     };
 
-    for (const failure of ['echo', 'count', 'columns', 'session', 'status', 'origin']) {
+    for (const failure of ['echo', 'count', 'columns', 'session', 'status', 'origin', 'utf8']) {
       mode = failure;
       await arm();
       const requests = env.reqs('download').length;
@@ -582,8 +666,9 @@ async function guideActions(page, base) {
     await p.click('[data-demo-action="skip"]');
     await panel.waitFor({state: 'hidden'});
     assert.equal(JSON.parse(await stored(p)).skipped, true);
+    const sent = env.reqs('state', p).length;
     await p.reload();
-    await until(() => env.reqs('state', p).length >= 2, 'state GET after reload');
+    await until(() => env.reqs('state', p).length > sent, 'state GET after reload');
     await expectMap(p, 'C X P P P P');
     assert(await panel.isHidden(), 'skip persists across reload');
     assert(await resume.isVisible());
@@ -674,7 +759,7 @@ export default async function check(page) {
   const base = new URL(page.url()).origin;
   // Spec items 1–15 in order; a failure names its scenario.
   for (const fn of [normalMode, firstStateGet, expectedMapTable, observationsAndStorage, roleSwitch, lostResponse,
-    csrfInvalid, resetFlow, lowerGenerationIgnored, stateCheckEvent, tabNotification, tourCsv, guideActions,
+    csrfInvalid, resetFlow, resetFailure, lowerGenerationIgnored, stateCheckEvent, tabNotification, tourCsv, guideActions,
     expiredEnvelope, layout]) {
     try {
       await fn(page, base);

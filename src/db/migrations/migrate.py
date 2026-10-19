@@ -2,15 +2,26 @@
 
 import argparse
 import asyncio
+import json
+import os
 import sqlite3
 from pathlib import Path
 
 from sqlalchemy import text
 
-from src.db.connection import engine
-
 BASELINE = "023_schema_baseline"
 DIRECTORY = Path(__file__).parent
+engine = None
+
+
+def _get_engine(db_engine):
+    if db_engine is not None:
+        return db_engine
+    if engine is not None:
+        return engine
+    from src.db.connection import engine as default_engine
+
+    return default_engine
 
 
 def statements(sql):
@@ -58,13 +69,14 @@ async def run_migration(
     migration_file: Path, *, cutover_receipt=None, db_engine=None
 ):
     """DDL and history commit together, with an explicit SQLite transaction."""
-    async with (db_engine or engine).connect() as conn:
+    async with _get_engine(db_engine).connect() as conn:
         rebuild_runs = migration_file.name in (
             "028_generation_providers.sql",
             "029_scenario_config.sql",
             "031_scenario_contract.sql",
             "034_analysis_run.sql",
             "035_comparison_run.sql",
+            "037_demo_provider.sql",
         )
         try:
             if rebuild_runs:
@@ -74,6 +86,16 @@ async def run_migration(
             await conn.exec_driver_sql("BEGIN IMMEDIATE")
             await _history(conn)
             if not await _applied(conn, migration_file.name):
+                objects = []
+                if migration_file.name == "037_demo_provider.sql":
+                    objects = (
+                        await conn.exec_driver_sql(
+                            "SELECT type, name, sql FROM sqlite_master "
+                            "WHERE type IN ('index', 'trigger') AND sql IS NOT NULL "
+                            "AND tbl_name IN ('provider_connection', 'provider_audit_log', 'generation_run') "
+                            "ORDER BY type, name"
+                        )
+                    ).all()
                 if migration_file.name == "031_scenario_contract.sql":
                     from src.db.s2_verification import verify_cleanup
 
@@ -82,6 +104,14 @@ async def run_migration(
                     )
                 for statement in statements(migration_file.read_text()):
                     await conn.exec_driver_sql(statement)
+                for object_type, name, sql in objects:
+                    if not (
+                        await conn.exec_driver_sql(
+                            "SELECT 1 FROM sqlite_master WHERE type=? AND name=?",
+                            (object_type, name),
+                        )
+                    ).first():
+                        await conn.exec_driver_sql(sql)
                 if (
                     rebuild_runs
                     and (
@@ -119,7 +149,7 @@ async def _install_baseline(*, db_engine=None):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-    async with (db_engine or engine).connect() as conn:
+    async with _get_engine(db_engine).connect() as conn:
         # Rebuild is required to align NULL, FK actions, CHECKs and indexes.
         # Disable FKs before BEGIN, then validate every reference before commit.
         await conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
@@ -223,9 +253,18 @@ async def run_all_migrations(
             )
 
 
-if __name__ == "__main__":
+def main():
+    app_mode = os.environ.get("APP_MODE", "normal")
+    if app_mode != "normal":
+        code = (
+            "DEMO_ACTION_FORBIDDEN"
+            if app_mode == "demo"
+            else "DEMO_CONFIGURATION_INVALID"
+        )
+        print(json.dumps(dict(code=code, exit_status=1)))
+        return 1
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--through", type=int, choices=range(23, 37))
+    parser.add_argument("--through", type=int, choices=range(23, 38))
     parser.add_argument("--cutover-receipt", type=Path)
     args = parser.parse_args()
     asyncio.run(
@@ -233,3 +272,8 @@ if __name__ == "__main__":
             through=args.through, cutover_receipt=args.cutover_receipt
         )
     )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

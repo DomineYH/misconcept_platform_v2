@@ -45,10 +45,12 @@ class ProviderConnection(Base):
     catalog_credential_revision: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (
-        CheckConstraint("provider IN ('openai','anthropic','google')"),
+        CheckConstraint("provider IN ('openai','anthropic','google','demo')"),
         CheckConstraint("credential_revision >= 0 AND connection_version >= 1"),
+        CheckConstraint("enabled IN (0,1)"),
+        CheckConstraint("json_valid(catalog_models_json)"),
         CheckConstraint(
-            "(encrypted_key IS NULL AND nonce IS NULL AND encryption_key_version IS NULL AND masked_hint IS NULL AND enabled = 0) OR (encrypted_key IS NOT NULL AND length(encrypted_key) >= 17 AND nonce IS NOT NULL AND length(nonce) = 12 AND encryption_key_version IS NOT NULL AND length(encryption_key_version) > 0 AND masked_hint IS NOT NULL)",
+            "(provider = 'demo' AND encrypted_key IS NULL AND nonce IS NULL AND encryption_key_version IS NULL AND masked_hint IS NULL AND credential_revision = 0) OR (provider != 'demo' AND ((encrypted_key IS NULL AND nonce IS NULL AND encryption_key_version IS NULL AND masked_hint IS NULL AND enabled = 0) OR (encrypted_key IS NOT NULL AND length(encrypted_key) >= 17 AND nonce IS NOT NULL AND length(nonce) = 12 AND encryption_key_version IS NOT NULL AND length(encryption_key_version) > 0 AND masked_hint IS NOT NULL)))",
             name="ck_provider_key_material",
         ),
     )
@@ -73,8 +75,8 @@ class ProviderAuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
     __table_args__ = (
-        CheckConstraint("provider IN ('openai','anthropic','google')"),
+        CheckConstraint("provider IN ('openai','anthropic','google','demo')"),
         CheckConstraint(
-            "change_kind IN ('key_saved','key_replaced','enabled','disabled','deleted')"
+            "(provider = 'demo' AND change_kind = 'demo_seeded' AND actor_id IS NULL AND previous_credential_revision = 0 AND credential_revision = 0 AND previous_connection_version = 1 AND connection_version = 1) OR (provider != 'demo' AND change_kind IN ('key_saved','key_replaced','enabled','disabled','deleted'))"
         ),
     )

@@ -1,11 +1,36 @@
 """Real non-test startup/login with no provider or encryption keys."""
 
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+
+def test_normal_migration_cli_installs_current_schema_without_seed(tmp_path):
+    path = tmp_path / "normal-cli.db"
+    result = subprocess.run(
+        [sys.executable, "-m", "src.db.migrations.migrate", "--through", "37"],
+        env={
+            **os.environ,
+            "APP_MODE": "normal",
+            "TESTING": "true",
+            "DATABASE_URL": f"sqlite+aiosqlite:///{path}",
+        },
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    with sqlite3.connect(path) as db:
+        assert db.execute(
+            "SELECT filename FROM _migrations ORDER BY id DESC LIMIT 1"
+        ).fetchone() == ("037_demo_provider.sql",)
+        assert db.execute("SELECT * FROM demo_metadata").fetchall() == []
+        assert db.execute("SELECT count(*) FROM user").fetchone() == (0,)
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
 @pytest.mark.parametrize("master", ["", "invalid-master"])

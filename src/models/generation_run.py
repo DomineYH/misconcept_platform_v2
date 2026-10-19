@@ -83,7 +83,7 @@ class GenerationRun(Base):
             ),
         ),
         CheckConstraint("operation IN ('student','mentor','analysis')"),
-        CheckConstraint("provider IN ('openai','anthropic','google')"),
+        CheckConstraint("provider IN ('openai','anthropic','google','demo')"),
         CheckConstraint(
             "status IN ('running','completed','failed',"
             "'cancelled','interrupted','ok','degraded')"

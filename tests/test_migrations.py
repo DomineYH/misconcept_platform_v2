@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import event, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
+from test_demo_config import run_python
 from test_demo_d2_01_schema import REBUILT, database_state, populated036
 
 from src.db.migrations import migrate
@@ -222,7 +223,6 @@ async def test_demo_explicit_engine_installs_without_global_access(tmp_path):
     script = textwrap.dedent(
         """
         import asyncio
-        import sys
         from sqlalchemy.ext.asyncio import create_async_engine
         from src.db import connection
         from src.db.migrations import migrate
@@ -238,7 +238,7 @@ async def test_demo_explicit_engine_installs_without_global_access(tmp_path):
             def connect(self):
                 raise AssertionError("Explicit engine accessed global engine")
 
-        staging = create_async_engine("sqlite+aiosqlite:///" + sys.argv[1])
+        staging = create_async_engine("sqlite+aiosqlite:///staging.db")
         connection.engine = migrate.engine = ForbiddenEngine()
 
         async def install():
@@ -253,17 +253,8 @@ async def test_demo_explicit_engine_installs_without_global_access(tmp_path):
         asyncio.run(install())
         """
     )
-    process = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-c",
-        script,
-        str(tmp_path / "staging.db"),
-        env={**os.environ, "APP_MODE": "demo"},
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
-    assert process.returncode == 0, (stdout + stderr).decode()
+    process = run_python(script, cwd=tmp_path)
+    assert process.returncode == 0, process.stdout + process.stderr
 
 
 @pytest.mark.parametrize("failure", [None, "sql", "foreign_key", "object"])

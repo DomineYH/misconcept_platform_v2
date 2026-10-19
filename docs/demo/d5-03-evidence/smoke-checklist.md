@@ -26,11 +26,11 @@
 | P03 | normal `/health` 영향 없음 | §28:771 | 블록 P03 | 200 | | | |
 | L01 | 링크 변경 **전** normal 화면 링크 수 | §26:633 | 블록 L01 | 0 (첫 공개) | | | |
 | L02 | 링크 변경 **후** normal 화면 링크 수 | §26:633 | 블록 L01 | 1 | | | |
-| L03 | host 분리 | §2, §26:633 | 블록 L03 | 공개 URL host = demo host, demo host ≠ normal host | | | |
+| L03 | host 분리 | §2, §26:633 | 블록 L03 | 공개 URL hostname = demo hostname, demo hostname ≠ normal hostname (port 무시) | | | |
 | C01 | demo 쿠키 속성 | §10:254-255 | 블록 C01 | 둘 다 `Domain` 없음·`Path=/`·`Secure`·`SameSite=lax`; `demo_session_id`는 `HttpOnly`·`Max-Age=28800`; `demo_csrftoken`은 `HttpOnly`·`Max-Age`·`Expires` 없음 | | | |
-| X01 | token/origin 없는 start | §10, §28:761 | 블록 X01 | 403 | | | |
-| X02 | token/origin 없는 role | §10, §28:761 | 블록 X01 | 403 | | | |
-| X03 | token/origin 없는 reset | §10, §28:761 | 블록 X01 | 403 | | | |
+| X01 | 세션 쿠키만 있고 token/origin 없는 start | §10, §28:761 | 블록 X01 | 403 | | | |
+| X02 | 세션 쿠키만 있고 token/origin 없는 role | §10, §28:761 | 블록 X01 | 403 | | | |
+| X03 | 세션 쿠키만 있고 token/origin 없는 reset | §10, §28:761 | 블록 X01 | 403 | | | |
 | X04 | 유효 token + 다른 Origin의 start | §10, §28:761 | 블록 X04 | 403 | | | |
 | N01 | normal origin의 demo route | §28:759 | 블록 N01 | `/demo`, `/demo/state` 모두 404 | | | |
 | D01 | demo의 비밀번호 로그인 POST | §4:62 | 블록 D01 | 403 | | | |
@@ -58,8 +58,10 @@ curl -sS "$NORMAL_ORIGIN/login" | grep -cF "href=\"$DEMO_PUBLIC_URL\""
 ```
 ### L03
 ```sh
-for u in "$DEMO_PUBLIC_URL" "$DEMO_ORIGIN" "$NORMAL_ORIGIN"; do printf '%s\n' "$u" | awk -F/ '{print $3}'; done
-# 1행 = 2행, 2행 ≠ 3행이면 passed. 출력 값은 기록하지 않고 "같음/다름"만 적는다.
+for u in "$DEMO_PUBLIC_URL" "$DEMO_ORIGIN" "$NORMAL_ORIGIN"; do
+  python3 -c 'import sys,urllib.parse;print(urllib.parse.urlsplit(sys.argv[1]).hostname)' "$u"
+done
+# hostname(port 제외) 기준: 1행 = 2행, 2행 ≠ 3행이면 passed. 출력 값은 기록하지 않고 "같음/다름"만 적는다.
 ```
 ### C01
 ```sh
@@ -67,9 +69,13 @@ curl -sS -D - -o /dev/null "$DEMO_ORIGIN/demo" | grep -i '^set-cookie:' | sed -E
 ```
 ### X01
 ```sh
+# 세션 쿠키가 없으면 CSRF 검사 전에 401(SESSION_REQUIRED)이 나므로 먼저 방문 쿠키를 받는다.
+jar=$(mktemp)
+curl -sS -c "$jar" -o /dev/null "$DEMO_ORIGIN/demo"
 for p in start role reset; do
-  curl -sS -o /dev/null -w "$p %{http_code}\n" -X POST -H 'Content-Type: application/json' -d '{}' "$DEMO_ORIGIN/demo/$p"
+  curl -sS -b "$jar" -o /dev/null -w "$p %{http_code}\n" -X POST -H 'Content-Type: application/json' -d '{}' "$DEMO_ORIGIN/demo/$p"
 done
+rm -f "$jar"
 ```
 ### X04
 ```sh

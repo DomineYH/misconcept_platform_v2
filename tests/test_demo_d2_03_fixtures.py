@@ -27,6 +27,7 @@ from src.services.analysis_output_contract import (
     UnifiedAnalysisOutput,
 )
 from src.services.invocation_types import StructuredRequest, TextRequest
+from src.services.model_configuration import supported_config_sha256
 from src.services.role_output_contracts import MentorOutput
 
 visitors = fixture_visitors
@@ -123,66 +124,6 @@ SIX_KEYS = {
 def _sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
-
-SUPPORTED_FIELDS = dict(
-    problem=("public_text", "learning_objective"),
-    student=(
-        "name",
-        "public_profile",
-        "internal_profile",
-        "misconception",
-        "behavior_instruction",
-    ),
-    mentor=(
-        "mode",
-        "name",
-        "welcome_message",
-        "behavior_instruction",
-        "intervention_policy",
-    ),
-    analysis=(
-        "context",
-        "expected_understanding",
-        "instruction",
-        "rubric_name",
-        "rubric_description",
-        "category_name",
-        "classification_enabled",
-        "rubric",
-    ),
-)
-
-
-def _interim_supported_config_sha256(config_schema_version, config):
-    """Contract §16.1 projection, test-only: the shared helper is #195 PR3's."""
-    assert type(config_schema_version) is int and config_schema_version == 1
-    raw = {section: dict(value) for section, value in config.items()}
-    resolved = {
-        role: raw[role].pop("resolved_model_config", None)
-        for role in ("student", "mentor", "analysis")
-    }
-    full = ScenarioConfig.model_validate(raw).model_dump()
-    projection = {
-        section: {name: full[section][name] for name in names}
-        for section, names in SUPPORTED_FIELDS.items()
-    }
-    for role, value in resolved.items():
-        projection[role]["resolved_model_config"] = value and {
-            k: value[k] for k in ("provider", "model_id")
-        }
-    return _sha(
-        json.dumps(
-            dict(config_schema_version=1, config=projection),
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-    )
-
-
-# Swap for src.services.model_configuration.supported_config_sha256 after #195 PR3.
-supported_config_sha256 = _interim_supported_config_sha256
 
 SCENARIO = json.loads((FIXTURES / "seed/scenario.json").read_text())
 DEMO_CONFIG = {

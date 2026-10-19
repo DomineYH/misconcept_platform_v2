@@ -8,6 +8,7 @@ from dataclasses import replace
 import httpx2
 from anthropic import APIStatusError, AsyncAnthropic, transform_schema
 
+from src.config import config
 from src.services.anthropic_errors import exception_code
 from src.services.anthropic_usage import normalize_usage
 from src.services.call_policy import CallDeadline, retry_after
@@ -65,7 +66,10 @@ def parameters(request):
         raise InvocationError("invalid_output")
     try:
         options = validate_model_and_options(
-            request.provider, request.model_id, request.validated_options
+            request.provider,
+            request.model_id,
+            request.validated_options,
+            app_mode=config.APP_MODE,
         )
     except ValueError:
         raise InvocationError("configuration_unavailable") from None

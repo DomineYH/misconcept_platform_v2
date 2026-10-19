@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from src.demo.session import Provenance
 from src.models import GenerationRun, SessionFeedbackReport
 from src.models.message import Message
 from src.models.question_analysis import QuestionAnalysis
@@ -41,6 +42,35 @@ HISTORY_COLUMNS = [
     "source_scenario_version",
     "config_hash_kind",
 ]
+
+# §23: demo-only suffix, always after the fixed admin/teacher columns.
+DEMO_COLUMNS = [
+    "demo_response_source",
+    "demo_external_ai_called",
+    "demo_content_version",
+    "demo_fixture_version",
+    "demo_record_origin",
+]
+
+
+def _demo_columns(session_id, demo_seed_session_id):
+    """Server-side provenance; None keeps the normal CSV unchanged."""
+    if demo_seed_session_id is None:
+        return {}
+    provenance = Provenance(
+        record_origin=(
+            "seed_prepared"
+            if session_id == demo_seed_session_id
+            else "visitor_generated"
+        )
+    )
+    return {
+        "demo_response_source": provenance.response_source,
+        "demo_external_ai_called": "false",
+        "demo_content_version": provenance.content_version,
+        "demo_fixture_version": provenance.fixture_version,
+        "demo_record_origin": provenance.record_origin,
+    }
 
 
 def _history_columns(display):
@@ -159,7 +189,13 @@ class CSVExporter:
             return f"'{value}"
         return value
 
-    async def export_session(self, session_id: int, db: AsyncSession) -> str:
+    async def export_session(
+        self,
+        session_id: int,
+        db: AsyncSession,
+        *,
+        demo_seed_session_id: int | None = None,
+    ) -> str:
         """
         Export single session to CSV format.
 
@@ -193,6 +229,7 @@ class CSVExporter:
 
         display = session_display(session)
         history_columns = _history_columns(display)
+        demo_columns = _demo_columns(session_id, demo_seed_session_id)
         scenario_title = self._sanitize_csv_value(display["scenario_title"])
         classification_enabled, label_names = analysis_display(session)
         classification_status = {
@@ -244,6 +281,7 @@ class CSVExporter:
                 "classification_status",
                 *HISTORY_COLUMNS,
                 *ANALYSIS_COLUMNS,
+                *(DEMO_COLUMNS if demo_seed_session_id is not None else []),
             ],
         )
         writer.writeheader()
@@ -273,6 +311,7 @@ class CSVExporter:
                     "classification_status": classification_status,
                     **history_columns,
                     **analysis_columns,
+                    **demo_columns,
                     "confidence": (
                         f"{analysis.confidence:.2f}"
                         if analysis and analysis.confidence
@@ -302,6 +341,7 @@ class CSVExporter:
                     "classification_status": classification_status,
                     **history_columns,
                     **analysis_columns,
+                    **demo_columns,
                     "confidence": "",
                     **analysis_summary_columns,
                     "feedback": self._sanitize_csv_value(
@@ -313,7 +353,11 @@ class CSVExporter:
         return output.getvalue()
 
     async def export_multiple_sessions(
-        self, session_ids: List[int], db: AsyncSession
+        self,
+        session_ids: List[int],
+        db: AsyncSession,
+        *,
+        demo_seed_session_id: int | None = None,
     ) -> str:
         """
         Export multiple sessions to single CSV.
@@ -329,7 +373,9 @@ class CSVExporter:
 
         for session_id in session_ids:
             try:
-                csv_content = await self.export_session(session_id, db)
+                csv_content = await self.export_session(
+                    session_id, db, demo_seed_session_id=demo_seed_session_id
+                )
                 # Skip header for subsequent sessions
                 lines = csv_content.strip().split("\n")
                 if not all_rows:
@@ -343,7 +389,11 @@ class CSVExporter:
         return "\n".join(all_rows)
 
     async def export_session_admin(
-        self, session_id: int, db: AsyncSession
+        self,
+        session_id: int,
+        db: AsyncSession,
+        *,
+        demo_seed_session_id: int | None = None,
     ) -> str:
         """Admin export with raw teacher info and meta_json."""
         result = await db.execute(
@@ -360,6 +410,7 @@ class CSVExporter:
 
         display = session_display(session)
         history_columns = _history_columns(display)
+        demo_columns = _demo_columns(session_id, demo_seed_session_id)
         scenario_title = self._sanitize_csv_value(display["scenario_title"])
         classification_enabled, label_names = analysis_display(session)
         classification_status = {
@@ -413,6 +464,7 @@ class CSVExporter:
             "classification_status",
             *HISTORY_COLUMNS,
             *ANALYSIS_COLUMNS,
+            *(DEMO_COLUMNS if demo_seed_session_id is not None else []),
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -449,6 +501,7 @@ class CSVExporter:
                     "classification_status": classification_status,
                     **history_columns,
                     **analysis_columns,
+                    **demo_columns,
                     "confidence": (
                         f"{analysis.confidence:.2f}"
                         if analysis and analysis.confidence
@@ -490,6 +543,7 @@ class CSVExporter:
                     "classification_status": classification_status,
                     **history_columns,
                     **analysis_columns,
+                    **demo_columns,
                     "confidence": "",
                     "meta_json": "",
                     **analysis_summary_columns,
@@ -502,7 +556,11 @@ class CSVExporter:
         return output.getvalue()
 
     async def export_multiple_sessions_admin(
-        self, session_ids: List[int], db: AsyncSession
+        self,
+        session_ids: List[int],
+        db: AsyncSession,
+        *,
+        demo_seed_session_id: int | None = None,
     ) -> str:
         """Admin bulk export with raw teacher info and meta_json.
 
@@ -584,6 +642,7 @@ class CSVExporter:
             "classification_status",
             *HISTORY_COLUMNS,
             *ANALYSIS_COLUMNS,
+            *(DEMO_COLUMNS if demo_seed_session_id is not None else []),
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -598,6 +657,7 @@ class CSVExporter:
             teacher = session.teacher
             display = session_display(session)
             history_columns = _history_columns(display)
+            demo_columns = _demo_columns(session_id, demo_seed_session_id)
             scenario_title = self._sanitize_csv_value(display["scenario_title"])
             classification_enabled, label_names = analysis_display(session)
             classification_status = {
@@ -644,6 +704,7 @@ class CSVExporter:
                         "classification_status": classification_status,
                         **history_columns,
                         **analysis_columns,
+                        **demo_columns,
                         "confidence": (
                             f"{analysis.confidence:.2f}"
                             if analysis and analysis.confidence
@@ -689,6 +750,7 @@ class CSVExporter:
                         "classification_status": classification_status,
                         **history_columns,
                         **analysis_columns,
+                        **demo_columns,
                         "confidence": "",
                         "meta_json": "",
                         **analysis_summary_columns,

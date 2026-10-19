@@ -1,0 +1,149 @@
+# D2-01 keyless schema, model mode and projection evidence (#195, G2)
+
+Contract: `d0-03-v1-r3` (G0 approved 2026-10-19). The wire and manifest
+`contract_version` stays `d0-03-v1-r3`. This page is G2 evidence only. It does
+not mark G3 (real storage, zero external calls, final browser run) or G4 done.
+Local role evidence means "output format checked", not a real provider test or
+an educational quality certification.
+
+## Delivery
+
+| PR | Branch / head | Scope |
+| --- | --- | --- |
+| #223 (merged, main `3b967f19be0cdbc361877addbf46ec9f7582b889`) | `feat/195-migration`, `e116df7` | migration 037, `demo_metadata`, ORM, guarded installer |
+| [#224](https://github.com/DomineYH/misconcept_platform_v2/pull/224) (open) | `feat/195-mode`, `ba539225e952cc6c3c65e23b2ec37b8cff9d3b4a` (review repair on `f4afe15`) | explicit `app_mode`, demo model/options/limits, role evidence, caller pass-through |
+| [#232](https://github.com/DomineYH/misconcept_platform_v2/pull/232) (open) | `feat/195-projection` (on top of #224), tested tree `7b0cce91d0a41d71c2ad72146b1d085022297fc4`, doc-only successors `bcf789a` and later | §16.1 helper, this page |
+
+## Migration handoff for #197 (§12, §17)
+
+- `db_schema_version`: `037_demo_provider.sql`. This is the last `_migrations`
+  filename after a fresh install.
+- `src/db/migrations/037_demo_provider.sql` SHA-256:
+  `cc16dfd90cbc2d71eedb919daa4920da050f433839bf2a5a0255ac0f4f1eacf9`
+- `migration_set_sha256`:
+  `d245be48d9b05c13264a43b146343388d85d81a43ad199490054ee45f79beec1`
+  (computed from main `3b967f1`; unchanged on #224 and PR3, which add no
+  migration).
+
+Recipe (owner: #197, `migration_set_sha256()` in
+`tests/test_demo_d2_03_fixtures.py`; coordinator-confirmed canonical). The set
+is exactly what `run_all_migrations()` installs on a fresh database:
+`src/db/migrations/baseline.sql` plus every `src/db/migrations/[0-9]*.sql` with
+revision > 23 that does not end in `_down.sql`. Sort by repo-relative POSIX
+path; for each file feed `path + NUL + file bytes + NUL` into one SHA-256:
+
+```python
+import hashlib, subprocess
+rev, root = "3b967f1", "src/db/migrations/"
+names = subprocess.run(["git", "ls-tree", "--name-only", rev, root],
+                       check=True, capture_output=True, text=True).stdout.split()
+def applied(n):
+    base = n.rsplit("/", 1)[1]
+    return base == "baseline.sql" or (base[:1].isdigit() and base.endswith(".sql")
+        and int(base.split("_")[0]) > 23 and not base.endswith("_down.sql"))
+digest = hashlib.sha256()
+for n in sorted(filter(applied, names)):
+    data = subprocess.run(["git", "show", f"{rev}:{n}"],
+                          check=True, capture_output=True).stdout
+    digest.update(n.encode() + b"\0" + data + b"\0")
+print(digest.hexdigest())
+```
+
+The set has 15 files: 024–037 and `baseline.sql`. A change to any of their
+bytes, or a new migration, changes the hash. The manifest must then be
+regenerated; it is never patched by hand.
+
+## Interfaces for #196/#197/#198
+
+- §2: `connection_ready`, `effective_roles`, `model_available`,
+  `validate_model_and_options`, `public_model`, `configuration_state` and
+  `resolve_frozen_model` take a required keyword-only
+  `app_mode: Literal["normal","demo"]`. Normal rejects `demo` rows. Demo
+  rejects external providers and never calls `decrypt_key` for the keyless
+  connection.
+- §13: `src/services/model_capabilities.py` exposes `DEMO_MODEL_ID`
+  (`demo-classroom-v1`) and `DEMO_MODEL_TITLE` (`준비된 수업 예시 v1`).
+  Capability `demo-cap-v1`: text, stream and structured true; tools, image and
+  audio false; input 65536 (estimate); output 8192. Options are exactly
+  `{"max_output_tokens": int 4096..8192}`. `ResolvedModelConfig` stores 4096
+  when the value is omitted at authoring.
+- §13 evidence tuple: `RoleVerification` status `succeeded`, `verified_at`
+  `2026-10-18T00:00:00Z`, revision 0, version 1, `demo-cap-v1`, roles
+  `s1-v1`/`s3-v1`/`s4-v2`, no `probe_request_id`. A mismatch gives `stale`
+  with `error_code: VERSION_MISMATCH`; re-enabling the connection does not
+  repair it.
+- §8: `CallLimits.demo` is a strict int ≥ 2 and reads as 2 when absent.
+- §16.1: `src/services/model_configuration.py` provides
+  `supported_config_projection(config_schema_version, config)` and
+  `supported_config_sha256(config_schema_version, config)`. They validate with
+  `ScenarioConfig` and its defaults first, project only the contract fields,
+  never trim or normalize, and raise `ValueError("INVALID_REQUEST")` for a bad
+  version, type, null, extra field or invalid UTF-8. Consumers import these
+  helpers and never copy them. Excluded PKs and options still need their own
+  validation. The unit vector digest is
+  `84c3988b5ab0c5ad9aa47e1c7c66edb755909e8b65a820eac9456bcf56dfaadb`. It is
+  not the product D0-02 hash, which #197 computes from the real seed config.
+
+## Checks
+
+All pytest runs were serial with one worker (no xdist), on Python 3.12.3,
+pytest 8.4.2 and `uv run --frozen` (frozen `uv.lock`, dev extra). Log paths are
+under `/mnt/d/dev/mp2-wt/_coord/reports/logs-w195/` on the implementation host.
+
+**#223 (PR1).** Tested revision `e116df7` (integration onto main), venv
+`/tmp/w195-venv`.
+
+- Affected:
+  `UV_PROJECT_ENVIRONMENT=/tmp/w195-venv uv run --frozen python -m pytest -q tests/test_demo_d1_0*.py tests/test_demo_d2_01_schema.py tests/test_migrations.py tests/test_provider_startup.py tests/test_s4_cutover.py tests/test_comparison_conversation_migration.py`
+  gave 521 collected/executed, 521 passed, 223.23 s.
+- Full suite:
+  `flock /tmp/mp2-heavy.lock -c 'UV_PROJECT_ENVIRONMENT=/tmp/w195-venv uv run --frozen python -m pytest -q'`
+  gave 2640 collected/executed, 2640 passed, 1878.30 s, exit 0. Log:
+  `int/full.log`.
+
+**#224 (PR2).** Tested revisions `f4afe15` and review repair `ba53922`.
+
+- `f4afe15` targeted A:
+  `pytest -q tests/test_demo_d2_01_mode.py tests/test_demo_d2_01_schema.py tests/test_migrations.py tests/test_provider_migration.py tests/test_provider_startup.py`
+  gave 105/105 passed, 53.0 s (`s2-targeted1.log`).
+- `f4afe15` targeted B:
+  `pytest -q tests/test_model_management.py tests/test_model_native_options.py tests/test_provider_connections.py tests/test_google_capabilities.py tests/test_analysis_limits.py tests/test_call_admission.py tests/test_lesson_snapshots.py tests/test_scenario_drafts.py tests/test_scenario_publication.py`
+  gave 235/235 passed, 328.0 s (`s2-targeted2.log`).
+- `f4afe15` affected: the 85 test files that import an edited module.
+  - The first run was invalid: the `/tmp` tmpfs ran out of space (ENOSPC), which
+    broke 6 late files (`s2-affected.log`).
+  - Those 6 files were rerun on clean `f4afe15` with venv
+    `/home/dominelinux/.cache/mp2-venvs/w195` and
+    `TMPDIR=/home/dominelinux/.cache/mp2-tmp/w195`: 87/87 passed, 192.2 s
+    (`s2-rerun2.log`).
+  - The other 79 files had passed before the disk filled.
+- `ba53922`:
+  `uv run --frozen python -m pytest -q -p no:cacheprovider --basetemp=$TMPDIR/pt tests/test_demo_d2_01_mode.py tests/test_model_management.py tests/test_model_native_options.py tests/test_provider_connections.py tests/test_google_capabilities.py tests/test_analysis_limits.py tests/test_call_admission.py tests/test_lesson_snapshots.py tests/test_scenario_drafts.py tests/test_scenario_publication.py`
+  gave 295 collected/executed, 295 passed, 380.7 s, exit 0.
+- Full pytest, browser and live: **CI on
+  [PR #224](https://github.com/DomineYH/misconcept_platform_v2/pull/224)**. Not
+  run locally.
+
+**#232 (PR3).** Tested tree `7b0cce91d0a41d71c2ad72146b1d085022297fc4`. This is
+`ba53922` plus the exact PR3 diff, which was then committed unchanged.
+
+- Environment: venv `UV_PROJECT_ENVIRONMENT=/home/dominelinux/.cache/mp2-venvs/w195`,
+  `TMPDIR=/home/dominelinux/.cache/mp2-tmp/w195`.
+- Command:
+  `uv run --frozen python -m pytest -q -p no:cacheprovider --basetemp=$TMPDIR/pt tests/test_demo_d2_01_projection.py tests/test_demo_d2_01_mode.py tests/test_demo_d2_01_schema.py tests/test_model_management.py tests/test_lesson_snapshots.py tests/test_scenario_*.py`
+- Result: 410 collected/executed, 410 passed, 559.84 s, exit 0. Log:
+  `s3-targeted.log`.
+- Successor `bcf789a` and this evidence repair change only this page, so no code
+  differs from the tested tree.
+- Full pytest, browser and live: **CI on
+  [PR #232](https://github.com/DomineYH/misconcept_platform_v2/pull/232)**. Not
+  run locally.
+
+`ruff check .` and `black --check .` pass on each head. `conftest` uses
+`TESTING=true` and ORM `create_all`, so the migration preservation evidence
+comes only from the official runner on temporary databases
+(`tests/test_demo_d2_01_schema.py`). It is not evidence of a non-test startup.
+
+Not run locally: full `npm run test:browser` and `tests/check_student_live.py`
+for #224 and #232 (Addendum H1: CI). No real provider, network, production DB or
+secret was used.

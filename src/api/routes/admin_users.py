@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies import get_admin_user, get_db_session, templates
+from src.api.routes.admin_session_actions import demo_delete
 from src.api.schemas import (
     AdminUserResponse,
     BulkPreviewResponse,
@@ -25,13 +26,14 @@ from src.api.schemas import (
     UserCreate,
     UserUpdate,
 )
+from src.config import config
+from src.demo.lifecycle import NORMAL_SCOPE, lifecycle
 from src.i18n import display_language, translate
 from src.models.generation_run import GenerationRun
 from src.models.model_probe import ModelProbe
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
-from src.services.generation_lifecycle import active_runs
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +291,27 @@ async def delete_user(
     request: Request = None,
 ):
     """POST /admin/users/{id}/delete - Delete user."""
+    if config.APP_MODE == "demo":
+        comparison_generations = await demo_delete(
+            request,
+            lambda demo_db: remove_user(user_id, user, demo_db, request),
+            teacher_id=user_id,
+        )
+        scope = request.state.demo_context.scope
+    else:
+        comparison_generations = await remove_user(user_id, user, db, request)
+        scope = NORMAL_SCOPE
+    for run_id in comparison_generations:
+        lifecycle.cancel(scope, "run", run_id)
 
+    return {
+        "status": "deleted",
+        "user_id": user_id,
+    }
+
+
+async def remove_user(user_id, user, db, request):
+    """Apply the existing deletion limits; return running comparison runs."""
     if user_id == user.id:
         raise HTTPException(
             status_code=400,
@@ -355,11 +377,4 @@ async def delete_user(
     ).all()
     await db.delete(target)
     await db.flush()
-    for run_id in comparison_generations:
-        if signal := active_runs.get(run_id):
-            signal.set()
-
-    return {
-        "status": "deleted",
-        "user_id": user_id,
-    }
+    return comparison_generations

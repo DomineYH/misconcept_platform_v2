@@ -1,7 +1,10 @@
 """Admin session CSV export routes."""
 
+import csv
+import io
 import logging
 from typing import List, Optional
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -16,10 +19,13 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session
+from src.api.routes.admin_session_actions import session_missing
 from src.api.routes.admin_sessions import (
     parse_date_filter,
     safe_int,
 )
+from src.config import config
+from src.demo.database import DemoError
 from src.i18n import display_language, translate
 from src.models.message import Message
 from src.models.session import Session
@@ -29,6 +35,47 @@ from src.services.session_history import session_display
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def demo_seed_session(request):
+    """§23 record origin from server seed refs; None keeps normal CSV."""
+    if config.APP_MODE != "demo":
+        return None
+    runtime = getattr(request.app.state, "demo_request_db", None)
+    seed = getattr(runtime, "seed_refs", {}).get("completed_session")
+    if type(seed) is not int:
+        raise DemoError("CONFIGURATION_INVALID")
+    return seed
+
+
+def csv_response(request, csv_content, filename, target, *, echo=False):
+    """Normal keeps its filename; demo uses the fixed §23 ASCII name."""
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    if config.APP_MODE == "demo":
+        headers["Content-Disposition"] = (
+            f"attachment; filename=demo_d0-02-v1_admin_{target}.csv"
+        )
+        if echo:
+            # §24.1 S5: the tour verifies this echo and count before csv_received.
+            request_id = request.headers.get("x-demo-export-request-id")
+            if request_id is not None:
+                try:
+                    canonical = str(UUID(request_id)) == request_id
+                except ValueError:
+                    canonical = False
+                if not canonical:
+                    raise DemoError("INVALID_REQUEST")
+                headers["X-Demo-Export-Request-ID"] = request_id
+            rows = len(list(csv.DictReader(io.StringIO(csv_content))))
+            # §24.1 requires a count >= 1; never fabricate a row for it.
+            if rows < 1:
+                raise DemoError("INVALID_REQUEST")
+            headers["X-Demo-Export-Row-Count"] = str(rows)
+    return Response(
+        content="\ufeff" + csv_content,
+        media_type="text/csv; charset=utf-8",
+        headers=headers,
+    )
 
 
 @router.get("/admin/sessions/export")
@@ -98,16 +145,10 @@ async def export_sessions(
 
     exporter = CSVExporter()
     csv_content = await exporter.export_multiple_sessions_admin(
-        list(session_ids), db
+        list(session_ids), db, demo_seed_session_id=demo_seed_session(request)
     )
 
-    return Response(
-        content="\ufeff" + csv_content,
-        media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": ("attachment; filename=sessions_export.csv")
-        },
-    )
+    return csv_response(request, csv_content, "sessions_export.csv", "all")
 
 
 @router.post("/admin/sessions/export-selected")
@@ -162,16 +203,12 @@ async def export_selected_sessions(
         )
 
     exporter = CSVExporter()
-    csv_content = await exporter.export_multiple_sessions_admin(valid_ids, db)
+    csv_content = await exporter.export_multiple_sessions_admin(
+        valid_ids, db, demo_seed_session_id=demo_seed_session(request)
+    )
 
-    return Response(
-        content="\ufeff" + csv_content,
-        media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": (
-                "attachment;" " filename=selected_sessions.csv"
-            )
-        },
+    return csv_response(
+        request, csv_content, "selected_sessions.csv", "selected", echo=True
     )
 
 
@@ -191,6 +228,8 @@ async def export_user_conversations(
 
     target_user = await db.get(User, user_id)
     if not target_user:
+        if config.APP_MODE == "demo":
+            raise DemoError("RESOURCE_NOT_FOUND")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=translate("admin.user_missing", display_language(request)),
@@ -218,14 +257,14 @@ async def export_user_conversations(
 
     exporter = CSVExporter()
     csv_content = await exporter.export_multiple_sessions_admin(
-        list(session_ids), db
+        list(session_ids), db, demo_seed_session_id=demo_seed_session(request)
     )
 
-    filename = f"user_{user_id}_conversations.csv"
-    return Response(
-        content="\ufeff" + csv_content,
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": (f"attachment; filename={filename}")},
+    return csv_response(
+        request,
+        csv_content,
+        f"user_{user_id}_conversations.csv",
+        f"user-{user_id}",
     )
 
 
@@ -297,12 +336,7 @@ async def download_session(
 
     session = await db.get(Session, session_id)
     if not session or session.deleted_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=translate(
-                "teacher.session_not_found", display_language(request)
-            ),
-        )
+        raise session_missing(request)
 
     if session.ended_at is None:
         raise HTTPException(
@@ -313,11 +347,14 @@ async def download_session(
         )
 
     exporter = CSVExporter()
-    csv_content = await exporter.export_session_admin(session_id, db)
+    csv_content = await exporter.export_session_admin(
+        session_id, db, demo_seed_session_id=demo_seed_session(request)
+    )
 
-    filename = f"session_{session_id}.csv"
-    return Response(
-        content="\ufeff" + csv_content,
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": (f"attachment; filename={filename}")},
+    return csv_response(
+        request,
+        csv_content,
+        f"session_{session_id}.csv",
+        f"session-{session_id}",
+        echo=True,
     )

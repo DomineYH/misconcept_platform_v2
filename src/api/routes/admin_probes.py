@@ -100,7 +100,7 @@ async def _reserve_probe(model_id, data, user, db):
         raise HTTPException(
             422, detail={"code": "capability_definition_required"}
         )
-    if not connection_ready(connection):
+    if not connection_ready(connection, app_mode="normal"):
         raise HTTPException(503, detail={"code": "configuration_unavailable"})
     try:
         options = probe_options(connection.provider, model, data.role)

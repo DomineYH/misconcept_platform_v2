@@ -44,7 +44,7 @@ async def update_settings(
                     else None
                 )
                 if model is None or not model_available(
-                    model, connection, role
+                    model, connection, role, app_mode="normal"
                 ):
                     raise HTTPException(
                         422, detail={"code": "default_model_unavailable"}

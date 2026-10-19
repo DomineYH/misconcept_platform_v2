@@ -16,13 +16,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from src.api.dependencies import get_admin_user, get_db_session, templates
+from src.api.dependencies import (
+    get_admin_user,
+    get_db_session,
+    get_demo_session,
+    templates,
+)
 from src.api.routes.session_helpers import (
     mark_session_ended,
     require_native_session,
 )
 from src.api.schemas import AnalysisRequest
 from src.config import config
+from src.demo.database import DemoError
+from src.demo.session import capture_tour_facts, retain_tour_facts
 from src.i18n import display_language, translate
 from src.models.session import Session
 from src.models.user import User
@@ -41,7 +48,35 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 
+async def demo_delete(request, delete, *, teacher_id=None, session_id=None):
+    """§24.1: capture, commit and retain tour facts under one write guard."""
+    ctx = request.state.demo_context
+    demo = get_demo_session(request)
+    async with demo.visitors.write_guard(ctx) as handle:
+        facts = await capture_tour_facts(ctx, handle, demo.tour_content)
+        async with ctx.factory() as db:
+            result = await delete(db)
+            await db.commit()
+        retain_tour_facts(
+            handle,
+            facts.model_copy(
+                update={
+                    "teacher_deleted": facts.teacher_deleted
+                    or teacher_id == demo.tour_content.seed_refs["teacher"],
+                    "session_deleted": facts.session_deleted
+                    or (
+                        session_id is not None
+                        and session_id == facts.journey_session_id
+                    ),
+                }
+            ),
+        )
+    return result
+
+
 def session_missing(request):
+    if config.APP_MODE == "demo":
+        return DemoError("RESOURCE_NOT_FOUND")
     return HTTPException(
         404,
         detail=translate(
@@ -123,6 +158,19 @@ async def delete_session(
     request: Request = None,
 ):
     """Soft delete a session (set deleted_at)."""
+    if config.APP_MODE == "demo":
+        await demo_delete(
+            request,
+            lambda demo_db: soft_delete(session_id, demo_db, request),
+            session_id=session_id,
+        )
+    else:
+        await soft_delete(session_id, db, request)
+
+    return Response(content="", status_code=200)
+
+
+async def soft_delete(session_id, db, request):
     session = await db.get(Session, session_id)
     if not session:
         raise session_missing(request)
@@ -137,8 +185,6 @@ async def delete_session(
 
     session.mark_deleted()
     await db.flush()
-
-    return Response(content="", status_code=200)
 
 
 @router.get(

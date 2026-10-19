@@ -4,6 +4,7 @@ import json
 
 from sqlalchemy import func, select, text, update
 
+from src.demo.lifecycle import NormalContext, lifecycle
 from src.models import ApiUsageLog, ModelConfig, ModelProbe, ProviderConnection
 from src.models.provider_connection import now
 from src.services.invocation_types import InvocationError
@@ -45,8 +46,12 @@ def current_probe(probe, model, connection):
     )
 
 
-async def finish_probe(factory, probe_id, status, error_code=None):
-    async with factory() as db:
+async def finish_probe(
+    factory, probe_id, status, error_code=None, *, ctx=None, registry=lifecycle
+):
+    ctx = ctx if ctx is not None else NormalContext(factory)
+    factory = ctx.factory
+    async with registry.write_guard(ctx), factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
         probe = await db.get(ModelProbe, probe_id)
         if probe is None or probe.status != "verifying":
@@ -85,8 +90,10 @@ async def finish_probe(factory, probe_id, status, error_code=None):
         await db.commit()
 
 
-async def interrupt_probe_orphans(factory):
-    async with factory() as db:
+async def interrupt_probe_orphans(factory, *, ctx=None, registry=lifecycle):
+    ctx = ctx if ctx is not None else NormalContext(factory)
+    factory = ctx.factory
+    async with registry.write_guard(ctx), factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
         probes = (
             await db.scalars(
@@ -138,9 +145,15 @@ async def interrupt_probe_orphans(factory):
         await db.commit()
 
 
-async def cancel_reserved_probe(factory, probe_id):
-    await finish_probe(factory, probe_id, "failed", "interrupted")
-    async with factory() as db:
+async def cancel_reserved_probe(
+    factory, probe_id, *, ctx=None, registry=lifecycle
+):
+    await finish_probe(
+        factory, probe_id, "failed", "interrupted", ctx=ctx, registry=registry
+    )
+    ctx = ctx if ctx is not None else NormalContext(factory)
+    factory = ctx.factory
+    async with registry.write_guard(ctx), factory() as db:
         probe = await db.get(ModelProbe, probe_id)
         if probe is None:
             raise InvocationError("configuration_unavailable")

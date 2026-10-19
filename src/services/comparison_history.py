@@ -7,9 +7,9 @@ from fastapi import HTTPException
 from sqlalchemy import and_, delete, or_, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.demo.lifecycle import NORMAL_SCOPE, lifecycle
 from src.models import ApiUsageLog, ComparisonRun, GenerationRun
 from src.services.comparison_state import owned_comparison, utcnow
-from src.services.generation_lifecycle import active_runs
 
 
 async def list_comparisons(db, owner_id, cursor=None):
@@ -81,12 +81,14 @@ async def list_comparisons(db, owner_id, cursor=None):
     )
 
 
-def running_content():
+def running_content(*, scope=NORMAL_SCOPE, registry=lifecycle):
     return or_(
         select(GenerationRun.id)
         .where(
             GenerationRun.comparison_run_id == ComparisonRun.id,
-            GenerationRun.id.in_(list(active_runs)),
+            GenerationRun.id.in_(
+                [token.key[2] for token in registry.tokens(scope, "run")]
+            ),
         )
         .exists(),
         ComparisonRun.status == "running",
@@ -120,14 +122,17 @@ async def delete_contents(db, comparison_ids):
     )
 
 
-async def delete_comparison(db, comparison_id, owner_id):
+async def delete_comparison(
+    db, comparison_id, owner_id, *, scope=NORMAL_SCOPE, registry=lifecycle
+):
     await db.execute(text("BEGIN IMMEDIATE"))
     comparison = await owned_comparison(db, comparison_id, owner_id)
     if comparison.conversation_id is not None:
         raise HTTPException(409, detail={"code": "use_conversation"})
     running = await db.scalar(
         select(ComparisonRun.id).where(
-            ComparisonRun.id == comparison_id, running_content()
+            ComparisonRun.id == comparison_id,
+            running_content(scope=scope, registry=registry),
         )
     )
     runs = await db.scalars(
@@ -135,7 +140,9 @@ async def delete_comparison(db, comparison_id, owner_id):
             GenerationRun.comparison_run_id == comparison_id
         )
     )
-    if running or any(run_id in active_runs for run_id in runs):
+    if running or any(
+        registry.lookup(scope, "run", run_id) is not None for run_id in runs
+    ):
         raise HTTPException(409, detail={"code": "comparison_busy"})
     try:
         await delete_contents(db, [comparison_id])

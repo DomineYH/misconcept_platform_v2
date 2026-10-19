@@ -5,6 +5,7 @@ from copy import deepcopy
 from sqlalchemy import text
 
 from src.api.schemas.comparison import ComparisonRetry
+from src.demo.lifecycle import NORMAL_SCOPE, lifecycle
 from src.models import ComparisonRun
 from src.services.call_admission import execution_lock
 from src.services.comparison_conversations import (
@@ -20,12 +21,20 @@ from src.services.comparison_runs import (
     persist_comparison,
 )
 from src.services.comparison_stop import stage_stop
-from src.services.generation_lifecycle import active_runs
 from src.services.generation_runs import conflict
 
 
 async def recover_action(
-    factory, user, identifier, action, body, child_id=None, panel_id=None
+    factory,
+    user,
+    identifier,
+    action,
+    body,
+    child_id=None,
+    panel_id=None,
+    *,
+    scope=NORMAL_SCOPE,
+    registry=lifecycle,
 ):
     executions = None
     async with execution_lock():
@@ -107,8 +116,7 @@ async def recover_action(
                         execution["permit"].release()
                 raise
             for run_id in stopped:
-                if signal := active_runs.get(run_id):
-                    signal.set()
+                registry.cancel(scope, "run", run_id)
             if executions:
                 snapshot.update(
                     conversation_id=parent.id,

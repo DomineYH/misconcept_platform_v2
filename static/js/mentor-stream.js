@@ -21,7 +21,7 @@ export function mountMentorStream(ui) {
   }));
   const help = document.getElementById('request-mentor');
   const helpStatus = document.getElementById('mentor-help-status');
-  const storageKey = `chat-mentor-${ui.sessionId}`;
+  const storageKey = uiLanguage.storageKey(`chat-mentor-${ui.sessionId}`);
   let saved = {};
   try { saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}'); } catch {}
   let leftPage = false;

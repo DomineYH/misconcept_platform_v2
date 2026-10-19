@@ -180,7 +180,7 @@ class StudentStreamingResponse(StreamingResponse):
         finisher=finish_student,
         demo_run=None,
     ):
-        self.aborted = False
+        self.abort_task = None
         self.factory, self.run_id = factory, accepted["run_id"]
         self.permit = kwargs.get("permit")
         self.finisher = finisher
@@ -206,30 +206,50 @@ class StudentStreamingResponse(StreamingResponse):
         )
 
     async def demo_abort(self):
-        """End a demo run once, whether or not its body ever started."""
-        if self.demo_run is None or self.aborted:
+        """End a demo run once, whether or not its body ever started.
+
+        One owned cleanup task; every caller awaits it, and cancelling a
+        caller never cancels the cleanup itself.
+        """
+        if self.demo_run is None:
             return
-        self.aborted = True
-        with anyio.CancelScope(shield=True):
-            with anyio.move_on_after(CLEANUP_SECONDS):
-                with suppress(Exception):
-                    await self.body_iterator.aclose()
-                if self.claim():
-                    # Response headers can fail before the generator starts.
-                    try:
-                        await self.finisher(
-                            self.factory,
-                            self.run_id,
-                            status="interrupted",
-                            error_code="disconnected",
-                            **demo_kwargs(self.demo_run),
-                        )
-                    except Exception:
-                        logger.error("Unable to record unsent generation")
-            if self.permit is not None:
-                self.permit.release()
-            # §6: done only after the producer and final saves end.
-            await self.demo_run.release()
+        if self.abort_task is None:
+            self.abort_task = asyncio.create_task(self._demo_cleanup())
+        cancelled = False
+        while not self.abort_task.done():
+            try:
+                await asyncio.shield(self.abort_task)
+            except asyncio.CancelledError:
+                cancelled = True
+        self.abort_task.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
+    async def _demo_cleanup(self):
+        # Quiesce active work first so joining it cannot wait forever.
+        for task in self.demo_run.tasks:
+            task.cancel()
+        with anyio.move_on_after(CLEANUP_SECONDS):
+            # A body still being read cannot be closed here; its own
+            # finally claims and records the run instead.
+            with suppress(Exception):
+                await self.body_iterator.aclose()
+            if self.claim():
+                # Response headers can fail before the generator starts.
+                try:
+                    await self.finisher(
+                        self.factory,
+                        self.run_id,
+                        status="interrupted",
+                        error_code="disconnected",
+                        **demo_kwargs(self.demo_run),
+                    )
+                except Exception:
+                    logger.error("Unable to record unsent generation")
+        if self.permit is not None:
+            self.permit.release()
+        # §6: done only after the producer and final saves end.
+        await self.demo_run.release()
 
     async def __call__(self, scope, receive, send):
         try:

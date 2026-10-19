@@ -1847,6 +1847,90 @@ async def test_s2r1b_demo_abort_ends_an_unsent_response_once(lifecycle):
         permit.release()
 
 
+def slot_permit():
+    permit = CallPermit(
+        None,
+        1,
+        "demo",
+        0,
+        1,
+        "student",
+        "student",
+        False,
+        {},
+        None,
+        0.0,
+        None,
+        1,
+    )
+    active_calls.add(permit)
+    registered_calls.add(permit)
+    return permit
+
+
+async def test_cancelling_an_abort_never_skips_its_cleanup(lifecycle):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    entered, finish = asyncio.Event(), asyncio.Event()
+    saved = []
+
+    async def finisher(factory, run_id, *, status, demo=None, **values):
+        entered.set()
+        await finish.wait()
+        async with demo.guard():
+            saved.append(status)
+
+    permit = slot_permit()
+    try:
+        response = s2r1b_student(run, run_id, [], permit=permit)
+        response.finisher = finisher
+        first = asyncio.create_task(response.demo_abort())
+        await entered.wait()
+        first.cancel()
+        second = asyncio.create_task(response.demo_abort())
+        await asyncio.sleep(0.05)
+        # The cancelled caller keeps waiting; cleanup is still in progress.
+        assert not first.done() and not second.done()
+        assert permit in active_calls
+        finish.set()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        await second
+        await response.demo_abort()
+        assert saved == ["interrupted"]
+        assert permit not in active_calls and permit not in registered_calls
+        assert run.token.task_control.done.is_set()
+        assert lifecycle.lookup(scope, "run", run_id) is None
+        assert lifecycle.visitors.lease_count(scope) == 0
+    finally:
+        permit.release()
+
+
+async def test_abort_quiesces_an_active_producer_before_joining(
+    lifecycle, monkeypatch
+):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    started = asyncio.Event()
+
+    async def execute_call(permit, request, **kwargs):
+        started.set()
+        await asyncio.Event().wait()
+        yield CallEvent("completed", text="never")
+
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", recorder([]))
+    response = s2r1b_student(run, run_id, [])
+    serving = asyncio.create_task(serve(response))
+    await started.wait()
+    # The body is mid-read; abort must not wait on the blocked producer.
+    await asyncio.wait_for(response.demo_abort(), 10)
+    assert all(task.done() for task in run.tasks)
+    assert lifecycle.lookup(scope, "run", run_id) is None
+    await asyncio.wait_for(serving, 10)
+    assert lifecycle.visitors.lease_count(scope) == 0
+
+
 async def test_s2r1b_demo_abort_after_a_served_run_is_a_noop(
     lifecycle, monkeypatch
 ):
@@ -1872,7 +1956,7 @@ async def test_s2r1b_normal_response_has_no_demo_abort_work():
     )
     try:
         await response.demo_abort()
-        assert not response.aborted
+        assert response.abort_task is None
     finally:
         student_stream.active_runs.pop(response.run_id, None)
         await response.body_iterator.aclose()
@@ -2201,10 +2285,37 @@ def test_s2r1c_envelope_table_matches_section_11():
         "context_limit": (422, False, "demo.supported_only"),
         "output_limit": (422, False, "demo.supported_only"),
         "session_ended": (409, False, "demo.stopped"),
-        "student_busy": (409, True, "demo.wait_or_stop"),
-        "mentor_busy": (409, True, "demo.wait_or_stop"),
-        "unresolved_turn": (409, False, "demo.refresh_state"),
     }
+
+
+@pytest.mark.parametrize(
+    "legacy,code,retryable,recovery",
+    [
+        ("student_busy", "DEMO_BUSY", True, "demo.wait_or_stop"),
+        ("mentor_busy", "DEMO_BUSY", True, "demo.wait_or_stop"),
+        (
+            "unresolved_turn",
+            "DEMO_REQUEST_CONFLICT",
+            False,
+            "demo.refresh_state",
+        ),
+    ],
+)
+def test_legacy_reservation_codes_become_their_section_11_rows(
+    legacy, code, retryable, recovery
+):
+    # Literal §11 rows, independent of the mapping tables under test.
+    response = demo_error_response(s2r1c_error(legacy, 409), S2R1C_CTX)
+    assert response.status_code == 409
+    assert json.loads(response.body) == dict(
+        detail=dict(
+            code=code,
+            retryable=retryable,
+            recovery=recovery,
+            generation=7,
+            auth_epoch=3,
+        )
+    )
 
 
 def test_s2r1c_unknown_or_plain_errors_pass_through():
@@ -2245,7 +2356,7 @@ async def test_s2r1c_real_student_busy_maps_to_wait_or_stop(s2r_demo):
     response = demo_error_response(error, demo.binding.ctx)
     assert response.status_code == 409
     assert json.loads(response.body)["detail"] == dict(
-        code="student_busy",
+        code="DEMO_BUSY",
         retryable=True,
         recovery="demo.wait_or_stop",
         generation=demo.ctx.generation,
@@ -2270,6 +2381,9 @@ async def test_s2r1c_real_unresolved_turn_maps_to_refresh_state(s2r_demo):
     assert (response.status_code, error.detail["code"]) == (
         409,
         "unresolved_turn",
+    )
+    assert json.loads(response.body)["detail"]["code"] == (
+        "DEMO_REQUEST_CONFLICT"
     )
     assert json.loads(response.body)["detail"]["recovery"] == (
         "demo.refresh_state"
@@ -2302,7 +2416,7 @@ async def test_s2r1c_real_mentor_busy_maps_to_wait_or_stop(s2r_demo):
     assert (response.status_code, json.loads(response.body)["detail"]) == (
         409,
         dict(
-            code="mentor_busy",
+            code="DEMO_BUSY",
             retryable=True,
             recovery="demo.wait_or_stop",
             generation=demo.ctx.generation,

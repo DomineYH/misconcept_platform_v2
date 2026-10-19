@@ -16,6 +16,7 @@ from src.api.routes.session_helpers import load_session
 from src.api.routes.session_messages import limiter
 from src.api.schemas import GenerationRequest
 from src.config import config
+from src.demo.database import DemoError
 from src.demo.lifecycle import TaskControl
 from src.i18n import display_language, translate
 from src.models import GenerationRun, User
@@ -81,18 +82,30 @@ DEMO_ERRORS = {
     "context_limit": (422, False, "demo.supported_only"),
     "output_limit": (422, False, "demo.supported_only"),
     "session_ended": (409, False, "demo.stopped"),
-    "student_busy": (409, True, "demo.wait_or_stop"),
-    "mentor_busy": (409, True, "demo.wait_or_stop"),
-    "unresolved_turn": (409, False, "demo.refresh_state"),
+}
+# Legacy reservation codes without a §11 row become their boundary code.
+DEMO_CODES = {
+    "student_busy": "BUSY",
+    "mentor_busy": "BUSY",
+    "unresolved_turn": "REQUEST_CONFLICT",
 }
 
 
 def demo_error_response(error, ctx):
     """The §11 E(code) envelope for a known demo reserve refusal, else None."""
     code = error.detail.get("code") if isinstance(error.detail, dict) else None
-    if ctx is None or code not in DEMO_ERRORS:
+    if ctx is None or code not in DEMO_ERRORS.keys() | DEMO_CODES.keys():
         return None
-    status, retryable, recovery = DEMO_ERRORS[code]
+    if code in DEMO_CODES:
+        boundary = DemoError(DEMO_CODES[code])
+        code, status, retryable, recovery = (
+            boundary.code,
+            boundary.status_code,
+            boundary.retryable,
+            boundary.recovery,
+        )
+    else:
+        status, retryable, recovery = DEMO_ERRORS[code]
     return JSONResponse(
         {
             "detail": {

@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.demo.lifecycle import NormalContext, lifecycle
 from src.models import ApiUsageLog
 from src.models.provider_connection import now
 from src.services.invocation_types import InvocationError, empty_usage
@@ -31,8 +32,14 @@ async def start_attempt(
     session_id=None,
     context_budget_json=None,
     usage_scope=None,
+    ctx=None,
+    registry=lifecycle,
 ):
-    async with factory() as db:
+    # §6: a demo row is written only while ctx's generation/epoch is current.
+    async with (
+        registry.write_guard(ctx or NormalContext(factory)),
+        factory() as db,
+    ):
         entry = ApiUsageLog(
             invocation_id=invocation_id or str(uuid4()),
             request_id=request_id,
@@ -72,8 +79,13 @@ async def finish_attempt(
     error_code=None,
     usage=None,
     first_output_at=None,
+    ctx=None,
+    registry=lifecycle,
 ):
-    async with factory() as db:
+    async with (
+        registry.write_guard(ctx or NormalContext(factory)),
+        factory() as db,
+    ):
         try:
             changed = await db.execute(
                 update(ApiUsageLog)

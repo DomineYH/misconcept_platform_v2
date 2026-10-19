@@ -122,18 +122,20 @@ async def save_analysis(
             run.status = status
             run.finished_at = now()
             run.error_code = payload.get("metadata", {}).get("error_code")
-            run.outcome_json = json.dumps(
-                dict(
-                    status=status,
-                    error_code=run.error_code,
-                    coverage=payload.get("metadata", {}).get("coverage"),
-                    outcome=(
-                        payload.get("metadata", {}).get("outcome", status)
-                        if status != "failed"
-                        else "failed"
-                    ),
-                )
+            outcome = dict(
+                status=status,
+                error_code=run.error_code,
+                coverage=payload.get("metadata", {}).get("coverage"),
+                outcome=(
+                    payload.get("metadata", {}).get("outcome", status)
+                    if status != "failed"
+                    else "failed"
+                ),
             )
+            # §19: demo runs carry the server provenance; normal has none.
+            if "provenance" in payload.get("metadata", {}):
+                outcome["provenance"] = payload["metadata"]["provenance"]
+            run.outcome_json = json.dumps(outcome)
             if status == "failed":
                 await db.commit()
                 return None
@@ -405,6 +407,15 @@ async def load_analysis_response(
                 plan=plan,
             )
         )
+    provenance = (
+        json.loads(feedback_report.payload_json)
+        .get("metadata", {})
+        .get("provenance")
+        if feedback_report
+        else None
+    )
+    if provenance is not None:
+        response["provenance"] = provenance
     if latest_run is not None and json.loads(latest_run.plan_json or "{}").get(
         "regenerate"
     ):

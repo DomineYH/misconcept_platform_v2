@@ -10,6 +10,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
+from src.api.routes.admin_session_export import demo_seed_session
 from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
@@ -34,6 +35,11 @@ from src.services.export import CSVExporter
 
 router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
+
+
+def demo_context(request):
+    """The request's fixed demo context (§3); None keeps normal unchanged."""
+    return getattr(request.state, "demo_context", None)
 
 
 @router.post("/sessions/{session_id}/end")
@@ -69,6 +75,7 @@ async def end_session(
         request_id,
         plan_hash=body.plan_hash if body else None,
         language=display_language(request),
+        ctx=demo_context(request),
     )
 
 
@@ -90,6 +97,7 @@ async def analyze_session_endpoint(
         body.request_id,
         plan_hash=body.plan_hash,
         language=display_language(request),
+        ctx=demo_context(request),
     )
 
 
@@ -215,7 +223,9 @@ async def export_session(
 
     exporter = CSVExporter()
     try:
-        csv_content = await exporter.export_session(session_id, db)
+        csv_content = await exporter.export_session(
+            session_id, db, demo_seed_session_id=demo_seed_session(request)
+        )
     except ValueError:
         raise HTTPException(
             status_code=404,
@@ -229,7 +239,9 @@ async def export_session(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                f"attachment; filename=session_{session_id}_analysis.csv"
+                f"attachment; filename=demo_d0-02-v1_teacher_session-{session_id}.csv"
+                if config.APP_MODE == "demo"
+                else f"attachment; filename=session_{session_id}_analysis.csv"
             )
         },
     )
@@ -264,5 +276,10 @@ async def cancel_analysis_run(
 ):
     await load_session(session_id, user, db, language=display_language(request))
     return await cancel_analysis(
-        db, session_id, run_id, user.id, language=display_language(request)
+        db,
+        session_id,
+        run_id,
+        user.id,
+        language=display_language(request),
+        ctx=demo_context(request),
     )

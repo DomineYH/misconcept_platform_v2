@@ -7,7 +7,12 @@ from pathlib import Path
 def test_ci_controls_contract():
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run(
-        ["node", "--test", "tests/ci_controls.test.mjs"],
+        [
+            "node",
+            "--test",
+            "tests/ci_controls.test.mjs",
+            "tests/ci_browser_sharding.test.mjs",
+        ],
         cwd=root,
         capture_output=True,
         text=True,

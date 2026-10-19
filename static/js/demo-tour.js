@@ -118,12 +118,14 @@ window.demoTour = (() => {
 
   let cfg = null, root = null, panel = null, statusEl = null, resumeBtn = null, titleEl = null, csvBtn = null;
   let confirmed = {scope: null, generation: null, auth_epoch: null};
+  // The generation whose facts/observations are shown; it only moves on a ready state (§24.1).
+  let journeyNs = {scope: null, generation: null};
   let lastState = null, facts = null, observations = [], map = null;
   let closed = false, skipped = false, frozen = false, expired = false, resetRan = false;
-  let staleKey = null, checking = null, rerun = false;
+  let staleKey = null, checking = null, rerun = false, staleRetry = false;
   let pending = null, controlBusy = false, csvBusy = false, channel = null;
-  // Observations can arrive before the first state GET answers; hold them until facts exist.
-  let applied = false, early = [];
+  // Observations can arrive before the journey's facts are known; hold a few until they are.
+  let early = [];
 
   const tr = key => (window.uiLanguage ? window.uiLanguage.t(key) : key);
   const clone = value => (value == null ? value : JSON.parse(JSON.stringify(value)));
@@ -140,8 +142,8 @@ window.demoTour = (() => {
 
   function setStatus(text) { if (statusEl) statusEl.textContent = text; }
   function currentKey() {
-    return confirmed.scope != null && confirmed.generation != null
-      ? storageKey(confirmed.scope, confirmed.generation) : null;
+    return journeyNs.scope != null && journeyNs.generation != null
+      ? storageKey(journeyNs.scope, journeyNs.generation) : null;
   }
   function nsHeaders(ns) {
     const h = {};
@@ -207,7 +209,7 @@ window.demoTour = (() => {
     return {schema_version: 1, browser_scope_id: d.browser_scope_id, generation: d.generation,
       auth_epoch: d.auth_epoch, journey_session_id: d.journey_session_id, kind: d.kind, request_id: d.request_id};
   }
-  const isCurrentNs = o => o.browser_scope_id === confirmed.scope && o.generation === confirmed.generation;
+  const isCurrentNs = o => o.browser_scope_id === journeyNs.scope && o.generation === journeyNs.generation;
 
   function parseRecord(raw) {
     try {
@@ -268,12 +270,15 @@ window.demoTour = (() => {
   }
 
   function accept(detail) {
-    if (!applied) { early.push(detail); return false; }
+    if (facts == null) {
+      if (early.length < 20) early.push(detail);
+      return false;
+    }
     const o = cleanObs(detail);
     const journey = journeyId();
     if (!o || journey == null || o.journey_session_id !== journey) return false;
     if (o.browser_scope_id !== confirmed.scope || o.generation !== confirmed.generation ||
-        o.auth_epoch !== confirmed.auth_epoch) return false;
+        o.auth_epoch !== confirmed.auth_epoch || o.generation !== journeyNs.generation) return false;
     observations = mergeObservations(observations, [o]);
     persist();
     render();
@@ -325,26 +330,29 @@ window.demoTour = (() => {
         prev.state === 'resetting')) name = 'demo:reset-completed';
     else if (prev.generation === s.generation && s.auth_epoch > prev.auth_epoch) name = 'demo:role-changed';
 
-    const matches = f => f && f.browser_scope_id === s.browser_scope_id && f.generation === s.generation;
-    const nextFacts = matches(s.tour_facts) ? s.tour_facts : (matches(facts) ? facts : null);
-    const nsChanged = cg != null && (s.generation > cg ||
-      (confirmed.scope != null && s.browser_scope_id !== confirmed.scope));
-    let notice = null;
-    if (nsChanged) {
-      if (resetRan) {
-        if (computeSteps(facts, observations, true).reset === 'complete') frozen = true;
-        notice = panel ? panel.dataset.labelResetDone : null;
-      }
-      resetRan = false;
-      const oldKey = currentKey();
-      if (oldKey) store.del(oldKey);
-    }
-    const reload = nsChanged || confirmed.scope == null || cg == null;
     confirmed = {scope: s.browser_scope_id, generation: s.generation, auth_epoch: s.auth_epoch};
-    facts = nextFacts ? clone(nextFacts) : null;
-    if (reload) loadRecord();
     lastState = clone(s);
     expired = s.state === 'expired';
+    let notice = null;
+    const matches = f => f && f.browser_scope_id === s.browser_scope_id && f.generation === s.generation;
+    const moved = journeyNs.scope !== s.browser_scope_id || journeyNs.generation !== s.generation;
+    if (s.state === 'ready' && moved) {
+      // A reserved generation is not a reset success: the old journey stays until ready (§24.1).
+      if (journeyNs.generation != null) {
+        if (resetRan) {
+          if (computeSteps(facts, observations, true).reset === 'complete') frozen = true;
+          notice = panel ? panel.dataset.labelResetDone : null;
+        }
+        const oldKey = currentKey();
+        if (oldKey) store.del(oldKey);
+      }
+      resetRan = false;
+      journeyNs = {scope: s.browser_scope_id, generation: s.generation};
+      facts = matches(s.tour_facts) ? clone(s.tour_facts) : null;
+      loadRecord();
+    } else if (s.state === 'ready' && matches(s.tour_facts)) {
+      facts = clone(s.tour_facts);
+    }
     if (s.state === 'reset_failed') resetRan = false;
 
     let text = notice;
@@ -365,11 +373,20 @@ window.demoTour = (() => {
     if (text) setStatus(text);
     render();
     emit(name, s, s.last_error);
-    if (!applied) {
-      applied = true;
-      early.splice(0).forEach(accept);
-    }
     return true;
+  }
+
+  // Facts for the namespace the plain state GET just confirmed; never an event of its own.
+  function applyFacts(s) {
+    if (!s || !lastState || lastState.state !== 'ready' || s.browser_scope_id !== confirmed.scope ||
+        s.generation !== confirmed.generation || s.auth_epoch !== confirmed.auth_epoch) return;
+    const f = s.tour_facts;
+    if (!f || f.browser_scope_id !== journeyNs.scope || f.generation !== journeyNs.generation) return;
+    const first = facts == null || facts.journey_session_id !== f.journey_session_id;
+    facts = clone(f);
+    if (first) loadRecord();
+    render();
+    early.splice(0).forEach(accept);
   }
 
   function expire(detail, code, fallbackKey) {
@@ -380,30 +397,48 @@ window.demoTour = (() => {
     emit('demo:expired', lastState, code);
   }
 
+  // §9.1: a bootstrap-bound current-state GET (no old selectors) adopts the namespace and cookies first.
   async function fetchState() {
     let response;
     try {
-      response = await fetch(`${cfg.state_url}?include_tour=true`, {credentials: 'same-origin',
-        cache: 'no-store', headers: nsHeaders(confirmed)});
+      response = await fetch(cfg.state_url, {credentials: 'same-origin', cache: 'no-store'});
     } catch {
       setStatus(tr('demo.retry_later'));
       return;
     }
     const body = await readJson(response);
-    if (response.status === 200) {
-      if (!apply(body)) setStatus(tr('demo.retry_later'));
+    if (response.status !== 200) {
+      const detail = errorDetail(body);
+      if (response.status === 410) expire(detail, detail.code || 'DEMO_EXPIRED', 'demo.expired');
+      else if (response.status === 401) expire(detail, 'DEMO_SESSION_REQUIRED', 'demo.start_required');
+      else setStatus(tr(detail.recovery || 'demo.retry_later'));
       return;
     }
-    const detail = errorDetail(body);
-    if (response.status === 410) expire(detail, detail.code || 'DEMO_EXPIRED', 'demo.expired');
-    else if (response.status === 401) expire(detail, 'DEMO_SESSION_REQUIRED', 'demo.start_required');
-    else setStatus(tr(detail.recovery || 'demo.retry_later'));
+    if (!apply(body)) { setStatus(tr('demo.retry_later')); return; }
+    // Dropped as older than the confirmed namespace, or not ready: no facts to fetch.
+    if (lastState.generation !== body.generation || lastState.auth_epoch !== body.auth_epoch ||
+        lastState.state !== 'ready') return;
+    let tour;
+    try {
+      tour = await fetch(`${cfg.state_url}?include_tour=true`, {credentials: 'same-origin', cache: 'no-store',
+        headers: nsHeaders(confirmed)});
+    } catch {
+      return;
+    }
+    const factsBody = await readJson(tour);
+    if (tour.status === 200) applyFacts(factsBody);
+    // The namespace moved between the two GETs: resync once more.
+    else if (tour.status === 409 && /^DEMO_STALE_/.test(errorDetail(factsBody).code || '') && !staleRetry) {
+      staleRetry = true;
+      rerun = true;
+    }
   }
 
   // Single flight: calls made while a check runs collapse into exactly one rerun.
   function check() {
     if (!cfg) return Promise.resolve();
     if (checking) { rerun = true; return checking; }
+    staleRetry = false;
     checking = (async () => {
       try {
         do { rerun = false; await fetchState(); } while (rerun);
@@ -446,18 +481,26 @@ window.demoTour = (() => {
       return;
     }
     const retryAfter = response.headers.get('Retry-After');
-    setStatus(tr(d.recovery || 'demo.retry_later') + (retryAfter ? ` (${retryAfter}s)` : ''));
+    const text = tr(d.recovery || 'demo.retry_later') + (retryAfter ? ` (${retryAfter}s)` : '');
+    setStatus(text);
     // A CSRF failure never re-posts: refresh the cookie, then ask what happened to this ID.
     if (response.status === 403 && d.code === 'DEMO_CSRF_INVALID' && !fromLookup) {
       await check('csrf');
       await lookup(op);
       return;
     }
-    if (d.retryable !== true) {
-      done(op);
-      if (op.operation === 'reset') resetRan = false;
+    // A finished failure (§9.1): resync, resolve this ID's receipt, then retire it so a new
+    // attempt gets a new ID with the current expected generation/epoch.
+    await check('failure');
+    if (!fromLookup) {
+      let receipt = null;
+      try { receipt = await getLookup(op); } catch { /* the failure itself is known */ }
+      if (receipt && receipt.status === 200) { done(op); await check('control'); return; }
+      if (receipt && receipt.status === 202) { await poll(op); return; }
     }
-    if (/STALE/.test(d.code || '')) await check('stale');
+    done(op);
+    if (op.operation === 'reset') resetRan = false;
+    setStatus(text);
   }
 
   async function resolveLookup(op, response) {
@@ -535,7 +578,7 @@ window.demoTour = (() => {
         {credentials: 'same-origin', headers: {'X-Demo-Export-Request-ID': req, ...nsHeaders(ns)}});
       // Bytes, not text(): the saved file keeps the BOM the server sent.
       const bytes = await response.arrayBuffer();
-      const text = new TextDecoder('utf-8', {ignoreBOM: true}).decode(bytes);
+      const text = new TextDecoder('utf-8', {fatal: true, ignoreBOM: true}).decode(bytes);
       ok = verifyCsv({status: response.status, echo: response.headers.get('X-Demo-Export-Request-ID'),
         requestId: req, rowCount: response.headers.get('X-Demo-Export-Row-Count'), text, journeyId: journey,
         state: lastState}) && sameNs(ns, confirmed);
@@ -626,6 +669,7 @@ window.demoTour = (() => {
     resumeBtn = document.querySelector('[data-demo-action="resume"]');
     confirmed = {scope: root.dataset.demoScope || null, generation: toInt(root.dataset.demoGeneration),
       auth_epoch: toInt(root.dataset.demoAuthEpoch)};
+    journeyNs = {scope: confirmed.scope, generation: confirmed.generation};
     lastState = clone(cfg);
     facts = cfg.tour_facts ? clone(cfg.tour_facts) : null;
     loadRecord();

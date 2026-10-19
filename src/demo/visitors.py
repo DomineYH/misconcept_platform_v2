@@ -206,6 +206,8 @@ class ControlReceipt:
     error_code: str | None
     historical: bool
     current: VisitorSnapshot
+    status_code: int | None = None
+    retry_after: int | None = None
 
 
 @dataclass(frozen=True)
@@ -218,9 +220,11 @@ class CleanupResult:
 @dataclass
 class _Receipt:
     operation: str
-    body: tuple
+    body: object
     snapshot: VisitorSnapshot
     error_code: str | None = None
+    status_code: int | None = None
+    retry_after: int | None = None
 
 
 @dataclass
@@ -487,6 +491,8 @@ class VisitorRegistry:
         if unfinished and state.operation is not None:
             receipt = state.receipts[state.operation.request_id]
             receipt.error_code = "DEMO_EXPIRED"
+            receipt.status_code = 410
+            receipt.retry_after = None
             receipt.snapshot = self._snapshot(state)
         state.changed.set()
         return scope
@@ -530,7 +536,7 @@ class VisitorRegistry:
     def _result(self, state, *, leader=False, scope=None, receipt=None):
         snapshot = receipt.snapshot if receipt else self._snapshot(state)
         if receipt and receipt.error_code:
-            raise self._error(state, receipt.error_code)
+            raise self._receipt_error(receipt)
         current = self._snapshot(state)
         historical = (
             snapshot.visitor_id,
@@ -551,6 +557,17 @@ class VisitorRegistry:
             scope,
             historical,
         )
+
+    def _receipt_error(self, receipt):
+        error = DemoError(
+            receipt.error_code,
+            generation=receipt.snapshot.generation,
+            auth_epoch=receipt.snapshot.auth_epoch,
+            retry_after=receipt.retry_after,
+        )
+        error.status_code = error.status = receipt.status_code
+        error.retry_after = receipt.retry_after
+        return error
 
     def _new_op(
         self, state, request_id, operation, body, *, generation=None, epoch=None
@@ -849,25 +866,34 @@ class VisitorRegistry:
             receipt = state.receipts.get(request_id)
             if receipt is None:
                 raise DemoError("RESOURCE_NOT_FOUND")
-            current = handle.snapshot()
-            previous = receipt.snapshot
-            historical = (
-                previous.browser_scope_id,
-                previous.generation,
-                previous.auth_epoch,
-            ) != (
-                current.browser_scope_id,
-                current.generation,
-                current.auth_epoch,
-            )
-            return ControlReceipt(
-                receipt.operation,
-                request_id,
-                previous,
-                receipt.error_code,
-                historical,
-                current,
-            )
+            return self._control_receipt(state, request_id, receipt)
+
+    async def replay(self, verified_visitor, operation, request_id, body):
+        async with self.transition(verified_visitor) as handle:
+            return handle.replay(operation, request_id, body)
+
+    def _control_receipt(self, state, request_id, receipt):
+        current = self._snapshot(state)
+        previous = receipt.snapshot
+        historical = (
+            previous.browser_scope_id,
+            previous.generation,
+            previous.auth_epoch,
+        ) != (
+            current.browser_scope_id,
+            current.generation,
+            current.auth_epoch,
+        )
+        return ControlReceipt(
+            receipt.operation,
+            request_id,
+            previous,
+            receipt.error_code,
+            historical,
+            current,
+            receipt.status_code,
+            receipt.retry_after,
+        )
 
     def _valid_op(self, state, op):
         return (
@@ -1053,10 +1079,14 @@ class VisitorRegistry:
                 error.code if isinstance(error, DemoError) else "PREPARE_FAILED"
             )
             async with self.transition(reservation.verified_visitor) as handle:
-                handle.fail(op, code)
-            raise self._error(
-                self._state(reservation.verified_visitor), code
-            ) from None
+                cause = error if isinstance(error, DemoError) else None
+                if handle.fail(op, code, error=cause):
+                    failure = self._receipt_error(
+                        handle._state.receipts[op.request_id]
+                    )
+                else:
+                    failure = cause or self._error(handle._state, code)
+            raise failure from None
 
     async def drain_retired(self, scope):
         self.lifecycle.cancel_scope(scope)
@@ -1440,14 +1470,19 @@ class TransitionHandle:
         state.receipts[op.request_id].snapshot = snapshot
         return snapshot
 
-    def fail(self, op, code):
+    def fail(self, op, code, *, error: DemoError | None = None):
         self._require()
         registry, state = self._registry, self._state
         if registry._due(state):
             self.expire("ttl")
         if not registry._valid_op(state, op):
             return False
-        error = registry._error(state, code)
+        default_error = registry._error(state, code)
+        if error is not None and (
+            not isinstance(error, DemoError) or error.code != default_error.code
+        ):
+            raise DemoError("INVALID_REQUEST")
+        error = error or default_error
         state.ref = None
         state.role = None
         state.state = (
@@ -1456,6 +1491,8 @@ class TransitionHandle:
         state.last_error = error.code
         receipt = state.receipts[op.request_id]
         receipt.error_code = error.code
+        receipt.status_code = error.status_code
+        receipt.retry_after = error.retry_after
         receipt.snapshot = self.snapshot()
         builder = registry._builders.get(op.op_id)
         if builder is not None:
@@ -1467,6 +1504,55 @@ class TransitionHandle:
     def expire(self, reason="ttl"):
         self._require()
         return self._registry._expire(self._state, reason)
+
+    def replay(self, operation, request_id, body):
+        """Look up an owned canonical body before constructing a request context."""
+        self._require()
+        _uuid(request_id)
+        if operation not in ("start", "role", "reset"):
+            raise DemoError("INVALID_REQUEST")
+        try:
+            hash(body)
+        except TypeError:
+            raise DemoError("INVALID_REQUEST") from None
+        state, registry = self._state, self._registry
+        if registry._due(state):
+            self.expire("ttl")
+        if state.state in ("expired", "closing"):
+            raise registry._error(state, "EXPIRED")
+        receipt = registry._receipt(state, request_id, operation, body)
+        if receipt is None:
+            return None
+        return registry._control_receipt(state, request_id, receipt)
+
+    def record_role_failure(self, request_id, body, error: DemoError):
+        """Consumer calls after context/User checks under this same handle."""
+        previous = self.replay("role", request_id, body)
+        if previous is not None:
+            return previous
+        state, registry = self._state, self._registry
+        registry._state_check(state)
+        if not isinstance(error, DemoError):
+            raise DemoError("INVALID_REQUEST")
+        if error.status_code == 422 or error.code in (
+            "DEMO_CSRF_INVALID",
+            "DEMO_STALE_GENERATION",
+            "DEMO_STALE_ROLE",
+            "DEMO_LIMIT_REACHED",
+        ):
+            raise error
+        if len(state.receipts) >= 256:
+            raise registry._error(state, "LIMIT_REACHED")
+        receipt = _Receipt(
+            "role",
+            body,
+            self.snapshot(),
+            error.code,
+            error.status_code,
+            error.retry_after,
+        )
+        state.receipts[request_id] = receipt
+        return registry._control_receipt(state, request_id, receipt)
 
     def change_role(
         self,
@@ -1490,26 +1576,31 @@ class TransitionHandle:
             self.expire("ttl")
         if state.state in ("expired", "closing"):
             raise registry._error(state, "EXPIRED")
-        body = (ctx.generation, ctx.auth_epoch, role)
+        body = (role, ctx.generation, ctx.auth_epoch)
         if request_id is not None:
-            _uuid(request_id)
-            receipt = registry._receipt(state, request_id, "role", body)
-            if receipt:
+            replay = self.replay("role", request_id, body)
+            if replay is not None:
+                receipt = state.receipts[request_id]
                 if receipt.error_code:
-                    raise registry._error(state, receipt.error_code)
+                    raise registry._receipt_error(receipt)
                 return receipt.snapshot
         self.check(ctx)
         if type(busy) is not bool:
             raise DemoError("INVALID_REQUEST")
+        if user_id is not None and user_id is not _USER_CHECKED_BY_CALLER:
+            _positive_int(user_id)
         if request_id is not None and len(state.receipts) >= 256:
             raise registry._error(state, "LIMIT_REACHED")
         if role != state.role:
-            if busy:
-                raise registry._error(state, "BUSY")
-            if user_id is None:
-                raise registry._error(state, "ROLE_DELETED")
-            if user_id is not _USER_CHECKED_BY_CALLER:
-                _positive_int(user_id)
+            try:
+                if busy:
+                    raise registry._error(state, "BUSY")
+                if user_id is None:
+                    raise registry._error(state, "ROLE_DELETED")
+            except DemoError as error:
+                if request_id is not None:
+                    self.record_role_failure(request_id, body, error)
+                raise
             state.role = role
             state.auth_epoch += 1
             state.csrf_revision += 1

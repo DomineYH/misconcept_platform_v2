@@ -12,10 +12,13 @@ import secrets
 import sqlite3
 import subprocess
 import sys
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
+
+from src.demo.database import DatabaseRoot
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).with_name("fixtures")
@@ -34,8 +37,23 @@ INPUTS = dict(
     C="같은 크기의 종이띠를 4조각과 8조각으로 똑같이 나누면 한 조각은 어느 쪽이 더 클까? 지금 생각을 말해 줄래?",
     common="같은 크기의 종이띠 두 개를 각각 똑같이 4조각과 8조각으로 나누어 한 조각씩 겹쳐 보자. 어느 쪽 조각이 더 크고, 조각 수가 늘면 한 조각의 크기는 어떻게 될까?",
 )
-# Volatile by design (§17): bcrypt salt and installer apply time.
-VOLATILE = {"user": {"password_hash"}, "_migrations": {"applied_at"}}
+# Volatile by design (§17): only the bcrypt salt.
+VOLATILE = {"user": {"password_hash"}}
+# The builder's exact logical rows; startup rejects any other seed content.
+SEED_LOGICAL_SHA256 = (
+    "8d3fa9dde40a9d65273868a20271cdf767665e27c54384a54c74e575b3342980"
+)
+# Contract §8: what the demo seed stores in AppSetting.
+DEMO_LIMITS = dict(total=2, openai=2, anthropic=2, google=2, admin=1, demo=2)
+DEMO_TIMEOUTS = dict(
+    connect=2,
+    student_first_output=5,
+    student_total=15,
+    mentor_first_output=5,
+    mentor_total=15,
+    analysis_total=30,
+    model_list_total=5,
+)
 
 
 def _sha(raw):
@@ -104,37 +122,45 @@ def _bind(template, refs):
 
 def logical_data_sha256(path):
     """Row content hash that ignores SQLite pages and VOLATILE columns."""
+    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        return _logical_digest(db)
+    finally:
+        db.close()
+
+
+def _logical_digest(db):
     digest = hashlib.sha256()
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
-        tables = db.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type='table' "
-            "AND name != 'sqlite_sequence' ORDER BY name"
+    tables = db.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type='table' "
+        "AND name != 'sqlite_sequence' ORDER BY name"
+    ).fetchall()
+    for name, sql in tables:
+        columns = [
+            r[1]
+            for r in db.execute(f'PRAGMA table_info("{name}")')
+            if r[1] not in VOLATILE.get(name, ())
+        ]
+        selected = ",".join(f'"{c}"' for c in columns)
+        rows = db.execute(
+            f'SELECT {selected} FROM "{name}" ORDER BY rowid'
         ).fetchall()
-        for name, sql in tables:
-            columns = [
-                r[1]
-                for r in db.execute(f'PRAGMA table_info("{name}")')
-                if r[1] not in VOLATILE.get(name, ())
-            ]
-            selected = ",".join(f'"{c}"' for c in columns)
-            rows = db.execute(
-                f'SELECT {selected} FROM "{name}" ORDER BY rowid'
-            ).fetchall()
-            digest.update(
-                json.dumps(
-                    [name, sql, columns, rows], ensure_ascii=False
-                ).encode()
-                + b"\n"
-            )
-    db.close()
+        digest.update(
+            json.dumps(
+                [name, sql, columns, [tuple(r) for r in rows]],
+                ensure_ascii=False,
+            ).encode()
+            + b"\n"
+        )
     return digest.hexdigest()
 
 
 async def _populate(db, manifest, manifest_sha256):
     # Imported here: src.config is loaded only after the CLI's mode check.
     import bcrypt
-    from sqlalchemy import select
+    from sqlalchemy import select, text
 
+    from src.api.schemas.ai_settings import CallLimits, CallTimeouts
     from src.api.schemas.scenario_config import ScenarioConfig
     from src.models import (
         ApiUsageLog,
@@ -171,6 +197,11 @@ async def _populate(db, manifest, manifest_sha256):
     from src.services.scenario_publication import publication_errors
     from src.utils.cache import load_prompt_template
 
+    # Installer rows carry their apply time; the seed fixes it (§17).
+    await db.execute(
+        text("UPDATE _migrations SET applied_at=:at"),
+        dict(at=_at().isoformat(sep=" ")),
+    )
     for row in await db.scalars(select(ProviderConnection)):
         row.created_at = row.updated_at = _at()
     group = UserGroup(
@@ -249,7 +280,8 @@ async def _populate(db, manifest, manifest_sha256):
     db.add(model)
     await db.flush()
     setting = await db.get(AppSetting, 1)
-    setting.limits_json = dict(setting.limits_json, demo=2)
+    setting.limits_json = CallLimits(**DEMO_LIMITS).model_dump()
+    setting.timeouts_json = CallTimeouts(**DEMO_TIMEOUTS).model_dump()
     setting.student_model_config_id = model.id
     setting.mentor_model_config_id = model.id
     setting.analysis_model_config_id = model.id
@@ -591,7 +623,8 @@ async def build(out, *, command=None):
         or manifest["migration_set_sha256"] != migration_set_sha256()
     ):
         raise ValueError("manifest does not match the installed migrations")
-    out = Path(out)
+    # #191 accepts only absolute paths.
+    out = Path(out).absolute()
     out.mkdir(parents=True, exist_ok=True)
     final, staging = out / SEED_NAME, out / f"{SEED_NAME}.staging"
     staging.unlink(missing_ok=True)
@@ -607,9 +640,20 @@ async def build(out, *, command=None):
     try:
         db.execute("PRAGMA journal_mode=DELETE")
         db.execute("VACUUM")
-        _check(db, manifest)
     finally:
         db.close()
+    # Publish only what startup accepts: manifest, fixture bytes and rows.
+    try:
+        # A throwaway root outside out: #191 refuses roots inside the repo.
+        with tempfile.TemporaryDirectory() as scratch:
+            root = DatabaseRoot(Path(scratch) / "root", initialize=True).open()
+            try:
+                root.validate_seed(replace(load_seed(out)[0], path=staging))
+            finally:
+                root.close()
+    except BaseException:
+        staging.unlink(missing_ok=True)
+        raise
     os.replace(staging, final)
     receipt = dict(
         source_commit=subprocess.run(
@@ -632,66 +676,15 @@ async def build(out, *, command=None):
 
 
 def _check(db, manifest):
-    """Seed rows behind manifest refs (DatabaseRoot verify_content hook)."""
-    refs = manifest["seed_refs"]
-
-    def one(sql, *args):
-        rows = db.execute(sql, args).fetchall()
-        if len(rows) != 1:
-            raise ValueError(sql)
-        return rows[0]
-
-    one("SELECT 1 FROM user WHERE id=? AND role='admin'", refs["admin"])
-    one("SELECT 1 FROM user WHERE id=? AND role='teacher'", refs["teacher"])
-    one("SELECT 1 FROM user_group WHERE id=?", refs["group"])
-    one(
-        "SELECT 1 FROM scenario s JOIN scenario_group g ON g.scenario_id=s.id "
-        "WHERE s.id=? AND g.group_id=? AND s.status='published' "
-        "AND s.is_active=1 AND s.deleted_at IS NULL",
-        refs["scenario"],
-        refs["group"],
-    )
-    one(
-        "SELECT 1 FROM provider_connection WHERE id=? AND provider='demo' "
-        "AND enabled=1 AND credential_revision=0 AND connection_version=1",
-        refs["connection"],
-    )
-    one("SELECT 1 FROM provider_connection WHERE provider='demo'")
-    one(
-        "SELECT 1 FROM provider_audit_log WHERE provider_connection_id=? "
-        "AND change_kind='demo_seeded' AND actor_id IS NULL",
-        refs["connection"],
-    )
-    one(
-        "SELECT 1 FROM model_config WHERE id=? AND provider_connection_id=? "
-        "AND model_id=? AND capability_definition_version=? AND enabled=1",
-        refs["model"],
-        refs["connection"],
-        manifest["model_id"],
-        manifest["capability_definition_version"],
-    )
-    one(
-        "SELECT 1 FROM session WHERE id=? AND scenario_id=? AND teacher_id=? "
-        "AND ended_at IS NOT NULL AND deleted_at IS NULL "
-        "AND snapshot_origin='native'",
-        refs["completed_session"],
-        refs["scenario"],
-        refs["teacher"],
-    )
-    roles = [
-        r[0]
-        for r in db.execute(
-            "SELECT role FROM message WHERE session_id=? ORDER BY created_at, id",
-            (refs["completed_session"],),
-        )
-    ]
-    if roles != ["teacher", "student", "tutor", "teacher", "student"]:
-        raise ValueError("completed example messages")
-    one(
-        "SELECT 1 FROM session_feedback_report WHERE session_id=? "
-        "AND status='ok' AND version=2",
-        refs["completed_session"],
-    )
+    """DatabaseRoot verify_content hook: the seed must be the builder's rows."""
+    (kind,) = db.execute("SELECT kind FROM demo_metadata WHERE id=1").fetchone()
+    # Restart recovery re-verifies retired visitor DBs, which visitors edit;
+    # #191 already checks their marker, history and key material.
+    if kind != "demo_seed":
+        return
+    actual = _logical_digest(db)
+    if actual != SEED_LOGICAL_SHA256:
+        raise ValueError(f"seed content digest {actual}")
 
 
 @dataclass(frozen=True)

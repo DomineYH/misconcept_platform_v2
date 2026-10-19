@@ -104,9 +104,13 @@ def test_receipt_records_real_values_and_logical_data_is_deterministic(
     assert receipt["seed_sha256"] == _sha((out / seed.SEED_NAME).read_bytes())
     assert receipt["command"] == f"python -m src.demo.seed build --out {out}"
     again = asyncio.run(seed.build(tmp_path))
-    # Fresh bcrypt salt and installer apply time change only physical bytes.
+    # A fresh bcrypt salt changes only physical bytes; rows are pinned.
     assert again["seed_sha256"] != receipt["seed_sha256"]
-    assert again["logical_data_sha256"] == receipt["logical_data_sha256"]
+    assert (
+        again["logical_data_sha256"]
+        == receipt["logical_data_sha256"]
+        == seed.SEED_LOGICAL_SHA256
+    )
     assert not list(tmp_path.glob("*.staging"))
 
 
@@ -159,9 +163,20 @@ def test_rows_are_keyless_demo_with_current_role_evidence(seed_db):
         student="succeeded", mentor="succeeded", analysis="succeeded"
     )
     setting = dict(seed_db.execute("SELECT * FROM app_setting").fetchone())
-    assert (
-        CallLimits.model_validate(json.loads(setting["limits_json"])).demo >= 2
+    # Contract §8 demo seed values.
+    assert json.loads(setting["limits_json"]) == dict(
+        total=2, openai=2, anthropic=2, google=2, admin=1, demo=2
     )
+    assert json.loads(setting["timeouts_json"]) == dict(
+        connect=2,
+        student_first_output=5,
+        student_total=15,
+        mentor_first_output=5,
+        mentor_total=15,
+        analysis_total=30,
+        model_list_total=5,
+    )
+    CallLimits.model_validate(json.loads(setting["limits_json"]))
     users = [dict(r) for r in seed_db.execute("SELECT * FROM user ORDER BY id")]
     assert [(u["id"], u["role"]) for u in users] == [
         (refs["admin"], "admin"),
@@ -198,10 +213,14 @@ def test_rows_are_keyless_demo_with_current_role_evidence(seed_db):
             ("generation_run", "finished_at"),
             ("user", "created_at"),
             ("provider_connection", "updated_at"),
+            ("app_setting", "updated_at"),
         )
         for r in seed_db.execute(f'SELECT {column} FROM "{table}"')
     ]
     assert all(s.startswith("2026-10-18 00:") for s in stamps)
+    assert {
+        r[0] for r in seed_db.execute("SELECT applied_at FROM _migrations")
+    } == {"2026-10-18 00:00:00"}
 
 
 def test_completed_example_follows_the_default_b_path(seed_db):
@@ -275,9 +294,36 @@ async def test_validate_seed_and_clone_accept_the_built_seed(built, root):
         await ref.factory.dispose()
 
 
+def _snapshot_model(db):
+    from src.services.lesson_snapshots import canonical_hash
+
+    (raw,) = db.execute("SELECT config_snapshot_json FROM session").fetchone()
+    envelope = json.loads(raw)
+    envelope["config"]["student"]["resolved_model_config"].update(
+        provider="openai", model_id="gpt-4.1"
+    )
+    db.execute(
+        "UPDATE session SET config_snapshot_json=?, config_hash=?",
+        (json.dumps(envelope, ensure_ascii=False), canonical_hash(envelope)),
+    )
+
+
+# Value mutations a sparse row check would miss (review of PR #228).
+MUTATIONS = dict(
+    seed_row="DELETE FROM provider_audit_log",
+    message_text="UPDATE message SET content=content||' 수정' WHERE id=2",
+    model_evidence="UPDATE model_config SET verification_state='{}'",
+    measured_usage="UPDATE api_usage_log SET input_tokens=10, output_tokens=5, "
+    "total_tokens=15, usage_complete=1 WHERE id=1",
+    scenario_instruction="UPDATE scenario SET config_json=json_set(config_json,"
+    "'$.student.behavior_instruction','다른 지시')",
+    snapshot_model=_snapshot_model,
+)
+
+
 @pytest.mark.parametrize(
     "tamper",
-    ["migration_set", "schema_version", "fixture_byte", "seed_row", "history"],
+    ["migration_set", "schema_version", "fixture_byte", "history", *MUTATIONS],
 )
 def test_any_seed_tuple_change_is_version_mismatch(
     built, root, tmp_path, tamper
@@ -300,13 +346,57 @@ def test_any_seed_tuple_change_is_version_mismatch(
     else:
         copy = tmp_path / seed.SEED_NAME
         shutil.copy(spec.path, copy)
+        mutation = MUTATIONS[tamper]
         with sqlite3.connect(copy) as db:
-            db.execute("DELETE FROM provider_audit_log")
+            if callable(mutation):
+                mutation(db)
+            else:
+                assert db.execute(mutation).rowcount >= 1
         db.close()
         spec = replace(spec, path=copy)
     with pytest.raises(DemoError) as error:
         root.validate_seed(spec)
     assert error.value.code == "DEMO_VERSION_MISMATCH"
+
+
+def test_build_refuses_to_publish_fixture_bytes_startup_rejects(
+    tmp_path, monkeypatch
+):
+    fixtures = tmp_path / "fixtures"
+    shutil.copytree(seed.FIXTURES, fixtures)
+    target = fixtures / "student/initial-B-B.json"
+    target.write_bytes(target.read_bytes() + b" ")
+    monkeypatch.setattr(seed, "FIXTURES", fixtures)
+    monkeypatch.setattr(seed, "MANIFEST", fixtures / "manifest.json")
+    out = tmp_path / "out"
+    with pytest.raises(DemoError) as error:
+        asyncio.run(seed.build(out))
+    assert error.value.code == "DEMO_VERSION_MISMATCH"
+    assert sorted(p.name for p in out.iterdir()) == []
+
+
+def test_build_accepts_a_relative_out_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    receipt = asyncio.run(seed.build("out"))
+    assert (tmp_path / "out" / seed.SEED_NAME).is_file()
+    assert receipt["logical_data_sha256"] == seed.SEED_LOGICAL_SHA256
+
+
+def test_restart_recovery_accepts_edited_visitor_databases(built, tmp_path):
+    # #191 re-verifies leftover visitor DBs with this hook; visitors edit them.
+    copy = tmp_path / "visitor.db"
+    shutil.copy(built[0] / seed.SEED_NAME, copy)
+    with sqlite3.connect(copy) as db:
+        db.execute(
+            "UPDATE demo_metadata SET kind='demo_visitor', visitor_id='v', "
+            "generation=1"
+        )
+        db.execute("DELETE FROM user WHERE id=2")
+    db.close()
+    spec, _ = seed.load_seed(built[0])
+    with sqlite3.connect(copy) as db:
+        spec.verify_content(db, MANIFEST)
+    db.close()
 
 
 def _session_row(seed_db, **changes):

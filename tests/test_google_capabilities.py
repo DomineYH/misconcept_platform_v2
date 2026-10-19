@@ -44,11 +44,16 @@ def test_stable_google_definition_preserves_budget_zero_and_rejects_level():
         "thinking": {"budget": 0},
     }
     assert (
-        validate_model_and_options("google", "gemini-2.5-flash", options)
+        validate_model_and_options(
+            "google", "gemini-2.5-flash", options, app_mode="normal"
+        )
         == options
     )
     assert validate_model_and_options(
-        "google", "gemini-2.5-flash", {"thinking": {"budget": -1}}
+        "google",
+        "gemini-2.5-flash",
+        {"thinking": {"budget": -1}},
+        app_mode="normal",
     ) == {"thinking": {"budget": -1}}
     for options in [
         {"thinking": {"level": "low"}},
@@ -63,7 +68,9 @@ def test_stable_google_definition_preserves_budget_zero_and_rejects_level():
         {"response_format": {}},
     ]:
         with pytest.raises(ValueError, match="invalid_options"):
-            validate_model_and_options("google", "gemini-2.5-flash", options)
+            validate_model_and_options(
+                "google", "gemini-2.5-flash", options, app_mode="normal"
+            )
     assert capabilities("google", "gemini-custom") is None
 
 

@@ -1,15 +1,92 @@
 """Public model/settings views and revision-aware role availability."""
 
+import hashlib
+import json
+from typing import Literal
+
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import select
 
 from src.api.schemas.ai_settings import CallLimits, CallTimeouts
+from src.api.schemas.scenario_config import ScenarioConfig
 from src.i18n import translate
 from src.models.model_config import ROLES, AppSetting, ModelConfig
 from src.services.model_capabilities import capabilities, metadata_conflict
 from src.services.model_verification import effective_roles, model_available
 from src.services.role_probe_contract import probe_options
+
+# Contract §16.1: the only fields of the supported execution content.
+PROJECTION = dict(
+    problem=("public_text", "learning_objective"),
+    student=(
+        "name",
+        "public_profile",
+        "internal_profile",
+        "misconception",
+        "behavior_instruction",
+    ),
+    mentor=("mode", "name", "welcome_message", "behavior_instruction"),
+    analysis=(
+        "context",
+        "expected_understanding",
+        "instruction",
+        "rubric_name",
+        "rubric_description",
+        "category_name",
+        "classification_enabled",
+    ),
+)
+POLICY_FIELDS = (
+    "condition",
+    "start_turn",
+    "min_interval_turns",
+    "window_turns",
+    "max_interventions",
+)
+RUBRIC_FIELDS = ("id", "name", "criteria", "level")
+
+
+def supported_config_projection(config_schema_version, config):
+    if type(config_schema_version) is not int or config_schema_version != 1:
+        raise ValueError("INVALID_REQUEST")
+    try:
+        values = ScenarioConfig.model_validate(config).model_dump()
+    except ValidationError:
+        raise ValueError("INVALID_REQUEST") from None
+    projected = {
+        section: {name: values[section][name] for name in names}
+        for section, names in PROJECTION.items()
+    }
+    projected["mentor"]["intervention_policy"] = {
+        name: values["mentor"]["intervention_policy"][name]
+        for name in POLICY_FIELDS
+    }
+    projected["analysis"]["rubric"] = [
+        {name: item[name] for name in RUBRIC_FIELDS}
+        for item in values["analysis"]["rubric"]
+    ]
+    for role in ROLES:
+        selection = values[role]["resolved_model_config"]
+        # PKs and options are excluded here but still validated separately.
+        projected[role]["resolved_model_config"] = selection and {
+            "provider": selection["provider"],
+            "model_id": selection["model_id"],
+        }
+    return dict(config_schema_version=1, config=projected)
+
+
+def supported_config_sha256(config_schema_version, config):
+    projection = supported_config_projection(config_schema_version, config)
+    return hashlib.sha256(
+        json.dumps(
+            projection,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def settings_values(setting):
@@ -99,7 +176,9 @@ def connection_impact(
     return impact
 
 
-def public_model(model, connection, language="ko"):
+def public_model(
+    model, connection, language="ko", *, app_mode: Literal["normal", "demo"]
+):
     definition = capabilities(connection.provider, model.model_id, language)
     if definition:
         definition["metadata_conflict"] = metadata_conflict(
@@ -123,12 +202,16 @@ def public_model(model, connection, language="ko"):
         config_version=model.config_version,
         capabilities=definition,
         default_options=model.default_options_json,
-        verification_state=effective_roles(model, connection),
+        verification_state=effective_roles(
+            model, connection, app_mode=app_mode
+        ),
         probe_budgets=budgets,
     )
 
 
-async def configuration_state(db, connections, language="ko"):
+async def configuration_state(
+    db, connections, language="ko", *, app_mode: Literal["normal", "demo"]
+):
     by_id = {c.id: c for c in connections.values()}
     models = (
         await db.scalars(select(ModelConfig).order_by(ModelConfig.id))
@@ -150,11 +233,17 @@ async def configuration_state(db, connections, language="ko"):
                     available=bool(
                         model
                         and model_available(
-                            model, by_id[model.provider_connection_id], role
+                            model,
+                            by_id[model.provider_connection_id],
+                            role,
+                            app_mode=app_mode,
                         )
                     ),
                 )
             )
+        if app_mode == "normal":
+            # The normal administrator form has no demo limit field.
+            del limits["demo"]
         settings = dict(
             settings_version=setting.settings_version,
             defaults=defaults,
@@ -163,7 +252,9 @@ async def configuration_state(db, connections, language="ko"):
         )
     return dict(
         models=[
-            public_model(m, by_id[m.provider_connection_id], language)
+            public_model(
+                m, by_id[m.provider_connection_id], language, app_mode=app_mode
+            )
             for m in models
         ],
         models_available=True,

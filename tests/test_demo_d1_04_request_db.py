@@ -29,6 +29,7 @@ import pytest
         "reset_close_failure",
         "restart_recovery",
         "malformed_form",
+        "rollback_failure",
     ],
 )
 def test_demo_request_boundary(case, tmp_path):
@@ -1105,6 +1106,55 @@ async def malformed_form(h):
         error(response, "INVALID_REQUEST")
         assert response.status_code == 422, response.text
         assert h.visitors.lease_count(ctx.scope) == 0
+
+
+async def rollback_failure(h):
+    client = await h.client()
+    state = await h.start(client)
+    ctx = await h.context(client, state)
+    await ctx.db.execute(
+        text(
+            "UPDATE synthetic_record SET body='expires before commit' WHERE id=1"
+        )
+    )
+    assert ctx._request_db.handle is not None
+    h.clock.elapsed = 7201
+    with pytest.raises(DemoError) as caught:
+        await ctx.db.commit()
+    assert caught.value.code == "DEMO_EXPIRED"
+    session = ctx._request_db.session
+    rollback, close, release = (
+        session.rollback,
+        session.close,
+        h.visitors.release_lease,
+    )
+    calls = []
+
+    async def observed_rollback():
+        calls.append("rollback")
+        await rollback()
+
+    async def observed_close():
+        calls.append("close")
+        await close()
+
+    async def observed_release(lease, **kwargs):
+        calls.append("release")
+        return await release(lease, **kwargs)
+
+    session.rollback, session.close = observed_rollback, observed_close
+    h.visitors.release_lease = observed_release
+    try:
+        with pytest.raises(DemoError) as caught:
+            await h.runtime.release_request_db(ctx)
+        assert caught.value.code == "DEMO_EXPIRED"
+        assert calls == ["rollback", "close", "release"], calls
+        assert ctx._request_db.released
+        assert h.visitors.lease_count(ctx.scope) == 0
+    finally:
+        session.rollback, session.close = rollback, close
+        h.visitors.release_lease = release
+        await h.runtime.release_request_db(ctx)
 
 
 async def run_case(case, tmp_path):

@@ -435,11 +435,14 @@ class DemoRequestDB:
         async with state.lock:
             if state.released:
                 return
-            if state.session is not None:
-                await state.session.rollback()
-                await state.session.close()
-            await self.visitors.release_lease(state.lease)
-            state.released = True
+            try:
+                if state.session is not None:
+                    await state.session.rollback()
+            finally:
+                if state.session is not None:
+                    await state.session.close()
+                await self.visitors.release_lease(state.lease)
+                state.released = True
 
     async def release_request_db(self, ctx):
         if isinstance(ctx, ControlContext):

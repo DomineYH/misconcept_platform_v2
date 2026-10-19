@@ -473,6 +473,36 @@ def test_student_and_mentor_bodies_are_d0_02_text():
             )
 
 
+# D0-02 §6: first-response evidence per branch (C is a prefix of its answer).
+FIRST_EVIDENCE = dict(
+    A=("8이 4보다 크니까 1/8 조각도 더 클 것 같아요.",) * 2,
+    B=(
+        "8이 더 큰 수라서 왜 1/8이 더 작은지는 모르겠어요.",
+        "왜 1/8이 더 작은지는 모르겠어요.",
+    ),
+    C=("8조각이면 더 많으니까 한 조각도 1/8 쪽이 클 것 같아요.",) * 2,
+)
+
+
+def test_analysis_evidence_and_early_end_text_follow_d0_02():
+    for key, envelope in responses().items():
+        case, role, state, branch, _, _, _ = key.split("/")
+        if case != "normal" or role != "analysis" or branch == "none":
+            continue
+        finding, clue = FIRST_EVIDENCE[branch]
+        body = envelope["structured"]
+        assert finding in D0_02 and clue in D0_02
+        assert [
+            f["evidence"][0]["quote"] for f in body["misconception_findings"]
+        ] == [finding] * (2 if state == "after_compare" else 1)
+        assert [c["quote"] for c in body["dialogue_coaching"]] == [clue]
+        if state == "after_first":
+            # Only what the state guarantees; turn count and question vary.
+            assert body["brief_feedback"][0] == (
+                "공통 두 번째 입력은 아직 사용하지 않았습니다."
+            )
+
+
 @dataclass(frozen=True)
 class DemoTextRequest(TextRequest):
     demo_context: object = field(default=None, kw_only=True)
@@ -815,6 +845,42 @@ async def test_b_chunks_and_interleaved_unsupported_follow_projection(
         (c["disposition"], c["rubric_id"])
         for c in single.structured["message_classifications"]
     ] == [("classified", "r2"), ("non_analyzable", None), ("classified", "r3")]
+
+
+@pytest.mark.parametrize(
+    "path,branch,classes",
+    [
+        (["C"], "C", [("classified", "r1")]),
+        (
+            ["unsupported", "B"],
+            "B",
+            [("non_analyzable", None), ("classified", "r2")],
+        ),
+    ],
+)
+async def test_early_end_after_first_supported_turn(
+    classroom, path, branch, classes
+):
+    sid, _, messages = await classroom.session(path, ended=True)
+    result = await classroom.structured(
+        sid,
+        selection("analysis", "after_first", branch, branch, phase="single"),
+        UnifiedAnalysisOutput,
+        classroom.validation(messages),
+    )
+    assert result.type == "completed", result.error_code
+    assert [
+        (c["disposition"], c["rubric_id"])
+        for c in result.structured["message_classifications"]
+    ] == classes
+    assert result.structured["brief_feedback"][0] == (
+        "공통 두 번째 입력은 아직 사용하지 않았습니다."
+    )
+    quote = FIRST_EVIDENCE[branch][0]
+    assert [
+        f["evidence"][0]["quote"]
+        for f in result.structured["misconception_findings"]
+    ] == [quote]
 
 
 async def test_failure_envelopes_terminate_as_declared(classroom):

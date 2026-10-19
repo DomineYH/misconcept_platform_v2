@@ -35,7 +35,7 @@
         "evidence": [
           {
             "message_id": "@student_first",
-            "quote": "8조각이면 더 많으니까 한 조각도 1/8 쪽이 클 것 같아요. 직접 나누어 보지는 않았어요."
+            "quote": "8조각이면 더 많으니까 한 조각도 1/8 쪽이 클 것 같아요."
           }
         ]
       },
@@ -45,7 +45,7 @@
         "evidence": [
           {
             "message_id": "@student_first",
-            "quote": "8조각이면 더 많으니까 한 조각도 1/8 쪽이 클 것 같아요. 직접 나누어 보지는 않았어요."
+            "quote": "8조각이면 더 많으니까 한 조각도 1/8 쪽이 클 것 같아요."
           },
           {
             "message_id": "@student_common",
@@ -77,7 +77,7 @@
     "dialogue_coaching": [
       {
         "message_id": "@student_first",
-        "quote": "8조각이면 더 많으니까 한 조각도 1/8 쪽이 클 것 같아요. 직접 나누어 보지는 않았어요.",
+        "quote": "8조각이면 더 많으니까 한 조각도 1/8 쪽이 클 것 같아요.",
         "role": "student",
         "marker": "key_clue",
         "note": "분모의 크기로 한 조각의 크기를 판단하는 생각이 드러나는 단서다."

@@ -1795,3 +1795,92 @@ async def test_reset_form_true_and_missing_confirmation(harness):
     )
     assert response.status_code == 200
     assert response.json()["generation"] == 2
+
+
+@pytest.mark.parametrize("operation", ["role", "reset"])
+async def test_receipt_wins_if_context_becomes_stale_after_preflight(
+    harness, operation
+):
+    h = harness
+    await start(h, "admin")
+    await h.client.get("/demo/state")
+    entered, release = asyncio.Event(), asyncio.Event()
+    context = h.security.context
+    request_id = uid()
+    body = {
+        "request_id": request_id,
+        "expected_generation": 1,
+        "expected_auth_epoch": 1,
+        **({"role": "teacher"} if operation == "role" else {"confirm": True}),
+    }
+
+    async def delayed(request, bootstrap, generation, epoch):
+        entered.set()
+        await release.wait()
+        record = h.visitors.records[bootstrap]
+        if record.generation != generation:
+            raise DemoError("STALE_GENERATION")
+        if record.auth_epoch != epoch:
+            raise DemoError("STALE_ROLE")
+        return await context(request, bootstrap, generation, epoch)
+
+    h.security.context = delayed
+    first = asyncio.create_task(
+        h.client.post(
+            f"/demo/{operation}", json=body, headers=headers(h.client)
+        )
+    )
+    await entered.wait()
+    h.security.context = context
+    try:
+        completed = await h.client.post(
+            f"/demo/{operation}", json=body, headers=headers(h.client)
+        )
+        assert completed.status_code == 200
+        release.set()
+        replay = await first
+        assert replay.status_code == 200
+        assert replay.json()["result"]["auth_epoch"] == 2
+        assert h.visitors.records["A"].auth_epoch == 2
+        assert h.visitors.clones == (2 if operation == "reset" else 1)
+        assert "set-cookie" not in replay.headers
+    finally:
+        release.set()
+        await asyncio.gather(first, return_exceptions=True)
+
+
+async def test_in_progress_receipt_wins_if_context_observes_resetting(harness):
+    h = harness
+    await start(h)
+    await h.client.get("/demo/state")
+    entered, release = asyncio.Event(), asyncio.Event()
+    context = h.security.context
+    request_id = uid()
+
+    async def delayed(*args):
+        entered.set()
+        await release.wait()
+        return await context(*args)
+
+    h.security.context = delayed
+    first = asyncio.create_task(reset(h, request_id))
+    await entered.wait()
+    h.security.context = context
+    h.visitors.clone_started.clear()
+    h.visitors.clone_continue.clear()
+    owner = asyncio.create_task(reset(h, request_id))
+    try:
+        await h.visitors.clone_started.wait()
+        release.set()
+        response = await first
+        assert response.status_code == 202
+        assert response.json()["request_id"] == request_id
+        assert response.json()["state"] == "resetting"
+        assert "set-cookie" not in response.headers
+        h.visitors.clone_continue.set()
+        assert (await owner).status_code == 200
+        assert h.visitors.clones == 2
+    finally:
+        release.set()
+        h.visitors.clone_continue.set()
+        await asyncio.gather(first, owner, return_exceptions=True)

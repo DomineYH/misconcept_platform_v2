@@ -875,6 +875,32 @@ class DemoSession:
             await cleanup
             raise
 
+    async def _replay_after_context_error(
+        self,
+        visitor: object,
+        command: RoleCommand | ResetCommand,
+        operation: Literal["role", "reset"],
+        error: DemoError,
+    ) -> ControlResult:
+        # A result may appear while the verified context is resolving.
+        if error.code not in (
+            "DEMO_STALE_GENERATION",
+            "DEMO_STALE_ROLE",
+            "DEMO_START_IN_PROGRESS",
+            "DEMO_RESET_IN_PROGRESS",
+            "DEMO_PREPARE_FAILED",
+            "DEMO_RESET_FAILED",
+            "DEMO_ROLE_DELETED",
+        ):
+            raise error
+        async with self.visitors.transition(visitor) as handle:
+            stored = handle.replay(
+                command.request_id, operation, command.model_dump()
+            )
+            if stored is not None:
+                return replay_result(stored, handle.snapshot())
+        raise error
+
     async def reset(
         self,
         bootstrap: object,
@@ -890,7 +916,12 @@ class DemoSession:
             )
             if stored is not None:
                 return replay_result(stored, handle.snapshot())
-        ctx = await context()
+        try:
+            ctx = await context()
+        except DemoError as error:
+            return await self._replay_after_context_error(
+                visitor, command, "reset", error
+            )
         task = None
         released = asyncio.Event()
         try:
@@ -986,7 +1017,12 @@ class DemoSession:
             )
             if stored is not None:
                 return replay_result(stored, handle.snapshot())
-        ctx = await context()
+        try:
+            ctx = await context()
+        except DemoError as error:
+            return await self._replay_after_context_error(
+                visitor, command, "role", error
+            )
         try:
             async with self.visitors.transition(visitor) as handle:
                 stored = handle.replay(

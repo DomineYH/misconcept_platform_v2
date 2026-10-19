@@ -157,7 +157,7 @@
   5. `demo_record_origin` = `seed_prepared` 또는 `visitor_generated`. `session_id == seed_refs["completed_session"]`이면 seed, 아니면 visitor. `seed_refs`는 #194 S3가 `app.state.demo_request_db.seed_refs`로 공급한다.
 - exporter 인자: keyword-only `demo_seed_session_id: int | None`. `None`(normal 기본)이면 출력은 기존과 동일하다. normal exporter 호출에 demo 값을 기본 주입하지 않는다.
 - 파일명(계약): `demo_d0-02-v1_<admin|teacher>_<session-ID|selected|all|user-ID>.csv`. 관리자 route 구현값은 `demo_d0-02-v1_admin_session-<id>.csv`, `..._admin_selected.csv`, `..._admin_all.csv`, `..._admin_user-<id>.csv`. `Content-Disposition`은 이 ASCII 패턴과 검증된 ID로만 구성한다. 사용자 삭제 뒤 세션 export에는 user-ID를 만들어 넣지 않는다. normal 파일명(`sessions_export.csv`, `selected_sessions.csv`, `user_{id}_conversations.csv`, `session_{id}.csv`)은 불변이다.
-- 헤더: `download_session`과 `export_selected_sessions`만 `X-Demo-Export-Request-ID`(canonical UUID, 클라이언트 값을 그대로 echo)와 `X-Demo-Export-Row-Count`(header 제외 실제 행 수, 1 이상)를 낸다. 잘못된 request ID는 422 `DEMO_INVALID_REQUEST`, 헤더가 없으면 echo를 생략한다. 나머지 두 admin export route에는 이 헤더가 없다.
+- 헤더: `download_session`과 `export_selected_sessions`만 `X-Demo-Export-Request-ID`(canonical UUID, 클라이언트 값을 그대로 echo)와 `X-Demo-Export-Row-Count`(header 제외 실제 행 수, 1 이상)를 낸다. 잘못된 request ID와 data 행이 0인 결과(header만 있는 CSV)는 422 `DEMO_INVALID_REQUEST`이며 행을 만들어 넣지 않는다. 헤더가 없으면 echo를 생략한다. 나머지 두 admin export route에는 이 헤더가 없다.
 - 유지: UTF-8, 기존 csv writer quoting/줄바꿈, 수식 시작 문자(`=`, `+`, `-`, `@`, tab, CR) 방어. 주석·배너·별도 summary 행을 추가하지 않는다. 기본 두 턴 세션은 6행(teacher 2 / student 2 / tutor 1 / summary 1).
 
 ## 4. 다른 소유자 요청

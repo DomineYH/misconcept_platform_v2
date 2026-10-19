@@ -66,9 +66,11 @@ def csv_response(request, csv_content, filename, target, *, echo=False):
                 if not canonical:
                     raise DemoError("INVALID_REQUEST")
                 headers["X-Demo-Export-Request-ID"] = request_id
-            headers["X-Demo-Export-Row-Count"] = str(
-                len(list(csv.DictReader(io.StringIO(csv_content))))
-            )
+            rows = len(list(csv.DictReader(io.StringIO(csv_content))))
+            # §24.1 requires a count >= 1; never fabricate a row for it.
+            if rows < 1:
+                raise DemoError("INVALID_REQUEST")
+            headers["X-Demo-Export-Row-Count"] = str(rows)
     return Response(
         content="\ufeff" + csv_content,
         media_type="text/csv; charset=utf-8",

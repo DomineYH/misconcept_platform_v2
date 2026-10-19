@@ -306,6 +306,33 @@ async def download_with(client, mode, ids, request_id):
     )
 
 
+@pytest.mark.parametrize("mode", ["single", "selected"])
+@CSV_CASE
+async def test_demo_empty_single_or_selected_export_is_invalid_request(
+    data, export_history, export_api, demo_mode, mode
+):
+    """§24.1 S5: X-Demo-Export-Row-Count is int>=1, so no header-only CSV."""
+    empty = Session(
+        scenario_id=data.scenario.id,
+        teacher_id=data.other.id,
+        started_at=datetime(2026, 10, 3),
+        ended_at=datetime(2026, 10, 3, 1),
+    )
+    data.db.add(empty)
+    await data.db.commit()
+    with pytest.raises(DemoError) as raised:
+        await download_with(export_api, mode, [empty.id], str(uuid4()))
+    assert raised.value.code == "DEMO_INVALID_REQUEST"
+    assert raised.value.status_code == 422
+    # A non-empty session in the same selection still exports normally.
+    if mode == "selected":
+        response = await download_with(
+            export_api, mode, [empty.id, export_history.id], None
+        )
+        rows = demo_rows(response, "selected", [export_history.id])
+        assert response.headers["x-demo-export-row-count"] == str(len(rows))
+
+
 @CSV_CASE
 async def test_demo_selected_export_contains_only_requested_sessions(
     data, export_history, export_api, demo_mode

@@ -10,6 +10,7 @@ export function mountStudentStream(ui) {
   const container = document.getElementById('messages-container');
   const storageKey = uiLanguage.storageKey(`chat-run-${ui.sessionId}`);
   const draftKey = uiLanguage.storageKey(`chat-draft-${ui.sessionId}`);
+  const captured = uiLanguage.storageKey('');
   let pending, teacher, student, status, actions, retry;
   let lookupBusy = false;
   let sessionEnded = false;
@@ -22,6 +23,13 @@ export function mountStudentStream(ui) {
   let recoveryTimer, recoveryStartedAt, recoveryStep;
   let leftPage = false, lifetime = new AbortController();
   ui.stopPolling();
+  uiLanguage.registerStale(message => {
+    lifetime.abort();
+    clearTimeout(recoveryTimer);
+    if (!pending || !status) return;
+    status.textContent = message;
+    actions.hidden = true;
+  });
   // Remove the legacy transport on this mounted form, including future HTMX processing.
   form.removeAttribute('hx-post');
   container.removeAttribute('hx-get');
@@ -119,15 +127,17 @@ export function mountStudentStream(ui) {
       container.dispatchEvent(new CustomEvent('student:completed', {detail:{row:student, ...data}}));
     } else if (['run.failed', 'run.interrupted', 'run.cancelled'].includes(type)) {
       if (data.run_id !== pending.run_id) return;
+      const hint = uiLanguage.recovery(data);
+      if (hint && ui.isLocked()) return;
       Object.assign(pending, data);
       clearTimeout(recoveryTimer);
       pending.partial_text = student.querySelector('.message-bubble').textContent;
-      status.textContent = uiLanguage.t('teacher.student_incomplete', {reason:
+      status.textContent = uiLanguage.t('teacher.student_incomplete', {reason:hint ?? (
         data.status === 'cancelled' ? uiLanguage.t('teacher.conversation_ended') :
         (data.code || data.error_code) === 'configuration_unavailable' ? uiLanguage.t('teacher.student_configuration_error') :
         (data.code || data.error_code) === 'storage_error' ? uiLanguage.t('teacher.student_storage_failed') :
         data.status === 'interrupted' ? uiLanguage.t('teacher.student_interrupted') :
-        uiLanguage.t('teacher.student_failed')});
+        uiLanguage.t('teacher.student_failed'))});
       actions.hidden = false;
       retry.textContent = uiLanguage.t('teacher.student_retry');
       retry.disabled = !data.retryable;
@@ -265,6 +275,20 @@ export function mountStudentStream(ui) {
         expire();
         return;
       }
+      const detail = response.ok ? null : await response.clone().json().then(body => body.detail, () => null);
+      const hint = uiLanguage.recovery(detail);
+      if (hint) {
+        // §11: the request was refused; only an explicit resend reuses its request_id.
+        pending.status = 'unknown';
+        pending.retryable = detail.retryable === true;
+        status.textContent = hint;
+        retry.textContent = uiLanguage.t('teacher.resend_request');
+        retry.disabled = !pending.retryable;
+        actions.hidden = false;
+        if (!input.value) input.value = pending.content;
+        persist();
+        return;
+      }
       if (response.status === 403) {
         deny();
         return;
@@ -318,7 +342,8 @@ export function mountStudentStream(ui) {
         if (pending?.status === 'running') await recover();
       } else {
         await readSSE(response.body, (type, data) => {
-          if (pending === attempt && !leftPage) event(type, data);
+          if (pending !== attempt || leftPage || !uiLanguage.current(captured, data)) return false;
+          event(type, data);
           return !leftPage && pending === attempt && ['sending', 'running'].includes(pending.status);
         });
         if (pending === attempt && ['sending', 'running'].includes(pending.status)) await recover();
@@ -353,7 +378,7 @@ export function mountStudentStream(ui) {
     if (!e.persisted) return;
     leftPage = false;
     lifetime = new AbortController();
-    if (pending) void recover();
+    if (pending) uiLanguage.afterState(() => void recover());
   });
   if (!ui.isLocked()) input.value = sessionStorage.getItem(draftKey) ?? input.value;
   const saved = sessionStorage.getItem(storageKey);

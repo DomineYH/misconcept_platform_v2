@@ -27,7 +27,14 @@ function fetchWithRetry(url, retries) {
         }
         throw new Error('Session expired');
       }
-      if (!response.ok) throw new Error('Request failed');
+      if (!response.ok) {
+        // A demo envelope carries its own hint and is never retried.
+        return uiLanguage.responseRecovery(response).then(function (hint) {
+          var error = new Error('Request failed');
+          error.hint = hint;
+          throw error;
+        });
+      }
       return response.text();
     });
 }
@@ -60,6 +67,7 @@ var analysisModalRequest = 0;
 
 function showAnalysisModal(sessionId) {
   var requestId = ++analysisModalRequest;
+  var captured = uiLanguage.storageKey('');
   analysisModalBody.replaceChildren(document.getElementById('admin-session-loading').content.cloneNode(true));
   analysisModal.classList.remove('hidden');
   analysisModal.classList.add('flex');
@@ -71,16 +79,19 @@ function showAnalysisModal(sessionId) {
   )
     .then(function (html) {
       if (requestId !== analysisModalRequest) return;
+      if (uiLanguage.storageKey('') !== captured) return;
       analysisModalBody.innerHTML = sanitizeHTML(html);
       mountAnalysisResults(analysisModalBody);
       var close = analysisModalBody.querySelector('.close-modal-btn');
       if (close && !analysisModal.contains(document.activeElement)) close.focus();
+      uiLanguage.observe('admin_record_viewed', sessionId, captured);
     })
-    .catch(function () {
+    .catch(function (error) {
       if (requestId !== analysisModalRequest) return;
       var loading = analysisModalBody.querySelector('[role="status"]');
       if (loading) { loading.replaceChildren(); loading.removeAttribute('role'); }
-      modalLifecycle.error(analysisModal, uiLanguage.t('teacher.analysis_load_failed'));
+      modalLifecycle.error(analysisModal,
+        (error && error.hint) || uiLanguage.t('teacher.analysis_load_failed'));
     }).finally(function () { sessionPendingRequests--; });
 }
 
@@ -91,6 +102,12 @@ function closeAnalysisModal() {
   analysisModalBody.innerHTML = '';
   modalLifecycle.close(analysisModal);
 }
+
+// A new demo namespace drops in-flight responses and closes the stale record.
+uiLanguage.registerStale(function () {
+  ++analysisModalRequest;
+  if (!analysisModal.classList.contains('hidden')) closeAnalysisModal();
+});
 
 analysisModal.addEventListener('click', function (e) {
   if (e.target === this) closeAnalysisModal();
@@ -173,6 +190,60 @@ document.getElementById('sessions-tbody')
     }
   });
 
+/* RFC 4180 parser; stray quote or unterminated quote returns null. */
+function parseCsv(text) {
+  var rows = [], row = [], field = '', quoted = false, closed = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (quoted) {
+      if (c !== '"') field += c;
+      else if (text[i + 1] === '"') { field += '"'; i++; }
+      else { quoted = false; closed = true; }
+    } else if (c === '"') {
+      if (field !== '' || closed) return null;
+      quoted = true;
+    } else if (c === ',') {
+      row.push(field); field = ''; closed = false;
+    } else if (c === '\r' || c === '\n') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); rows.push(row); row = []; field = ''; closed = false;
+    } else if (closed) {
+      return null;
+    } else {
+      field += c;
+    }
+  }
+  if (quoted) return null;
+  if (field !== '' || closed || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+/* §24.1 csv_received: the exact one-record journey export, nothing else. */
+var DEMO_CSV_TAIL = ['demo_response_source', 'demo_external_ai_called',
+  'demo_content_version', 'demo_fixture_version', 'demo_record_origin'];
+
+function journeyCsv(buffer, response, ids, exportId) {
+  if (ids.length !== 1 || response.status !== 200 ||
+      response.headers.get('X-Demo-Export-Request-ID') !== exportId) return false;
+  var count = response.headers.get('X-Demo-Export-Row-Count') || '';
+  if (!/^\d+$/.test(count) || Number(count) < 1) return false;
+  // The default TextDecoder strips exactly one leading BOM.
+  var rows = parseCsv(new TextDecoder('utf-8', {fatal: true}).decode(buffer));
+  if (!rows || rows.length !== Number(count) + 1) return false;
+  var head = rows[0];
+  if (head.length !== 32 || head[0] !== 'session_id' ||
+      DEMO_CSV_TAIL.some(function (name, i) { return head[27 + i] !== name; })) return false;
+  var role = head.indexOf('role');
+  var summary = false;
+  for (var r = 1; r < rows.length; r++) {
+    var row = rows[r];
+    if (row.length !== 32 || row[0] !== String(ids[0]) ||
+        row[28] !== 'false' || row[31] !== 'visitor_generated') return false;
+    if (role >= 0 && row[role] === 'summary') summary = true;
+  }
+  return summary;
+}
+
 btnDownloadSelected.addEventListener('click', function () {
   var ids = getCheckedIds();
   if (ids.length === 0) return;
@@ -184,23 +255,35 @@ btnDownloadSelected.addEventListener('click', function () {
   var body = new URLSearchParams();
   ids.forEach(function (id) { body.append('session_ids', id); });
 
+  var captured = uiLanguage.storageKey('');
+  var exportId = captured !== '' ? crypto.randomUUID() : '';
+  var initial = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    [uiLanguage.csrfHeader]: getCsrfToken(),
+  };
+  if (captured !== '') initial['X-Demo-Export-Request-ID'] = exportId;
+
   sessionPendingRequests++;
   fetch('/admin/sessions/export-selected', {
     method: 'POST',
-    headers: uiLanguage.headers('/admin/sessions/export-selected', {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      [uiLanguage.csrfHeader]: getCsrfToken(),
-    }),
+    headers: uiLanguage.headers('/admin/sessions/export-selected', initial),
     credentials: 'same-origin',
     body: body,
   })
     .then(function (response) {
       if (!response.ok) {
-        return response.text().then(function (t) {
-          throw new Error(t || uiLanguage.t('admin.download_failed'));
+        return uiLanguage.responseRecovery(response).then(function (hint) {
+          return response.text().then(function (t) {
+            var error = new Error(t || uiLanguage.t('admin.download_failed'));
+            error.hint = hint;
+            throw error;
+          });
         });
       }
-      return response.blob().then(function (blob) {
+      // Demo reads bytes so the CSV can be verified; normal keeps blob().
+      return (captured !== '' ? response.arrayBuffer() : response.blob()).then(function (data) {
+        var blob = captured !== '' ?
+          new Blob([data], {type: response.headers.get('Content-Type') || ''}) : data;
         var disposition =
           response.headers.get('Content-Disposition') || '';
         var match = disposition.match(/filename=([^;]+)/);
@@ -213,11 +296,17 @@ btnDownloadSelected.addEventListener('click', function () {
         a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
+        // A failed check must never reach the download-failed handler.
+        try {
+          if (captured !== '' && journeyCsv(data, response, ids, exportId)) {
+            uiLanguage.observe('csv_received', ids[0], captured, exportId);
+          }
+        } catch (e) {}
       });
     })
-    .catch(function () {
+    .catch(function (error) {
       modalLifecycle.error(document.querySelector('.table-container'),
-        uiLanguage.t('admin.selected_download_failed'));
+        (error && error.hint) || uiLanguage.t('admin.selected_download_failed'));
     })
     .finally(function () {
       sessionPendingRequests--;
@@ -237,8 +326,8 @@ for (var eventName of ['htmx:responseError', 'htmx:sendError']) {
   document.body.addEventListener(eventName, function (event) {
     if (!event.detail.elt.closest('#sessions-tbody')) return;
     modalLifecycle.error(document.querySelector('.table-container'),
-      event.type === 'htmx:sendError'
+      event.detail.demoRecovery || (event.type === 'htmx:sendError'
         ? uiLanguage.t('admin.session_action_unknown')
-        : uiLanguage.t('admin.session_action_failed'));
+        : uiLanguage.t('admin.session_action_failed')));
   });
 }

@@ -30,7 +30,7 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
         if (previous && document.querySelectorAll('.scenario-card').length === 1) {
           window.location.assign(previous.href);
         } else window.location.reload();
-      } else window.alert(response.status === 409 ? uiLanguage.t('admin.another_administrator_made_changes_reload_and_check_again') : uiLanguage.t('admin.deletion_failed'));
+      } else window.alert(await uiLanguage.responseRecovery(response) || (response.status === 409 ? uiLanguage.t('admin.another_administrator_made_changes_reload_and_check_again') : uiLanguage.t('admin.deletion_failed')));
     } catch {
       window.alert(uiLanguage.t('admin.deletion_failed'));
     } finally {

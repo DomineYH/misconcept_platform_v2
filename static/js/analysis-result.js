@@ -24,6 +24,7 @@
     const prefix = `analysis-result-${++nextId}`;
     let data, announcement, pending, busy = false, planHidden = false;
     let pollTimer, pollController, statusError = false;
+    const captured = uiLanguage.storageKey('');
     const readGuard = () => ({busy: busy || Boolean(pending) || data?.latest_run?.status === 'running'});
     const unregister = uiLanguage.registerGuard(readGuard);
     function publishState() {
@@ -36,6 +37,7 @@
       clearTimeout(pollTimer);
       if (pollController) pollController.abort();
     }
+    const unregisterStale = uiLanguage.registerStale(stopPolling);
     function schedulePolling() {
       if (root.isConnected && data.latest_run?.status === 'running' && data.actions.status) {
         pollTimer = setTimeout(checkStatus, 1000);
@@ -47,9 +49,10 @@
       const signal = pollController.signal;
       try {
         const response = await fetch(data.actions.status, {credentials: 'same-origin', signal, headers: uiLanguage.headers(data.actions.status)});
+        if (!response.ok && await uiLanguage.responseRecovery(response)) return;
         if (!response.ok) throw new Error();
         const result = await projection(response);
-        if (signal.aborted || !root.isConnected) return;
+        if (signal.aborted || !root.isConnected || !uiLanguage.current(captured)) return;
         const announce = statusError || data.latest_run?.status !== result.latest_run?.status;
         const changed = statusError || JSON.stringify(data) !== JSON.stringify(result);
         statusError = false;
@@ -69,6 +72,7 @@
     const observer = new MutationObserver(() => {
       if (!root.isConnected) {
         unregister();
+        unregisterStale();
         stopPolling();
         observer.disconnect();
       }
@@ -98,6 +102,16 @@
           headers: uiLanguage.headers(url, {...getAnalysisCsrfHeaders(), 'Content-Type': 'application/json'}),
           body: JSON.stringify(body),
         });
+        // §11/§25: a demo refusal or a newer namespace ends this request; nothing is resent.
+        const hint = await uiLanguage.responseRecovery(response);
+        if (hint || !uiLanguage.current(captured)) {
+          busy = false;
+          pending = null;
+          render();
+          announcement.textContent = hint ?? uiLanguage.t('demo.stale_generation');
+          announcement.focus();
+          return;
+        }
         if (!response.ok && ![409, 422].includes(response.status)) throw new Error();
         const conflict = response.status === 409 ? (await response.clone().json()).detail : null;
         if (conflict?.code === 'request_conflict') {
@@ -329,9 +343,19 @@
       return;
     }
     fetch(root.dataset.resultUrl, {credentials: 'same-origin', headers: uiLanguage.headers(root.dataset.resultUrl)})
-      .then(response => { if (!response.ok) throw new Error(); return projection(response); })
-      .then(result => { data = result; render(); schedulePolling(); })
-      .catch(() => { node(root, 'p', uiLanguage.t('teacher.analysis_load_failed')); });
+      .then(async response => {
+        if (!response.ok) throw (await uiLanguage.responseRecovery(response)) ?? new Error();
+        return projection(response);
+      })
+      .then(result => {
+        if (!uiLanguage.current(captured)) return;
+        data = result;
+        render();
+        schedulePolling();
+        // §24.1: an opened journey history/analysis detail; comparisons are not history.
+        if (!root.dataset.comparison) uiLanguage.observe('history_viewed', root.dataset.sessionId, captured);
+      })
+      .catch(error => { node(root, 'p', typeof error === 'string' ? error : uiLanguage.t('teacher.analysis_load_failed')); });
   }
   window.showAnalysisResult = (root, data) => mount(root, data);
   window.mountAnalysisResults = (parent = document) => {

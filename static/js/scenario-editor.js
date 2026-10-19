@@ -177,7 +177,9 @@ async function save(action) {
     const response = await fetch(data.id == null ? '/admin/scenarios' : `/admin/scenarios/${data.id}/update`, {
       method:'POST', credentials:'same-origin', headers:uiLanguage.headers('/admin/scenarios', {'Content-Type':'application/json', [uiLanguage.csrfHeader]:uiLanguage.csrfToken() || ''}), body:JSON.stringify(payload(action))
     });
-    if (response.status === 422) {
+    const hint = await uiLanguage.responseRecovery(response);
+    if (hint) status.textContent = hint; // Demo refusal: show the hint, keep the input, never retry.
+    else if (response.status === 422) {
       const result = await response.json();
       showErrors(result.detail);
     } else if (response.status === 409) {

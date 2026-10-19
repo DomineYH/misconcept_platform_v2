@@ -134,7 +134,7 @@ async def _reserve_mentor(
                 if demo:
                     raise demo.error("REQUEST_CONFLICT")
                 conflict("request_conflict")
-            return await snapshot(db, existing), None
+            return await snapshot(db, existing, demo=demo), None
         teacher = await db.scalar(
             select(Message).where(
                 Message.session_id == session_id,
@@ -156,7 +156,7 @@ async def _reserve_mentor(
             )
         )
         if completed:
-            return await snapshot(db, completed), None
+            return await snapshot(db, completed, demo=demo), None
         if session.ended_at:
             raise HTTPException(400, detail={"code": "session_ended"})
         await validate_scenario_access(scenario.id, user, db, language=language)
@@ -220,7 +220,7 @@ async def _reserve_mentor(
                 None,
             )
             if prior is not None:
-                return await snapshot(db, prior), None
+                return await snapshot(db, prior, demo=demo), None
             policy = lesson.config.mentor.intervention_policy
             position = positions[turn_id]
             if position < policy.start_turn:
@@ -312,7 +312,7 @@ async def _reserve_mentor(
         )
         db.add(run)
         await db.flush()
-        accepted = await snapshot(db, run)
+        accepted = await snapshot(db, run, demo=demo)
         setting = await db.get(AppSetting, 1)
         if setting is None:
             raise InvocationError("configuration_unavailable")
@@ -366,7 +366,7 @@ async def finish_mentor(
         await db.execute(text("BEGIN IMMEDIATE"))
         run = await db.get(GenerationRun, run_id)
         if run.status != "running":
-            return await snapshot(db, run)
+            return await snapshot(db, run, demo=demo)
         session = await db.get(Session, run.session_id)
         if session.ended_at or session.deleted_at:
             status, error_code = "cancelled", "session_ended"
@@ -397,7 +397,7 @@ async def finish_mentor(
                 session.tutor_intervention_count += 1
                 run.first_output_at = run.finished_at
         await db.flush()
-        result = await snapshot(db, run)
+        result = await snapshot(db, run, demo=demo)
         try:
             await db.commit()
         except BaseException:

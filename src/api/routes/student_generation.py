@@ -31,32 +31,80 @@ from src.services.student_stream import DemoRun, StudentStreamingResponse
 router = APIRouter(tags=["Sessions"])
 
 
-async def register_demo_run(request):
-    """§6: register before reserving so the run's lease outlives the request."""
-    if config.APP_MODE != "demo":
-        return None
+def demo_binding(request, ctx):
+    """Server-owned demo inputs from app state; registers nothing."""
     # ponytail: #197's labeled inputs and #195's §16.1 helper are consumed
     # from their branches; PR4 verifies them against the merged real seed.
     from src.demo.seed import INPUTS
 
     from src.services.model_configuration import supported_config_sha256
 
-    ctx = request.state.demo_context
-    registry = request.app.state.demo_request_db.lifecycle
+    return DemoBinding(
+        ctx,
+        request.app.state.demo_request_db.lifecycle,
+        request.app.state.demo_seed,
+        INPUTS,
+        supported_config_sha256,
+    )
+
+
+async def register_demo_run(request):
+    """§6: register before reserving so the run's lease outlives the request."""
+    if config.APP_MODE != "demo":
+        return None
+    binding = demo_binding(request, request.state.demo_context)
     cancelled = asyncio.Event()
-    token = await registry.register(
-        ctx, "run", str(uuid4()), TaskControl(cancelled.set, asyncio.Event())
+    token = await binding.registry.register(
+        binding.ctx,
+        "run",
+        str(uuid4()),
+        TaskControl(cancelled.set, asyncio.Event()),
     )
     return DemoRun(
-        DemoBinding(
-            replace(ctx, lease=token.registry_lease),
-            registry,
-            request.app.state.demo_seed,
-            INPUTS,
-            supported_config_sha256,
-        ),
+        replace(binding, ctx=replace(binding.ctx, lease=token.registry_lease)),
         token,
         cancelled,
+    )
+
+
+def read_binding(request):
+    """Read-only binding for demo run JSON; normal mode gets None."""
+    if config.APP_MODE != "demo":
+        return None
+    return demo_binding(request, request.state.demo_context)
+
+
+# §11: pre-SSE lowercase codes -> (status, retryable, recovery key).
+DEMO_ERRORS = {
+    "configuration_unavailable": (422, False, "demo.unavailable"),
+    "call_limit_reached": (429, True, "demo.retry_later"),
+    "context_limit": (422, False, "demo.supported_only"),
+    "output_limit": (422, False, "demo.supported_only"),
+    "session_ended": (409, False, "demo.stopped"),
+    "student_busy": (409, True, "demo.wait_or_stop"),
+    "mentor_busy": (409, True, "demo.wait_or_stop"),
+    "unresolved_turn": (409, False, "demo.refresh_state"),
+}
+
+
+def demo_error_response(error, ctx):
+    """The §11 E(code) envelope for a known demo reserve refusal, else None."""
+    code = error.detail.get("code") if isinstance(error.detail, dict) else None
+    if ctx is None or code not in DEMO_ERRORS:
+        return None
+    status, retryable, recovery = DEMO_ERRORS[code]
+    return JSONResponse(
+        {
+            "detail": {
+                "code": code,
+                "retryable": retryable,
+                "recovery": recovery,
+                "generation": ctx.generation,
+                "auth_epoch": ctx.auth_epoch,
+            }
+        },
+        status_code=status,
+        headers=error.headers,
     )
 
 
@@ -111,17 +159,23 @@ async def mentor_turn(
         if run is None
         else run.binding.ctx.factory
     )
-    accepted, execution = await reserve_demo_run(
-        run,
-        reserve_mentor,
-        factory=factory,
-        session_id=session_id,
-        turn_id=str(turn_id),
-        user=user,
-        request_id=body.request_id,
-        trigger=body.trigger,
-        language=display_language(request),
-    )
+    try:
+        accepted, execution = await reserve_demo_run(
+            run,
+            reserve_mentor,
+            factory=factory,
+            session_id=session_id,
+            turn_id=str(turn_id),
+            user=user,
+            request_id=body.request_id,
+            trigger=body.trigger,
+            language=display_language(request),
+        )
+    except HTTPException as error:
+        response = demo_error_response(error, run and run.binding.ctx)
+        if response is None:
+            raise
+        return response
     if execution is None:
         return JSONResponse(accepted)
     execution["display_language"] = display_language(request)
@@ -145,15 +199,21 @@ async def student_turn(
         if run is None
         else run.binding.ctx.factory
     )
-    accepted, kwargs = await reserve_demo_run(
-        run,
-        reserve_student,
-        factory=factory,
-        session_id=session_id,
-        user=user,
-        request=body,
-        language=display_language(request),
-    )
+    try:
+        accepted, kwargs = await reserve_demo_run(
+            run,
+            reserve_student,
+            factory=factory,
+            session_id=session_id,
+            user=user,
+            request=body,
+            language=display_language(request),
+        )
+    except HTTPException as error:
+        response = demo_error_response(error, run and run.binding.ctx)
+        if response is None:
+            raise
+        return response
     if kwargs is None:
         return JSONResponse(accepted)
     kwargs["display_language"] = display_language(request)
@@ -183,7 +243,7 @@ async def get_run(
             403,
             detail=translate("teacher.forbidden", display_language(request)),
         )
-    return await snapshot(db, run)
+    return await snapshot(db, run, demo=read_binding(request))
 
 
 @router.get("/sessions/{session_id}/runs")
@@ -209,4 +269,4 @@ async def get_request_run(
                 "teacher.run_not_found", display_language(request)
             ),
         )
-    return await snapshot(db, run)
+    return await snapshot(db, run, demo=read_binding(request))

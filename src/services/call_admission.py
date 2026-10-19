@@ -73,9 +73,27 @@ class CallPermit:
         self.secret = None
 
 
-def demo_mode(ctx):
-    """Either the server or a demo context makes a call demo-only."""
-    return config.APP_MODE == "demo" or isinstance(ctx, DemoContext)
+def demo_forbidden(operation):
+    """Provider-only and comparison operations never run in demo."""
+    return operation in ("model_list", "probe", "comparison") or (
+        operation.startswith("comparison_")
+    )
+
+
+def require_mode(factory, operation, ctx, registry):
+    """The server mode decides; a context never turns normal into demo."""
+    if config.APP_MODE != "demo":
+        refused = ctx is not None or registry is not None
+    else:
+        refused = (
+            not isinstance(ctx, DemoContext)
+            or registry is None
+            or factory is not ctx.factory
+            or ctx.lease.released
+            or demo_forbidden(operation)
+        )
+    if refused:
+        raise InvocationError("configuration_unavailable")
 
 
 def approve_call(
@@ -90,23 +108,31 @@ def approve_call(
     ctx=None,
     registry=None,
 ):
-    demo = demo_mode(ctx)
+    require_mode(factory, operation, ctx, registry)
+    demo = config.APP_MODE == "demo"
     if (connection.provider == "demo") != demo or (
-        demo
-        and (
-            not isinstance(ctx, DemoContext)
-            or registry is None
-            or factory is not ctx.factory
-            or operation in ("model_list", "probe")
-            or connection.encrypted_key is not None
-        )
+        demo and connection.encrypted_key is not None
     ):
         raise InvocationError("configuration_unavailable")
+    scope = scope_for(ctx) if demo else NORMAL_SCOPE
     limits, timeouts = settings_values(setting)
-    total = len(active_calls)
-    provider = sum(c.provider == connection.provider for c in active_calls)
-    administrators = sum(c.admin for c in active_calls)
+    # Database limits are per scope; the demo hard caps span scopes.
+    mine = [c for c in active_calls if c.scope == scope]
+    total = len(mine)
+    provider = sum(c.provider == connection.provider for c in mine)
+    administrators = sum(c.admin for c in mine)
     if (
+        demo
+        and (
+            sum(c.ctx is not None for c in active_calls)
+            >= config.DEMO_MAX_ACTIVE_GLOBAL
+            or sum(
+                c.ctx is not None and c.scope[0] == scope[0]
+                for c in active_calls
+            )
+            >= config.DEMO_MAX_ACTIVE_VISITOR
+        )
+    ) or (
         total >= limits["total"] - int(admin)
         or provider >= limits[connection.provider] - int(admin)
         or (admin and administrators >= limits["admin"])
@@ -157,7 +183,12 @@ async def admit_call(
     ctx=None,
     registry=None,
 ):
-    app_mode = "demo" if demo_mode(ctx) else "normal"
+    require_mode(factory, operation, ctx, registry)
+    demo = config.APP_MODE == "demo"
+    app_mode = "demo" if demo else "normal"
+    if demo:
+        # Stale or released contexts must not touch the DB or take a slot.
+        await registry.assert_current(ctx)
     async with execution_lock():
         permit = None
         try:
@@ -246,8 +277,10 @@ def active_connection_count(provider):
 
 
 async def recheck_call(permit):
-    demo = demo_mode(permit.ctx)
+    demo = config.APP_MODE == "demo"
     app_mode = "demo" if demo else "normal"
+    if demo_forbidden(permit.operation) if demo else permit.ctx is not None:
+        raise InvocationError("configuration_unavailable")
     async with execution_lock():
         if demo:
             if permit.ctx is None or permit.registry is None:

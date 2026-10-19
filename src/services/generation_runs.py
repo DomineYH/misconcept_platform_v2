@@ -112,6 +112,10 @@ class DemoBinding:
     def bind(self, request, selection):
         return replace(request, demo_context=self.ctx, demo_selection=selection)
 
+    def provenance(self, session):
+        manifest = json.loads(self.seed.manifest_path.read_bytes())
+        return self.adapter(session).provenance(manifest)
+
     def adapter(self, session):
         envelope = session.config_snapshot_json
         return DemoProvider(
@@ -128,7 +132,7 @@ class DemoBinding:
         )
 
 
-async def snapshot(db, run):
+async def snapshot(db, run, *, demo=None):
     if run.operation == "analysis":
         from src.services.analysis_runs import run_response
 
@@ -147,7 +151,7 @@ async def snapshot(db, run):
             select(Message).where(Message.generation_run_id == run.id)
         )
     ).one_or_none()
-    return {
+    result = {
         "run_id": run.id,
         "request_id": run.request_id,
         "session_id": run.session_id,
@@ -171,6 +175,12 @@ async def snapshot(db, run):
         "error_code": run.error_code,
         "retryable": run.status in {"failed", "interrupted"},
     }
+    if demo:
+        # §19: only demo JSON carries provenance; normal stays byte-identical.
+        result["provenance"] = demo.provenance(
+            await db.get(Session, run.session_id)
+        )
+    return result
 
 
 async def reserve_student(
@@ -230,7 +240,7 @@ async def _reserve_student(
                 if demo:
                     raise demo.error("REQUEST_CONFLICT")
                 conflict("request_conflict")
-            return await snapshot(db, existing), None
+            return await snapshot(db, existing, demo=demo), None
         if request.turn_id:
             teacher = await db.scalar(
                 select(Message).where(
@@ -256,7 +266,7 @@ async def _reserve_student(
                 )
             )
             if completed:
-                return await snapshot(db, completed), None
+                return await snapshot(db, completed, demo=demo), None
         else:
             teacher = None
         if session.ended_at:
@@ -377,7 +387,7 @@ async def _reserve_student(
         )
         db.add(run)
         await db.flush()
-        accepted = await snapshot(db, run)
+        accepted = await snapshot(db, run, demo=demo)
         setting = await db.get(AppSetting, 1)
         if setting is None:
             raise HTTPException(
@@ -436,7 +446,7 @@ async def finish_student(
         await db.execute(text("BEGIN IMMEDIATE"))
         run = await db.get(GenerationRun, run_id)
         if run.status != "running":
-            return await snapshot(db, run)
+            return await snapshot(db, run, demo=demo)
         session = await db.get(Session, run.session_id)
         if session.ended_at or session.deleted_at:
             status, error_code = "cancelled", "session_ended"
@@ -465,7 +475,7 @@ async def finish_student(
             )
             run.result_kind = "message"
         await db.flush()
-        result = await snapshot(db, run)
+        result = await snapshot(db, run, demo=demo)
         try:
             await db.commit()
         except BaseException:

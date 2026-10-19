@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from contextlib import aclosing, nullcontext, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
 import anyio
@@ -75,8 +75,10 @@ CANCELLED = {
 
 
 class StudentStreamError(Exception):
-    def __init__(self, code):
+    def __init__(self, code, canonical=None):
         self.code = code
+        # The code before its legacy SSE alias; demo recovery follows it.
+        self.canonical = canonical
 
 
 @dataclass(eq=False)
@@ -87,12 +89,13 @@ class DemoRun:
     token: object
     cancelled: asyncio.Event
     claimed: bool = False
+    tasks: list = field(default_factory=list)
 
     def claim(self):
         claimed, self.claimed = self.claimed, True
         return not claimed
 
-    def fields(self, kind, data):
+    def fields(self, kind, data, canonical=None):
         ctx = self.binding.ctx
         fields = dict(
             generation=ctx.generation,
@@ -100,7 +103,7 @@ class DemoRun:
             browser_scope_id=ctx.browser_scope_id,
         )
         if kind.startswith("run.") and kind != "run.accepted":
-            code = data.get("code")
+            code = canonical if canonical in RECOVERY else data.get("code")
             fields["recovery"] = (
                 DemoError(code).recovery
                 if code and code.startswith("DEMO_")
@@ -119,7 +122,17 @@ class DemoRun:
     def child(self):
         return self.binding.registry.child_context(self.binding.ctx)
 
+    def track(self, task):
+        self.tasks.append(task)
+
     async def release(self):
+        # §6: bounded cleanup can end while child work still runs; done/pop
+        # must follow the work, not the cleanup deadline.
+        if self.tasks:
+            await asyncio.wait(self.tasks)
+            for task in self.tasks:
+                if not task.cancelled():
+                    task.exception()
         self.token.task_control.done.set()
         await self.binding.registry.pop(*self.token.key, self.token)
 
@@ -127,6 +140,21 @@ class DemoRun:
 def demo_kwargs(demo_run):
     """Final saves of a demo run hold its write guard."""
     return {} if demo_run is None else {"demo": demo_run.binding}
+
+
+def bind_child(permit, request, child):
+    """A producer runs on its own child lease, never the registry's."""
+    if child is None:
+        return request
+    permit.ctx = child
+    return request if request is None else replace(request, demo_context=child)
+
+
+def provenance_of(result):
+    """§19: a demo result's provenance rides on its terminal frame."""
+    return (
+        {"provenance": result["provenance"]} if "provenance" in result else {}
+    )
 
 
 def revoked_frame(frame, error, message):
@@ -152,6 +180,7 @@ class StudentStreamingResponse(StreamingResponse):
         finisher=finish_student,
         demo_run=None,
     ):
+        self.aborted = False
         self.factory, self.run_id = factory, accepted["run_id"]
         self.permit = kwargs.get("permit")
         self.finisher = finisher
@@ -176,31 +205,58 @@ class StudentStreamingResponse(StreamingResponse):
             },
         )
 
+    async def demo_abort(self):
+        """End a demo run once, whether or not its body ever started."""
+        if self.demo_run is None or self.aborted:
+            return
+        self.aborted = True
+        with anyio.CancelScope(shield=True):
+            with anyio.move_on_after(CLEANUP_SECONDS):
+                with suppress(Exception):
+                    await self.body_iterator.aclose()
+                if self.claim():
+                    # Response headers can fail before the generator starts.
+                    try:
+                        await self.finisher(
+                            self.factory,
+                            self.run_id,
+                            status="interrupted",
+                            error_code="disconnected",
+                            **demo_kwargs(self.demo_run),
+                        )
+                    except Exception:
+                        logger.error("Unable to record unsent generation")
+            if self.permit is not None:
+                self.permit.release()
+            # §6: done only after the producer and final saves end.
+            await self.demo_run.release()
+
     async def __call__(self, scope, receive, send):
         try:
             await super().__call__(scope, receive, send)
         finally:
-            # Disconnect during ASGI send can leave the generator suspended.
-            if self.permit is not None:
-                self.permit.release()
-            with anyio.CancelScope(shield=True):
-                with anyio.move_on_after(CLEANUP_SECONDS):
-                    await self.body_iterator.aclose()
-                    if self.claim():
-                        # Response headers can fail before the generator starts.
-                        try:
-                            await self.finisher(
-                                self.factory,
-                                self.run_id,
-                                status="interrupted",
-                                error_code="disconnected",
-                                **demo_kwargs(self.demo_run),
-                            )
-                        except Exception:
-                            logger.error("Unable to record unsent generation")
-                if self.demo_run is not None:
-                    # §6: done only after the producer and final saves end.
-                    await self.demo_run.release()
+            if self.demo_run is not None:
+                await self.demo_abort()
+            else:
+                # Disconnect during ASGI send can leave the generator suspended.
+                if self.permit is not None:
+                    self.permit.release()
+                with anyio.CancelScope(shield=True):
+                    with anyio.move_on_after(CLEANUP_SECONDS):
+                        await self.body_iterator.aclose()
+                        if self.claim():
+                            # Response headers can fail before the generator starts.
+                            try:
+                                await self.finisher(
+                                    self.factory,
+                                    self.run_id,
+                                    status="interrupted",
+                                    error_code="disconnected",
+                                )
+                            except Exception:
+                                logger.error(
+                                    "Unable to record unsent generation"
+                                )
 
 
 async def stream_student(factory, accepted, kwargs, started, cancelled):
@@ -220,7 +276,7 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
     last_sent = started
     cancellation = asyncio.create_task(cancelled.wait())
 
-    def frame(kind, **data):
+    def frame(kind, canonical=None, **data):
         nonlocal seq, last_sent
         last_sent = time.monotonic()
         payload = {
@@ -230,7 +286,7 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
             **data,
         }
         if demo_run is not None:
-            payload.update(demo_run.fields(kind, data))
+            payload.update(demo_run.fields(kind, data, canonical))
         seq += 1
         encoded = json.dumps(payload, ensure_ascii=False)
         return f"event: {kind}\ndata: {encoded}\n\n"
@@ -250,16 +306,18 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
         if demo_run is not None and (error := await demo_run.revoked()):
             raise error
 
-    def terminal_frame(result):
+    def terminal_frame(result, canonical=None):
         if result["status"] == "completed":
             return frame(
                 "output.completed",
                 status="completed",
                 message=result["message"],
                 turn_index=result["turn_index"],
+                **provenance_of(result),
             )
         return frame(
             f"run.{result['status']}",
+            canonical,
             status=result["status"],
             code=result["error_code"],
             retryable=result["retryable"],
@@ -272,9 +330,11 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
                     else translate("teacher.student_failed", language)
                 )
             ),
+            **provenance_of(result),
         )
 
     try:
+        await current()
         yield frame(
             "run.accepted",
             request_id=accepted["request_id"],
@@ -286,8 +346,13 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
         # End can commit between reservation and live-signal registration.
         async with factory() as db:
             run = await db.get(GenerationRun, accepted["run_id"])
-            state = await snapshot(db, run) if run.status != "running" else None
+            state = (
+                await snapshot(db, run, **demo_kwargs(demo_run))
+                if run.status != "running"
+                else None
+            )
         if state is not None:
+            await current()
             terminal = True
             yield terminal_frame(state)
             return
@@ -298,11 +363,12 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
             # Reservation hands execution ownership to this response's worker.
             permit.task = asyncio.current_task()
             # The producer can outlive bounded cleanup; it holds its own lease.
-            async with demo_run.child() if demo_run else nullcontext():
+            async with demo_run.child() if demo_run else nullcontext() as child:
+                request = bind_child(permit, kwargs["request"], child)
                 async with aclosing(
                     execute_call(
                         permit,
-                        kwargs["request"],
+                        request,
                         kind="stream",
                         run_id=accepted["run_id"],
                         session_id=accepted["session_id"],
@@ -315,6 +381,8 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
                         await queue.put(event)
 
         task = asyncio.create_task(produce())
+        if demo_run is not None:
+            demo_run.track(task)
         while True:
             reading = asyncio.create_task(queue.get())
             while True:
@@ -371,7 +439,9 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
                     "output_limit": "incomplete_response",
                     "interrupted": "configuration_unavailable",
                 }.get(event.error_code, event.error_code)
-                raise StudentStreamError(code or "provider_error")
+                raise StudentStreamError(
+                    code or "provider_error", canonical=event.error_code
+                )
     except asyncio.CancelledError:
         raise
     except DemoError as error:
@@ -394,7 +464,14 @@ async def stream_student(factory, accepted, kwargs, started, cancelled):
             )
             await current()
             terminal = True
-            yield terminal_frame(result)
+            yield terminal_frame(
+                result,
+                (
+                    error.canonical
+                    if isinstance(error, StudentStreamError)
+                    else None
+                ),
+            )
         except DemoError as error:
             terminal = True
             yield revoked_frame(

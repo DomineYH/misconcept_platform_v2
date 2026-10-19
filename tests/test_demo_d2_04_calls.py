@@ -4,22 +4,29 @@ import argparse
 import asyncio
 import dataclasses
 import json
-from contextlib import aclosing, asynccontextmanager
+import time
+from contextlib import aclosing, asynccontextmanager, suppress
 from copy import deepcopy
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from lesson_fixtures import install_snapshot
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from test_anthropic_invocations import REQUEST as ANTHROPIC_REQUEST
 from test_demo_config import run_python
 from test_demo_provider import prepared as demo_prepared
 from test_google_invocations import REQUEST as GOOGLE_REQUEST
 from test_openai_invocations import REQUEST as OPENAI_REQUEST
 
+from src.api.routes.student_generation import (
+    DEMO_ERRORS,
+    demo_error_response,
+)
 from src.cli import provider_smoke
 from src.demo.database import DemoError
 from src.demo.lifecycle import Lifecycle, TaskControl
@@ -50,6 +57,7 @@ from src.services import (
 from src.services.call_admission import (
     CallPermit,
     active_calls,
+    admit_call,
     approve_call,
     cancel_connection,
     recheck_call,
@@ -59,6 +67,7 @@ from src.services.generation_runs import (
     DemoBinding,
     finish_student,
     reserve_student,
+    snapshot,
 )
 from src.services.invocation_types import (
     CallEvent,
@@ -75,6 +84,19 @@ from src.services.model_verification import (
 from src.services.role_output_contracts import MentorOutput
 
 prepared = demo_prepared
+
+
+@pytest.fixture
+def demo_server(monkeypatch):
+    """Server mode is fixed at boot; unit tests swap the read config only."""
+    server = SimpleNamespace(
+        APP_MODE="demo", DEMO_MAX_ACTIVE_GLOBAL=8, DEMO_MAX_ACTIVE_VISITOR=2
+    )
+    monkeypatch.setattr(call_admission, "config", server)
+    monkeypatch.setattr(call_execution, "config", server)
+    return server
+
+
 EXTERNAL = {
     "openai": (openai_catalog, openai_generation),
     "anthropic": (anthropic_catalog, anthropic_generation),
@@ -263,6 +285,34 @@ async def test_demo_refuses_external_providers_before_any_sdk_or_ledger(
     ]
     assert boundary.sdk == boundary.ledger == []
     assert p.visitors.calls == 0
+
+
+async def test_ledger_writes_carry_the_run_context_only_in_demo(
+    prepared, boundary
+):
+    p = prepared
+    registry = object()
+    call_permit = permit(p.factory)
+    call_permit.registry = registry
+    request = demo_request(p)
+    await consume(
+        call_permit,
+        request,
+        kind="text",
+        app_mode="demo",
+        demo_adapter=p.provider,
+    )
+    for values in (boundary.ledger[0], boundary.finished[0]):
+        assert values["ctx"] is request.demo_context
+        assert values["registry"] is registry
+    boundary.ledger.clear()
+    boundary.finished.clear()
+    normal = permit(p.factory, provider="openai")
+    normal.model_id = OPENAI_REQUEST.model_id
+    await consume(normal, OPENAI_REQUEST, kind="text")
+    # Normal keeps the unguarded ledger call signature.
+    for values in (boundary.ledger[0], boundary.finished[0]):
+        assert "ctx" not in values and "registry" not in values
 
 
 def fake_adapter(p):
@@ -844,7 +894,7 @@ async def test_s2_normal_rejects_demo_provider(s2_decrypt):
 
 @pytest.mark.parametrize("provider", ["openai", "anthropic", "google"])
 async def test_s2_demo_rejects_real_provider_without_decrypting(
-    s2_decrypt, provider
+    demo_server, s2_decrypt, provider
 ):
     ctx = s2_context()
     with pytest.raises(InvocationError) as error:
@@ -855,7 +905,9 @@ async def test_s2_demo_rejects_real_provider_without_decrypting(
 
 
 @pytest.mark.parametrize("operation", ["model_list", "probe"])
-async def test_s2_demo_rejects_provider_only_operations(s2_decrypt, operation):
+async def test_s2_demo_rejects_provider_only_operations(
+    demo_server, s2_decrypt, operation
+):
     ctx = s2_context()
     with pytest.raises(InvocationError):
         s2_approve(
@@ -864,27 +916,27 @@ async def test_s2_demo_rejects_provider_only_operations(s2_decrypt, operation):
     assert s2_decrypt == []
 
 
-async def test_s2_demo_rejects_stored_key(s2_decrypt):
+async def test_s2_demo_rejects_stored_key(demo_server, s2_decrypt):
     ctx = s2_context()
     with pytest.raises(InvocationError):
         s2_approve(s2_connection("demo", b"x"), ctx, S2Registry())
     assert s2_decrypt == []
 
 
-async def test_s2_demo_requires_registry(s2_decrypt):
+async def test_s2_demo_requires_registry(demo_server, s2_decrypt):
     ctx = s2_context()
     with pytest.raises(InvocationError):
         s2_approve(s2_connection("demo"), ctx, None)
 
 
-async def test_s2_demo_rejects_foreign_factory(s2_decrypt):
+async def test_s2_demo_rejects_foreign_factory(demo_server, s2_decrypt):
     ctx = s2_context()
     with pytest.raises(InvocationError):
         s2_approve(s2_connection("demo"), ctx, S2Registry(), factory=object())
     assert not call_admission.active_calls
 
 
-async def test_s2_demo_valid_permit_carries_context(s2_decrypt):
+async def test_s2_demo_valid_permit_carries_context(demo_server, s2_decrypt):
     ctx, registry = s2_context(), S2Registry()
     permit = s2_approve(s2_connection("demo"), ctx, registry)
     assert permit.secret is None
@@ -896,13 +948,20 @@ async def test_s2_demo_valid_permit_carries_context(s2_decrypt):
     assert permit not in call_admission.registered_calls
 
 
-async def test_s2_cancel_connection_never_crosses_scopes(s2_decrypt):
+async def test_s2_cancel_connection_never_crosses_scopes(
+    monkeypatch, demo_server, s2_decrypt
+):
     ctx_a, ctx_b = s2_context(), s2_context()
     permits = {
         "a": s2_approve(s2_connection("demo"), ctx_a, S2Registry()),
         "b": s2_approve(s2_connection("demo"), ctx_b, S2Registry()),
-        "n": s2_approve(s2_connection("openai", b"x")),
     }
+    # The one normal permit is admitted while the server is in normal mode.
+    monkeypatch.setattr(
+        call_admission, "config", SimpleNamespace(APP_MODE="normal")
+    )
+    permits["n"] = s2_approve(s2_connection("openai", b"x"))
+    monkeypatch.setattr(call_admission, "config", demo_server)
     tasks = {k: asyncio.create_task(asyncio.sleep(60)) for k in permits}
     for key, permit in permits.items():
         permit.task = tasks[key]
@@ -953,7 +1012,9 @@ class S2KeyedFactory:
         return self.connection
 
 
-async def test_s2_recheck_demo_asserts_current_then_passes(data, s2_decrypt):
+async def test_s2_recheck_demo_asserts_current_then_passes(
+    data, demo_server, s2_decrypt
+):
     row = await s2_demo_row(data)
     ctx, registry = s2_context(data.factory), S2Registry()
     permit = s2_approve(row, ctx, registry)
@@ -962,7 +1023,9 @@ async def test_s2_recheck_demo_asserts_current_then_passes(data, s2_decrypt):
     permit.release()
 
 
-async def test_s2_recheck_demo_stale_generation_stops(data, s2_decrypt):
+async def test_s2_recheck_demo_stale_generation_stops(
+    data, demo_server, s2_decrypt
+):
     row = await s2_demo_row(data)
     registry = S2Registry(DemoError("STALE_GENERATION"))
     permit = s2_approve(row, s2_context(data.factory), registry)
@@ -973,7 +1036,7 @@ async def test_s2_recheck_demo_stale_generation_stops(data, s2_decrypt):
     permit.release()
 
 
-async def test_s2_recheck_demo_refuses_stored_key(s2_decrypt):
+async def test_s2_recheck_demo_refuses_stored_key(demo_server, s2_decrypt):
     keyed = S2KeyedFactory(s2_connection("demo", b"x"))
     ctx = s2_context(keyed)
     permit = s2_approve(s2_connection("demo"), ctx, S2Registry())
@@ -1097,7 +1160,7 @@ class S2rHash:
 
 
 @pytest.fixture
-async def s2r_demo(data, tmp_path, monkeypatch):
+async def s2r_demo(data, tmp_path, monkeypatch, demo_server):
     db = data.db
     connection = ProviderConnection(
         provider="demo",
@@ -1160,7 +1223,15 @@ async def s2r_demo(data, tmp_path, monkeypatch):
     await db.commit()
 
     manifest = Path(tmp_path / "manifest.json")
-    manifest.write_text(json.dumps({"supported_config_sha256": S2R_HEX}))
+    manifest.write_text(
+        json.dumps(
+            {
+                "supported_config_sha256": S2R_HEX,
+                # Provenance compares the run's session with this one.
+                "seed_refs": {"completed_session": 987654},
+            }
+        )
+    )
     seed = SimpleNamespace(
         manifest_path=manifest,
         db_schema_version="x",
@@ -1457,3 +1528,860 @@ async def test_s2r_mentor_unsupported_configuration_changes_nothing(s2r_demo):
         )
     assert mentors == 0
     assert demo.decrypted == []
+
+
+# S2R1-A admission
+def s2a_setting(**limits):
+    base = dict(S2_SETTING.limits_json, **limits)
+    return SimpleNamespace(
+        limits_json=base, timeouts_json=S2_SETTING.timeouts_json
+    )
+
+
+def s2a_demo_approve(ctx, setting=S2_SETTING, registry=None, **kw):
+    return approve_call(
+        ctx.factory,
+        s2_connection("demo"),
+        setting,
+        owner_id=1,
+        operation=kw.pop("operation", "student"),
+        role="student",
+        admin=False,
+        ctx=ctx,
+        registry=registry or S2Registry(),
+    )
+
+
+def s2a_boom():
+    raise AssertionError("factory opened")
+
+
+def s2a_refused(call):
+    with pytest.raises(InvocationError) as error:
+        call()
+    assert error.value.code == "configuration_unavailable"
+
+
+@pytest.mark.parametrize("case", ["context", "registry", "provider"])
+async def test_s2a_normal_server_refuses_demo_input_in_approve(
+    s2_decrypt, case
+):
+    ctx = s2_context()
+    kw = dict(ctx=ctx, registry=S2Registry())
+    connection = s2_connection("openai", b"x")
+    if case == "registry":
+        kw = dict(registry=S2Registry())
+    elif case == "provider":
+        kw, connection = {}, s2_connection("demo")
+    s2a_refused(lambda: s2_approve(connection, factory=ctx.factory, **kw))
+    assert s2_decrypt == [] and not active_calls
+
+
+async def test_s2a_normal_server_admit_refuses_before_any_db(s2_decrypt):
+    registry = S2Registry()
+    ctx = s2_context(s2a_boom)
+    with pytest.raises(InvocationError) as error:
+        await admit_call(
+            s2a_boom,
+            connection_id=1,
+            owner_id=1,
+            operation="student",
+            ctx=ctx,
+            registry=registry,
+        )
+    assert error.value.code == "configuration_unavailable"
+    assert registry.calls == [] and not active_calls
+
+
+async def test_s2a_normal_server_recheck_refuses_permit_with_context(
+    s2_decrypt,
+):
+    value = permit(s2a_boom, operation="student")
+    value.ctx = s2_context(s2a_boom)
+    with pytest.raises(InvocationError) as error:
+        await recheck_call(value)
+    assert error.value.code == "configuration_unavailable"
+    value.release()
+
+
+async def test_s2a_normal_server_never_executes_a_demo_permit(
+    prepared, boundary
+):
+    p = prepared
+    value = permit(p.factory)
+    value.ctx = p.context
+    events = await consume(
+        value, demo_request(p), kind="text", app_mode="normal"
+    )
+    assert [(e.type, e.error_code) for e in events] == [
+        ("error", "configuration_unavailable")
+    ]
+    assert boundary.sdk == boundary.ledger == []
+    assert boundary.rechecks == 0
+    value.release()
+
+
+S2A_FORBIDDEN = [
+    "comparison",
+    "comparison_student",
+    "comparison_mentor",
+    "model_list",
+    "probe",
+]
+
+
+@pytest.mark.parametrize("operation", S2A_FORBIDDEN)
+async def test_s2a_demo_refuses_forbidden_operations(
+    demo_server, s2_decrypt, operation
+):
+    ctx, registry = s2_context(s2a_boom), S2Registry()
+    s2a_refused(
+        lambda: s2a_demo_approve(ctx, registry=registry, operation=operation)
+    )
+    assert not active_calls
+    with pytest.raises(InvocationError) as error:
+        await admit_call(
+            s2a_boom,
+            connection_id=1,
+            owner_id=1,
+            operation=operation,
+            ctx=ctx,
+            registry=registry,
+        )
+    assert error.value.code == "configuration_unavailable"
+    assert registry.calls == [] and not active_calls
+    value = permit(s2a_boom, operation=operation)
+    value.ctx, value.registry = ctx, registry
+    with pytest.raises(InvocationError):
+        await recheck_call(value)
+    assert registry.calls == []
+    value.release()
+
+
+def s2a_stale(case):
+    ctx, registry = s2_context(s2a_boom), S2Registry()
+    if case == "released":
+        ctx.lease.released = True
+    elif case == "factory":
+        ctx = dataclasses.replace(ctx, factory=object())
+    else:
+        registry = S2Registry(DemoError("STALE_ROLE"))
+    return ctx, registry
+
+
+@pytest.mark.parametrize("case", ["released", "factory", "stale_role"])
+async def test_s2a_demo_admit_checks_currentness_before_db_or_slot(
+    demo_server, s2_decrypt, case
+):
+    ctx, registry = s2a_stale(case)
+    before = set(active_calls)
+    with pytest.raises((InvocationError, DemoError)) as error:
+        await admit_call(
+            s2a_boom,
+            connection_id=1,
+            owner_id=1,
+            operation="student",
+            ctx=ctx,
+            registry=registry,
+        )
+    assert error.value.code in ("configuration_unavailable", "DEMO_STALE_ROLE")
+    assert registry.calls == ([ctx] if case == "stale_role" else [])
+    assert active_calls == before
+
+
+async def test_s2a_demo_approve_rejects_a_released_lease(
+    demo_server, s2_decrypt
+):
+    ctx = s2_context()
+    ctx.lease.released = True
+    s2a_refused(lambda: s2a_demo_approve(ctx))
+    assert not active_calls
+
+
+def s2a_limited(ctx, count, setting):
+    return [s2a_demo_approve(ctx, setting) for _ in range(count)]
+
+
+async def test_s2a_db_limits_count_only_the_permit_scope(
+    demo_server, s2_decrypt
+):
+    demo_server.DEMO_MAX_ACTIVE_VISITOR = 99
+    setting = s2a_setting(total=2, demo=2, admin=1)
+    ctx_a, ctx_b = s2_context(), s2_context()
+    s2a_limited(ctx_a, 2, setting)
+    # The seed limit is full for visitor A only.
+    assert s2a_demo_approve(ctx_b, setting).scope == (ctx_b.visitor_id, 1)
+    with pytest.raises(InvocationError) as error:
+        s2a_demo_approve(ctx_a, setting)
+    assert error.value.code == "call_limit_reached"
+    assert len(active_calls) == 3
+
+
+async def test_s2a_visitor_cap_beats_large_db_limits(demo_server, s2_decrypt):
+    setting = s2a_setting(total=50, demo=50)
+    ctx = s2_context()
+    s2a_limited(ctx, 2, setting)
+    with pytest.raises(InvocationError) as error:
+        s2a_demo_approve(ctx, setting)
+    assert error.value.code == "call_limit_reached"
+    assert len(active_calls) == 2
+
+
+async def test_s2a_visitor_cap_counts_every_generation(demo_server, s2_decrypt):
+    setting = s2a_setting(total=50, demo=50)
+    first = s2_context()
+    second = dataclasses.replace(first, generation=2)
+    s2a_demo_approve(first, setting)
+    s2a_demo_approve(second, setting)
+    for ctx in (first, second):
+        with pytest.raises(InvocationError) as error:
+            s2a_demo_approve(ctx, setting)
+        assert error.value.code == "call_limit_reached"
+
+
+async def test_s2a_global_cap_spans_visitors(demo_server, s2_decrypt):
+    demo_server.DEMO_MAX_ACTIVE_GLOBAL = 3
+    setting = s2a_setting(total=50, demo=50)
+    ctx_a, ctx_b, ctx_c = s2_context(), s2_context(), s2_context()
+    s2a_limited(ctx_a, 2, setting)
+    s2a_demo_approve(ctx_b, setting)
+    with pytest.raises(InvocationError) as error:
+        s2a_demo_approve(ctx_c, setting)
+    assert error.value.code == "call_limit_reached"
+    assert len(active_calls) == 3
+
+
+@dataclasses.dataclass(frozen=True)
+class S2r1bRequest:
+    demo_context: object = None
+
+
+def s2r1b_permit(ctx=None):
+    return SimpleNamespace(release=lambda: None, task=None, ctx=ctx)
+
+
+def s2r1b_student(run, run_id, saved, db=RunningDB, **kwargs):
+    kwargs.setdefault("permit", fake_permit())
+    kwargs.setdefault("request", None)
+    return student_stream.StudentStreamingResponse(
+        db, accepted(run_id), kwargs, finisher=recorder(saved), demo_run=run
+    )
+
+
+def s2r1b_mentor(run, run_id, saved, db=RunningDB, **kwargs):
+    kwargs.setdefault("permit", fake_permit())
+    kwargs.setdefault("request", None)
+    response = mentor_stream.mentor_response(
+        db, accepted(run_id), dict(deadline=None, **kwargs), demo_run=run
+    )
+    response.finisher = recorder(saved)
+    return response
+
+
+async def s2r1b_revoke(run):
+    visitors = run.binding.registry.visitors
+    async with visitors.transition(run.binding.ctx.verified_visitor) as handle:
+        handle.mark_reset(run.binding.ctx, str(uuid4()))
+
+
+def s2r1b_done_db(run, status="completed"):
+    """A run that ends between acceptance and the snapshot, then a reset."""
+
+    class DB(RunningDB):
+        async def get(self, model, key):
+            await s2r1b_revoke(run)
+            return SimpleNamespace(status=status)
+
+    return DB
+
+
+async def s2r1b_snapshot(db, run, **kwargs):
+    return dict(status="completed", message="cached", turn_index=1)
+
+
+def s2r1b_with_provenance(finish, provenance):
+    async def wrapped(*args, **kwargs):
+        result = await finish(*args, **kwargs)
+        return (
+            result
+            if provenance is None
+            else {**result, "provenance": provenance}
+        )
+
+    return wrapped
+
+
+async def test_s2r1b_demo_abort_ends_an_unsent_response_once(lifecycle):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    saved = []
+    permit = CallPermit(
+        None,
+        1,
+        "demo",
+        0,
+        1,
+        "student",
+        "student",
+        False,
+        {},
+        None,
+        0.0,
+        None,
+        1,
+    )
+    active_calls.add(permit)
+    registered_calls.add(permit)
+    try:
+        response = s2r1b_student(run, run_id, saved, permit=permit)
+        assert lifecycle.lookup(scope, "run", run_id) is not None
+        await response.demo_abort()
+        await response.demo_abort()
+        assert saved == [("interrupted", {"error_code": "disconnected"})]
+        assert permit not in active_calls
+        assert permit not in registered_calls
+        assert lifecycle.lookup(scope, "run", run_id) is None
+        assert run.token.task_control.done.is_set()
+        assert lifecycle.visitors.lease_count(scope) == 0
+    finally:
+        permit.release()
+
+
+async def test_s2r1b_demo_abort_after_a_served_run_is_a_noop(
+    lifecycle, monkeypatch
+):
+    run, run_id = await demo_run(lifecycle)
+    saved = []
+
+    async def execute_call(permit, request, **kwargs):
+        yield CallEvent("completed", text="Hi")
+
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", recorder(saved))
+    response = s2r1b_student(run, run_id, saved)
+    await serve(response)
+    await response.demo_abort()
+    assert [status for status, _ in saved] == ["completed"]
+
+
+async def test_s2r1b_normal_response_has_no_demo_abort_work():
+    response = student_stream.StudentStreamingResponse(
+        RunningDB,
+        accepted(str(uuid4())),
+        dict(permit=fake_permit(), request=None),
+    )
+    try:
+        await response.demo_abort()
+        assert not response.aborted
+    finally:
+        student_stream.active_runs.pop(response.run_id, None)
+        await response.body_iterator.aclose()
+
+
+async def test_s2r1b_student_producer_runs_on_its_child_context(
+    lifecycle, monkeypatch
+):
+    run, run_id = await demo_run(lifecycle)
+    parent = run.binding.ctx
+    permit = s2r1b_permit(parent)
+    original = S2r1bRequest(parent)
+    seen = {}
+
+    async def execute_call(call_permit, request, **kwargs):
+        child = request.demo_context
+        seen.update(
+            same=call_permit.ctx is child,
+            child=child,
+            parent=child is parent,
+            released=child.lease.released,
+            lease=child.lease.lease_id != parent.lease.lease_id,
+            factory=child.factory is parent.factory,
+        )
+        yield CallEvent("completed", text="Hi")
+
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", recorder([]))
+    await serve(s2r1b_student(run, run_id, [], permit=permit, request=original))
+    assert seen.pop("child").lease.released
+    assert seen == dict(
+        same=True, parent=False, released=False, lease=True, factory=True
+    )
+    assert original.demo_context is parent
+
+
+async def test_s2r1b_mentor_bot_runs_on_its_child_context(
+    lifecycle, monkeypatch
+):
+    run, run_id = await demo_run(lifecycle)
+    parent = run.binding.ctx
+    permit = s2r1b_permit(parent)
+    seen = {}
+
+    async def execute_call(call_permit, request, **kwargs):
+        child = request.demo_context
+        seen.update(
+            same=call_permit.ctx is child,
+            parent=child is parent,
+            released=child.lease.released,
+            lease=child.lease.lease_id != parent.lease.lease_id,
+        )
+        yield CallEvent(
+            "completed", structured=dict(feedback="c", reason_summary="r")
+        )
+
+    monkeypatch.setattr(tutor_bot, "execute_call", execute_call)
+    monkeypatch.setattr(mentor_stream, "finish_mentor", recorder([]))
+    await serve(
+        s2r1b_mentor(
+            run, run_id, [], permit=permit, request=S2r1bRequest(parent)
+        )
+    )
+    assert seen == dict(same=True, parent=False, released=False, lease=True)
+    assert lifecycle.visitors.lease_count(parent.scope) == 0
+
+
+@pytest.mark.parametrize("mentor", [False, True])
+async def test_s2r1b_release_waits_for_the_producer(
+    lifecycle, monkeypatch, mentor
+):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    started, ended = asyncio.Event(), []
+
+    async def execute_call(permit, request, **kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            # Work that outlives bounded cleanup, even a second cancel.
+            until = time.monotonic() + 0.4
+            while time.monotonic() < until:
+                with suppress(asyncio.CancelledError):
+                    await asyncio.sleep(0.02)
+            ended.append(time.monotonic())
+            raise
+        yield CallEvent("completed", text="never")
+
+    monkeypatch.setattr(student_stream, "CLEANUP_SECONDS", 0.05)
+    monkeypatch.setattr(mentor_stream, "CLEANUP_SECONDS", 0.05)
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(tutor_bot, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", recorder([]))
+    monkeypatch.setattr(mentor_stream, "finish_mentor", recorder([]))
+    response = (s2r1b_mentor if mentor else s2r1b_student)(run, run_id, [])
+    serving = asyncio.create_task(serve(response))
+    await started.wait()
+    assert lifecycle.cancel(scope, "run", run_id) == 1
+    await asyncio.sleep(0.25)
+    # Bounded cleanup is over, the producer is not.
+    assert ended == []
+    assert not serving.done()
+    assert lifecycle.lookup(scope, "run", run_id) is not None
+    assert not run.token.task_control.done.is_set()
+    await serving
+    assert len(ended) == 1
+    assert run.token.task_control.done.is_set()
+    assert lifecycle.lookup(scope, "run", run_id) is None
+    assert lifecycle.visitors.lease_count(scope) == 0
+
+
+@pytest.mark.parametrize(
+    ("event", "recovery"),
+    [
+        (CallEvent("interrupted", error_code="interrupted"), "demo.stopped"),
+        (
+            CallEvent("error", error_code="configuration_unavailable"),
+            "demo.unavailable",
+        ),
+        (CallEvent("error", error_code="empty_response"), "demo.output_failed"),
+    ],
+)
+async def test_s2r1b_demo_recovery_follows_the_canonical_code(
+    lifecycle, monkeypatch, event, recovery
+):
+    run, run_id = await demo_run(lifecycle)
+    saved = []
+
+    async def execute_call(permit, request, **kwargs):
+        yield event
+
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", recorder(saved))
+    frames = await serve(s2r1b_student(run, run_id, saved))
+    kind, data = frames[-1]
+    alias = {
+        "interrupted": "configuration_unavailable",
+        "empty_response": "empty_output",
+    }.get(event.error_code, event.error_code)
+    assert kind == "run.failed"
+    # The SSE alias and the stored code stay as they were.
+    assert data["code"] == alias
+    assert [v["error_code"] for _, v in saved] == [alias]
+    assert data["recovery"] == recovery
+
+
+async def test_s2r1b_student_revoked_before_acceptance_sends_only_terminal(
+    lifecycle, monkeypatch
+):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    saved = []
+
+    async def execute_call(permit, request, **kwargs):
+        raise AssertionError("revoked run must not start")
+        yield
+
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", recorder(saved))
+    await s2r1b_revoke(run)
+    frames = await serve(s2r1b_student(run, run_id, saved))
+    assert [kind for kind, _ in frames] == ["run.cancelled"]
+    assert frames[0][1]["code"] == "DEMO_STALE_GENERATION"
+    assert frames[0][1]["recovery"] == "demo.stale_generation"
+    assert saved == []
+    assert lifecycle.lookup(scope, "run", run_id) is None
+    assert lifecycle.visitors.lease_count(scope) == 0
+
+
+async def test_s2r1b_mentor_revoked_before_acceptance_sends_only_terminal(
+    lifecycle, monkeypatch
+):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    saved = []
+
+    async def execute_call(permit, request, **kwargs):
+        raise AssertionError("revoked run must not start")
+        yield
+
+    monkeypatch.setattr(tutor_bot, "execute_call", execute_call)
+    monkeypatch.setattr(mentor_stream, "finish_mentor", recorder(saved))
+    await s2r1b_revoke(run)
+    frames = await serve(s2r1b_mentor(run, run_id, saved))
+    assert [kind for kind, _ in frames] == ["run.cancelled"]
+    assert frames[0][1]["code"] == "DEMO_STALE_GENERATION"
+    assert saved == []
+    assert lifecycle.lookup(scope, "run", run_id) is None
+    assert lifecycle.visitors.lease_count(scope) == 0
+
+
+@pytest.mark.parametrize("mentor", [False, True])
+async def test_s2r1b_revoked_cached_state_sends_no_cached_terminal(
+    lifecycle, monkeypatch, mentor
+):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    module = mentor_stream if mentor else student_stream
+    monkeypatch.setattr(module, "snapshot", s2r1b_snapshot)
+    db = s2r1b_done_db(run)
+    frames = await serve(
+        (s2r1b_mentor if mentor else s2r1b_student)(run, run_id, [], db=db)
+    )
+    assert [kind for kind, _ in frames] == ["run.accepted", "run.cancelled"]
+    assert frames[-1][1]["code"] == "DEMO_STALE_GENERATION"
+    assert "cached" not in repr(frames)
+    assert lifecycle.lookup(scope, "run", run_id) is None
+
+
+@pytest.mark.parametrize("provenance", [None, dict(response_source="prepared")])
+async def test_s2r1b_student_terminals_carry_result_provenance(
+    lifecycle, monkeypatch, provenance
+):
+    run, run_id = await demo_run(lifecycle)
+    finish = s2r1b_with_provenance(recorder([]), provenance)
+    events = iter(
+        [CallEvent("completed", text="Hi"), CallEvent("error", error_code="x")]
+    )
+
+    async def execute_call(permit, request, **kwargs):
+        yield next(events)
+
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", finish)
+    for kind in ("output.completed", "run.failed"):
+        if kind == "run.failed":
+            run, run_id = await demo_run(lifecycle)
+        frames = await serve(s2r1b_student(run, run_id, []))
+        assert frames[-1][0] == kind
+        if provenance is None:
+            assert "provenance" not in frames[-1][1]
+        else:
+            assert frames[-1][1]["provenance"] == provenance
+
+
+@pytest.mark.parametrize("provenance", [None, dict(response_source="prepared")])
+async def test_s2r1b_mentor_terminal_carries_result_provenance(
+    lifecycle, monkeypatch, provenance
+):
+    run, run_id = await demo_run(lifecycle)
+
+    async def execute_call(permit, request, **kwargs):
+        yield CallEvent(
+            "completed", structured=dict(feedback="c", reason_summary="r")
+        )
+
+    monkeypatch.setattr(tutor_bot, "execute_call", execute_call)
+    monkeypatch.setattr(
+        mentor_stream,
+        "finish_mentor",
+        s2r1b_with_provenance(recorder([]), provenance),
+    )
+    frames = await serve(s2r1b_mentor(run, run_id, []))
+    assert frames[-1][0] == "output.completed"
+    assert frames[-1][1].get("provenance") == provenance
+    assert ("provenance" in frames[-1][1]) is (provenance is not None)
+
+
+async def test_s2r1b_release_holds_done_and_pop_for_tracked_tasks(lifecycle):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    gate = asyncio.Event()
+
+    async def child_work():
+        await gate.wait()
+        raise RuntimeError("producer failed")
+
+    work = asyncio.create_task(child_work())
+    run.track(work)
+    releasing = asyncio.create_task(run.release())
+    await asyncio.sleep(0.05)
+    assert not releasing.done()
+    assert not run.token.task_control.done.is_set()
+    assert lifecycle.lookup(scope, "run", run_id) is not None
+    gate.set()
+    # The producer's own failure never blocks the end of the run.
+    await releasing
+    assert run.token.task_control.done.is_set()
+    assert lifecycle.lookup(scope, "run", run_id) is None
+    assert lifecycle.visitors.lease_count(scope) == 0
+
+
+S2R1C_VERSIONS = dict(
+    contract_version="d0-03-v1-r3",
+    content_version="d0-02-v1",
+    fixture_version="demo-fixture-v1",
+)
+S2R1C_CTX = SimpleNamespace(generation=7, auth_epoch=3)
+
+
+def s2r1c_expected(origin="visitor_generated"):
+    return dict(
+        mode="demo",
+        response_source="prepared_example",
+        external_ai_called=False,
+        **S2R1C_VERSIONS,
+        record_origin=origin,
+    )
+
+
+def s2r1c_error(code, status=400, headers=None):
+    return HTTPException(status, detail=dict(code=code), headers=headers)
+
+
+@pytest.mark.parametrize("code", sorted(DEMO_ERRORS))
+def test_s2r1c_known_codes_get_the_section_11_envelope(code):
+    status, retryable, recovery = DEMO_ERRORS[code]
+    response = demo_error_response(s2r1c_error(code, 503), S2R1C_CTX)
+    assert response.status_code == status
+    assert json.loads(response.body) == dict(
+        detail=dict(
+            code=code,
+            retryable=retryable,
+            recovery=recovery,
+            generation=7,
+            auth_epoch=3,
+        )
+    )
+
+
+def test_s2r1c_envelope_table_matches_section_11():
+    assert DEMO_ERRORS == {
+        "configuration_unavailable": (422, False, "demo.unavailable"),
+        "call_limit_reached": (429, True, "demo.retry_later"),
+        "context_limit": (422, False, "demo.supported_only"),
+        "output_limit": (422, False, "demo.supported_only"),
+        "session_ended": (409, False, "demo.stopped"),
+        "student_busy": (409, True, "demo.wait_or_stop"),
+        "mentor_busy": (409, True, "demo.wait_or_stop"),
+        "unresolved_turn": (409, False, "demo.refresh_state"),
+    }
+
+
+def test_s2r1c_unknown_or_plain_errors_pass_through():
+    for error in (
+        s2r1c_error("mentor_disabled"),
+        s2r1c_error("request_conflict", 409),
+        HTTPException(404, detail="not found"),
+    ):
+        assert demo_error_response(error, S2R1C_CTX) is None
+    # Normal mode has no context, so even a known code is left alone.
+    assert demo_error_response(s2r1c_error("student_busy", 409), None) is None
+
+
+def test_s2r1c_retry_after_is_preserved():
+    error = s2r1c_error("call_limit_reached", 429, {"Retry-After": "1"})
+    response = demo_error_response(error, S2R1C_CTX)
+    assert response.headers["retry-after"] == "1"
+    assert (
+        "retry-after"
+        not in demo_error_response(
+            s2r1c_error("session_ended"), S2R1C_CTX
+        ).headers
+    )
+
+
+async def s2r1c_raised(call):
+    with pytest.raises(HTTPException) as caught:
+        await call
+    return caught.value
+
+
+async def test_s2r1c_real_student_busy_maps_to_wait_or_stop(s2r_demo):
+    demo = s2r_demo
+    _, execution = await s2r_reserve(demo, demo.inputs["A"])
+    execution["permit"].release()
+    error = await s2r1c_raised(s2r_reserve(demo, demo.inputs["B"]))
+    assert error.detail["code"] == "student_busy"
+    response = demo_error_response(error, demo.binding.ctx)
+    assert response.status_code == 409
+    assert json.loads(response.body)["detail"] == dict(
+        code="student_busy",
+        retryable=True,
+        recovery="demo.wait_or_stop",
+        generation=demo.ctx.generation,
+        auth_epoch=demo.ctx.auth_epoch,
+    )
+
+
+async def test_s2r1c_real_unresolved_turn_maps_to_refresh_state(s2r_demo):
+    demo = s2r_demo
+    run_id = str(uuid4())
+    _, execution = await s2r_reserve(demo, demo.inputs["A"], None, run_id)
+    execution["permit"].release()
+    await finish_student(
+        demo.data.factory,
+        run_id,
+        status="failed",
+        error_code="refused",
+        demo=demo.binding,
+    )
+    error = await s2r1c_raised(s2r_reserve(demo, demo.inputs["B"]))
+    response = demo_error_response(error, demo.binding.ctx)
+    assert (response.status_code, error.detail["code"]) == (
+        409,
+        "unresolved_turn",
+    )
+    assert json.loads(response.body)["detail"]["recovery"] == (
+        "demo.refresh_state"
+    )
+
+
+async def test_s2r1c_real_session_ended_maps_to_stopped(s2r_demo):
+    demo = s2r_demo
+    async with demo.data.factory() as db:
+        await db.execute(
+            update(LessonSession)
+            .where(LessonSession.id == demo.data.session.id)
+            .values(ended_at=datetime.now(timezone.utc))
+        )
+        await db.commit()
+    error = await s2r1c_raised(s2r_reserve(demo, demo.inputs["A"]))
+    response = demo_error_response(error, demo.binding.ctx)
+    assert response.status_code == 409
+    assert json.loads(response.body)["detail"]["recovery"] == "demo.stopped"
+
+
+async def test_s2r1c_real_mentor_busy_maps_to_wait_or_stop(s2r_demo):
+    demo = s2r_demo
+    turn_id = await s2r_completed_turn(demo)
+    _, execution = await s2r_mentor(demo, turn_id)
+    execution["permit"].release()
+    error = await s2r1c_raised(s2r_mentor(demo, turn_id))
+    assert error.detail["code"] == "mentor_busy"
+    response = demo_error_response(error, demo.binding.ctx)
+    assert (response.status_code, json.loads(response.body)["detail"]) == (
+        409,
+        dict(
+            code="mentor_busy",
+            retryable=True,
+            recovery="demo.wait_or_stop",
+            generation=demo.ctx.generation,
+            auth_epoch=demo.ctx.auth_epoch,
+        ),
+    )
+
+
+async def test_s2r1c_accepted_and_replay_carry_provenance(s2r_demo):
+    demo = s2r_demo
+    request_id = str(uuid4())
+    accepted, execution = await s2r_reserve(demo, demo.inputs["A"], request_id)
+    execution["permit"].release()
+    assert accepted["provenance"] == s2r1c_expected()
+    replay, again = await s2r_reserve(demo, demo.inputs["A"], request_id)
+    assert again is None
+    assert replay["provenance"] == s2r1c_expected()
+
+
+async def test_s2r1c_finish_student_carries_provenance(s2r_demo):
+    demo = s2r_demo
+    run_id = str(uuid4())
+    _, execution = await s2r_reserve(demo, demo.inputs["A"], None, run_id)
+    execution["permit"].release()
+    result = await finish_student(
+        demo.data.factory,
+        run_id,
+        status="completed",
+        content="허구 응답",
+        demo=demo.binding,
+    )
+    assert result["provenance"] == s2r1c_expected()
+
+
+async def test_s2r1c_mentor_reservation_carries_provenance(s2r_demo):
+    demo = s2r_demo
+    turn_id = await s2r_completed_turn(demo)
+    accepted, execution = await s2r_mentor(demo, turn_id)
+    execution["permit"].release()
+    assert accepted["provenance"] == s2r1c_expected()
+
+
+async def test_s2r1c_completed_turn_shortcut_carries_provenance(s2r_demo):
+    demo = s2r_demo
+    turn_id = await s2r_completed_turn(demo)
+    request = s2r_request(demo.inputs["A"])
+    request.turn_id = turn_id
+    shortcut, execution = await reserve_student(
+        demo.data.factory,
+        demo.data.session.id,
+        demo.data.owner,
+        request,
+        demo=demo.binding,
+    )
+    assert execution is None
+    assert shortcut["status"] == "completed"
+    assert shortcut["provenance"] == s2r1c_expected()
+
+
+async def test_s2r1c_seed_session_is_seed_prepared(s2r_demo):
+    demo = s2r_demo
+    path = demo.seed.manifest_path
+    manifest = json.loads(path.read_text())
+    manifest["seed_refs"] = dict(completed_session=demo.data.session.id)
+    path.write_text(json.dumps(manifest))
+    accepted, execution = await s2r_reserve(demo, demo.inputs["A"])
+    execution["permit"].release()
+    assert accepted["provenance"] == s2r1c_expected("seed_prepared")
+
+
+async def test_s2r1c_normal_snapshot_has_no_provenance(s2r_demo):
+    demo = s2r_demo
+    accepted, execution = await s2r_reserve(demo, demo.inputs["A"])
+    execution["permit"].release()
+    async with demo.data.factory() as db:
+        from src.models import GenerationRun
+
+        run = await db.get(GenerationRun, accepted["run_id"])
+        plain = await snapshot(db, run)
+        with_demo = await snapshot(db, run, demo=demo.binding)
+    assert "provenance" not in plain
+    assert {k: v for k, v in with_demo.items() if k != "provenance"} == plain

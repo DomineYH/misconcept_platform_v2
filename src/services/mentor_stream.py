@@ -20,7 +20,9 @@ from src.services.student_stream import (
     HEARTBEAT_SECONDS,
     StudentStreamError,
     StudentStreamingResponse,
+    bind_child,
     demo_kwargs,
+    provenance_of,
     revoked_frame,
 )
 from src.services.tutor_bot import TutorBot
@@ -73,7 +75,8 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
 
     async def feedback():
         # The bot can outlive bounded cleanup; it holds its own lease.
-        async with demo_run.child() if demo_run else nullcontext():
+        async with demo_run.child() if demo_run else nullcontext() as child:
+            bot.request = bind_child(bot.permit, bot.request, child)
             return await bot.generate_feedback()
 
     def terminal_frame(result):
@@ -84,6 +87,7 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                 result_kind=result["result_kind"],
                 message=result["message"],
                 turn_index=result["turn_index"],
+                **provenance_of(result),
             )
         return frame(
             f"run.{result['status']}",
@@ -95,9 +99,11 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                 if result["status"] == "cancelled"
                 else translate("teacher.mentor_failed", language)
             ),
+            **provenance_of(result),
         )
 
     try:
+        await current()
         yield frame(
             "run.accepted",
             request_id=accepted["request_id"],
@@ -108,8 +114,13 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
         )
         async with factory() as db:
             run = await db.get(GenerationRun, accepted["run_id"])
-            state = await snapshot(db, run) if run.status != "running" else None
+            state = (
+                await snapshot(db, run, **demo_kwargs(demo_run))
+                if run.status != "running"
+                else None
+            )
         if state is not None:
+            await current()
             terminal = True
             yield terminal_frame(state)
             return
@@ -123,6 +134,8 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
             demo_adapter=execution.get("demo_adapter"),
         )
         task = asyncio.create_task(feedback())
+        if demo_run is not None:
+            demo_run.track(task)
         while True:
             remaining = (
                 execution["deadline"] - time.monotonic()

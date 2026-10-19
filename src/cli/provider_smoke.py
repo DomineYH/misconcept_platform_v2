@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 
+from src.cli.cleanup_comparisons import require_normal
+
 
 async def run(
     database,
@@ -16,7 +18,11 @@ async def run(
     execute=False,
     approval=None,
     output=None,
+    app_mode=None,
 ):
+    require_normal(
+        os.environ.get("APP_MODE", "normal") if app_mode is None else app_mode
+    )
     if execute and approval is None:
         raise ValueError("approval_required")
     if os.environ.get("TESTING", "").lower() != "true":
@@ -87,7 +93,15 @@ async def run(
         await engine.dispose()
 
 
-def main():
+def main(*, app_mode=None):
+    app_mode = (
+        os.environ.get("APP_MODE", "normal") if app_mode is None else app_mode
+    )
+    try:
+        require_normal(app_mode)
+    except ValueError as error:
+        print(json.dumps(dict(code=str(error), exit_status=1)))
+        return 1
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--selection", type=Path, required=True)
@@ -111,6 +125,7 @@ def main():
                     else None
                 ),
                 output=args.output,
+                app_mode=app_mode,
             )
         )
     except Exception as error:

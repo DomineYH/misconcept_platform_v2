@@ -29,7 +29,7 @@ from src.api.dependencies import (
 )
 from src.config import config
 from src.demo.database import DemoError
-from src.demo.lifecycle import NORMAL_SCOPE
+from src.demo.lifecycle import NORMAL_SCOPE, lifecycle
 from src.demo.session import Provenance
 from src.i18n import display_language, translate
 from src.models.provider_connection import ProviderAuditLog, ProviderConnection
@@ -94,6 +94,13 @@ def execution_scope(request):
     if config.APP_MODE == "demo":
         return request.state.demo_context.scope
     return NORMAL_SCOPE
+
+
+def execution_registry(request):
+    """Demo tasks live in the app's bound lifecycle, not the normal singleton."""
+    if config.APP_MODE == "demo":
+        return request.app.state.demo_request_db.lifecycle
+    return lifecycle
 
 
 def request_factory(db):

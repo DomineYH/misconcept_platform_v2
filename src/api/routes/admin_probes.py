@@ -17,6 +17,7 @@ from src.api.routes.admin_providers import (
     CredentialRoute,
     demo_missing,
     demo_read_only,
+    execution_registry,
 )
 from src.config import config
 from src.models import (
@@ -264,7 +265,11 @@ async def cancel_probe(
     if config.APP_MODE == "demo":
         await db.rollback()
         if pending:
-            await _cancel_demo_probe(request.state.demo_context, probe_id)
+            await _cancel_demo_probe(
+                request.state.demo_context,
+                probe_id,
+                execution_registry(request),
+            )
         return {"status": "cancel_requested"}
     factory = async_sessionmaker(db.bind, expire_on_commit=False)
     await db.rollback()
@@ -280,16 +285,17 @@ async def cancel_probe(
     return {"status": "cancel_requested"}
 
 
-async def _cancel_demo_probe(ctx, probe_id):
+async def _cancel_demo_probe(ctx, probe_id, registry):
     """Cancel only this visitor's own probe; never the normal registry."""
-    from src.demo.lifecycle import lifecycle
     from src.services.probe_lifecycle import cancel_reserved_probe
 
-    token = lifecycle.lookup(ctx.scope, "probe", probe_id)
+    token = registry.lookup(ctx.scope, "probe", probe_id)
     if token is not None:
         token.request_cancel()
         await token.wait_done()
     try:
-        await cancel_reserved_probe(ctx.factory, probe_id, ctx=ctx)
+        await cancel_reserved_probe(
+            ctx.factory, probe_id, ctx=ctx, registry=registry
+        )
     except InvocationError as error:
         raise HTTPException(503, detail={"code": error.code}) from None

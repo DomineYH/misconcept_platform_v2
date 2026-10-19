@@ -8,13 +8,17 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session
-from src.api.routes.admin_comparisons import PanelId, comparison_factory
+from src.api.routes.admin_comparisons import (
+    DemoComparisonRoute,
+    PanelId,
+    comparison_factory,
+)
 from src.api.routes.admin_providers import (
     demo_missing,
     demo_read_only,
+    execution_registry,
     execution_scope,
 )
-from src.api.routes.comparison_input import ComparisonRoute
 from src.api.schemas.comparison_conversation import (
     ConversationAction,
     ConversationAdopt,
@@ -35,7 +39,7 @@ from src.services.comparison_conversations import (
 from src.services.comparison_stream import ComparisonStreamingResponse
 
 router = APIRouter(
-    tags=["Admin Comparison Conversations"], route_class=ComparisonRoute
+    tags=["Admin Comparison Conversations"], route_class=DemoComparisonRoute
 )
 BASE = "/admin/comparison-conversations"
 
@@ -159,7 +163,11 @@ async def delete(
 
     with demo_missing():
         await delete_conversation(
-            db, str(identifier), user.id, scope=execution_scope(request)
+            db,
+            str(identifier),
+            user.id,
+            scope=execution_scope(request),
+            registry=execution_registry(request),
         )
     return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
@@ -205,6 +213,7 @@ async def stop(
             "stop",
             body,
             scope=execution_scope(request),
+            registry=execution_registry(request),
         )
     return json_result(snapshot)
 

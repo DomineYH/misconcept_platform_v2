@@ -11,6 +11,7 @@ from src.api.dependencies import get_admin_user, get_db_session
 from src.api.routes.admin_providers import (
     demo_missing,
     demo_read_only,
+    execution_registry,
     execution_scope,
     request_factory,
 )
@@ -53,7 +54,28 @@ async def comparison_factory(db):
     return factory
 
 
-router = APIRouter(tags=["Admin Comparisons"], route_class=ComparisonRoute)
+class DemoComparisonRoute(ComparisonRoute):
+    """§20: refuse forbidden demo writes before the bounded body reader."""
+
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+        if not any(
+            dependency.call is demo_read_only
+            for dependency in self.dependant.dependencies
+        ):
+            return handler
+
+        async def refuse(request):
+            if config.APP_MODE != "demo":
+                return await handler(request)
+            # Demo sessions need no cleanup here; the request boundary owns it.
+            db = await anext(get_db_session(request))
+            await demo_read_only(await get_admin_user(request, db))
+
+        return refuse
+
+
+router = APIRouter(tags=["Admin Comparisons"], route_class=DemoComparisonRoute)
 
 
 @router.get("/admin/comparisons")
@@ -158,7 +180,11 @@ async def remove_comparison(
 ):
     with demo_missing():
         await delete_comparison(
-            db, str(comparison_id), user.id, scope=execution_scope(request)
+            db,
+            str(comparison_id),
+            user.id,
+            scope=execution_scope(request),
+            registry=execution_registry(request),
         )
     return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
@@ -184,6 +210,7 @@ async def stop_panel(
                 )
             ],
             scope=execution_scope(request),
+            registry=execution_registry(request),
         )
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
@@ -205,5 +232,6 @@ async def stop_all(
             body.generations,
             all_panels=True,
             scope=execution_scope(request),
+            registry=execution_registry(request),
         )
     return JSONResponse(result, headers={"Cache-Control": "no-store"})

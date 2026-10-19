@@ -131,7 +131,8 @@ async def execute_call(
                 or demo_adapter.mode != "demo"
                 or permit.provider != "demo"
                 or permit.secret is not None
-                or permit.operation in ("model_list", "probe")
+                or permit.operation in ("model_list", "probe", "comparison")
+                or permit.operation.startswith("comparison_")
                 or probe_step is not None
                 or usage_scope == "comparison"
                 or not isinstance(context, DemoContext)

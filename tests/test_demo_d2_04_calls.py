@@ -239,6 +239,9 @@ DEMO_REFUSALS = {
     "probe": dict(operation="probe"),
     "probe_step": dict(call=dict(probe_step="student")),
     "comparison": dict(call=dict(usage_scope="comparison")),
+    # Operation names alone refuse comparisons; no scope label supplied.
+    "comparison_operation": dict(operation="comparison"),
+    "comparison_student": dict(operation="comparison_student"),
     "no_context": dict(request=dict(demo_context=None)),
     "no_selection": dict(request=dict(demo_selection=None)),
     "plain_context": dict(request=dict(demo_context=SimpleNamespace())),
@@ -277,6 +280,7 @@ async def test_demo_rechecks_mode_provider_context_and_secret_independently(
         ("error", "configuration_unavailable")
     ]
     assert boundary.sdk == boundary.ledger == []
+    assert boundary.rechecks == 0
     assert p.visitors.calls == 0
 
 

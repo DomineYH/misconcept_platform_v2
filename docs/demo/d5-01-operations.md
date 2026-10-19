@@ -43,7 +43,7 @@ G5 승인 후보와 검사 결과를 기록한 뒤에 한다(계약 §27:714, §
   uvicorn 0.38.0의 `--workers` 기본값은 `$WEB_CONCURRENCY` 또는 1이다.
   worker가 둘이면 둘째의 lock 획득이 실패한다. `--reload`는 개발 전용이다.
 - 프록시: start의 IP별 한도는 ASGI client 주소를 쓴다(`feat/194-app`
-  `src/api/dependencies.py:744-752`). `--forwarded-allow-ips`에는 실제 프록시 주소만
+  `src/api/dependencies.py:746-752`). `--forwarded-allow-ips`에는 실제 프록시 주소만
   넣고 `*`를 쓰지 않는다. 실제 프록시 주소는 D5-02 입력이다 `[#225 병합 후 재확인]`.
 - 접근 로그: 자료 URL에는 `ds`/`dg`/`da` query가 들어간다(§10:265). uvicorn 접근 로그는
   query를 포함한 경로를 출력한다(uvicorn 0.38.0 `protocols/utils.py:52-56`).
@@ -88,9 +88,9 @@ G5 승인 후보와 검사 결과를 기록한 뒤에 한다(계약 §27:714, §
 | `DEMO_REQUESTS_PER_MINUTE` / `DEMO_STARTS_PER_IP_PER_MINUTE` | 60 / 10 | 10..600 / 1..60 | 429, 고정 60초 window |
 
 - 교차 검증: `max_disk ≥ seed + 2 × max_db`, `seed ≤ max_db`, absolute ≥ idle이 아니면
-  부팅 거절(`src/demo/visitors.py:62-69`, seed 크기 재검사 `src/demo/database.py:262-266`).
+  부팅 거절(`src/demo/visitors.py:62-69`, seed 크기 재검사 `src/demo/database.py:262-267`).
 - 디스크 admission: 새 공간은 `max_db` 만큼 미리 예약하고 root 사용량+예약이 `max_disk`를
-  넘으면 507이다(`src/demo/visitors.py:509-525`). 상태 코드: `src/demo/database.py:28-50`.
+  넘으면 507이다(`src/demo/visitors.py:507-525`). 상태 코드: `src/demo/database.py:28-50`.
 - cleanup: `DEMO_CLEANUP_INTERVAL_SECONDS`마다 만료 공간을 정리한다
   (`src/demo/visitors.py:1206-1212`). 잠긴 DB는 `locked`로 남겨 다음 tick에 재시도하고,
   해제 없이 삭제하지 않는다(`src/demo/visitors.py:1110-1135`). 대기 세대가 상한에 닿으면

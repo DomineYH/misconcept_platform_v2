@@ -1,13 +1,20 @@
 """Health check and metrics endpoints for monitoring."""
 
+import asyncio
+import hashlib
 import logging
+import sqlite3
 import time
+from contextlib import closing
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session
+from src.config import config
+from src.demo.database import DemoError
 from src.models import User
 
 logger = logging.getLogger(__name__)
@@ -18,7 +25,6 @@ router = APIRouter(tags=["Health"])
 START_TIME = time.time()
 
 
-@router.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db_session)) -> dict:
     """
     Health check endpoint for monitoring.
@@ -39,6 +45,62 @@ async def health_check(db: AsyncSession = Depends(get_db_session)) -> dict:
         "database": db_status,
         "uptime_seconds": round(time.time() - START_TIME, 2),
     }
+
+
+async def demo_health_check(request: Request) -> JSONResponse:
+    """§4: visit-free readiness; no cookie, visitor DB or normal DB."""
+    ready = False
+    try:
+        visitors = request.app.state.demo_request_db.visitors
+        seed = request.app.state.demo_seed
+
+        def check_files():
+            # Revalidates the root identity, marker and exclusive lock file.
+            visitors.root.bytes_used()
+            if (
+                hashlib.sha256(seed.manifest_path.read_bytes()).hexdigest()
+                != visitors.root.seed_manifest_sha256
+            ):
+                raise DemoError("VERSION_MISMATCH")
+            with closing(
+                sqlite3.connect(
+                    seed.path.as_uri() + "?mode=ro", uri=True, timeout=1
+                )
+            ) as db:
+                db.execute("SELECT 1").fetchone()
+                # SELECT 1 never reads the file; the seed marker proves it is usable.
+                row = db.execute(
+                    "SELECT kind FROM demo_metadata WHERE id=1"
+                ).fetchone()
+                if row != ("demo_seed",):
+                    raise DemoError("VERSION_MISMATCH")
+
+        await asyncio.to_thread(check_files)
+        # The visitor cap alone keeps readiness; the cleanup hard cap does not.
+        ready = (
+            not request.app.state.demo_cleanup.done()
+            and visitors.pending_cleanup_count
+            < visitors.settings.max_retired_generations
+        )
+    except Exception as error:
+        logger.error(
+            "Demo health check failure",
+            extra={"code": getattr(error, "code", type(error).__name__)},
+        )
+    return JSONResponse(
+        {
+            "status": "healthy" if ready else "degraded",
+            "database": "healthy" if ready else "unhealthy",
+            "uptime_seconds": round(time.time() - START_TIME, 2),
+        },
+        200 if ready else 503,
+        {"Cache-Control": "no-store"},
+    )
+
+
+router.get("/health")(
+    demo_health_check if config.APP_MODE == "demo" else health_check
+)
 
 
 @router.get("/metrics")

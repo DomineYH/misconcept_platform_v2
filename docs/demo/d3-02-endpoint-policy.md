@@ -1,6 +1,6 @@
 # D3-02 관리자 endpoint demo 정책 대응표 (#200)
 
-상태: PR1(CSV·삭제)·PR2(위험 endpoint guard)는 구현, PR3(허용 CRUD quota)는 예정. 이 문서는 정책의 대응표이며 구현 증거(`d3-02-guards-evidence.md`)는 PR4에서 따로 쓴다.
+상태: PR1(CSV·삭제)·PR2(위험 endpoint guard)는 구현, PR3(허용 CRUD quota)는 구현(사용자 단건 생성·업로드 읽는 도중 차단·지원 표시 context는 결정 대기, §2.6). 이 문서는 정책의 대응표이며 구현 증거(`d3-02-guards-evidence.md`)는 PR4에서 따로 쓴다.
 
 ## 1. 목적과 규칙
 
@@ -110,16 +110,20 @@
 
 ### 2.6 허용 CRUD (§21, §8)
 
-모든 mutation은 `write_guard(ctx)` 아래에서 허용한다. GET 화면은 READ다. quota 설정은 `DEMO_MAX_USERS/GROUPS/SCENARIOS/CONTRIBUTORS`. 방문객 AppSetting으로 전역 quota를 바꿀 수 없다.
+모든 mutation은 `write_guard(ctx)` 아래에서 허용한다. GET 화면은 READ다. quota 설정은 `DEMO_MAX_USERS/GROUPS/SCENARIOS/CONTRIBUTORS/UPLOAD_BYTES/UPLOAD_ROWS`(config만, §8 기본값). 방문객 AppSetting으로 전역 quota를 바꿀 수 없다.
+
+- 구현 helper는 `src/services/admin_user_bulk.py:demo_quota`다. demo에서 count 전에 `BEGIN IMMEDIATE`로 방문객 writer를 잡아 count와 insert/commit이 같은 guard·transaction에 있다. 따라서 병렬 생성이 마지막 자리를 함께 쓰지 못한다. count는 현재 row 수이고, 삭제 commit 뒤 자리가 돌아온다. 시나리오는 soft delete된 row를 세지 않는다.
+- 시나리오 생성은 `save_scenario`가 자기 transaction을 다시 시작하므로, demo에서 `visitors.write_guard(ctx)`와 `ctx.factory()` session으로 count·저장·commit을 한 guard 안에서 한다(PR1 `demo_delete`와 같은 방식).
+- normal은 helper가 SQL 없이 바로 돌아오므로 동작이 같다.
 
 | method | path | 행위 | 허용 역할(demo) | demo 정책 | 결과/오류 | 구현 위치 | 단계 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/admin/users` | 계정 목록 | 관리자 | READ | 200 | `admin_users.py:list_users` | PR3 |
-| POST | `/admin/users` | 계정 생성 | 관리자 | CRUD. `DEMO_MAX_USERS` | 201 / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:create_user` | PR3 |
+| POST | `/admin/users` | 계정 생성 | 관리자 | CRUD. `DEMO_MAX_USERS` | 201 / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:create_user` | 결정 대기(`admin_users.py`가 S3 쓰기 범위 밖) |
 | POST | `/admin/users/{user_id}/update` | 계정 수정 | 관리자 | CRUD. 기존 중복·권한 검사 유지 | 기존 응답 | `admin_users.py:update_user` | PR3 |
 | GET | `/admin/users/bulk/template` | bulk 템플릿 | 관리자 | 기존 parser/필드 재사용 | 200 CSV | `admin_users.py:download_bulk_template` | PR3 |
-| POST | `/admin/users/bulk/preview` | bulk 미리보기 | 관리자 | 읽는 도중 바이트 `DEMO_MAX_UPLOAD_BYTES` 초과 거절. rows `DEMO_MAX_UPLOAD_ROWS`·현재 user 수 검사 | 200 / 413 `DEMO_UPLOAD_TOO_LARGE` / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:preview_bulk_upload`, `src/services/admin_user_bulk.py` | PR3 |
-| POST | `/admin/users/bulk/register` | bulk 등록 | 관리자 | 최종 transaction에서 rows·user 수 재검사(count+insert 한 transaction) | 200 / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:register_bulk_users_endpoint`, `src/services/admin_user_bulk.py` | PR3 |
+| POST | `/admin/users/bulk/preview` | bulk 미리보기 | 관리자 | 바이트 `DEMO_MAX_UPLOAD_BYTES` 초과 413(현재는 route가 파일을 다 읽은 뒤 `parse_csv`에서 검사; 읽는 도중 차단은 `admin_users.py` 변경 필요, 결정 대기). rows > min(`DEMO_MAX_UPLOAD_ROWS`, 남은 user 수)이면 429 | 200 / 413 `DEMO_UPLOAD_TOO_LARGE` / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:preview_bulk_upload`, `src/services/admin_user_bulk.py` | PR3 |
+| POST | `/admin/users/bulk/register` | bulk 등록 | 관리자 | 최종 transaction에서 같은 min 재검사(count+insert 한 transaction). 초과 요청은 행 등록 없이 전체 429 | 200 / 429 `DEMO_LIMIT_REACHED` | `admin_users.py:register_bulk_users_endpoint`, `src/services/admin_user_bulk.py` | PR3 |
 | GET | `/admin/groups` | 그룹 목록 | 관리자 | READ | 200 | `admin_groups.py:list_groups` | PR3 |
 | POST | `/admin/groups` | 그룹 생성 | 관리자 | CRUD. `DEMO_MAX_GROUPS` | 201 / 429 `DEMO_LIMIT_REACHED` | `admin_groups.py:create_group` | PR3 |
 | POST | `/admin/groups/{group_id}/update` | 그룹 수정 | 관리자 | CRUD. 기존 참조 제한·버전 검사 유지 | 기존 응답 | `admin_groups.py:update_group` | PR3 |

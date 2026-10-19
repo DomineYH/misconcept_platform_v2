@@ -5,7 +5,7 @@ import io
 import re
 import secrets
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,8 @@ from src.api.schemas.user import (
     BulkRegisterResponse,
     BulkUserEntry,
 )
+from src.config import config
+from src.demo.database import DemoError
 from src.i18n import translate
 from src.models.user import User
 from src.models.user_group import UserGroup
@@ -35,12 +37,40 @@ COLUMN_ALIASES: dict[str, str] = {
 }
 
 
+async def demo_quota(db, model, limit, *where):
+    """§21: take the visitor writer before counting current rows, so two
+    creates cannot both use the last slot and deletes free theirs."""
+    if config.APP_MODE != "demo":
+        return None
+    await db.execute(text("BEGIN IMMEDIATE"))
+    used = await db.scalar(
+        select(func.count()).select_from(model).where(*where)
+    )
+    if used >= limit:
+        raise DemoError("LIMIT_REACHED")
+    return limit - used
+
+
+async def demo_bulk_quota(db, count):
+    """§8: preview and register both cap rows at min(upload rows, users left)."""
+    remaining = await demo_quota(db, User, config.DEMO_MAX_USERS)
+    if remaining is not None and count > min(
+        config.DEMO_MAX_UPLOAD_ROWS, remaining
+    ):
+        raise DemoError("LIMIT_REACHED")
+
+
 def parse_csv(file_content: bytes, language="ko") -> list[dict]:
     """Parse CSV bytes into list of row dicts.
 
     Tries UTF-8 first, falls back to EUC-KR.
     Validates file size, required columns, and row count.
     """
+    if (
+        config.APP_MODE == "demo"
+        and len(file_content) > config.DEMO_MAX_UPLOAD_BYTES
+    ):
+        raise DemoError("UPLOAD_TOO_LARGE")
     if len(file_content) > MAX_FILE_SIZE:
         raise ValueError(translate("admin.the_file_exceeds_1mb", language))
 
@@ -133,6 +163,7 @@ async def validate_bulk_users(
     language="ko",
 ) -> BulkPreviewResponse:
     """Validate parsed CSV rows against DB state."""
+    await demo_bulk_quota(db, len(rows))
     # Load all existing usernames
     result = await db.execute(select(User.username))
     existing_usernames = {r[0] for r in result.all()}
@@ -249,6 +280,7 @@ async def register_bulk_users(
     """
     if not users:
         return BulkRegisterResponse(success_count=0, fail_count=0, failures=[])
+    await demo_bulk_quota(db, len(users))
 
     # Re-check existing usernames at registration time
     usernames = [u.username for u in users]

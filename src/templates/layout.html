@@ -89,7 +89,7 @@
         </div>
       </div>
     </nav>
-  </header>{% if demo_on %}
+  </header>{% if demo_on and demo_tour|default(true) %}
   <section id="demo-tour" class="demo-tour" aria-labelledby="demo-tour-title"
            data-label-complete="{{ t('demo.tour.complete') }}" data-label-current="{{ t('demo.tour.current') }}"
            data-label-pending="{{ t('demo.tour.pending') }}" data-label-reset-done="{{ t('demo.reset_done') }}">

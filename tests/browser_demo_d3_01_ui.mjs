@@ -670,12 +670,106 @@ async function layout(page, base) {
   });
 }
 
+// ---- 16 --------------------------------------------------------------------
+async function entryPage(page, base) {
+  await scenario(page, base, async env => {
+    let started = false;
+    env.handlers.state = (req, e) => started
+      ? {json: e.current}
+      : {status: 401, json: envelope('DEMO_SESSION_REQUIRED', 'demo.start_required')};
+    env.handlers.start = (req, e) => {
+      if (env.posts('start').length === 1) return {status: 503, headers: {'retry-after': '30'}, json: envelope('DEMO_CAPACITY', 'demo.capacity', true)};
+      started = true;
+      e.current = state({role: 'teacher', next_url: '/fixtures/demo/page', request_id: req.json.request_id});
+      return {status: 201, json: e.current};
+    };
+    const p = await env.open('/fixtures/demo/entry');
+    assert.equal(await p.locator('#demo-tour').count(), 0, 'no tour panel on the entry page');
+    assert.equal(await p.locator('[data-demo-step]').count(), 0, 'no tour steps on the entry page');
+    assert.deepEqual(await p.locator('[data-demo-action="start"]').evaluateAll(b => b.map(x => x.dataset.demoRole)), ['teacher', 'admin']);
+    assert.equal(await p.getAttribute('#demo-tour-status', 'aria-live'), 'polite');
+    await until(async () => (await status(p)).trim() !== '', 'recovery status after the 401 state GET');
+
+    for (const [width, height] of [[390, 844], [1440, 900], [720, 450]]) {
+      await p.setViewportSize({width, height});
+      const report = await p.evaluate(() => {
+        window.scrollTo(0, 0);
+        const buttons = [...document.querySelectorAll('[data-demo-action="start"]')].map(b => {
+          b.scrollIntoView({block: 'center'});
+          const r = b.getBoundingClientRect();
+          return {
+            name: b.dataset.demoRole, visible: b.checkVisibility() && r.width > 0 && r.height > 0,
+            inside: r.left >= 0 && r.right <= innerWidth,
+            textClipped: b.scrollWidth > b.clientWidth + 1 || b.scrollHeight > b.clientHeight + 1
+          };
+        });
+        window.scrollTo(0, 0);
+        return {buttons, scrollWidth: document.documentElement.scrollWidth, innerWidth};
+      });
+      const at = `${width}x${height}`;
+      assert(report.scrollWidth <= report.innerWidth, `${at}: no horizontal page scroll`);
+      for (const b of report.buttons) {
+        assert(b.visible && b.inside, `${at}: ${b.name} start button visible inside the viewport`);
+        assert(!b.textClipped, `${at}: ${b.name} start button text not clipped`);
+      }
+    }
+
+    // 503 + Retry-After: no navigation, the pending op survives, the retry reuses the id.
+    await p.click('[data-demo-action="start"][data-demo-role="teacher"]');
+    await until(() => env.posts('start').length, 'first start POST');
+    await until(async () => (await status(p)).trim().endsWith('(30s)'), 'capacity status with the Retry-After seconds');
+    assert.equal(new URL(p.url()).pathname, '/fixtures/demo/entry', 'no navigation after a 503');
+    await p.click('[data-demo-action="start"][data-demo-role="teacher"]');
+    await p.waitForURL(url => url.pathname === '/fixtures/demo/page', {timeout: 10000});
+    const [first, second] = env.posts('start');
+    assert.equal(env.posts('start').length, 2);
+    assert(isUuid(first.json.request_id), 'canonical lowercase UUID request_id');
+    assert.equal(second.json.request_id, first.json.request_id, 'the retry reuses the same request_id');
+    for (const post of [first, second]) {
+      assert.equal(post.json.role, 'teacher');
+      assert.equal(post.headers['x-csrf-token'], 'csrf-v1');
+    }
+    const afterPost = env.requests.slice(env.requests.indexOf(second) + 1).find(r => r.name === 'state');
+    assert(afterPost, 'a state GET follows the successful POST');
+    assert.equal(afterPost.query.request_id, undefined, 'plain state GET');
+    await p.locator('#demo-tour').waitFor({state: 'attached'});
+  });
+}
+
+// ---- 17 --------------------------------------------------------------------
+async function demoErrorPage(page, base) {
+  const catalog = JSON.parse(await readFile(new URL('../src/i18n/catalog.json', import.meta.url), 'utf8')).demo;
+  await scenario(page, base, async env => {
+    for (const [code, recovery] of [[410, 'demo.expired'], [409, 'demo.stale_role']]) {
+      const p = await env.ctx.newPage();
+      p.on('pageerror', error => env.errors.push(error.message));
+      const response = await p.goto(`${base}/fixtures/demo/error?status=${code}&recovery=${recovery}`);
+      assert.equal(response.status(), code);
+      const texts = Object.values(catalog[recovery.split('.')[1]]);
+      const title = (await p.locator('h2#error-title').innerText()).trim();
+      assert(texts.includes(title), `${code}: h2 shows the catalog text for ${recovery} (got "${title}")`);
+      assert((await p.title()).includes(title), `${code}: <title> carries the recovery text`);
+      const entry = p.locator('.empty-state a[href="/demo"]');
+      assert(await entry.isVisible(), `${code}: link back to /demo visible`);
+      assert.equal(await p.locator('.empty-state a[href="/scenarios"]').count(), 1, `${code}: scenarios link kept`);
+      await p.evaluate(() => document.activeElement?.blur());
+      let reached = false;
+      for (let i = 0; i < 40 && !reached; i++) {
+        await p.keyboard.press('Tab');
+        reached = await focused(p, '.empty-state a[href="/demo"]');
+      }
+      assert(reached, `${code}: Tab reaches the /demo link`);
+      await p.close();
+    }
+  });
+}
+
 export default async function check(page) {
   const base = new URL(page.url()).origin;
-  // Spec items 1–15 in order; a failure names its scenario.
+  // Spec items 1–17 in order; a failure names its scenario.
   for (const fn of [normalMode, firstStateGet, expectedMapTable, observationsAndStorage, roleSwitch, lostResponse,
     csrfInvalid, resetFlow, lowerGenerationIgnored, stateCheckEvent, tabNotification, tourCsv, guideActions,
-    expiredEnvelope, layout]) {
+    expiredEnvelope, layout, entryPage, demoErrorPage]) {
     try {
       await fn(page, base);
     } catch (error) {

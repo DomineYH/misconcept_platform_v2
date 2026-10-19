@@ -6,11 +6,12 @@ from typing import Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.api.dependencies import templates
 from src.demo.database import ERRORS, DemoError
 from src.demo.session import (
     ControlContext,
@@ -193,16 +194,7 @@ async def demo_entry(
     if request.query_params:
         raise DemoError("INVALID_REQUEST")
     bootstrap = await security.verified_bootstrap(request, issue=True)
-    response = HTMLResponse(
-        '<!doctype html><html lang="en"><meta charset="utf-8">'
-        "<title>Demo</title><main><h1>Demo</h1>"
-        "<p>Prepared example responses. No external AI calls. "
-        "Example content is Korean. Temporary data expires.</p>"
-        '<label for="demo-role">Choose a role</label>'
-        '<select id="demo-role"><option value="teacher">Teacher</option>'
-        '<option value="admin">Administrator</option></select>'
-        "<p>Choose a role to explore the prepared demo.</p></main></html>"
-    )
+    response = templates.TemplateResponse("demo.html", {"request": request})
     return await synchronized(response, security, bootstrap)
 
 

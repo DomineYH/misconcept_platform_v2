@@ -48,16 +48,20 @@ def demo_fixture(path, query, request):
     except ValueError:
         return NOT_FOUND
     role = first("role", "teacher")
+    recovery = first("recovery", "")
+    # Statuses beyond 403/404 are the demo envelope ones (§11): they need a recovery key.
     if role not in {"teacher", "admin"} or (
-        page == "error" and status not in {403, 404}
+        page == "error"
+        and status not in {403, 404}
+        and (status not in {401, 409, 410, 503} or not recovery)
     ):
         return NOT_FOUND
     if page == "normal":
         demo = dict(mode="normal", public_url=None)
         role = "teacher"
-    elif page in {"page", "error"}:
+    elif page in {"page", "error", "entry"}:
         scope = first("scope", "scope-a")
-        if first("novisit", "") == "1":
+        if page == "entry" or first("novisit", "") == "1":
             scope = generation = epoch = role = None
         demo = _demo_config(
             request, scope, generation, epoch, role, first("state", "ready")
@@ -69,11 +73,20 @@ def demo_fixture(path, query, request):
         if role is None
         else SimpleNamespace(nickname=f"Demo {role}", role=role)
     )
-    name, extra = (
-        ("error.html", dict(status_code=status))
-        if page == "error"
-        else ("scenarios.html", dict(scenarios=[]))
-    )
+    if page == "error":
+        name, extra = "error.html", dict(status_code=status)
+        if recovery:
+            extra["demo_error"] = dict(
+                code="DEMO_FIXTURE",
+                retryable=False,
+                recovery=recovery,
+                generation=None,
+                auth_epoch=None,
+            )
+    elif page == "entry":
+        name, extra = "demo.html", {}
+    else:
+        name, extra = "scenarios.html", dict(scenarios=[])
     body = (
         templates.get_template(name)
         .render(request=request, user=user, demo_config=demo, **extra)

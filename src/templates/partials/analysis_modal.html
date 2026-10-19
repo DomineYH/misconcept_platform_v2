@@ -1,3 +1,4 @@
+{% set demo_ns = {'ds': demo_config.browser_scope_id, 'dg': demo_config.generation, 'da': demo_config.auth_epoch}|urlencode if demo_config is defined and demo_config and demo_config.mode == 'demo' and demo_config.browser_scope_id else '' -%}
 <!-- Analysis Modal Content (HTMX partial) -->
 <!-- Modal Header -->
 <div class="modal-header">
@@ -11,7 +12,8 @@
     {% if analysis_result_url is defined %}
     {% include "partials/analysis_result.html" %}
     {% else %}
-    {% set feedback_status = feedback_status | default('legacy') %}
+    {% set feedback_status = feedback_status | default('legacy') %}{% if provenance is defined and provenance and provenance.record_origin in ('seed_prepared', 'visitor_generated') %}
+    <p class="demo-record-origin" data-record-origin="{{ provenance.record_origin }}">{{ t('demo.record_seed_prepared') if provenance.record_origin == 'seed_prepared' else t('demo.record_visitor_generated') }}</p>{% endif %}
 
     {# ── Wedge: feedback hero + stat grid + toggle ── #}
     <div class="analysis-wedge" data-session-id="{{ session_id }}">
@@ -100,14 +102,14 @@
     <button type="button" onclick="closeAnalysisModal()" class="btn-modal btn-modal-secondary">
         {{ t('teacher.close') }}
     </button>
-    <a href="/admin/sessions/{{ session_id }}/download" class="btn-modal btn-modal-primary" download>
+    <a href="/admin/sessions/{{ session_id }}/download{% if demo_ns %}?{{ demo_ns }}{% endif %}" class="btn-modal btn-modal-primary" download>
         {{ t('teacher.download_csv') }}
     </a>
     {% else %}
-    <a href="/sessions/{{ session_id }}/analysis_page" class="btn-modal btn-modal-secondary">
+    <a href="/sessions/{{ session_id }}/analysis_page{% if demo_ns %}?{{ demo_ns }}{% endif %}" class="btn-modal btn-modal-secondary">
         {{ t('teacher.view_full_page') }}
     </a>
-    <a href="/sessions/{{ session_id }}/export.csv" class="btn-modal btn-modal-primary" download>
+    <a href="/sessions/{{ session_id }}/export.csv{% if demo_ns %}?{{ demo_ns }}{% endif %}" class="btn-modal btn-modal-primary" download>
         {{ t('teacher.download_csv') }}
     </a>
     <a href="/scenarios" class="btn-modal btn-modal-success">

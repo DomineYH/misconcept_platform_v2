@@ -1,7 +1,8 @@
 {# The URL serves the public projection; providers and planning stay server-side. #}
 <section data-analysis-result data-session-id="{{ session_id if session_id is defined else session.id if session is defined else '' }}" data-result-url="{{ analysis_result_url }}"
          data-transcript-open="{{ analysis_transcript_open | default(false) | lower }}"
-         aria-label="{{ t('teacher.post_analysis_result') }}">
+         aria-label="{{ t('teacher.post_analysis_result') }}">{% if provenance is defined and provenance and provenance.record_origin in ('seed_prepared', 'visitor_generated') %}
+  <p class="demo-record-origin" data-record-origin="{{ provenance.record_origin }}">{{ t('demo.record_seed_prepared') if provenance.record_origin == 'seed_prepared' else t('demo.record_visitor_generated') }}</p>{% endif %}
   {% if accepted_report is defined and accepted_report and accepted_report.status == 'degraded' and accepted_report.coverage and accepted_report.coverage.chunks and display_language(request) == 'en' %}
   <p>{{ t('teacher.chunk_partial_notice', reviewed=accepted_report.coverage.reviewed_message_ids|length, total=accepted_report.coverage.input_message_ids|length) }}</p>
   {% elif feedback_status is defined and feedback_status == 'failed' and display_language(request) == 'en' %}

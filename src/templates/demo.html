@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+{# The guide starts once a role is chosen; this page only offers the start. #}
+{% set demo_tour = false %}
+
+{% block title %}{{ t('demo.entry_title') }} - {{ t('common.product') }}{% endblock %}
+
+{% block content %}
+{% set demo = demo_config if demo_config is defined and demo_config else {} %}
+<section class="demo-entry" aria-labelledby="demo-entry-title">
+  <h2 id="demo-entry-title">{{ t('demo.entry_title') }}</h2>
+  <p>{{ t('demo.entry_intro') }}</p>
+  <p>{{ t('demo.supported_only') }}</p>
+  {% if demo.idle_ttl_seconds and demo.absolute_ttl_seconds %}
+  <p>{{ t('demo.entry_retention', idle_minutes=demo.idle_ttl_seconds // 60, absolute_hours=demo.absolute_ttl_seconds // 3600) }}</p>
+  {% endif %}
+  <h3>{{ t('demo.choose_role') }}</h3>
+  <div class="demo-entry-actions">
+    <button type="button" class="btn-primary" data-demo-action="start" data-demo-role="teacher" value="teacher">{{ t('demo.start_teacher') }}</button>
+    <button type="button" class="btn-primary" data-demo-action="start" data-demo-role="admin" value="admin">{{ t('demo.start_admin') }}</button>
+  </div>
+  <p id="demo-tour-status" role="status" aria-live="polite" aria-atomic="true"></p>
+</section>
+{% endblock %}

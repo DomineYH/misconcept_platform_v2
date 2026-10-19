@@ -50,7 +50,7 @@ class ProviderConnection(Base):
         CheckConstraint("enabled IN (0,1)"),
         CheckConstraint("json_valid(catalog_models_json)"),
         CheckConstraint(
-            "(provider = 'demo' AND encrypted_key IS NULL AND nonce IS NULL AND encryption_key_version IS NULL AND masked_hint IS NULL AND credential_revision = 0) OR (provider != 'demo' AND ((encrypted_key IS NULL AND nonce IS NULL AND encryption_key_version IS NULL AND masked_hint IS NULL AND enabled = 0) OR (encrypted_key IS NOT NULL AND length(encrypted_key) >= 17 AND nonce IS NOT NULL AND length(nonce) = 12 AND encryption_key_version IS NOT NULL AND length(encryption_key_version) > 0 AND masked_hint IS NOT NULL)))",
+            "(provider = 'demo' AND encrypted_key IS NULL AND nonce IS NULL AND encryption_key_version IS NULL AND masked_hint IS NULL AND credential_revision = 0 AND typeof(connection_version) = 'integer') OR (provider != 'demo' AND ((encrypted_key IS NULL AND nonce IS NULL AND encryption_key_version IS NULL AND masked_hint IS NULL AND enabled = 0) OR (encrypted_key IS NOT NULL AND length(encrypted_key) >= 17 AND nonce IS NOT NULL AND length(nonce) = 12 AND encryption_key_version IS NOT NULL AND length(encryption_key_version) > 0 AND masked_hint IS NOT NULL)))",
             name="ck_provider_key_material",
         ),
     )

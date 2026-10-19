@@ -8,8 +8,11 @@ import pytest
 from sqlalchemy import event, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
+from test_demo_d2_01_schema import REBUILT, database_state, populated036
 
 from src.db.migrations import migrate
+
+__all__ = ["populated036"]
 
 
 async def test_empty_database_upgrade(tmp_path, monkeypatch):
@@ -377,3 +380,84 @@ async def test_demo_rebuild_preserves_objects_and_rolls_back(tmp_path, failure):
                 assert after_history[-1][1] == migration.name
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize("legacy_alter_table", [0, 1])
+@pytest.mark.parametrize("failure", [False, True], ids=["upgrade", "rollback"])
+async def test_037_preserves_dependent_views_and_cross_table_trigger(
+    populated036, tmp_path, legacy_alter_table, failure
+):
+    expected = {
+        "provider_connection": [1, 2, 3],
+        "provider_audit_log": [1],
+        "generation_run": ["analysis", "comparison-panel", "student"],
+    }
+    async with populated036.begin() as db:
+        await db.exec_driver_sql(
+            f"PRAGMA legacy_alter_table={legacy_alter_table}"
+        )
+        for table in REBUILT:
+            await db.exec_driver_sql(
+                f"CREATE VIEW dependent_{table} AS SELECT id FROM {table}"
+            )
+        await db.exec_driver_sql(
+            "CREATE TRIGGER cross_rebuild AFTER INSERT ON extra_trace BEGIN "
+            "SELECT id FROM provider_connection; "
+            "SELECT id FROM provider_audit_log; "
+            "SELECT id FROM generation_run; END"
+        )
+        before = await database_state(db)
+        for table, ids in expected.items():
+            assert (
+                await db.exec_driver_sql(
+                    f"SELECT id FROM dependent_{table} ORDER BY id"
+                )
+            ).scalars().all() == ids
+    migration = migrate.DIRECTORY / "037_demo_provider.sql"
+    if failure:
+        broken = tmp_path / migration.name
+        broken.write_text(
+            migration.read_text()
+            + "\nINSERT INTO repair_missing_table VALUES (1);"
+        )
+        with pytest.raises(OperationalError, match="repair_missing_table"):
+            await migrate.run_migration(broken, db_engine=populated036)
+    else:
+        await migrate.run_all_migrations(db_engine=populated036)
+    async with populated036.begin() as db:
+        assert (
+            await db.exec_driver_sql("PRAGMA legacy_alter_table")
+        ).scalar() == legacy_alter_table
+        assert (await db.exec_driver_sql("PRAGMA foreign_keys")).scalar() == 1
+        after = await database_state(db)
+        if failure:
+            assert after == before
+        else:
+            assert {
+                name: after["foreign_keys"][name]
+                for name in before["foreign_keys"]
+            } == before["foreign_keys"]
+            assert [
+                row
+                for row in after["objects"]
+                if row[0] == "view" or row[1] == "cross_rebuild"
+            ] == [
+                row
+                for row in before["objects"]
+                if row[0] == "view" or row[1] == "cross_rebuild"
+            ]
+        for table, ids in expected.items():
+            assert (
+                await db.exec_driver_sql(
+                    f"SELECT id FROM dependent_{table} ORDER BY id"
+                )
+            ).scalars().all() == ids
+        await db.exec_driver_sql(
+            "INSERT INTO extra_trace VALUES ('cross-trigger-probe')"
+        )
+        assert (
+            await db.exec_driver_sql("PRAGMA foreign_key_check")
+        ).all() == []
+        assert (
+            await db.exec_driver_sql("PRAGMA integrity_check")
+        ).scalar() == "ok"

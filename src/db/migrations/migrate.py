@@ -78,10 +78,16 @@ async def run_migration(
             "035_comparison_run.sql",
             "037_demo_provider.sql",
         )
+        legacy_alter_table = None
         try:
             if rebuild_runs:
                 # Dropping a referenced table with FKs enabled would mutate children.
                 await conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+                if migration_file.name == "037_demo_provider.sql":
+                    legacy_alter_table = (
+                        await conn.exec_driver_sql("PRAGMA legacy_alter_table")
+                    ).scalar()
+                    await conn.exec_driver_sql("PRAGMA legacy_alter_table=ON")
                 await conn.commit()
             await conn.exec_driver_sql("BEGIN IMMEDIATE")
             await _history(conn)
@@ -132,6 +138,10 @@ async def run_migration(
             raise
         finally:
             if rebuild_runs:
+                if legacy_alter_table is not None:
+                    await conn.exec_driver_sql(
+                        f"PRAGMA legacy_alter_table={legacy_alter_table}"
+                    )
                 await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
                 await conn.commit()
 

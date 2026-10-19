@@ -106,6 +106,39 @@ async def reject(conn, sql, parameters=()):
             await conn.exec_driver_sql(sql, parameters)
 
 
+@pytest.mark.parametrize(
+    "version",
+    ["", "garbage", b"", 1.5],
+    ids=["empty-text", "invalid-text", "empty-blob", "fraction"],
+)
+async def test_demo_connection_version_rejects_non_integer(
+    constrained, version
+):
+    async with constrained.begin() as conn:
+        await conn.execute(
+            ProviderConnection.__table__.insert().values(id=4, provider="demo")
+        )
+        await reject(
+            conn,
+            "UPDATE provider_connection SET connection_version=? WHERE id=4",
+            (version,),
+        )
+
+
+async def test_demo_connection_version_accepts_integer(constrained):
+    async with constrained.begin() as conn:
+        await conn.execute(
+            ProviderConnection.__table__.insert().values(
+                id=4, provider="demo", connection_version=1
+            )
+        )
+        assert (
+            await conn.exec_driver_sql(
+                "SELECT connection_version,typeof(connection_version) FROM provider_connection WHERE id=4"
+            )
+        ).one() == (1, "integer")
+
+
 async def test_demo_and_external_provider_key_material(constrained):
     async with constrained.begin() as conn:
         await conn.execute(

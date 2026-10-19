@@ -23,10 +23,15 @@ placeholder 그대로 적는다. 배포 스크립트·서비스 파일은 만들
 
 - C1 health 코드와 헤더. 이 route는 GET만 등록되어 HEAD를 쓰지 않는다(`src/api/routes/health.py:101-103`).
   `curl -s -D - -o /dev/null -w '%{http_code}\n' "<승인 기록 §1 DEMO_ORIGIN>/health"` — 코드와 `Cache-Control`만 기록.
-- C2 demo 프로세스 환경 변수 이름만(값 출력 금지). pid는 승인 기록의 서비스 식별자로 얻는다.
-  `tr '\0' '\n' < /proc/<pid>/environ | cut -d= -f1 | sort | grep -E '^(OPENAI_|ANTHROPIC_|AZURE_OPENAI_|GOOGLE_|GEMINI_|PROVIDER_SECRET_)|^(DATABASE_URL|TESTING|BOOTSTRAP_ADMIN_ON_STARTUP)$'`
-  — 출력 0줄이어야 한다. 금지 이름 전체는 `src/config.py:38-61`, 거절 조건은 `src/config.py:162-167, 213`이다.
-  secret 이름(`DEMO_SESSION_SECRET`, `DEMO_CSRF_SECRET`)은 존재해야 하고 값은 보지 않는다.
+- C2 demo 프로세스 환경. pid는 승인 기록의 서비스 식별자로 얻는다. 값은 출력하지 않는다.
+  - C2a 금지 자격 증명 이름만: `tr '\0' '\n' < /proc/<pid>/environ | cut -d= -f1 | sort | grep -E '^(OPENAI_|ANTHROPIC_|AZURE_OPENAI_|GOOGLE_|GEMINI_|PROVIDER_SECRET_)|^DATABASE_URL$'`
+    — 출력 0줄이어야 한다. 금지 이름 전체는 `src/config.py:38-61`, 거절 조건은 `src/config.py:162-167`이다.
+    빈 값은 앱이 통과시키지만 운영 자격 증명은 빈 값으로도 주입하지 않으므로 이름이 있으면 실패다.
+  - C2b boolean flag는 따로 판정하고 `pass`/`fail`만 출력한다:
+    `tr '\0' '\n' < /proc/<pid>/environ | awk '{n=index($0,"="); k=substr($0,1,n-1); if((k=="TESTING"||k=="BOOTSTRAP_ADMIN_ON_STARTUP")&&tolower(substr($0,n+1))=="true")b=1} END{print b?"fail":"pass"}'`
+    — `pass`여야 한다. 앱은 소문자 변환 값이 `true`일 때만 참으로 읽고(`src/config.py:313-320`), demo에서 참이면 부팅을
+    거절한다(`src/config.py:213-214`). 명시적 `false`나 이름 없음은 통과다.
+  - secret 이름(`DEMO_SESSION_SECRET`, `DEMO_CSRF_SECRET`)은 존재해야 하고 값은 보지 않는다.
 - C3 root. 표시는 `<승인 기록 DEMO_DATA_ROOT>` 참조로만 쓰고 출력 경로는 증거에 옮기지 않는다.
   `ls -A <root>`에 `.demo-root.json`과 `.demo.lock`이 있다(`src/demo/database.py:159, 186`). 표식은 키 4개(kind, marker_version,
   root_id, app_mode)이고 app_mode=demo다(`src/demo/database.py:176-183`): `jq -r 'keys[]' <root>/.demo-root.json`(값은 기록하지 않음).
@@ -34,9 +39,16 @@ placeholder 그대로 적는다. 배포 스크립트·서비스 파일은 만들
   `find <root> -maxdepth 1 -type l` 출력 0줄. 서비스가 떠 있는 동안 `flock -n <root>/.demo.lock true; echo $?`는 `1`이다
   (`src/demo/database.py:189-191`; 서비스가 서 있지 않을 때 실행하면 의미 없음).
 - C4 쿠키 속성(값 가림). `curl -s -D - -o /dev/null "<승인 기록 §1 DEMO_ORIGIN>/demo" | grep -i '^set-cookie' | sed -E 's/^(set-cookie: [^=]+)=[^;]*/\1=<omitted>/I'`
-- C5 CSRF·origin 거절. 쿠키·token 없이 다른 origin을 달고 보낸다:
-  `curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Origin: <승인 기록 §1 NORMAL_ORIGIN>' "<승인 기록 §1 DEMO_ORIGIN>/demo/start"` (`/demo/role`, `/demo/reset`도 같게).
-  route는 `src/api/routes/demo.py:241, 253, 276`이다. 유효 token에 틀린 Origin을 붙이는 경우는 브라우저 검사(행 4)가 맡는다.
+- C5 CSRF·origin 거절. 먼저 유효 bootstrap을 받고, 검사하는 조건 하나만 바꾼다.
+  - 준비: 증거 디렉터리 밖 임시 파일 `J=$(mktemp)`에 `curl -s -c "$J" -o /dev/null -w '%{http_code}\n' "<승인 기록 §1 DEMO_ORIGIN>/demo"` → 200.
+    `T=$(awk -F'\t' '$6=="demo_csrftoken"{print $7}' "$J")`. jar와 token은 출력·기록하지 않고 끝나면 `rm -f "$J"`.
+  - 유효 기준 요청 `V` = `curl -s -o /dev/null -w '%{http_code}\n' -X POST -b "$J" -H 'Origin: <승인 기록 §1 DEMO_ORIGIN>' -H "x-csrf-token: $T" -H 'content-type: application/json' --data '{"request_id":"<새 UUID>","role":"teacher"}' "<승인 기록 §1 DEMO_ORIGIN>/demo/start"`.
+    아래 사례는 `V`에서 표시한 부분만 바꾼다. 기준 요청 자체는 C5에서 보내지 않는다(방문 공간을 만들기 때문).
+  - C5-0 `-b "$J"` 제거(서명 없음) → **401** `SESSION_REQUIRED`. 서명 검사가 CSRF보다 먼저다(`src/api/dependencies.py:584-588`, code 표 `src/demo/database.py:24`).
+  - C5-1 Origin을 `<승인 기록 §1 NORMAL_ORIGIN>`으로 → **403** `CSRF_INVALID`(`src/api/dependencies.py:615-654`, `src/demo/database.py:37`).
+  - C5-2 `x-csrf-token` header 제거 → **403**. C5-3 header 값을 cookie와 다른 값으로 → **403**.
+  - 작업 0: 같은 jar로 `GET /demo/state`의 HTTP code를 C5 전후에 받아 같아야 한다.
+  route는 `src/api/routes/demo.py:241, 253, 276`이다. `/demo/role`, `/demo/reset`은 행 4의 브라우저 검사에서 같은 사례를 확인한다.
 - C6 normal에 demo 경로 없음. `curl -s -o /dev/null -w '%{http_code}\n' "<승인 기록 §1 NORMAL_ORIGIN>/demo"` (GET /demo, /demo/state, POST start/role/reset 모두 404; 로컬 기준 `tests/test_demo_d1_04_app.py:152-160`).
 - C7 서비스 로그의 cleanup·종료 줄. 승인 기록의 로그 조회 수단으로 `Demo cleanup`, `Demo cleanup failed`, `Demo shutdown` 줄 수와 `removed`/`pending`/`codes`
   필드만 센다(`src/main.py:216-229, 291-298`). 줄 전체를 붙이지 않는다.
@@ -54,13 +66,13 @@ placeholder 그대로 적는다. 배포 스크립트·서비스 파일은 만들
 | 1 | 두 방문객 격리 | §28:758 | 실제 브라우저 context 둘로 같은 배포 origin 사용. A에서 제목 변경·삭제·CSV·reset 후 B의 목록·총계·상세 확인. `tests/browser_demo_isolation.mjs` (#203/#204 산출물, 병합 뒤 사용) | B 불변. A scope+ID로 B가 요청하면 본문 없는 거절 | `isolation-<sha7>.md` |
 | 2 | normal 부정 | §28:759 | C6. normal 로그인·권한은 변경 없이 읽기 확인만 | 404 5종 | `isolation-<sha7>.md` |
 | 3 | AI 무호출 | §28:760, §14:353 | 행 12와 같은 egress 창 안에서 학생/멘토/분석/retry/catalog/probe 포함 여정. `tests/test_demo_security.py` (#203 산출물, 병합 뒤 사용) | 외부 시도 0 | `egress-<sha7>.log` |
-| 4 | 실제 CSRF/cookie | §28:761, §10:259 | C5, 그리고 브라우저로 missing/invalid/cross-origin start·role·reset·삭제 | 모두 403, 작업 0. normal 쿠키는 demo에서 인증 안 됨, 역방향도 동일 | `isolation-<sha7>.md` |
+| 4 | 실제 CSRF/cookie | §28:761, §10:259 | C5, 그리고 브라우저로 missing/invalid/cross-origin start·role·reset·삭제 | 서명 없음 401, 유효 서명에서 CSRF/Origin 오류 403, 작업 0. normal 쿠키는 demo에서 인증 안 됨, 역방향도 동일 | `isolation-<sha7>.md` |
 | 5 | reset race | §28:762 | 두 탭 중복 reset과 만료 후 reset을 실행. barrier 양쪽 순서는 `tests/test_demo_reset.py` (#203 산출물)이며 배포에서 재현하지 않고 #205 G5 기록의 같은 SHA 증거 링크로 대체 | generation 단일 증가, 안전 상태. 링크의 SHA가 다르면 `not run` | `isolation-<sha7>.md` |
 | 6 | 출력/재전송 | §28:763 | 여정에서 학생/멘토 실행과 명시 retry 1회. 같은 ID 중복 실행 여부는 방문객 화면 기준 | 같은 ID 1회, retry는 같은 turn | `rehearsal-<sha7>.md` |
 | 7 | 삭제/export | §28:764 | 세션 삭제 후 목록·상세·CSV에서 비노출 확인. `tests/test_demo_d3_02_exports.py`를 C8과 함께 선행 | 삭제 세션 모든 경로 비노출, 다른 방문객 불변 | `isolation-<sha7>.md` |
 | 8 | 실제 여정/복구 | §28:765 | A/B/C 각 완주, 두 탭·refresh·390px. `tests/browser_demo_journey.mjs`, `tests/browser_demo_recovery.mjs` (#204 산출물, 병합 뒤 사용) | 각 완주, 중복 방지 | `rehearsal-<sha7>.md` |
 | 9 | 지정 SHA 배포 | §28:767, §27 G5 | 배포 수단이 보고한 SHA를 승인 기록 SHA·#205 후보 SHA와 대조. tuple 표를 복사해 `rehearsal-<sha7>.md`에 둔다 | 세 SHA 전체 일치, `git status` clean | `rehearsal-<sha7>.md` |
-| 10 | 키 부재 | §2:35, §14:347 | C2 | 출력 0줄 | `rehearsal-<sha7>.md` |
+| 10 | 키 부재 | §2:35, §14:347 | C2 | C2a 출력 0줄, C2b `pass` | `rehearsal-<sha7>.md` |
 | 11 | root 표식·lock·운영 mount 부재 | §2:28, §2:33 | C3. 운영 mount·DB 접근 경로가 프로세스에서 안 보임은 승인 기록 제시 방법으로 확인하고 경로는 옮기지 않음 | 표식·lock 있음, symlink 0, 두 번째 lock 시도 실패, 운영 경로 없음 | `rehearsal-<sha7>.md` |
 | 12 | egress 0 | §14:353 | 승인된 인프라 로그/방화벽 수단으로 여정 전체(행 1-8, 13-20) 동안 demo 프로세스의 외부 연결을 센다 | 허용 목적지(승인 기록 값) 외 0건 | `egress-<sha7>.log` |
 | 13 | 쿠키 속성 | §10:254-255 | C4. 발급 코드는 `src/api/routes/demo.py:161-177` | `demo_session_id`: Domain 없음, Path=/, HttpOnly, SameSite=Lax, Secure, Max-Age=28800. `demo_csrftoken`: Domain 없음, Path=/, HttpOnly 없음, SameSite=Lax, Secure, Max-Age/Expires 없음 | `isolation-<sha7>.md` |
@@ -78,7 +90,10 @@ placeholder 그대로 적는다. 배포 스크립트·서비스 파일은 만들
 
 ## 3. 복구 절차 (§28:771 순서 그대로)
 
-1. 신규 start 차단: 승인된 수단으로 막고 C5 방식의 start가 거절/연결 불가임을 확인.
+1. 신규 start 차단: 차단 직전에 C5 준비 절차로 새 jar를 받는다(GET /demo가 막히기 전). 승인된 수단으로 막은 뒤 그 jar로
+   C5의 유효 기준 요청 `V`(같은 origin, 유효 서명·token, 새 UUID)를 한 번 보낸다. 기대값: 성공 code(2xx)가 아니고
+   (연결 불가 또는 차단 수단의 거절 code), 그 jar의 `GET /demo/state` code가 차단 전과 같아 방문 공간이 생기지 않았다.
+   C5의 무효 요청은 admission이 열려 있어도 거절되므로 차단 증거로 쓰지 않는다.
 2. demo 중단: 승인된 서비스 수단으로 정지. C1이 응답 불가임을 확인.
 3. 진행 작업 취소/drain/dispose: 종료 로그의 `Demo shutdown` 줄(`src/main.py:291-298`)에서 `pending`·`codes`만 기록. 범위별 drain은 최대 `DEMO_DRAIN_SECONDS`(`src/main.py:289`).
 4. 승인된 이전 동일 tuple로 복구: 승인 기록의 이전 tuple을 같은 수단으로 시작하고 C1=200과 tuple 일치를 기록.

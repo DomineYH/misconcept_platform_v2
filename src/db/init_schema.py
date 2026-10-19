@@ -7,18 +7,12 @@ import os
 # CLI preflight precedes imports that can initialize configuration or engines.
 if __name__ == "__main__" and os.environ.get("APP_MODE", "normal") != "normal":
     mode = os.environ.get("APP_MODE")
-    print(
-        json.dumps(
-            dict(
-                code=(
-                    "DEMO_ACTION_FORBIDDEN"
-                    if mode == "demo"
-                    else "DEMO_CONFIGURATION_INVALID"
-                ),
-                exit_status=1,
-            )
-        )
+    code = (
+        "DEMO_ACTION_FORBIDDEN"
+        if mode == "demo"
+        else "DEMO_CONFIGURATION_INVALID"
     )
+    print(json.dumps(dict(code=code, exit_status=1)))
     raise SystemExit(1)
 
 

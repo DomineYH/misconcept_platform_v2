@@ -19,7 +19,17 @@ MODULES = (
 
 @pytest.mark.parametrize("module", MODULES)
 @pytest.mark.parametrize("flag", ["--dry-run", "--apply"])
-def test_demo_cli_blocks_before_files_db_parser_or_testing(module, flag):
+@pytest.mark.parametrize(
+    "app_mode,code",
+    [
+        ("demo", "DEMO_ACTION_FORBIDDEN"),
+        ("unknown", "DEMO_CONFIGURATION_INVALID"),
+        ("", "DEMO_CONFIGURATION_INVALID"),
+    ],
+)
+def test_cli_blocks_invalid_modes_before_files_db_parser_or_testing(
+    module, flag, app_mode, code
+):
     result = run_python(
         f"""
 import argparse
@@ -43,11 +53,11 @@ with patch("builtins.open", forbidden), patch("pathlib.Path.open", forbidden), p
         raise AssertionError("CLI did not exit")
 assert os.environ.get("TESTING") is None
 """,
-        env={"APP_MODE": "demo"},
+        env={"APP_MODE": app_mode},
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "code": "DEMO_ACTION_FORBIDDEN",
+        "code": code,
         "exit_status": 1,
     }
 

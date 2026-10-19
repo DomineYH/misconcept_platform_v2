@@ -40,6 +40,10 @@ DEMO_FORBIDDEN_ENV = (
     "OPENAI_ADMIN_KEY",
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_IDENTITY_TOKEN",
+    "ANTHROPIC_IDENTITY_TOKEN_FILE",
+    "ANTHROPIC_PROFILE",
+    "ANTHROPIC_CONFIG_DIR",
     "GOOGLE_API_KEY",
     "GEMINI_API_KEY",
     "AZURE_OPENAI_API_KEY",
@@ -57,7 +61,7 @@ DEMO_FORBIDDEN_ENV = (
 )
 
 
-def _url_host(value, *, production, paths):
+def _url_host(value, *, development, paths):
     try:
         url = urlsplit(value)
         host = (url.hostname or "").rstrip(".")
@@ -68,6 +72,9 @@ def _url_host(value, *, production, paths):
             loopback = address.is_loopback
         except ValueError:
             host = host.encode("idna").decode("ascii").lower()
+            # Browsers interpret numeric final labels as IPv4 aliases.
+            if re.fullmatch(r"[0-9]+|0x[0-9a-f]*", host.rsplit(".", 1)[-1]):
+                raise DemoError("CONFIGURATION_INVALID")
             loopback = host == "localhost"
         if (
             not host
@@ -83,7 +90,7 @@ def _url_host(value, *, production, paths):
             or (port is not None and port == 0)
             or (
                 url.scheme != "https"
-                and not (url.scheme == "http" and not production and loopback)
+                and not (url.scheme == "http" and development and loopback)
             )
         ):
             raise ValueError
@@ -183,11 +190,11 @@ class Config(BaseSettings):
 
     @model_validator(mode="after")
     def validate_demo(self):
-        production = self.is_production
+        development = self.ENV == "development"
         normal_host = None
         if self.NORMAL_ORIGIN:
             normal_host = _url_host(
-                self.NORMAL_ORIGIN, production=production, paths=("",)
+                self.NORMAL_ORIGIN, development=development, paths=("",)
             )
         if self.DEMO_PUBLIC_URL:
             if normal_host is None:
@@ -195,7 +202,7 @@ class Config(BaseSettings):
             if (
                 _url_host(
                     self.DEMO_PUBLIC_URL,
-                    production=production,
+                    development=development,
                     paths=("/", "/demo"),
                 )
                 == normal_host
@@ -210,7 +217,7 @@ class Config(BaseSettings):
             raise DemoError("CONFIGURATION_INVALID")
         if (
             normal_host is None
-            or _url_host(self.DEMO_ORIGIN, production=production, paths=("",))
+            or _url_host(self.DEMO_ORIGIN, development=development, paths=("",))
             == normal_host
         ):
             raise DemoError("CONFIGURATION_INVALID")

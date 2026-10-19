@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 DEMO_ENV = {
     "APP_MODE": "demo",
@@ -241,6 +243,122 @@ for field in ("DEMO_SESSION_SECRET", "DEMO_CSRF_SECRET"):
             pass
         else:
             raise AssertionError((field, pattern))
+"""
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "ANTHROPIC_IDENTITY_TOKEN",
+        "ANTHROPIC_IDENTITY_TOKEN_FILE",
+        "ANTHROPIC_PROFILE",
+        "ANTHROPIC_CONFIG_DIR",
+    ],
+)
+def test_demo_rejects_anthropic_identity_and_profile_inputs(key):
+    result = run_python("import src.config", env=DEMO_ENV | {key: "forbidden"})
+    assert result.returncode != 0
+    assert "DEMO_CONFIGURATION_INVALID" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "field", ["DEMO_ORIGIN", "NORMAL_ORIGIN", "DEMO_PUBLIC_URL"]
+)
+def test_demo_rejects_browser_numeric_host_aliases(field):
+    result = run_python(
+        f"""
+from src.config import Config
+from src.demo.database import DemoError
+for host in ("127.1", "2130706433", "0x7f000001", "0177.0.0.1", "api.123", "api.0x"):
+    value = "https://" + host + ("/demo" if {field!r} == "DEMO_PUBLIC_URL" else "")
+    try:
+        Config(**{{{field!r}: value}})
+    except DemoError as error:
+        assert error.code == "DEMO_CONFIGURATION_INVALID"
+    else:
+        raise AssertionError(({field!r}, host))
+"""
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("environment", ["staging", "", "developmnt"])
+def test_demo_rejects_loopback_http_outside_development(environment):
+    result = run_python(
+        f"""
+from src.config import Config
+from src.demo.database import DemoError
+for field in ("DEMO_ORIGIN", "NORMAL_ORIGIN", "DEMO_PUBLIC_URL"):
+    value = "http://127.0.0.1" + ("/demo" if field == "DEMO_PUBLIC_URL" else "")
+    try:
+        Config(ENV={environment!r}, **{{field: value}})
+    except DemoError as error:
+        assert error.code == "DEMO_CONFIGURATION_INVALID"
+    else:
+        raise AssertionError((field, {environment!r}))
+"""
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_demo_accepts_canonical_hosts_and_development_loopback():
+    result = run_python(
+        """
+from src.config import Config
+for field in ("DEMO_ORIGIN", "NORMAL_ORIGIN", "DEMO_PUBLIC_URL"):
+    for host in ("127.0.0.1", "example42.invalid"):
+        for scheme in ("http", "https") if host == "127.0.0.1" else ("https",):
+            value = scheme + "://" + host + ("/demo" if field == "DEMO_PUBLIC_URL" else "")
+            Config(ENV="development", **{field: value})
+"""
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_normal_link_numeric_aliases_and_loopback_environment_validation():
+    result = run_python(
+        """
+from src.config import Config
+from src.demo.database import DemoError
+for field in ("NORMAL_ORIGIN", "DEMO_PUBLIC_URL"):
+    for host in ("127.1", "2130706433", "0x7f000001", "0177.0.0.1"):
+        value = "https://" + host + ("/demo" if field == "DEMO_PUBLIC_URL" else "")
+        try:
+            Config(**{field: value})
+        except DemoError:
+            pass
+        else:
+            raise AssertionError((field, host))
+    value = "http://127.0.0.1" + ("/demo" if field == "DEMO_PUBLIC_URL" else "")
+    for environment in ("staging", "", "developmnt"):
+        try:
+            Config(ENV=environment, **{field: value})
+        except DemoError:
+            pass
+        else:
+            raise AssertionError((field, environment))
+    Config(ENV="development", **{field: value})
+""",
+        env={"TESTING": "true", "NORMAL_ORIGIN": "https://normal.invalid"},
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("field", ["DEMO_SESSION_SECRET", "DEMO_CSRF_SECRET"])
+def test_demo_secret_31_and_32_character_boundary(field):
+    result = run_python(
+        f"""
+from src.config import Config
+from src.demo.database import DemoError
+try:
+    Config(**{{{field!r}: "b" * 31}})
+except DemoError as error:
+    assert error.code == "DEMO_CONFIGURATION_INVALID"
+else:
+    raise AssertionError("31 characters accepted")
+assert getattr(Config(**{{{field!r}: "b" * 32}}), {field!r}).get_secret_value() == "b" * 32
 """
     )
     assert result.returncode == 0, result.stderr

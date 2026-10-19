@@ -278,9 +278,26 @@ class _RequestDBState:
             finally:
                 self.guard = self.handle = self.guard_owner = None
 
-    def watch_transactions(self):
+    async def watch_transactions(self):
         # Events also cover ORM autoflush and run_sync; callers cannot bypass DML guards.
         sync = self.session.sync_session
+
+        def watch_connection(connection):
+            @event.listens_for(connection, "before_cursor_execute")
+            def before_cursor_execute(*args):
+                self.ensure_open()
+
+            @event.listens_for(connection, "commit")
+            def before_connection_commit(*args):
+                self.ensure_open()
+
+        # The User lookup already began a transaction before these listeners exist.
+        watch_connection((await self.session.connection()).sync_connection)
+
+        @event.listens_for(sync, "after_begin")
+        def after_begin(session, transaction, connection):
+            if transaction.parent is None:
+                watch_connection(connection)
 
         @event.listens_for(sync, "before_flush")
         def before_flush(*args):
@@ -332,11 +349,9 @@ class DemoRequestDB:
             settings.DEMO_CSRF_SECRET.get_secret_value(), salt="demo-csrf-v1"
         )
 
-    async def context(self, request, bootstrap, generation, epoch):
-        existing = getattr(request.state, "demo_context", None)
-        if existing is not None:
-            await existing._request_db.check()
-            return existing
+    async def validate_namespace(
+        self, request, bootstrap, generation=None, epoch=None
+    ):
         visitor = self.visitors.visitor_for_bootstrap(bootstrap)
         if visitor is None:
             raise DemoError("SESSION_REQUIRED")
@@ -383,6 +398,16 @@ class DemoRequestDB:
                     reject("INVALID_REQUEST")
                 if value != expected[key]:
                     reject("STALE_ROLE" if key == "da" else "STALE_GENERATION")
+        return visitor, snapshot
+
+    async def context(self, request, bootstrap, generation, epoch):
+        existing = getattr(request.state, "demo_context", None)
+        if existing is not None:
+            await existing._request_db.check()
+            return existing
+        visitor, snapshot = await self.validate_namespace(
+            request, bootstrap, generation, epoch
+        )
         if (
             snapshot.state == "reset_failed"
             and request.url.path == "/demo/reset"
@@ -415,7 +440,7 @@ class DemoRequestDB:
             object.__setattr__(ctx, "_request_db", state)
             object.__setattr__(ctx, "db", _RequestSession(state))
             object.__setattr__(ctx, "user", user)
-            state.watch_transactions()
+            await state.watch_transactions()
             request.state.demo_context = ctx
             return ctx
         except BaseException:
@@ -624,16 +649,24 @@ def demo_request_handler(handler):
         try:
             runtime = _demo_runtime(request)
             security = get_demo_security(request)
-            if (
-                request.url.path not in ("/demo", "/demo/state")
-                or request.method != "GET"
-            ):
-                bootstrap = await security.verified_bootstrap(
-                    request, issue=False
-                )
-                if request.method not in ("GET", "HEAD", "OPTIONS"):
-                    await security.verify_csrf(request, bootstrap)
+            bootstrap = await security.verified_bootstrap(
+                request,
+                issue=(
+                    request.method == "GET"
+                    and request.url.path in ("/demo", "/demo/state")
+                    and "request_id" not in request.query_params
+                ),
+            )
+            if request.method not in ("GET", "HEAD", "OPTIONS"):
+                await security.verify_csrf(request, bootstrap)
             await _namespace(request)
+            if request.state.demo_invalid_selector:
+                raise DemoError("INVALID_REQUEST")
+            # Controls resolve namespace only after their receipt/replay lookup.
+            if request.url.path != "/demo" and not request.url.path.startswith(
+                "/demo/"
+            ):
+                await runtime.validate_namespace(request, bootstrap)
             response = await handler(request)
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and not request.url.path.startswith("/demo/"):

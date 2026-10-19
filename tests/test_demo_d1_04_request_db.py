@@ -30,6 +30,10 @@ import pytest
         "restart_recovery",
         "malformed_form",
         "rollback_failure",
+        "captured_connection",
+        "typed_namespace_priority",
+        "control_selectors",
+        "signer_lifecycle_matrix",
     ],
 )
 def test_demo_request_boundary(case, tmp_path):
@@ -302,6 +306,18 @@ class Harness:
         class StrictForm(BaseModel):
             model_config = ConfigDict(extra="forbid")
             body: str
+
+        @app.post("/typed")
+        async def typed_record(
+            value: StrictForm,
+            user=Depends(deps.get_current_user),
+            db=Depends(deps.get_db_session),
+        ):
+            await db.execute(
+                text("UPDATE synthetic_record SET body=:body WHERE id=1"),
+                {"body": value.body},
+            )
+            return {"body": value.body, "user_id": user.id}
 
         @app.post("/form")
         async def form_record(
@@ -1155,6 +1171,283 @@ async def rollback_failure(h):
         session.rollback, session.close = rollback, close
         h.visitors.release_lease = release
         await h.runtime.release_request_db(ctx)
+
+
+async def captured_connection(h):
+    from sqlalchemy.exc import ResourceClosedError
+
+    client = await h.client()
+    state = await h.start(client)
+    ctx = await h.context(client, state)
+    connection = await ctx.db.connection()
+    assert isinstance(
+        await connection.run_sync(
+            lambda sync: sync.connection.driver_connection.in_transaction
+        ),
+        bool,
+    )
+    await ctx.db.execute(
+        text("UPDATE synthetic_record SET body='first transaction' WHERE id=1")
+    )
+    await ctx.db.commit()
+    connection = await ctx.db.connection()
+    assert (await connection.execute(text("SELECT 1"))).scalar_one() == 1
+    await ctx.db.execute(
+        text("UPDATE synthetic_record SET body='must roll back' WHERE id=1")
+    )
+    h.runtime.handoff_request_db(ctx)
+    with pytest.raises(DemoError):
+        await connection.execute(text("SELECT 1"))
+    with pytest.raises(DemoError):
+        await connection.commit()
+    await h.runtime.release_request_db(ctx)
+    assert h.visitors.lease_count(ctx.scope) == 0
+    with pytest.raises((DemoError, ResourceClosedError)):
+        await connection.execute(text("SELECT 1"))
+    released = await h.context(client, state)
+    connection = await released.db.connection()
+    await h.runtime.release_request_db(released)
+    with pytest.raises((DemoError, ResourceClosedError)):
+        await connection.execute(text("SELECT 1"))
+    response = await client.get("/records", params=h.namespace(state))
+    assert response.status_code == 200, response.text
+    assert response.json()["body"] == "first transaction"
+    initial = await h.context(client, state)
+    connection = await initial.db.connection()
+    with pytest.raises(DemoError):
+        await connection.execute(
+            text("UPDATE synthetic_record SET body='unguarded' WHERE id=1")
+        )
+    await initial.db.execute(
+        text(
+            "UPDATE synthetic_record SET body='initial transaction' WHERE id=1"
+        )
+    )
+    h.runtime.handoff_request_db(initial)
+    with pytest.raises(DemoError):
+        await connection.execute(text("SELECT 1"))
+    with pytest.raises(DemoError):
+        await connection.commit()
+    await h.runtime.release_request_db(initial)
+    response = await client.get("/records", params=h.namespace(state))
+    assert response.status_code == 200, response.text
+    assert response.json()["body"] == "first transaction"
+
+
+async def typed_namespace_priority(h):
+    client = await h.client()
+    state = await h.start(client)
+    response = await client.post(
+        "/typed",
+        json={"body": "typed body"},
+        params=h.namespace(state),
+        headers=h.headers(client),
+    )
+    assert response.status_code == 200, response.text
+    forged = await h.client()
+    forged.cookies.set("demo_session_id", "forged")
+    for params, namespace_headers in (
+        (h.namespace(state) | {"dg": state["generation"] + 1}, {}),
+        (
+            {},
+            {
+                "x-demo-scope": state["browser_scope_id"],
+                "x-demo-generation": str(state["generation"] + 1),
+                "x-demo-auth-epoch": str(state["auth_epoch"]),
+            },
+        ),
+    ):
+        headers = (
+            h.headers(client)
+            | namespace_headers
+            | {"content-type": "application/json"}
+        )
+        error(
+            await forged.post(
+                "/typed", content=b"{", params=params, headers=headers
+            ),
+            "SESSION_REQUIRED",
+        )
+        error(
+            await client.post(
+                "/typed",
+                content=b"{",
+                params=params,
+                headers=headers | {"x-csrf-token": "forged"},
+            ),
+            "CSRF_INVALID",
+        )
+        response = await client.post(
+            "/typed", content=b"{", params=params, headers=headers
+        )
+        error(response, "STALE_GENERATION")
+        assert response.status_code == 409, response.text
+    error(
+        await client.post(
+            "/typed",
+            content=b"{",
+            params=h.namespace(state),
+            headers=h.headers(client) | {"content-type": "application/json"},
+        ),
+        "INVALID_REQUEST",
+    )
+    ctx = await h.context(client, state)
+    await h.runtime.release_request_db(ctx)
+    assert h.visitors.lease_count(ctx.scope) == 0
+
+
+async def control_selectors(h):
+    client = await h.client()
+    assert (await client.get("/demo")).status_code == 200
+    forged = await h.client()
+    forged.cookies.set("demo_session_id", "forged")
+    command = {"request_id": str(uuid4()), "role": "teacher"}
+    params = {"visitor_id": "attacker", "db_path": "/normal.db"}
+    error(
+        await forged.post(
+            "/demo/start",
+            params=params,
+            json=command,
+            headers=h.headers(client),
+        ),
+        "SESSION_REQUIRED",
+    )
+    error(
+        await client.post(
+            "/demo/start",
+            params=params,
+            json=command,
+            headers=h.headers(client) | {"x-csrf-token": "forged"},
+        ),
+        "CSRF_INVALID",
+    )
+    assert not h.visitors._states
+    for selector, value in (
+        ("visitor_id", "attacker"),
+        ("db_path", "/normal.db"),
+        ("user_id", "1"),
+        ("database_url", "sqlite+aiosqlite:////normal.db"),
+    ):
+        for kwargs in (
+            {"params": {selector: value}, "json": command},
+            {"data": command | {selector: value}},
+        ):
+            response = await client.post(
+                "/demo/start", headers=h.headers(client), **kwargs
+            )
+            error(response, "INVALID_REQUEST")
+            assert response.status_code == 422, response.text
+            assert not h.visitors._states
+    response = await client.post(
+        "/demo/start",
+        json=command,
+        headers=h.headers(client) | {"x-demo-visitor-id": "attacker"},
+    )
+    error(response, "INVALID_REQUEST")
+    assert not h.visitors._states
+
+
+async def signer_lifecycle_matrix(h):
+    client = await h.client()
+    assert (await client.get("/demo")).status_code == 200
+    entered, proceed = asyncio.Event(), asyncio.Event()
+    clone = h.root.clone
+
+    async def gated_clone(*args, **kwargs):
+        entered.set()
+        await proceed.wait()
+        return await clone(*args, **kwargs)
+
+    h.root.clone = gated_clone
+    start_command = {"request_id": str(uuid4()), "role": "teacher"}
+    start = asyncio.create_task(
+        client.post(
+            "/demo/start", json=start_command, headers=h.headers(client)
+        )
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        for response in (
+            await client.post(
+                "/demo/start", json=start_command, headers=h.headers(client)
+            ),
+            await client.get(
+                "/demo/state",
+                params={"request_id": start_command["request_id"]},
+            ),
+        ):
+            assert response.status_code == 202, response.text
+            assert response.json()["state"] == "preparing"
+            assert "set-cookie" not in response.headers
+            assert response.headers["cache-control"] == "no-store"
+        response = await client.get("/demo/state")
+        assert response.status_code == 200, response.text
+        assert response.json()["state"] == "preparing"
+        assert len(response.headers.get_list("set-cookie")) == 2
+    finally:
+        proceed.set()
+        response = await start
+    assert response.status_code == 201, response.text
+    assert "set-cookie" not in response.headers
+    state = response.json()
+    assert (await client.get("/demo/state")).status_code == 200
+    entered.clear()
+    proceed.clear()
+    reset_id = str(uuid4())
+    reset = asyncio.create_task(h.reset(client, state, reset_id))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        for response in (
+            await h.reset(client, state, reset_id),
+            await client.get("/demo/state", params={"request_id": reset_id}),
+        ):
+            assert response.status_code == 202, response.text
+            assert response.json()["state"] == "resetting"
+            assert "set-cookie" not in response.headers
+            assert response.headers["cache-control"] == "no-store"
+        response = await client.get("/demo/state")
+        assert response.status_code == 200, response.text
+        assert response.json()["state"] == "resetting"
+        assert len(response.headers.get_list("set-cookie")) == 2
+        old_token = client.cookies.get("demo_csrftoken")
+    finally:
+        proceed.set()
+        response = await reset
+        h.root.clone = clone
+    assert response.status_code == 200, response.text
+    assert "set-cookie" not in response.headers
+    second = response.json()
+    error(await h.reset(client, state, reset_id), "CSRF_INVALID")
+    response = await client.get("/demo/state")
+    assert response.status_code == 200, response.text
+    assert client.cookies.get("demo_csrftoken") != old_token
+    response = await client.post(
+        "/demo/start", json=start_command, headers=h.headers(client)
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["historical"] is True
+    assert response.json()["current"]["generation"] == second["generation"]
+    assert "set-cookie" not in response.headers
+    response = await h.reset(client, second)
+    assert response.status_code == 200, response.text
+    current = response.json()
+    assert (await client.get("/demo/state")).status_code == 200
+    for response in (
+        await h.reset(client, state, reset_id),
+        await client.get("/demo/state", params={"request_id": reset_id}),
+    ):
+        assert response.status_code == 200, response.text
+        assert response.json()["historical"] is True
+        assert response.json()["result"]["generation"] == second["generation"]
+        assert response.json()["result"]["next_url"] is None
+        assert response.json()["current"]["generation"] == current["generation"]
+        assert response.json()["current"]["auth_epoch"] == current["auth_epoch"]
+        assert "set-cookie" not in response.headers
+    response = await client.get("/demo/state")
+    assert response.status_code == 200, response.text
+    assert response.json()["generation"] == current["generation"]
+    assert response.json()["auth_epoch"] == current["auth_epoch"]
+    assert response.json()["browser_scope_id"] == current["browser_scope_id"]
 
 
 async def run_case(case, tmp_path):

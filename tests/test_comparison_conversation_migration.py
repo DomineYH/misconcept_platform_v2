@@ -72,7 +72,7 @@ async def test_036_is_additive_repeatable_and_matches_fresh_install(tmp_path):
                 await db.exec_driver_sql("PRAGMA integrity_check")
             ).scalar() == "ok"
             upgraded_schema = await schema(db)
-        await migrate.run_all_migrations(db_engine=fresh)
+        await migrate.run_all_migrations(through=36, db_engine=fresh)
         async with fresh.connect() as db:
             assert await schema(db) == upgraded_schema
     finally:

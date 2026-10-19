@@ -127,10 +127,6 @@ async def make_root(tmp_path, *, max_db_bytes=None):
                 ),
             ],
         )
-        # G2 owns production metadata DDL; this models that explicit boundary only.
-        db.execute(
-            "CREATE TABLE demo_metadata (id INTEGER PRIMARY KEY, kind TEXT, contract_version TEXT, content_version TEXT, fixture_version TEXT, db_schema_version TEXT, manifest_sha256 TEXT, visitor_id TEXT, generation INTEGER)"
-        )
         db.execute(
             "INSERT INTO demo_metadata VALUES (1,'demo_seed','d0-03-v1-r3','d0-02-v1','demo-fixture-v1','unit_demo_metadata.sql',?,NULL,NULL)",
             (digest,),
@@ -362,6 +358,7 @@ async def test_changed_manifest_and_invalid_seed_do_not_publish_or_leave_candida
         assert list(root.path.glob("*.db")) == [root.path / "seed.db"]
         manifest.write_bytes(original)
         with sqlite3.connect(root.path / "seed.db") as db:
+            db.execute("PRAGMA ignore_check_constraints=ON")
             db.execute("UPDATE demo_metadata SET kind='ordinary'")
         with pytest.raises(DemoError, match="DEMO_VERSION_MISMATCH"):
             await root.clone(str(uuid4()), 1)
@@ -753,10 +750,12 @@ async def test_seed_validation_rejects_manifest_metadata_and_provider_tampering(
                 "DELETE FROM _migrations WHERE filename='unit_demo_metadata.sql'"
             )
         if mutation == "metadata_rows":
+            db.execute("PRAGMA ignore_check_constraints=ON")
             db.execute(
-                "INSERT INTO demo_metadata(id,kind) VALUES(2,'demo_seed')"
+                "INSERT INTO demo_metadata SELECT 2,kind,contract_version,content_version,fixture_version,db_schema_version,manifest_sha256,visitor_id,generation FROM demo_metadata WHERE id=1"
             )
         if mutation == "seed_generation":
+            db.execute("PRAGMA ignore_check_constraints=ON")
             db.execute("UPDATE demo_metadata SET generation=1")
         if mutation == "key_material":
             db.execute(

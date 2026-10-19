@@ -171,10 +171,6 @@ async def make_root(tmp_path, *, max_db_bytes=None):
             "CREATE TABLE session_feedback_report (id INTEGER PRIMARY KEY, session_id INTEGER, version INTEGER, status TEXT, payload_json TEXT)",
         ):
             db.execute(ddl)
-        # G2 owns production metadata DDL; this models that explicit boundary only.
-        db.execute(
-            "CREATE TABLE demo_metadata (id INTEGER PRIMARY KEY, kind TEXT, contract_version TEXT, content_version TEXT, fixture_version TEXT, db_schema_version TEXT, manifest_sha256 TEXT, visitor_id TEXT, generation INTEGER)"
-        )
         db.execute(
             "INSERT INTO demo_metadata VALUES (1,'demo_seed','d0-03-v1-r3','d0-02-v1','demo-fixture-v1','unit_demo_metadata.sql',?,NULL,NULL)",
             (digest,),

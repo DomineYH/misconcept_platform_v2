@@ -773,3 +773,25 @@ async def test_seed_validation_rejects_manifest_metadata_and_provider_tampering(
         assert not list(root.path.glob("*.staging"))
     finally:
         root.close()
+
+
+async def test_generation_factory_rejects_session_bind_override(tmp_path):
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    root = await make_root(tmp_path)
+    ref = await root.clone(str(uuid4()), 1)
+    forbidden = tmp_path / "forbidden.db"
+    other = create_async_engine(f"sqlite+aiosqlite:///{forbidden}")
+    try:
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            async with ref.factory(bind=other) as db:
+                await db.execute(text("SELECT 1"))
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            ref.factory(binds={object(): other})
+        assert not forbidden.exists()
+    finally:
+        await other.dispose()
+        ref.factory.retire()
+        await root.cleanup(ref)
+        root.close()

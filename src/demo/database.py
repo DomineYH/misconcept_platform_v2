@@ -935,6 +935,8 @@ class GenerationFactory:
 
     def __call__(self, **kwargs):
         self._check()
+        if "bind" in kwargs or "binds" in kwargs:
+            raise DemoError("INVALID_REQUEST")
         return self._sessions(**kwargs)
 
     def set_write_check(self, callback):

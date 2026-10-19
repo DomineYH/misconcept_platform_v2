@@ -2,8 +2,10 @@
 
 import asyncio
 import hmac
+import math
 import secrets
 import time
+from datetime import timezone
 from functools import wraps
 from typing import AsyncGenerator
 from urllib.parse import urlencode, urlsplit
@@ -25,11 +27,57 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.config import config
 from src.db.connection import AsyncSessionLocal
 from src.demo.database import DemoError
-from src.demo.visitors import ControlContext
+from src.demo.session import CONTENT_VERSION, CONTRACT_VERSION, FIXTURE_VERSION
+from src.demo.visitors import ControlContext, DemoContext
 from src.i18n import display_language, t, translate, ui_strings
 
+
+def demo_template_context(request: Request) -> dict:
+    """§24 `demo_config`: display-safe fields only, never factories/paths/secrets."""
+    public_url = config.DEMO_PUBLIC_URL or None
+    if config.APP_MODE == "normal":
+        return {"demo_config": {"mode": "normal", "public_url": public_url}}
+    ctx = getattr(request.state, "demo_context", None)
+    ready = isinstance(ctx, DemoContext)
+    return {
+        "demo_config": {
+            "mode": "demo",
+            "contract_version": CONTRACT_VERSION,
+            "content_version": CONTENT_VERSION,
+            "fixture_version": FIXTURE_VERSION,
+            "state": "ready" if ready else None,
+            "browser_scope_id": ctx.browser_scope_id if ready else None,
+            "generation": ctx.generation if ready else None,
+            "auth_epoch": ctx.auth_epoch if ready else None,
+            "role": ctx.role if ready else None,
+            "expires_at": (
+                ctx.expires_at.astimezone(timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+                if ready
+                else None
+            ),
+            "idle_ttl_seconds": config.DEMO_IDLE_TTL_SECONDS,
+            "absolute_ttl_seconds": config.DEMO_ABSOLUTE_TTL_SECONDS,
+            "active": False,
+            "last_error": None,
+            "start_url": "/demo/start",
+            "role_url": "/demo/role",
+            "reset_url": "/demo/reset",
+            "state_url": "/demo/state",
+            "public_url": public_url,
+            "csrf_cookie_name": "demo_csrftoken",
+            "csrf_header_name": "x-csrf-token",
+            "ui_language": display_language(request),
+            "tour_facts": None,
+        }
+    }
+
+
 # Shared Jinja2Templates instance
-templates = Jinja2Templates(directory="src/templates")
+templates = Jinja2Templates(
+    directory="src/templates", context_processors=[demo_template_context]
+)
 templates.env.globals.update(
     t=t, display_language=display_language, ui_strings=ui_strings
 )
@@ -348,6 +396,24 @@ class DemoRequestDB:
         self.csrf_signer = URLSafeTimedSerializer(
             settings.DEMO_CSRF_SECRET.get_secret_value(), salt="demo-csrf-v1"
         )
+        self._windows = {}
+
+    def rate_limit(self, key, limit):
+        """§8 fixed 60-second window; Retry-After is the window's remainder."""
+        now = self.visitors.clock.monotonic()
+        if key not in self._windows:
+            for stale in [
+                k for k, v in self._windows.items() if now >= v[0] + 60
+            ]:
+                del self._windows[stale]
+        start, count = self._windows.get(key, (now, 0))
+        if now >= start + 60:
+            start, count = now, 0
+        if count >= limit:
+            raise DemoError(
+                "RATE_LIMITED", retry_after=max(1, math.ceil(start + 60 - now))
+            )
+        self._windows[key] = (start, count + 1)
 
     async def validate_namespace(
         self, request, bootstrap, generation=None, epoch=None
@@ -657,11 +723,24 @@ def demo_request_handler(handler):
                     and "request_id" not in request.query_params
                 ),
             )
+            visitor = runtime.visitors.visitor_for_bootstrap(bootstrap)
+            if visitor is not None:
+                runtime.rate_limit(
+                    ("visitor", visitor.visitor_id),
+                    runtime.settings.DEMO_REQUESTS_PER_MINUTE,
+                )
             if request.method not in ("GET", "HEAD", "OPTIONS"):
                 await security.verify_csrf(request, bootstrap)
             await _namespace(request)
             if request.state.demo_invalid_selector:
                 raise DemoError("INVALID_REQUEST")
+            if request.method == "POST" and request.url.path == "/demo/start":
+                # Counts signed, CSRF-valid starts by the ASGI client, which only
+                # a trusted proxy (server --forwarded-allow-ips) may rewrite.
+                runtime.rate_limit(
+                    ("ip", request.client.host if request.client else ""),
+                    runtime.settings.DEMO_STARTS_PER_IP_PER_MINUTE,
+                )
             # Controls resolve namespace only after their receipt/replay lookup.
             if request.url.path != "/demo" and not request.url.path.startswith(
                 "/demo/"
@@ -677,6 +756,11 @@ def demo_request_handler(handler):
             response = error_response(error)
         except RequestValidationError:
             response = error_response(DemoError("INVALID_REQUEST"))
+        except StarletteHTTPException as error:
+            # Render while this request's lease is live; error pages read no other DB.
+            response = await request.app.exception_handlers[
+                StarletteHTTPException
+            ](request, error)
         finally:
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and runtime is not None:

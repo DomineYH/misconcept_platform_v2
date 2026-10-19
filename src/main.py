@@ -1,5 +1,6 @@
 """Main FastAPI application entry point."""
 
+import asyncio
 import json
 import logging
 import re
@@ -21,10 +22,16 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette_csrf import CSRFMiddleware
 
-from src.api.dependencies import AuthenticationRequired, templates
+from src.api.dependencies import (
+    AuthenticationRequired,
+    DemoRequestDB,
+    get_current_user,
+    templates,
+)
 from src.config import config
 from src.db.connection import AsyncSessionLocal, close_db, init_db
 from src.db.seed import ensure_default_admin_account
+from src.demo.database import DatabaseRoot, DemoError
 from src.models import User
 
 # Configure structured JSON logging
@@ -190,14 +197,111 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
+def demo_seed():
+    """Return the verified product (SeedSpec, TourContent) pair.
+
+    #197 owns the product seed and tour content; until it is bound here,
+    demo startup refuses instead of serving unverified data.
+    """
+    raise DemoError("CONFIGURATION_INVALID")
+
+
+async def _demo_cleanup(visitors, interval):
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            result = await visitors.cleanup_tick()
+        except Exception as error:
+            # Codes only: exception text may carry real root paths.
+            logger.error(
+                "Demo cleanup failed",
+                extra={"code": getattr(error, "code", type(error).__name__)},
+            )
+            if isinstance(error, DemoError):
+                continue  # §8: retried on the next tick; /health reports it.
+            raise
+        logger.info(
+            "Demo cleanup",
+            extra={
+                "removed": result.removed,
+                "pending": result.pending,
+                "codes": list(result.failure_codes),
+            },
+        )
+
+
+@asynccontextmanager
+async def demo_lifespan(app: FastAPI):
+    """§4: verified root and seed only; no normal init, bootstrap or orphan scan."""
+    from src.demo.lifecycle import Lifecycle
+    from src.demo.session import DemoSession
+    from src.demo.visitors import VisitorRegistry
+
+    settings = config.demo_settings
+    root = None
+    try:
+        root = DatabaseRoot(
+            config.DEMO_DATA_ROOT,
+            initialize=True,
+            max_db_bytes=settings.max_db_bytes,
+        ).open()
+        spec, tour_content = demo_seed()
+        root.validate_seed(spec)
+        lifecycle = Lifecycle()
+        visitors = VisitorRegistry(root, lifecycle=lifecycle, settings=settings)
+        lifecycle.visitors = visitors
+        request_db = DemoRequestDB(
+            visitors, lifecycle, seed_refs=tour_content.seed_refs
+        )
+        session = DemoSession(
+            visitors,
+            lifecycle,
+            request_db,
+            tour_content=tour_content,
+            drain_seconds=settings.drain_seconds,
+        )
+    except Exception as error:
+        if root is not None:
+            root.close()
+        # Chained OS errors would print the real root path in startup logs.
+        raise DemoError(
+            getattr(error, "code", "CONFIGURATION_INVALID")
+        ) from None
+    app.state.demo_request_db = request_db
+    app.state.demo_session = session
+    app.state.demo_seed = spec
+    app.state.demo_cleanup = asyncio.create_task(
+        _demo_cleanup(visitors, settings.cleanup_interval_seconds)
+    )
+    try:
+        yield
+    finally:
+        try:
+            app.state.demo_cleanup.cancel()
+            await asyncio.gather(app.state.demo_cleanup, return_exceptions=True)
+            await session.shutdown()
+            # Each retired scope drains for at most DEMO_DRAIN_SECONDS.
+            result = await visitors.shutdown()
+            logger.info(
+                "Demo shutdown",
+                extra={
+                    "removed": result.removed,
+                    "pending": result.pending,
+                    "codes": list(result.failure_codes),
+                },
+            )
+        finally:
+            root.close()
+            app.state.demo_request_db = app.state.demo_session = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     if config.APP_MODE == "demo":
-        from src.demo.database import DemoError
-
-        # shortcut: demo wiring is incomplete, remove at stage 3 integration.
-        raise DemoError("CONFIGURATION_INVALID")
+        async with demo_lifespan(app):
+            yield
+        return
     # Startup - validate config in non-test mode
     if not config.TESTING:
         config.validate()
@@ -245,6 +349,7 @@ async def html_http_error_handler(
     request: Request, exc: HTTPException
 ) -> Response:
     """Render safe document errors while preserving the default API contract."""
+    demo = config.APP_MODE == "demo"
     if (
         exc.status_code not in (403, 404)
         or request.method not in ("GET", "HEAD")
@@ -254,19 +359,44 @@ async def html_http_error_handler(
             for value in request.headers.get("accept", "").split(",")
         )
     ):
-        return await http_exception_handler(request, exc)
+        if demo and exc.status_code in (403, 404):
+            from src.api.routes.demo import error_response
+
+            return error_response(
+                DemoError(
+                    "ACTION_FORBIDDEN"
+                    if exc.status_code == 403
+                    else "RESOURCE_NOT_FOUND"
+                )
+            )
+        response = await http_exception_handler(request, exc)
+        if demo:
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     user = None
-    user_id = request.session.get("user_id")
-    if user_id:
-        async with AsyncSessionLocal() as db:
-            user = await db.get(User, user_id)
-    return templates.TemplateResponse(
+    if demo:
+        # Only this request's current visitor context may name the user.
+        db = getattr(getattr(request.state, "demo_context", None), "db", None)
+        if db is not None:
+            try:
+                user = await get_current_user(request, db)
+            except DemoError:
+                user = None
+    else:
+        user_id = request.session.get("user_id")
+        if user_id:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+    response = templates.TemplateResponse(
         "error.html",
         {"request": request, "user": user, "status_code": exc.status_code},
         status_code=exc.status_code,
         headers=exc.headers,
     )
+    if demo:
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # Add authentication redirect handler
@@ -355,7 +485,8 @@ def _get_cors_origins() -> list[str]:
 
 
 cors_origins = _get_cors_origins()
-if cors_origins:
+# Demo serves only its own origin; normal session/CSRF cookies never apply.
+if cors_origins and config.APP_MODE == "normal":
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
@@ -371,19 +502,20 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(LoggingMiddleware)
 
 # Add session middleware for cookie-based auth (T112: Security hardening)
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=config.SESSION_SECRET,
-    session_cookie="session_id",
-    max_age=28800,  # 8 hours
-    same_site="lax",
-    https_only=config.is_production,  # Enable HTTPS-only in production
-    # HttpOnly flag is enforced by SessionMiddleware internally.
-)
+if config.APP_MODE == "normal":
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=config.SESSION_SECRET,
+        session_cookie="session_id",
+        max_age=28800,  # 8 hours
+        same_site="lax",
+        https_only=config.is_production,  # Enable HTTPS-only in production
+        # HttpOnly flag is enforced by SessionMiddleware internally.
+    )
 
 # Add CSRF protection middleware (Double Submit Cookie)
 # Disabled in testing mode (same pattern as rate limiting).
-if not config.TESTING:
+if not config.TESTING and config.APP_MODE == "normal":
     app.add_middleware(
         CSRFMiddleware,
         secret=config.SESSION_SECRET,
@@ -433,3 +565,30 @@ app.include_router(admin_api_usage.router)
 app.include_router(admin_session_export.router)
 app.include_router(admin_session_actions.router)
 app.include_router(admin_session_stats.router)
+
+if config.APP_MODE == "demo":
+    from fastapi.routing import APIRoute, request_response
+
+    from src.api import dependencies
+    from src.api.routes import demo
+
+    app.include_router(demo.router)
+    app.dependency_overrides[demo.get_demo_security] = (
+        dependencies.get_demo_security
+    )
+    app.dependency_overrides[demo.get_demo_session] = (
+        dependencies.get_demo_session
+    )
+
+    async def _forbidden(request: Request) -> Response:
+        raise DemoError("ACTION_FORBIDDEN")
+
+    # Every visitor route resolves its DB at this boundary; /health is visit-free.
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.path != "/health":
+            handler = route.get_route_handler()
+            if route.path in ("/login", "/logout") and "POST" in route.methods:
+                handler = _forbidden
+            route.app = request_response(
+                dependencies.demo_request_handler(handler)
+            )

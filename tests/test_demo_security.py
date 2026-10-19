@@ -286,12 +286,6 @@ def test_demo_lifecycle_makes_no_external_calls(tmp_path):
     run_case("egress", tmp_path)
 
 
-@pytest.mark.skip(
-    reason="product defect -> #200: §20 guards absent on main; demo admin "
-    "POST /admin/ai/models registers an external model (200 saved, "
-    "src/api/routes/admin_models.py:53), key/catalog/settings/comparisons "
-    "get 422 from body/reauth checks instead of 403 DEMO_ACTION_FORBIDDEN"
-)
 def test_demo_admin_dangerous_endpoints_are_forbidden(tmp_path):
     run_case("dangerous", tmp_path)
 

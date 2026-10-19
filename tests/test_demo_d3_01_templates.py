@@ -274,3 +274,43 @@ def test_data_links_carry_namespace_only_in_demo(name, context, hrefs):
             else:
                 assert f'href="{href}"' in html
                 assert "ds=" not in html
+
+
+STEPS = ["start", "scenario", "dialogue", "analysis", "admin_csv", "reset"]
+ACTIONS = ["resume", "role", "role", "reset", "restart", "skip", "close"]
+
+
+@pytest.mark.parametrize("shape", ["undefined", "normal"])
+def test_tour_panel_and_script_absent_outside_demo(shape):
+    html = page("scenarios.html", shape)
+    for absent in ("demo-tour", "data-demo-step", "data-demo-action"):
+        assert absent not in html
+
+
+def test_demo_tour_panel_markup_contract():
+    html = page("scenarios.html", "demo")
+    assert (
+        html.count('<script src="/static/js/demo-tour.js" defer></script>') == 1
+    )
+    assert re.findall(r'data-demo-step="([a-z_]+)"', html) == STEPS
+    assert re.findall(r'data-demo-action="([a-z]+)"', html) == ACTIONS
+    assert re.findall(r'data-demo-role="([a-z]+)"', html) == [
+        "teacher",
+        "admin",
+    ]
+    panel = re.search(
+        r'<section id="demo-tour".*?</section>', html, re.S
+    ).group(0)
+    assert 'aria-labelledby="demo-tour-title"' in panel
+    assert '<h2 id="demo-tour-title" tabindex="-1">' in panel
+    assert 'role="status" aria-live="polite"' in panel
+    assert (
+        '<button type="button" class="btn-secondary" id="demo-tour-csv" hidden>'
+        in (panel)
+    )
+    for label in ("complete", "current", "pending", "reset-done"):
+        assert f'data-label-{label}="' in panel
+    assert 'data-confirm="' in panel
+    # The panel sits in normal flow before <main>, never inside it.
+    assert html.index('id="demo-tour"') < html.index('<main id="main-content">')
+    assert "csrf-v1" not in html and "token-value" not in html

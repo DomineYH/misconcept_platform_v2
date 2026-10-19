@@ -302,7 +302,7 @@ def convert_values(source, settings, models):
             ):
                 raise ValueError("missing_effective_model")
             options = validate_model_and_options(
-                "openai", model_id, operation.options
+                "openai", model_id, operation.options, app_mode="normal"
             )
             config[role]["resolved_model_config"] = dict(
                 model_config_id=model["id"],

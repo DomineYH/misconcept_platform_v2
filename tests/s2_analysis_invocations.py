@@ -47,7 +47,7 @@ class AnalysisCaller:
         # No database transaction spans the provider call.
         async with self.factory() as db:
             connection, model, options = await resolve_frozen_model(
-                db, self.selection, "analysis"
+                db, self.selection, "analysis", app_mode="normal"
             )
             from src.services.analysis_pipeline import load_analysis_lesson
 

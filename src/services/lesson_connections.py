@@ -6,7 +6,7 @@ from src.services.model_capabilities import validate_model_and_options
 from src.services.model_verification import model_available
 
 
-async def resolve_frozen_model(db, selection, role):
+async def resolve_frozen_model(db, selection, role, *, app_mode):
     """Current registration/role authorization using the saved effective options."""
     model = (
         await db.get(ModelConfig, selection.model_config_id)
@@ -27,12 +27,14 @@ async def resolve_frozen_model(db, selection, role):
     ):
         raise InvocationError("configuration_unavailable")
     options = selection.options.model_dump(exclude_unset=True)
-    if not model_available(model, connection, role, options=options):
+    if not model_available(
+        model, connection, role, options=options, app_mode=app_mode
+    ):
         raise InvocationError("configuration_unavailable")
     return (
         connection,
         model,
         validate_model_and_options(
-            connection.provider, model.model_id, options
+            connection.provider, model.model_id, options, app_mode=app_mode
         ),
     )

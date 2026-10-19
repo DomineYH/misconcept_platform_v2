@@ -579,6 +579,7 @@ async def conversation_model(db, parent, panel_id):
                     }
                 ),
                 role,
+                app_mode="normal",
             )
     except (InvocationError, ValueError):
         raise HTTPException(
@@ -607,6 +608,8 @@ async def validate_setup(db, parent, panel_id=None):
                         "options": panel["role_options"][role],
                     }
                 )
-                await resolve_frozen_model(db, selection, role)
+                await resolve_frozen_model(
+                    db, selection, role, app_mode="normal"
+                )
     except (InvocationError, ValueError):
         raise_input_error("configuration_unavailable", "panels")

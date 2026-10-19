@@ -4,6 +4,7 @@ import asyncio
 from contextlib import aclosing, nullcontext
 from dataclasses import replace
 
+from src.config import config as app_config
 from src.services.call_policy import CallDeadline
 from src.services.google_client import exception_event, scoped_client
 from src.services.google_usage import normalize_usage
@@ -25,7 +26,10 @@ def parameters(request):
         raise InvocationError("invalid_output")
     try:
         options = validate_model_and_options(
-            request.provider, request.model_id, request.validated_options
+            request.provider,
+            request.model_id,
+            request.validated_options,
+            app_mode=app_config.APP_MODE,
         )
     except ValueError:
         raise InvocationError("configuration_unavailable") from None

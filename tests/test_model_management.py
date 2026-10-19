@@ -235,7 +235,7 @@ async def test_options_and_registration_trust_boundaries(data, api):
     from src.services.model_capabilities import validate_model_and_options
 
     with pytest.raises(ValueError, match="capability_definition_required"):
-        validate_model_and_options("openai", "custom", {})
+        validate_model_and_options("openai", "custom", {}, app_mode="normal")
     for model_id in ("gpt-5-mini", "gpt-5.2", "custom"):
         assert (
             await write(

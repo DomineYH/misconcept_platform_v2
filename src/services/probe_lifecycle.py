@@ -42,7 +42,7 @@ def current_probe(probe, model, connection):
         == probe.capability_definition_version
         and ROLE_CONTRACT_VERSIONS[probe.role] == probe.role_contract_version
         and not metadata_conflict(model.model_id, connection)
-        and connection_ready(connection)
+        and connection_ready(connection, app_mode="normal")
     )
 
 

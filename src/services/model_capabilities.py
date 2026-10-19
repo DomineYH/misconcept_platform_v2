@@ -84,6 +84,10 @@ DEFINITIONS = {
         922000,
     ),
 }
+DEMO_MODEL_ID = "demo-classroom-v1"
+DEMO_MODEL_TITLE = "준비된 수업 예시 v1"
+# Role default is the minimum; ScenarioConfig snapshots it explicitly.
+DEMO_OUTPUT_TOKENS = (4096, 8192)
 SNAPSHOTS = {
     "gpt-5-mini-2025-08-07": "gpt-5-mini",
     "gpt-5.2-2025-12-11": "gpt-5.2",
@@ -126,6 +130,8 @@ def metadata_conflict(model_id, connection):
 
 
 def capabilities(provider, model_id, language="ko"):
+    if provider == "demo":
+        return demo_capabilities(model_id, language)
     adapter = PROVIDER_CAPABILITIES.get(provider)
     if adapter is not None:
         return adapter.capabilities(model_id, language)
@@ -222,7 +228,52 @@ def capabilities(provider, model_id, language="ko"):
     )
 
 
-def validate_model_and_options(provider, model_id, options):
+def demo_capabilities(model_id, language):
+    if model_id != DEMO_MODEL_ID:
+        return None
+    minimum, maximum = DEMO_OUTPUT_TOKENS
+    # Local estimates for the fixture provider, not provider-reported usage.
+    return dict(
+        definition_version="demo-cap-v1",
+        text=True,
+        streaming=True,
+        structured=True,
+        tools=False,
+        image=False,
+        audio=False,
+        input_token_limit=65536,
+        combined_context_tokens=None,
+        max_output_tokens=maximum,
+        fields=[
+            dict(
+                name="max_output_tokens",
+                label=translate("admin.maximum_output_tokens", language),
+                type="integer",
+                min=minimum,
+                max=maximum,
+                default=minimum,
+            )
+        ],
+    )
+
+
+def validate_model_and_options(provider, model_id, options, *, app_mode):
+    # Demo rows never run in normal and external models never run in demo.
+    if (provider == "demo") != (app_mode == "demo"):
+        raise ValueError("configuration_unavailable")
+    if provider == "demo":
+        if capabilities(provider, model_id) is None:
+            raise ValueError("capability_definition_required")
+        if (
+            not isinstance(options, dict)
+            or set(options) != {"max_output_tokens"}
+            or type(options["max_output_tokens"]) is not int
+            or not DEMO_OUTPUT_TOKENS[0]
+            <= options["max_output_tokens"]
+            <= DEMO_OUTPUT_TOKENS[1]
+        ):
+            raise ValueError("invalid_options")
+        return deepcopy(options)
     adapter = PROVIDER_CAPABILITIES.get(provider)
     if adapter is not None:
         return adapter.validate_model_and_options(model_id, options)

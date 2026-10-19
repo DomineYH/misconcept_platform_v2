@@ -20,8 +20,12 @@ jobs:
       - run: uv run --frozen black --check .
       - run: uv run --frozen python -m pytest -q --durations=30
       - run: uv run --frozen python tests/check_student_live.py
-  browser:
+  browser-shard:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,4 +36,30 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen --extra dev --python 3.12
-      - run: npm run test:browser
+      - run: npm run test:browser -- --shard ${{ matrix.shard }}/3 --report "$RUNNER_TEMP/browser-results/shard-${{ matrix.shard }}-of-3.json"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: browser-shard-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/browser-results/shard-${{ matrix.shard }}-of-3.json
+          if-no-files-found: error
+  browser:
+    runs-on: ubuntu-latest
+    needs: browser-shard
+    if: ${{ always() }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        id: download
+        with:
+          pattern: browser-shard-*-attempt-${{ github.run_attempt }}
+          path: browser-results
+          merge-multiple: false
+      - run: node tests/aggregate_browser_checks.mjs --artifacts browser-results --shard-count 3
+        if: ${{ always() }}
+        env:
+          BROWSER_SHARD_RESULT: ${{ needs.browser-shard.result }}
+          BROWSER_ARTIFACT_DOWNLOAD_RESULT: ${{ steps.download.outcome }}

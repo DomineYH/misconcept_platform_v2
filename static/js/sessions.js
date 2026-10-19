@@ -111,10 +111,7 @@ var btnDownloadSelected =
 var selectedCountEl = document.getElementById('selected-count');
 
 function getCsrfToken() {
-  var match = document.cookie.match(
-    /(?:^|;\s*)csrftoken=([^;]*)/
-  );
-  return match ? match[1] : '';
+  return uiLanguage.csrfToken() ?? '';
 }
 
 function buildFilterQuery() {
@@ -192,7 +189,7 @@ btnDownloadSelected.addEventListener('click', function () {
     method: 'POST',
     headers: uiLanguage.headers('/admin/sessions/export-selected', {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'x-csrf-token': getCsrfToken(),
+      [uiLanguage.csrfHeader]: getCsrfToken(),
     }),
     credentials: 'same-origin',
     body: body,

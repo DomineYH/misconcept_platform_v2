@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 
+from src.demo.database import ERRORS
 from src.i18n import ui_strings
 from src.i18n.admin import FIELD_KEYS, REASON_KEYS, ROLE_KEYS, RUBRIC_FIELD_KEYS
 
@@ -23,13 +24,13 @@ def test_catalog_has_both_languages_matching_parameters_and_no_unused_keys():
     )
     literal_keys = set(
         re.findall(
-            r"""["']((?:common|login|about|teacher|admin)\.[\w]+)["']""",
+            r"""["']((?:common|login|about|teacher|admin|demo)\.\w+(?:\.\w+)*)["']""",
             sources,
         )
     )
     called_keys = set(
         re.findall(
-            r"""\b(?:t|translate)\(\s*["']((?:common|login|about|teacher|admin)\.[\w]+)["']\s*[,)]""",
+            r"""\b(?:t|translate)\(\s*["']((?:common|login|about|teacher|admin|demo)\.\w+(?:\.\w+)*)["']\s*[,)]""",
             sources,
         )
     )
@@ -79,6 +80,28 @@ def test_catalog_has_both_languages_matching_parameters_and_no_unused_keys():
             "minimal_is_unsupported",
             "unspecified_uses_dynamic_thinking_1_is_automatic_0_is_off_and_1_24576_is_a_numeric_budget_level_is_u",
             "unspecified_uses_the_provider_default_level_level_and_budget_cannot_be_combined_this_app_edits_gemin",
+        },
+        # Server error envelopes and SSE terminal frames carry these recovery
+        # keys; the rest are rendered by #199 templates/demo-tour.js (§24).
+        "demo": {recovery for _, _, recovery, _ in ERRORS.values()}
+        | {"output_failed", "stopped", "output_refused"}
+        | {
+            "banner",
+            "content_language",
+            "reset_confirm",
+            "public_link",
+            "back_to_entry",
+        }
+        | {
+            f"tour.{step}"
+            for step in (
+                "start",
+                "scenario",
+                "dialogue",
+                "analysis",
+                "admin_csv",
+                "reset",
+            )
         },
     }
     dynamic_keys = {

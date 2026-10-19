@@ -1,0 +1,19 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/mentor/after_first/A/A/auto/none",
+  "role": "mentor",
+  "content_state": "after_first",
+  "branch": "A",
+  "input_kind": "A",
+  "trigger": "auto",
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "should_intervene": true,
+    "feedback": "학생봇이 분모의 크기로 판단하는 이유를 말했습니다. 다음에는 같은 크기의 종이띠를 등분했을 때 한 조각을 비교하게 해 보세요.",
+    "reason_summary": "분모로 크기를 판단하는 이유가 드러나 같은 전체 비교를 제안한다."
+  },
+  "partial_text": null
+}

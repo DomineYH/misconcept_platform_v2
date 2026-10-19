@@ -1,0 +1,19 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/mentor/initial/none/unsupported/manual/none",
+  "role": "mentor",
+  "content_state": "initial",
+  "branch": null,
+  "input_kind": "unsupported",
+  "trigger": "manual",
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "should_intervene": true,
+    "feedback": "이 입력은 준비된 예시 범위에 없습니다. 현재 단계의 추천 입력으로 돌아가 체험해 주세요.",
+    "reason_summary": "수동 도움에 지원 범위를 안내한다."
+  },
+  "partial_text": null
+}

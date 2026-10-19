@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% set i18n_areas = ['admin', 'teacher'] %}
+{% set demo_ns = {'ds': demo_config.browser_scope_id, 'dg': demo_config.generation, 'da': demo_config.auth_epoch}|urlencode if demo_config is defined and demo_config and demo_config.mode == 'demo' and demo_config.browser_scope_id else '' %}
 {% block title %}{{ t('admin.scenario_editor_admin') }}{% endblock %}
 {% macro text_field(path, label, kind='text', limit=50000, hint='') %}
 <div class="form-group">
@@ -56,7 +57,7 @@
     <p id="review-publication-status" role="status"></p>
   </section>
   {% endif %}
-  {% if editor.id %}<p><a class="btn btn-secondary" href="/admin/model-comparison?scenario_id={{ editor.id }}">{{ t('admin.compare_the_saved_scenario_across_all_roles') }}</a></p>{% endif %}
+  {% if editor.id %}<p><a class="btn btn-secondary" href="/admin/model-comparison?scenario_id={{ editor.id }}{% if demo_ns %}&{{ demo_ns }}{% endif %}">{{ t('admin.compare_the_saved_scenario_across_all_roles') }}</a></p>{% endif %}
   <p>{{ t('admin.the_legacy_individual_role_comparison_is_below_start_whole_model_comparisons_from_a_saved_scenario') }}</p>
   <button type="button" id="open-comparison" class="btn btn-secondary" aria-expanded="false" aria-controls="scenario-comparison">{{ t('admin.open_model_comparison') }}</button>
   <section id="scenario-comparison" aria-label="{{ t('admin.model_comparison_with_common_context') }}" hidden></section>

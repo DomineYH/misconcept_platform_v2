@@ -263,7 +263,7 @@ export function mountComparison(data, draft) {
   }
   async function request(url, method = 'GET', body, signal) {
     return fetch(url, {method, signal, credentials:'same-origin', headers:uiLanguage.headers(url, {'Content-Type':'application/json',
-      'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}), body:body == null ? undefined : JSON.stringify(body)});
+      [uiLanguage.csrfHeader]:uiLanguage.csrfToken() || ''}), body:body == null ? undefined : JSON.stringify(body)});
   }
   function showError(response, result, missingId = run?.comparison_run_id) {
     errors.replaceChildren();

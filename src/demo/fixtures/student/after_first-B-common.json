@@ -1,0 +1,15 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/student/after_first/B/common/none/none",
+  "role": "student",
+  "content_state": "after_first",
+  "branch": "B",
+  "input_kind": "common",
+  "trigger": null,
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": "같은 크기의 종이띠라면 1/4 조각이 1/8 조각보다 커요. 조각 수가 많아지면 한 조각은 더 작아져요. 아까는 분모의 수만 비교했어요.",
+  "structured": null,
+  "partial_text": null
+}

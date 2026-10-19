@@ -20,10 +20,9 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
     if (!window.confirm(uiLanguage.t('admin.scenario_delete_confirm', {title:btn.dataset.title, count:btn.dataset.sessionCount}))) return;
     btn.disabled = true;
     try {
-      const token = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
       const response = await fetch(`/admin/scenarios/${btn.dataset.id}/delete`, {
         method: 'POST',
-        headers: uiLanguage.headers(`/admin/scenarios/${btn.dataset.id}/delete`, {'Content-Type': 'application/json', 'x-csrf-token': token ? token[1] : ''}),
+        headers: uiLanguage.headers(`/admin/scenarios/${btn.dataset.id}/delete`, {'Content-Type': 'application/json', [uiLanguage.csrfHeader]: uiLanguage.csrfToken() ?? ''}),
         body: JSON.stringify({expected_version: Number(btn.dataset.version)})
       });
       if (response.ok) {

@@ -1,0 +1,15 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/student/initial/B/B/none/none",
+  "role": "student",
+  "content_state": "initial",
+  "branch": "B",
+  "input_kind": "B",
+  "trigger": null,
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": "답은 1/4이라고 들었지만, 8이 더 큰 수라서 왜 1/8이 더 작은지는 모르겠어요.",
+  "structured": null,
+  "partial_text": null
+}

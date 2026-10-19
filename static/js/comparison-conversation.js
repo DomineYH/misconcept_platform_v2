@@ -21,7 +21,7 @@ const path = () => `${base}/${state.conversation_id}`;
 const running = () => state?.children.some(child => child.panels.some(panel => panel.status === 'running'));
 async function request(url, method = 'GET', body = null, signal = undefined) {
   return fetch(url, {method, credentials:'same-origin', signal, headers:uiLanguage.headers(url, {'Content-Type':'application/json',
-    'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}),
+    [uiLanguage.csrfHeader]:uiLanguage.csrfToken() || ''}),
     ...(body == null ? {} : {body:JSON.stringify(body)})});
 }
 function remember() {

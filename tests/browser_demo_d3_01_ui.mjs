@@ -511,6 +511,12 @@ async function resetFailure(page, base) {
         e.current = state({state: 'resetting', generation: 2, auth_epoch: 2, role: 'admin', request_id: req.json.request_id, tour_facts: null});
         return {status: 202, json: e.current};
       }
+      if (ids.length === 3) {
+        // The retry keeps the reserved generation/epoch and answers when the reset is done.
+        e.current = state({generation: 2, auth_epoch: 2, role: 'admin', request_id: req.json.request_id,
+          tour_facts: facts({generation: 2, auth_epoch: 2, teacher_entered: false})});
+        return {json: e.current};
+      }
       e.current = failed();
       return {status: 503, json: envelope('DEMO_RESET_FAILED', 'demo.reset_failed', true)};
     };
@@ -546,6 +552,19 @@ async function resetFailure(page, base) {
     await until(async () => (await p.evaluate(() => sessionStorage.getItem('demo:control-v1'))) === null, 'retired');
     assert.equal(env.eventsOf(p, 'demo:reset-completed').length, 0);
     assert.equal(await domMap(p), 'C C C C C X');
+
+    // A successful retry from reset_failed (same generation 2): exactly one completion event,
+    // after the authoritative ready GET.
+    await p.click('[data-demo-action="reset"]');
+    await until(() => env.eventsOf(p, 'demo:reset-completed').length, 'demo:reset-completed after the retry');
+    await delay(300);
+    const completed = env.eventsOf(p, 'demo:reset-completed');
+    assert.equal(completed.length, 1, 'exactly one reset-completed');
+    assert.equal(completed[0].detail.state, 'ready');
+    assert.equal(completed[0].detail.generation, 2);
+    assert.equal(completed[0].detail.auth_epoch, 2);
+    await expectMap(p, 'C C C C C C');
+    assert.equal(await stored(p), null, 'old journey dropped on success');
   });
 }
 

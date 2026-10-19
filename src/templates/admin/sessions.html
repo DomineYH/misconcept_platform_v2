@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% set i18n_areas = ['admin', 'teacher'] %}
+{% set demo_ns = {'ds': demo_config.browser_scope_id, 'dg': demo_config.generation, 'da': demo_config.auth_epoch}|urlencode if demo_config is defined and demo_config and demo_config.mode == 'demo' and demo_config.browser_scope_id else '' %}
 
 {% block title %}{{ t('admin.dialogue_sessions_admin') }}{% endblock %}
 
@@ -112,7 +113,7 @@
               <span class="btn-text">{{ t('admin.end') }}</span>
             </button>
             {% else %}
-            <a href="/admin/sessions/{{ session.id }}/download"
+            <a href="/admin/sessions/{{ session.id }}/download{% if demo_ns %}?{{ demo_ns }}{% endif %}"
               class="btn btn-sm btn-success">CSV</a>
             {% if session.summary or session.id in analysis_session_ids %}
             <button type="button"

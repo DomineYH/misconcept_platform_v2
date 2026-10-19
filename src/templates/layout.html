@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 {% set ui_lang = display_language(request if request is defined else none) %}
-<html lang="{{ ui_lang }}">
+{%- set demo = demo_config if demo_config is defined and demo_config else none %}
+{%- set demo_on = demo and demo.mode == 'demo' %}
+{%- set csrf_cookie = demo.csrf_cookie_name if demo_on and demo.csrf_cookie_name else 'csrftoken' %}
+{%- set csrf_header = demo.csrf_header_name if demo_on and demo.csrf_header_name else 'x-csrf-token' %}
+<html lang="{{ ui_lang }}"
+{%- if demo_on %} data-demo-mode="demo"
+  {%- for name, key in [('scope', 'browser_scope_id'), ('generation', 'generation'), ('auth-epoch', 'auth_epoch')] if demo[key] is not none %} data-demo-{{ name }}="{{ demo[key] }}"{% endfor %}
+{%- endif %}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport"
@@ -10,8 +17,13 @@
     {{ t('common.product') }}
     {% endblock %}
   </title>
-  <link rel="stylesheet" href="/static/css/styles.css">
-  <script id="ui-strings" type="application/json">{{ ui_strings(ui_lang, i18n_areas|default([]))|tojson }}</script>
+  <link rel="stylesheet" href="/static/css/styles.css">{% if demo_on %}
+  <link rel="stylesheet" href="/static/css/demo-tour.css">{% endif %}
+  <script id="ui-strings" type="application/json">{{ ui_strings(ui_lang, i18n_areas|default([]))|tojson }}</script>{% if demo %}
+  {#- §24 display-safe fields only; anything else the caller passes stays out. #}
+  {%- set demo_json = {} %}
+  {%- for key in ['mode', 'contract_version', 'content_version', 'fixture_version', 'state', 'browser_scope_id', 'generation', 'auth_epoch', 'role', 'expires_at', 'idle_ttl_seconds', 'absolute_ttl_seconds', 'active', 'last_error', 'start_url', 'role_url', 'reset_url', 'state_url', 'public_url', 'csrf_cookie_name', 'csrf_header_name', 'ui_language', 'tour_facts'] if demo[key] is defined %}{% set _ = demo_json.update({key: demo[key]}) %}{% endfor %}
+  <script type="application/json" id="demo-config">{{ demo_json|tojson }}</script>{% endif %}
   <script src="/static/js/display-language.js"></script>
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/analysis-toggle.js"></script>
@@ -21,16 +33,17 @@
     // Auto-inject CSRF token into all HTMX requests
     document.addEventListener('htmx:configRequest', function(e) {
       var match = document.cookie.match(
-        /(?:^|;\s*)csrftoken=([^;]*)/
+        /(?:^|;\s*){{ csrf_cookie }}=([^;]*)/
       );
       if (match) {
-        e.detail.headers['x-csrf-token'] = match[1];
+        e.detail.headers['{{ csrf_header }}'] = match[1];
       }
     });
   </script>
 </head>
 <body>
-  <a href="#main-content" class="skip-link">{{ t('common.skip') }}</a>
+  <a href="#main-content" class="skip-link">{{ t('common.skip') }}</a>{% if demo_on %}
+  <div class="demo-banner" role="note"><strong>{{ t('demo.banner') }}</strong> <span>{{ t('demo.content_language') }}</span></div>{% endif %}
   {% set current_path = request.url.path if request is defined else '' %}
   <header>
     <nav aria-label="{{ t('common.navigation') }}">
@@ -87,7 +100,8 @@
     <p>
       {{ t('common.product') }} v0.1.0 |
       {{ t('common.footer') }}
-    </p>
+    </p>{% if demo and not demo_on and demo.public_url %}
+    <p><a href="{{ demo.public_url }}" class="demo-public-link">{{ t('demo.public_link') }}</a></p>{% endif %}
   </footer>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
@@ -158,11 +172,11 @@
 
     function doLogout() {
       var match = document.cookie.match(
-        /(?:^|;\s*)csrftoken=([^;]*)/
+        /(?:^|;\s*){{ csrf_cookie }}=([^;]*)/
       );
       var headers = uiLanguage.headers('/logout');
       if (match) {
-        headers.set('x-csrf-token', match[1]);
+        headers.set('{{ csrf_header }}', match[1]);
       }
       fetch('/logout', {
         method: 'POST',

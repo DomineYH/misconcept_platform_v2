@@ -85,10 +85,13 @@ def build_mentor_request(lesson, history, trigger, options, request_id):
 
 
 class TutorBot:
-    def __init__(self, *, request, session_id, run_id, permit):
+    def __init__(
+        self, *, request, session_id, run_id, permit, demo_adapter=None
+    ):
         self.request = request
         self.session_id, self.run_id = session_id, run_id
         self.permit = permit
+        self.demo_adapter = demo_adapter
 
     async def generate_feedback(self):
         permit, self.permit = self.permit, None
@@ -100,6 +103,7 @@ class TutorBot:
                 kind="structured",
                 run_id=self.run_id,
                 session_id=self.session_id,
+                demo_adapter=self.demo_adapter,
             )
         ) as events:
             async for event in events:

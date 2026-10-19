@@ -11,11 +11,27 @@ const workflow = await readFile(new URL('../.github/workflows/tests.yml', import
 
 test('workflow keeps all PR events, limits pushes to main and preserves job names', () => {
   assert.match(workflow, /^on:\n  push:\n    branches: \[main\]\n  pull_request:\n(?=\S)/m);
-  assert.deepEqual([...workflow.matchAll(/^  (\w+):\n    runs-on:/gm)].map(match => match[1]), ['test', 'browser']);
+  assert.deepEqual([...workflow.matchAll(/^  ([\w-]+):\n    runs-on:/gm)].map(match => match[1]), ['test', 'browser-shard', 'browser']);
   assert.match(workflow, /run: uv run --frozen python -m pytest -q --durations=30$/m);
-  assert.match(workflow, /run: npm run test:browser$/m);
+  assert.match(workflow, /run: npm run test:browser -- --shard \$\{\{ matrix.shard \}\}\/3 --report/);
   assert.match(workflow, /run: uv run --frozen python tests\/check_student_live.py$/m);
   assert.match(workflow.split('\n  browser:')[0], /uses: actions\/setup-node@v4\n        with:\n          node-version: 24\n/);
+});
+
+test('browser gate always runs and requires the complete isolated matrix and artifact download', () => {
+  const shard = workflow.split('  browser-shard:\n')[1].split('  browser:\n')[0];
+  const gate = workflow.split('  browser:\n')[1];
+  assert.match(shard, /strategy:\n      fail-fast: false\n      matrix:\n        shard: \[1, 2, 3\]/);
+  assert.match(shard, /uses: actions\/upload-artifact@v4\n        if: \$\{\{ always\(\) \}\}/);
+  assert.match(shard, /name: browser-shard-\$\{\{ matrix.shard \}\}-attempt-\$\{\{ github.run_attempt \}\}/);
+  assert.match(shard, /if-no-files-found: error/);
+  assert.match(gate, /needs: browser-shard\n    if: \$\{\{ always\(\) \}\}/);
+  assert.match(gate, /uses: actions\/download-artifact@v4\n        id: download/);
+  assert.match(gate, /pattern: browser-shard-\*-attempt-\$\{\{ github.run_attempt \}\}/);
+  assert.match(gate, /merge-multiple: false/);
+  assert.match(gate, /run: node tests\/aggregate_browser_checks.mjs --artifacts browser-results --shard-count 3\n        if: \$\{\{ always\(\) \}\}/);
+  assert.match(gate, /BROWSER_SHARD_RESULT: \$\{\{ needs.browser-shard.result \}\}/);
+  assert.match(gate, /BROWSER_ARTIFACT_DOWNLOAD_RESULT: \$\{\{ steps.download.outcome \}\}/);
 });
 
 test('only superseded runs for the same PR share a cancelable concurrency group', () => {
@@ -120,19 +136,27 @@ try {await import(pathToFileURL(process.argv[1]));}
 finally {console.log('TRACE ' + JSON.stringify(trace));}
 `;
 
-async function runChecks(t, {mode = '', files, filters = []}) {
+async function runChecks(t, {mode = '', files, filters = [], report = false, env = {}, noMocks = false}) {
   const directory = await mkdtemp(join(tmpdir(), 'ci-runner-contract-'));
   t.after(() => rm(directory, {recursive: true, force: true}));
   const tests = join(directory, 'tests');
   await mkdir(tests);
   await copyFile(runner, join(tests, 'run_browser_checks.mjs'));
+  for (const name of ['ci_browser_sharding.mjs', 'browser_duration_estimates.json']) {
+    await copyFile(new URL(name, runner), join(tests, name));
+  }
   for (const [name, source] of Object.entries(files)) await writeFile(join(tests, name), source);
   const entry = join(directory, 'bootstrap.mjs');
   await writeFile(entry, bootstrap);
-  const result = spawnSync(process.execPath, [entry, join(tests, 'run_browser_checks.mjs'), ...filters], {
-    encoding: 'utf8', timeout: 5000, env: {...process.env, CI_RUNNER_TEST_MODE: mode}
+  const reportPath = join(directory, 'evidence.json');
+  const args = [...(noMocks ? [] : [entry]), join(tests, 'run_browser_checks.mjs'), ...filters, ...(report ? ['--report', reportPath] : [])];
+  const result = spawnSync(process.execPath, args, {
+    encoding: 'utf8', timeout: 5000, env: {...process.env, CI_RUNNER_TEST_MODE: mode, ...env}
   });
   assert.ifError(result.error);
+  if (report) {
+    try {result.evidence = JSON.parse(await readFile(reportPath, 'utf8'));} catch {}
+  }
   result.trace = JSON.parse(result.stdout.match(/^TRACE (.+)$/m)?.[1] ?? 'null');
   return result;
 }
@@ -192,4 +216,54 @@ test('unmatched filters still fail before server startup', async t => {
   assert.match(result.stderr, /No browser checks matched/);
   assert.doesNotMatch(result.stdout, /START|END/);
   assert.deepEqual(result.trace, []);
+});
+
+test('--list validates selection without Playwright installed or any browser/server launch', async t => {
+  const result = await runChecks(t, {noMocks: true, files: {
+    'browser_a.mjs': passing, 'browser_b.mjs': passing, 'browser_c.mjs': passing
+  }, filters: ['--list', '--shard', '2/3']});
+  assert.equal(result.status, 0, result.stderr);
+  const listed = JSON.parse(result.stdout);
+  assert.deepEqual(listed.plannedModules, ['browser_b.mjs']);
+  assert.deepEqual(listed.executedModules, []);
+  assert.equal(listed.status, 'NOT_RUN');
+});
+
+test('sharded runner executes only its deterministic selection and writes final success evidence', async t => {
+  const result = await runChecks(t, {files: {
+    'browser_a.mjs': passing, 'browser_b.mjs': passing, 'browser_c.mjs': passing
+  }, filters: ['--shard', '1/2'], report: true});
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.evidence.status, 'PASS');
+  assert.equal(result.evidence.shard, 1);
+  assert.equal(result.evidence.shardCount, 2);
+  assert.deepEqual(result.evidence.plannedModules, ['browser_a.mjs', 'browser_c.mjs']);
+  assert.deepEqual(result.evidence.executedModules, ['browser_a.mjs', 'browser_c.mjs'].map(module =>
+    ({module, status: 'PASS', elapsedMs: 25})));
+  assert.match(result.evidence.inventoryId, /^[a-f0-9]{64}$/);
+  assert.match(result.evidence.planId, /^[a-f0-9]{64}$/);
+  assert.doesNotMatch(result.stdout, /START browser_b/);
+});
+
+for (const mode of ['check', 'cleanup']) {
+  test('failure evidence keeps attempted and planned modules for ' + mode, async t => {
+    const result = await runChecks(t, {mode: mode === 'cleanup' ? mode : '', report: true, files: {
+      'browser_a.mjs': mode === 'check' ? `export default async () => {throw new Error('bad');};` : passing,
+      'browser_b.mjs': passing
+    }});
+    assert.equal(result.status, 1);
+    assert.equal(result.evidence.status, 'FAIL');
+    assert.deepEqual(result.evidence.plannedModules, ['browser_a.mjs', 'browser_b.mjs']);
+    assert.equal(result.evidence.executedModules[0].status, 'FAIL');
+    assert.equal(result.evidence.executedModules.length, mode === 'cleanup' ? 1 : 2);
+  });
+}
+
+test('CI filter plus shard and zero-module partitions fail before server startup', async t => {
+  for (const filters of [['--shard', '1/2', 'student'], ['--shard', '1/3']]) {
+    const result = await runChecks(t, {files: {'browser_a.mjs': passing, 'browser_b.mjs': passing},
+      filters, env: {CI: 'true'}});
+    assert.equal(result.status, 1);
+    assert.deepEqual(result.trace, []);
+  }
 });

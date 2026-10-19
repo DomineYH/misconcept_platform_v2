@@ -1,0 +1,595 @@
+{
+  "sourceRun": "https://github.com/DomineYH/misconcept_platform_v2/actions/runs/39186456508",
+  "sourceCommit": "add76e54777f1b82cd408460a2a1006b7e5e5f9c",
+  "sourceHead": "ad597b604a5f8374a2c91ec086d2e4d19b6da438",
+  "kind": "measured instrumented END elapsed_ms from successful stage1 run; future shard loads are estimated",
+  "durations": [
+    {
+      "file": "browser_169_delete_confirm.mjs",
+      "ms": 1333
+    },
+    {
+      "file": "browser_170_button_roles.mjs",
+      "ms": 156623.1
+    },
+    {
+      "file": "browser_171_page_header.mjs",
+      "ms": 61883
+    },
+    {
+      "file": "browser_172_cards.mjs",
+      "ms": 22498.7
+    },
+    {
+      "file": "browser_173_form_density.mjs",
+      "ms": 115977.7
+    },
+    {
+      "file": "browser_173_modal_close.mjs",
+      "ms": 810717.3
+    },
+    {
+      "file": "browser_173_user_failure.mjs",
+      "ms": 4221
+    },
+    {
+      "file": "browser_174_hover_header.mjs",
+      "ms": 231939
+    },
+    {
+      "file": "browser_admin_display_language.mjs",
+      "ms": 1274.3
+    },
+    {
+      "file": "browser_admin_language_layout.mjs",
+      "ms": 21284
+    },
+    {
+      "file": "browser_admin_language_options.mjs",
+      "ms": 1047.7
+    },
+    {
+      "file": "browser_admin_language_order.mjs",
+      "ms": 447.8
+    },
+    {
+      "file": "browser_admin_language_sessions.mjs",
+      "ms": 490.1
+    },
+    {
+      "file": "browser_admin_language_tasks.mjs",
+      "ms": 1359.3
+    },
+    {
+      "file": "browser_admin_language_uncertain.mjs",
+      "ms": 1042.3
+    },
+    {
+      "file": "browser_ai_anthropic.mjs",
+      "ms": 774.7
+    },
+    {
+      "file": "browser_ai_boundaries.mjs",
+      "ms": 880.3
+    },
+    {
+      "file": "browser_ai_catalog.mjs",
+      "ms": 951.9
+    },
+    {
+      "file": "browser_ai_connections.mjs",
+      "ms": 229.4
+    },
+    {
+      "file": "browser_ai_google.mjs",
+      "ms": 819.9
+    },
+    {
+      "file": "browser_ai_models.mjs",
+      "ms": 1118.9
+    },
+    {
+      "file": "browser_ai_probes.mjs",
+      "ms": 1329.7
+    },
+    {
+      "file": "browser_ai_saved_options.mjs",
+      "ms": 665.8
+    },
+    {
+      "file": "browser_ai_secrets.mjs",
+      "ms": 773.9
+    },
+    {
+      "file": "browser_ai_selectors.mjs",
+      "ms": 758.6
+    },
+    {
+      "file": "browser_ai_settings.mjs",
+      "ms": 1352.4
+    },
+    {
+      "file": "browser_ai_setup.mjs",
+      "ms": 748.7
+    },
+    {
+      "file": "browser_ai_student_probe.mjs",
+      "ms": 671.7
+    },
+    {
+      "file": "browser_analysis_notice_language.mjs",
+      "ms": 323.2
+    },
+    {
+      "file": "browser_api_usage.mjs",
+      "ms": 687.5
+    },
+    {
+      "file": "browser_bulk_passwords.mjs",
+      "ms": 4614.4
+    },
+    {
+      "file": "browser_chat.mjs",
+      "ms": 1794.4
+    },
+    {
+      "file": "browser_chat_empty_state.mjs",
+      "ms": 2079.2
+    },
+    {
+      "file": "browser_conversation_live.mjs",
+      "ms": 10524.4
+    },
+    {
+      "file": "browser_conversation_models.mjs",
+      "ms": 364
+    },
+    {
+      "file": "browser_display_language.mjs",
+      "ms": 6968.4
+    },
+    {
+      "file": "browser_html_errors.mjs",
+      "ms": 2955.5
+    },
+    {
+      "file": "browser_i18n_admin_guards.mjs",
+      "ms": 5577.3
+    },
+    {
+      "file": "browser_i18n_cross_tab.mjs",
+      "ms": 2359.9
+    },
+    {
+      "file": "browser_i18n_notices.mjs",
+      "ms": 5006.4
+    },
+    {
+      "file": "browser_i18n_strings.mjs",
+      "ms": 1328.4
+    },
+    {
+      "file": "browser_language_toggle.mjs",
+      "ms": 2808.2
+    },
+    {
+      "file": "browser_mentor_modes.mjs",
+      "ms": 1781
+    },
+    {
+      "file": "browser_mentor_recovery.mjs",
+      "ms": 2531.9
+    },
+    {
+      "file": "browser_mentor_stream.mjs",
+      "ms": 1733.8
+    },
+    {
+      "file": "browser_native_analysis.mjs",
+      "ms": 674.2
+    },
+    {
+      "file": "browser_phase_a_history.mjs",
+      "ms": 308
+    },
+    {
+      "file": "browser_s1_live.mjs",
+      "ms": 10784.8
+    },
+    {
+      "file": "browser_s2_148a_preview.mjs",
+      "ms": 976.4
+    },
+    {
+      "file": "browser_s2_148b_zero_models.mjs",
+      "ms": 898.9
+    },
+    {
+      "file": "browser_s2_148c_spacing.mjs",
+      "ms": 1892.3
+    },
+    {
+      "file": "browser_s2_authoring.mjs",
+      "ms": 454.3
+    },
+    {
+      "file": "browser_s2_draft_live.mjs",
+      "ms": 17100.1
+    },
+    {
+      "file": "browser_s2_failed_save_guard.mjs",
+      "ms": 838
+    },
+    {
+      "file": "browser_s2_full_context.mjs",
+      "ms": 463.8
+    },
+    {
+      "file": "browser_s2_models.mjs",
+      "ms": 478.9
+    },
+    {
+      "file": "browser_s2_privacy.mjs",
+      "ms": 1208
+    },
+    {
+      "file": "browser_s2_review.mjs",
+      "ms": 627.3
+    },
+    {
+      "file": "browser_s2_save.mjs",
+      "ms": 717.7
+    },
+    {
+      "file": "browser_s2_saved_options.mjs",
+      "ms": 649
+    },
+    {
+      "file": "browser_s2_visibility.mjs",
+      "ms": 692
+    },
+    {
+      "file": "browser_s3_context.mjs",
+      "ms": 897.4
+    },
+    {
+      "file": "browser_s3_live.mjs",
+      "ms": 6899.5
+    },
+    {
+      "file": "browser_s3_mentor.mjs",
+      "ms": 1472
+    },
+    {
+      "file": "browser_s4_analysis.mjs",
+      "ms": 623.5
+    },
+    {
+      "file": "browser_s4_lifecycle.mjs",
+      "ms": 7161.8
+    },
+    {
+      "file": "browser_s4_plan.mjs",
+      "ms": 6334.4
+    },
+    {
+      "file": "browser_s4_privacy.mjs",
+      "ms": 1208.5
+    },
+    {
+      "file": "browser_s4_records.mjs",
+      "ms": 7066.8
+    },
+    {
+      "file": "browser_s4_statuses.mjs",
+      "ms": 841.1
+    },
+    {
+      "file": "browser_s5_adoption.mjs",
+      "ms": 569.1
+    },
+    {
+      "file": "browser_s5_analysis.mjs",
+      "ms": 555.3
+    },
+    {
+      "file": "browser_s5_apply_errors.mjs",
+      "ms": 924.1
+    },
+    {
+      "file": "browser_s5_deleted_source.mjs",
+      "ms": 836.1
+    },
+    {
+      "file": "browser_s5_draft.mjs",
+      "ms": 528
+    },
+    {
+      "file": "browser_s5_editor.mjs",
+      "ms": 739.6
+    },
+    {
+      "file": "browser_s5_fix.mjs",
+      "ms": 1426.3
+    },
+    {
+      "file": "browser_s5_history.mjs",
+      "ms": 1045
+    },
+    {
+      "file": "browser_s5_layout.mjs",
+      "ms": 830.5
+    },
+    {
+      "file": "browser_s5_lifecycle.mjs",
+      "ms": 749.3
+    },
+    {
+      "file": "browser_s5_mentor_history.mjs",
+      "ms": 628.4
+    },
+    {
+      "file": "browser_s5_model_copy.mjs",
+      "ms": 1914
+    },
+    {
+      "file": "browser_s5_past_apply.mjs",
+      "ms": 579.8
+    },
+    {
+      "file": "browser_s5_recovery.mjs",
+      "ms": 12387.5
+    },
+    {
+      "file": "browser_s5_results.mjs",
+      "ms": 716
+    },
+    {
+      "file": "browser_s5_retry_race.mjs",
+      "ms": 701.8
+    },
+    {
+      "file": "browser_s5_stream.mjs",
+      "ms": 790
+    },
+    {
+      "file": "browser_s5_student_live.mjs",
+      "ms": 23476.4
+    },
+    {
+      "file": "browser_s6_delete.mjs",
+      "ms": 3336.9
+    },
+    {
+      "file": "browser_s6_pagination.mjs",
+      "ms": 2706.4
+    },
+    {
+      "file": "browser_s6_pagination_live.mjs",
+      "ms": 8715.7
+    },
+    {
+      "file": "browser_s6_users.mjs",
+      "ms": 2478.9
+    },
+    {
+      "file": "browser_scenario_cards.mjs",
+      "ms": 22830.7
+    },
+    {
+      "file": "browser_scenario_cards_languages.mjs",
+      "ms": 31703.8
+    },
+    {
+      "file": "browser_scenario_cards_shared_grids.mjs",
+      "ms": 2663.9
+    },
+    {
+      "file": "browser_scenario_filter_help.mjs",
+      "ms": 21413.6
+    },
+    {
+      "file": "browser_scenarios.mjs",
+      "ms": 2206.3
+    },
+    {
+      "file": "browser_student_errors.mjs",
+      "ms": 1736
+    },
+    {
+      "file": "browser_student_recovery.mjs",
+      "ms": 1868
+    },
+    {
+      "file": "browser_student_stream.mjs",
+      "ms": 1026.1
+    },
+    {
+      "file": "browser_teacher_analysis_language.mjs",
+      "ms": 1425.9
+    },
+    {
+      "file": "browser_teacher_display_language.mjs",
+      "ms": 350.6
+    },
+    {
+      "file": "browser_teacher_language_layout.mjs",
+      "ms": 37846.1
+    },
+    {
+      "file": "browser_teacher_language_session.mjs",
+      "ms": 492
+    },
+    {
+      "file": "browser_teacher_language_streams.mjs",
+      "ms": 1468.9
+    },
+    {
+      "file": "browser_uiux_admin_about.mjs",
+      "ms": 1587.4
+    },
+    {
+      "file": "browser_uiux_admin_bulk.mjs",
+      "ms": 291.4
+    },
+    {
+      "file": "browser_uiux_admin_crud.mjs",
+      "ms": 3582.7
+    },
+    {
+      "file": "browser_uiux_admin_detail.mjs",
+      "ms": 372.5
+    },
+    {
+      "file": "browser_uiux_admin_evidence.mjs",
+      "ms": 52623.5
+    },
+    {
+      "file": "browser_uiux_admin_keyboard.mjs",
+      "ms": 6178.2
+    },
+    {
+      "file": "browser_uiux_admin_load.mjs",
+      "ms": 526.8
+    },
+    {
+      "file": "browser_uiux_admin_modal.mjs",
+      "ms": 241.1
+    },
+    {
+      "file": "browser_uiux_admin_pagehide.mjs",
+      "ms": 666.5
+    },
+    {
+      "file": "browser_uiux_admin_sessions.mjs",
+      "ms": 500.9
+    },
+    {
+      "file": "browser_uiux_admin_tables.mjs",
+      "ms": 1486
+    },
+    {
+      "file": "browser_uiux_ai_evidence.mjs",
+      "ms": 15420.1
+    },
+    {
+      "file": "browser_uiux_ai_layout.mjs",
+      "ms": 1009.3
+    },
+    {
+      "file": "browser_uiux_ai_states.mjs",
+      "ms": 1041.7
+    },
+    {
+      "file": "browser_uiux_analysis.mjs",
+      "ms": 3289.2
+    },
+    {
+      "file": "browser_uiux_chat.mjs",
+      "ms": 1834.6
+    },
+    {
+      "file": "browser_uiux_chat_modal.mjs",
+      "ms": 3714.4
+    },
+    {
+      "file": "browser_uiux_color_math.mjs",
+      "ms": 119.6
+    },
+    {
+      "file": "browser_uiux_comparison.mjs",
+      "ms": 651.3
+    },
+    {
+      "file": "browser_uiux_comparison_evidence.mjs",
+      "ms": 10915.5
+    },
+    {
+      "file": "browser_uiux_comparison_history.mjs",
+      "ms": 417.8
+    },
+    {
+      "file": "browser_uiux_comparison_keyboard.mjs",
+      "ms": 525.4
+    },
+    {
+      "file": "browser_uiux_comparison_polling.mjs",
+      "ms": 11897.1
+    },
+    {
+      "file": "browser_uiux_comparison_recovery.mjs",
+      "ms": 1028
+    },
+    {
+      "file": "browser_uiux_comparison_states.mjs",
+      "ms": 545.6
+    },
+    {
+      "file": "browser_uiux_entry.mjs",
+      "ms": 4982.9
+    },
+    {
+      "file": "browser_uiux_final_failures.mjs",
+      "ms": 636
+    },
+    {
+      "file": "browser_uiux_final_sessions.mjs",
+      "ms": 322.3
+    },
+    {
+      "file": "browser_uiux_final_states.mjs",
+      "ms": 1606.5
+    },
+    {
+      "file": "browser_uiux_gnb.mjs",
+      "ms": 22204.1
+    },
+    {
+      "file": "browser_uiux_history.mjs",
+      "ms": 260.2
+    },
+    {
+      "file": "browser_uiux_practice.mjs",
+      "ms": 14061.2
+    },
+    {
+      "file": "browser_uiux_scenario_errors.mjs",
+      "ms": 5091.5
+    },
+    {
+      "file": "browser_uiux_scenario_layout.mjs",
+      "ms": 29457.9
+    },
+    {
+      "file": "browser_uiux_tab_contrast.mjs",
+      "ms": 5658.5
+    },
+    {
+      "file": "browser_uiux_users_filter.mjs",
+      "ms": 749.4
+    },
+    {
+      "file": "browser_uiux_visual.mjs",
+      "ms": 36333.2
+    }
+  ],
+  "defaultEstimateMs": 810717.3,
+  "sourceBase": "0115b8c09ce55b835c6f70f32f38077e045ad12f",
+  "sourcePaths": [
+    ".github/workflows/tests.yml at sourceCommit (browser job: Run npm run test:browser)",
+    "tests/run_browser_checks.mjs at sourceCommit (instrumented END elapsed_ms, 142 PASS records)",
+    "tests/browser_*.mjs at sourceCommit (individual module filenames are listed in durations)"
+  ],
+  "defaultEstimatePolicy": "New modules use the largest successful baseline measured module duration (810717.3 ms); stale entries never define the inventory. Replace weights from successful instrumented END/artifact timings only after review. Future shard loads remain estimates.",
+  "historicalBaseline": {
+    "sourceRun": "https://github.com/DomineYH/misconcept_platform_v2/actions/runs/39171140769",
+    "sourceCommit": "427890033d206a4f043ffc946009bd8ce6a437c2",
+    "kind": "estimated intervals between sequential PASS log timestamps; not instrumented module durations",
+    "sourcePaths": [
+      ".github/workflows/tests.yml at sourceCommit (browser job: Run npm run test:browser)",
+      "tests/run_browser_checks.mjs at sourceCommit (sequential PASS timestamp intervals)",
+      "tests/browser_*.mjs at sourceCommit (individual module filenames are listed in durations)"
+    ],
+    "note": "Historical sequential PASS timestamp intervals were superseded by successful instrumented stage1 measurements; this source remains comparison provenance, not current weights."
+  }
+}

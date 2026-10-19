@@ -78,7 +78,7 @@ class ModelOptions(ConfigValue):
 class ResolvedModelConfig(ConfigValue):
     model_config_id: StrictInt = Field(ge=1)
     provider_connection_id: StrictInt = Field(ge=1)
-    provider: Literal["openai", "anthropic", "google"]
+    provider: Literal["openai", "anthropic", "google", "demo"]
     model_id: str = Field(min_length=1)
     options: ModelOptions
 
@@ -93,9 +93,13 @@ class ResolvedModelConfig(ConfigValue):
                 "output_config",
             },
             "google": {"max_output_tokens", "temperature", "thinking"},
+            "demo": {"max_output_tokens"},
         }
         if self.options.model_fields_set - allowed[self.provider]:
             raise ValueError("invalid_options")
+        if self.provider == "demo" and self.options.max_output_tokens is None:
+            # Authoring fixes the role default so execution never re-merges it.
+            self.options.max_output_tokens = 4096
         thinking = self.options.thinking
         if thinking is not None:
             expected = (

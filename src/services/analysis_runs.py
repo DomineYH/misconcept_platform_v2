@@ -18,6 +18,7 @@ from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
 )
+from src.config import config
 from src.demo.lifecycle import (
     NORMAL_SCOPE,
     NormalContext,
@@ -255,7 +256,10 @@ async def reserve_analysis(
                 db, session_id, actor_id, language=language
             )
             connection, model, _ = await resolve_frozen_model(
-                db, lesson.config.analysis.resolved_model_config, "analysis"
+                db,
+                lesson.config.analysis.resolved_model_config,
+                "analysis",
+                app_mode=config.APP_MODE,
             )
             if plan["mode"] == "blocked":
                 return await plan_response(

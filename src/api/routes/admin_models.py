@@ -135,7 +135,10 @@ async def update_model(
             {}
             if definition is None and not data.default_options
             else validate_model_and_options(
-                connection.provider, model.model_id, data.default_options
+                connection.provider,
+                model.model_id,
+                data.default_options,
+                app_mode="normal",
             )
         )
     except ValueError:
@@ -145,7 +148,9 @@ async def update_model(
         or metadata_conflict(model.model_id, connection)
         or not any(
             v["status"] == "succeeded"
-            for v in effective_roles(model, connection).values()
+            for v in effective_roles(
+                model, connection, app_mode="normal"
+            ).values()
         )
     ):
         raise HTTPException(422, detail={"code": "role_verification_required"})

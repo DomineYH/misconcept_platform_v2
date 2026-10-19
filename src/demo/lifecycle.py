@@ -2,15 +2,23 @@
 
 import asyncio
 from collections.abc import Callable, MutableMapping
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from math import isfinite
-from typing import Literal, Protocol
+from typing import Literal
 from uuid import UUID, uuid4
 from weakref import WeakValueDictionary
 
 import anyio
-from fastapi import HTTPException
+
+from src.demo.visitors import (
+    DemoContext,
+    DemoError,
+    Lease,
+    TransitionHandle,
+    VerifiedVisitor,
+    VisitorRegistry,
+)
 
 ExecutionScope = tuple[UUID | str, int]
 ExecutionKey = tuple[ExecutionScope, str, int | str | UUID]
@@ -18,21 +26,6 @@ NORMAL_SCOPE: ExecutionScope = ("normal", 0)
 KINDS = frozenset(
     {"run", "analysis", "probe", "connection", "session", "comparison"}
 )
-
-
-class TransitionHandle(Protocol):
-    def check(self, ctx) -> None: ...
-    def retain_lease(self, lease): ...
-    def release_lease(self, lease) -> None: ...
-
-
-class VisitorLifecycle(Protocol):
-    def transition(
-        self, verified_visitor
-    ) -> AbstractAsyncContextManager[TransitionHandle]: ...
-    def write_guard(
-        self, ctx
-    ) -> AbstractAsyncContextManager[TransitionHandle]: ...
 
 
 @dataclass(frozen=True)
@@ -55,7 +48,8 @@ class ExecutionToken:
     key: ExecutionKey
     captured_auth_epoch: int
     task_control: TaskControl
-    registry_lease: object
+    registry_lease: Lease | None
+    verified_visitor: VerifiedVisitor | None = None
     token_id: UUID = field(default_factory=uuid4)
     _cancel_requested: bool = field(
         default=False, init=False, repr=False, compare=False
@@ -75,17 +69,10 @@ class ExecutionToken:
 
 
 def _error(code, *, scope=None, auth_epoch=None):
-    busy = code == "DEMO_BUSY"
-    raise HTTPException(
-        409 if busy else 422,
-        detail=dict(
-            code=code,
-            retryable=busy,
-            recovery="demo.wait_or_stop" if busy else "demo.check_input",
-            generation=scope[1] if scope and scope != NORMAL_SCOPE else None,
-            auth_epoch=auth_epoch,
-        ),
-        headers={"Cache-Control": "no-store"},
+    raise DemoError(
+        code,
+        generation=scope[1] if scope and scope != NORMAL_SCOPE else None,
+        auth_epoch=auth_epoch,
     )
 
 
@@ -143,29 +130,29 @@ def _key(scope, kind, identifier):
 
 
 class Lifecycle:
-    def __init__(
-        self, visitors: VisitorLifecycle | None = None, *, lease_count=None
-    ):
+    def __init__(self, visitors: VisitorRegistry | None = None):
         self.visitors = visitors
-        # The injected counter reads #191 accounting under its supplied handle.
-        self.lease_count = lease_count
+        # #191 counts all leases; these references distinguish execution children.
+        self._children: set[Lease] = set()
         self._tokens: dict[ExecutionKey, ExecutionToken] = {}
         self._legacy: dict[UUID, object] = {}
         self._normal_lock = asyncio.Lock()
         self._locks = WeakValueDictionary()
 
     def _authority(self):
-        if self.visitors is None or self.lease_count is None:
+        if self.visitors is None:
             raise RuntimeError("Demo lifecycle authority is not bound")
         return self.visitors
 
     @asynccontextmanager
-    async def transition(self, ctx):
+    async def transition(self, ctx: DemoContext | NormalContext):
         if scope_for(ctx) == NORMAL_SCOPE:
             async with self._normal_lock:
                 yield None
         else:
-            async with self._authority().transition(ctx.visitor_id) as handle:
+            async with self._authority().transition(
+                ctx.verified_visitor
+            ) as handle:
                 handle.check(ctx)
                 yield handle
 
@@ -177,7 +164,9 @@ class Lifecycle:
         self._tokens[key] = token
         return token
 
-    async def register(self, ctx, kind, id, task: TaskControl):
+    async def register(
+        self, ctx: DemoContext | NormalContext, kind, id, task: TaskControl
+    ):
         scope = scope_for(ctx)
         key = _key(scope, kind, id)
         async with self.transition(ctx) as handle:
@@ -189,7 +178,9 @@ class Lifecycle:
                 return self.register_normal(kind, id, task)
             lease = handle.retain_lease(ctx.lease)
             try:
-                token = ExecutionToken(key, ctx.auth_epoch, task, lease)
+                token = ExecutionToken(
+                    key, ctx.auth_epoch, task, lease, ctx.verified_visitor
+                )
                 self._tokens[key] = token
                 return token
             except BaseException:
@@ -218,7 +209,9 @@ class Lifecycle:
         if scope == NORMAL_SCOPE:
             async with self._normal_lock:
                 return self._remove(key, token)
-        async with self._authority().transition(scope[0]) as handle:
+        async with self._authority().transition(
+            token.verified_visitor
+        ) as handle:
             if self._tokens.get(key) is not token:
                 return False
             handle.release_lease(token.registry_lease)
@@ -231,22 +224,27 @@ class Lifecycle:
         self._legacy.pop(token.token_id, None)
         return True
 
-    def busy_locked(self, handle, scope):
-        validate_scope(scope)
-        return bool(
-            self.tokens(scope)
-            or (scope != NORMAL_SCOPE and self.lease_count(handle, scope, True))
+    def _execution_children(self, scope):
+        return any(
+            not lease.released and (lease.visitor_id, lease.generation) == scope
+            for lease in self._children
         )
+
+    def busy_locked(self, handle: TransitionHandle, scope):
+        validate_scope(scope)
+        if (
+            scope != NORMAL_SCOPE
+            and handle.verified_visitor.visitor_id != scope[0]
+        ):
+            _error("INVALID_REQUEST")
+        return bool(self.tokens(scope) or self._execution_children(scope))
 
     async def busy(self, scope, kind=None, id=None):
         validate_scope(scope)
-        tokens = self.tokens(scope, kind)
-        if any(id is None or t.key[2] == id for t in tokens):
-            return True
-        if scope == NORMAL_SCOPE:
-            return False
-        async with self._authority().transition(scope[0]) as handle:
-            return bool(self.lease_count(handle, scope, True))
+        return any(
+            id is None or token.key[2] == id
+            for token in self.tokens(scope, kind)
+        ) or self._execution_children(scope)
 
     def cancel(self, scope, kind, id):
         token = self.lookup(scope, kind, id)
@@ -270,29 +268,28 @@ class Lifecycle:
             or timeout_seconds < 0
         ):
             raise ValueError("Drain timeout must be finite and nonnegative")
-        remaining = max(1, len(self.tokens(scope)))
+        authority = None if scope == NORMAL_SCOPE else self._authority()
         try:
             async with asyncio.timeout(timeout_seconds):
                 while True:
                     for token in self.tokens(scope):
                         if token.completed:
                             await self.pop(*token.key, token)
-                    remaining = len(self.tokens(scope))
-                    if scope != NORMAL_SCOPE:
-                        async with self._authority().transition(
-                            scope[0]
-                        ) as handle:
-                            remaining = max(
-                                remaining,
-                                self.lease_count(handle, scope, False),
-                            )
+                    leases = authority.lease_count(scope) if authority else 0
+                    remaining = max(len(self.tokens(scope)), leases)
                     if not remaining:
                         return dict(drained=True, remaining=0)
-                    # Lease releases belong to #191; never wait under transition.
-                    await asyncio.sleep(0.01)
+                    # Reap done tokens while #191 waits for request/child leases.
+                    if leases:
+                        await authority.wait_for_leases(scope, 0.01)
+                    else:
+                        await asyncio.sleep(0.01)
         except TimeoutError:
-            # A contended transition leaves its lease count unobserved, never zero.
-            return dict(drained=False, remaining=max(1, remaining))
+            remaining = max(
+                len(self.tokens(scope)),
+                authority.lease_count(scope) if authority else 0,
+            )
+            return dict(drained=remaining == 0, remaining=remaining)
 
     @asynccontextmanager
     async def resource_lock(self, scope, kind, id):
@@ -310,15 +307,14 @@ class Lifecycle:
             return
         async with self.transition(ctx) as handle:
             lease = handle.retain_lease(ctx.lease)
+            self._children.add(lease)
         try:
             yield replace(ctx, lease=lease)
         finally:
 
             async def release():
-                async with self._authority().transition(
-                    ctx.visitor_id
-                ) as handle:
-                    handle.release_lease(lease)
+                await self._authority().release_lease(lease)
+                self._children.discard(lease)
 
             cancelled = False
             with anyio.CancelScope(shield=True):

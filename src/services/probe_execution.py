@@ -12,6 +12,7 @@ from src.demo.lifecycle import (
     lifecycle,
     scope_for,
 )
+from src.demo.visitors import DemoError
 from src.models import ModelConfig, ModelProbe
 from src.services.call_admission import admit_call
 from src.services.call_execution import execute_call
@@ -64,6 +65,8 @@ async def run_probe(factory, probe_id, permit, *, ctx=None, registry=lifecycle):
         await cleanup_failure(
             factory, probe_id, "interrupted", ctx=ctx, registry=registry
         )
+    except DemoError:
+        raise
     except Exception as error:
         code = (
             error.code
@@ -160,6 +163,8 @@ async def cleanup_failure(
         await finish_probe(
             factory, probe_id, "failed", code, ctx=ctx, registry=registry
         )
+    except DemoError:
+        raise
     except Exception:
         logger.error("Probe state cleanup failed")
 

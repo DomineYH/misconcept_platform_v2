@@ -25,6 +25,7 @@ from src.demo.lifecycle import (
     lifecycle,
     scope_for,
 )
+from src.demo.visitors import DemoError
 from src.i18n import translate
 from src.models import GenerationRun, Message, Session, User
 from src.models.provider_connection import now
@@ -409,6 +410,8 @@ async def execute_analysis(factory, execution, *, ctx=None, registry=lifecycle):
             ctx=ctx,
             registry=registry,
         )
+    except DemoError:
+        raise
     except (HTTPException, InvocationError) as error:
         await finish_failure(
             factory,

@@ -3,7 +3,9 @@
 Contract: `d0-03-v1-r3`, G0 approved 2026-10-19. Input base:
 `427890033d206a4f043ffc946009bd8ce6a437c2` (confirmed ancestor of HEAD).
 The implementation is on `feat/192-demo-lifecycle`; commits and final check
-counts are recorded in the worker report. No #191 branch was imported.
+counts are recorded in the worker report. #191 integration target:
+`79d29259e27761ffe75968517cc036d3df31c1f9`, merged without conflicts as
+`d9fd0264da30a17929a3adc07e319ab5ce4af33f`. The five #191 files are unchanged.
 
 ## Public boundary and ownership
 
@@ -19,20 +21,30 @@ singleton `lifecycle`. Module functions delegate to that singleton:
 - `resource_lock(scope, kind, id)`, `write_guard(ctx)`, and
   `Lifecycle.child_context(ctx)` are async context managers.
 
-Demo integration injects `Lifecycle(visitors, lease_count=counter)`.
-`VisitorLifecycle` and `TransitionHandle` are typing protocols: transition,
-check, retain_lease, release_lease, and write_guard belong exclusively to #191.
-The counter receives `(held_handle, scope, execution_only)` and must read #191's
-accounting, including retired scopes and independent request/child/shield leases.
-It must count retained execution children for role busy checks, excluding plain
-request leases. There is no local visitor state, lease allocator, TTL store,
-factory fallback, or production double. Missing demo authority fails closed.
+Demo integration wires the same objects in both directions:
+`registry = Lifecycle(); visitors = VisitorRegistry(root, lifecycle=registry);`
+`registry.visitors = visitors`. The concrete #191 types replace the earlier local
+protocols. `transition(ctx.verified_visitor)` receives the issued capability;
+registration captures it and a distinct #191 lease on the token. Retain/check/
+release under a handle use synchronous handle methods without outer re-entry.
+Pop uses the token's captured capability, including after role/reset retirement.
+Independent child release uses `await visitors.release_lease(lease)`.
+All demo errors are the shared #191 `DemoError`, including consumer propagation.
 
-#191 binding still needs a supported scoped lease-count projection and the adapter
-from server-owned visitor identity to its transition reference. Contexts passed
-to the owned background launchers must support `dataclasses.replace(ctx, lease=...)`;
-all other context fields, particularly factory/generation/auth_epoch, stay fixed.
-The final source candidate is `ea2ba63` (full SHA in the report).
+#191 exclusively allocates, validates and counts leases. Drain uses its public
+`lease_count(scope)` and `wait_for_leases(scope, timeout)`, including request,
+registry and independent child/shield leases. Execution busy state consists of
+unremoved tokens plus live lease references retained by `Lifecycle.child_context`.
+Plain request leases do not imply busy. Every independent execution/shield child
+must use `child_context` for this classification; direct generic #191 retains
+are counted by drain but have no execution-purpose marker. #198 must route its
+children through this boundary. The reference set is not a second allocator or
+lease counter. No private #191 state, TTL store, factory fallback or production
+double is used; missing authority fails closed.
+
+Contexts passed to the background launchers support
+`dataclasses.replace(ctx, lease=...)`; all other fields, particularly
+factory/generation/auth_epoch, stay fixed.
 
 `child_context` retains an execution lease across analysis reservation and task
 registration, so a role change cannot leave an ownerless committed running row.
@@ -41,9 +53,9 @@ cleanup, producer cleanup, and owned final writes have ended. Cancellation is
 idempotent and never sets done. Pop checks identity under the transition before
 releasing once; retired-scope cleanup does not check currentness.
 
-Drain bounds both transition acquisition and completion waits. On timeout while
-transition is unavailable, remaining is a conservative positive count; it never
-reports a zero/complete result without observing all leases. Timeout preserves
+Drain bounds transition acquisition and completion waits, reaps completed tokens
+between bounded #191 waits, and reads the public synchronous lease count again
+on timeout. A contended pop remains owned until its token and lease are released. Timeout preserves
 tokens and files. Settings validation and passing DEMO_DRAIN_SECONDS (5, 1..30)
 belong to #194; zero-second checks in unit tests are immediate observations.
 
@@ -75,7 +87,8 @@ Comparisons remain normal-only; no demo comparison execution was added.
 ## Acceptance map
 
 Tests below are in `tests/test_demo_d1_02_lifecycle.py` unless otherwise stated.
-Visitor/lease/role/reset state is a local test double, never real #191 evidence.
+The original matrix below used local doubles. The Binding B section names the
+real #191 matrix and supersedes its earlier integration gaps.
 
 | Criteria | Unit / regression evidence | Scope and limits |
 |---|---|---|
@@ -98,7 +111,7 @@ Visitor/lease/role/reset state is a local test double, never real #191 evidence.
 | U23 | allowlisted diff; guarded demo error logging; no production stubs | no visitor metrics added; other-owner requests below |
 | U24 | gate table below | unit evidence never promotes integration gates |
 
-## Execution record
+## Historical execution record (before Binding B)
 
 Environment: Python 3.12.3, frozen uv dependencies, isolated pytest DBs with
 outbound sockets blocked by existing conftest. No paid calls, production DB,
@@ -135,19 +148,19 @@ outbound sockets blocked by existing conftest. No paid calls, production DB,
 
 | Gate | Status | Owner / required follow-up |
 |---|---|---|
-| #192 unit/normal regression | passed: 2085 full; 106 owned + 4 delta; 108 impact | this branch, local doubles only |
-| #191 real binding | not run; dependency unmerged | bind real check/guard/retain/release/scoped counts, rerun same matrix |
+| #192 unit/normal regression | historical counts below; Binding B adds merged-candidate checks | this branch |
+| #191 real binding | integrated at 79d2925; Binding B matrix below | capability/guard/retain/release/public counts |
 | #194 G1 | not run | inject lifecycle into resolver/middleware/lifespan; no normal startup orphan scan in demo; configure drain timeout |
 | #198 G3 | not run | pass ctx/registry through call admission, student/mentor ASGI cleanup, pipeline/chunk/ledger/shield, all final DML; scope cancel_connection |
 | #193 reset/role | not run | same-handle busy_locked; mark then handoff then release_request_db then cancel_scope/drain; retain receipt Task |
 | #200 guards/admin | not run | forbid demo comparison/probe direct calls; migrate admin registry consumers and pass fixed context |
 | #203/#204/G5 | not run | independent security/browser on integrated fixed candidate |
 
-Skipped/unverified: real #191 binding, G1/G3/G5, browser/live checks (CI).
+Skipped/unverified: G1/G3/G5 and browser/live checks (CI).
 Risk: this branch supplies lifecycle boundaries; it does not yet make the whole
 application safe to serve in demo mode.
 
-## Repair R1 — reserved scope and role/write ordering
+## Historical Repair R1 — reserved scope and role/write ordering
 
 Coordinator order `wo-192-repair1.md` repairs reviewed candidate `9f55275`.
 The demo branch now rejects the reserved NORMAL_SCOPE before normal dispatch;
@@ -170,6 +183,49 @@ With `UV_PROJECT_ENVIRONMENT=/tmp/w192-demo-lifecycle-venv`:
   `9f55275` result of 2085 passed. This repair changes only demo sentinel validation,
   its dedicated tests, and this evidence; the normal-context branch is unchanged.
 
-P2 verified-visitor binding is explicitly deferred to the coordinator's later
-binding order after #191 merges. The current UUID-versus-capability mismatch is
-not fixed here and remains a before-merge integration requirement.
+R1 deferred P2 to Binding B; the capability mismatch is resolved by the concrete
+#191 binding described above and verified below.
+
+## Binding B — real #191 authority
+
+Integrated #191 `79d29259e27761ffe75968517cc036d3df31c1f9` via merge
+`d9fd0264da30a17929a3adc07e319ab5ce4af33f`. P2 is resolved using the issued
+`VerifiedVisitor`, concrete `DemoContext`/`Lease`/`TransitionHandle`, shared
+`DemoError`, and public total-lease accounting. The same lifecycle supplies
+`cancel_scope` and `drain` to #191; the drain result is its supported
+`dict(drained=bool, remaining=int)` shape. No #191 file was changed.
+
+The dedicated fixture copies only the authorized tiny-seed construction pattern,
+runs the official migrations on temporary synthetic data, and wires a real
+`DatabaseRoot` / `VisitorRegistry` / `Lifecycle`. It imports no #191 tests.
+The following tests now provide real authority evidence (U01–U18); the retained
+doubles additionally exercise forced construction failures, cancellation and
+consumer callback barriers without claiming application integration:
+
+| Criteria | Real #191 test | Observations |
+|---|---|---|
+| U01/U04/U06/U13 | real_namespaces_isolate_equal_ids_and_allow_retired_pop | six kinds × int/string UUID/UUID; A-only cancellation; other generation/normal absent; retired pop releases A once and preserves B |
+| U02/U03/U07/U10 | real_visitor_capability_registration_and_request_release | request+execution count 2; request release 1; done/pop 0; distinct lease and identical captured capability |
+| U03/U18 | real_concurrent_registration_has_one_token_and_child; real_registration_failure_releases_retained_lease | duplicate BUSY; one token/count 2; failed construction leaves token 0/count 1 |
+| U05/U10 | real_busy_excludes_request_leases_and_includes_execution_child; real_registration_first_blocks_role_change_but_same_role_is_noop | two plain requests are idle; execution child is busy; current same-role no-op; different role BUSY; after child exit role changes |
+| U07/U08/U10/U16/U17 | real_drain_waits_for_every_lease_kind; real_drain_reaps_token_completed_during_lease_wait | live request/generic/execution lease times out with remaining 1; release gives drained/0; token completion during wait is reaped, no transition held while waiting |
+| U09/U12/U13/U14 | real_write_guard_and_reset_serialize_sql_without_late_writes | guard-first commit precedes mark; mark-first denies stale SQL; captured factory remains fixed; new generation stays fictional before/after late-write denial |
+| U05/U09/U12/U18 | real_role_and_write_guard_serialize_sql_without_stale_dml | role-first STALE_ROLE; guard-first commit precedes role transition; stale SQL rejected and stored body preserved |
+| U12/U18 | owned_execution_propagates_original_demo_error | analysis/probe/cleanup propagate the identical shared error; no generic failure write; probe permit released |
+
+Real #191 database/visitor/lifecycle tests are also run unchanged, supplying its
+TTL/state/error priority, lease validation, reset/expiry/shutdown and budget
+coverage. #192 does not duplicate that authority. HTTP receipt handoff, CSRF,
+SSE revocation and application shutdown gates still belong to #193/#194/#198.
+
+Binding B checks use the same frozen environment described above:
+- Requested lifecycle/probe/comparison command: **163 passed**, 17 warnings,
+  40.09 seconds (138 dedicated cases; 18 redundant double namespace cases
+  replaced with stronger real-authority cases).
+- Requested 12-file impact command: **108 passed**, 66 warnings, 271.26 seconds;
+  all requested filenames exist.
+- Unchanged three-file #191 matrix plus existing probe/comparison regressions:
+  **133 passed**, 17 warnings, 81.26 seconds (108 #191 cases).
+- `uv run --frozen ruff check .`: passed.
+- `uv run --frozen black --check .`: passed, 360 files unchanged.
+- Independent read-only worker review found no concrete binding bug.

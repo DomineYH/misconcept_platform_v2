@@ -118,6 +118,8 @@ def scope_for(ctx):
     scope = validate_scope(
         (getattr(ctx, "visitor_id", None), getattr(ctx, "generation", None))
     )
+    if scope == NORMAL_SCOPE:
+        _error("DEMO_INVALID_REQUEST")
     if (
         getattr(ctx, "lease", None) is None
         or type(getattr(ctx, "auth_epoch", None)) is not int

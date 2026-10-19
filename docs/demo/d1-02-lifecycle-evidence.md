@@ -79,7 +79,7 @@ Visitor/lease/role/reset state is a local test double, never real #191 evidence.
 
 | Criteria | Unit / regression evidence | Scope and limits |
 |---|---|---|
-| U01 | namespace_identity_and_retired_cleanup; reset_cancel_does_not_touch_same_id_in_other_visit_or_generation; invalid_scope_is_rejected; missing_demo_context_fields_are_invalid_requests; resource_reservations_are_scoped_and_serialized | all six kinds, int/string UUID/UUID, A/B and g/g+1 |
+| U01 | namespace_identity_and_retired_cleanup; reset_cancel_does_not_touch_same_id_in_other_visit_or_generation; invalid_scope_is_rejected; missing_demo_context_fields_are_invalid_requests; invalid_demo_namespace_never_enters_normal_scope; resource_reservations_are_scoped_and_serialized | all six kinds, int/string UUID/UUID, A/B and g/g+1 |
 | U02/U11 | registration_retains_execution_after_request_release; prestart_cancel_waits_for_callback_cleanup | Event cancellation does not complete; actual analysis/probe completion callback barriers |
 | U03 | concurrent_registration_has_one_token_and_one_child_lease; register_rolls_back_retained_lease; authority_errors_preserved_and_no_lease_retained | one token/one child, duplicate adds zero, failed registration rolls back |
 | U04 | namespace_identity_and_retired_cleanup | unfinished pop BUSY, identity, duplicate pop, retired cleanup |
@@ -87,7 +87,7 @@ Visitor/lease/role/reset state is a local test double, never real #191 evidence.
 | U06 | cancel_is_idempotent_without_completion; reset_cancel_does_not_touch_same_id_in_other_visit_or_generation | exact target counts and no early completion |
 | U07/U10 | request_child_and_shield_leases_prevent_drain; child_context_changes_only_lease_and_releases_after_retirement; child_release_finishes_under_repeated_cancellation_and_contended_transition | request/child/shield counts and captured factory/epoch |
 | U08 | resource_reservations_are_scoped_and_serialized; drain_waits_without_holding_transition; drain_timeout_includes_waiting_for_transition | independent resources and bounded wait |
-| U09/U12 | write_guard_serializes_commit_with_reset_and_role; late_owned_callbacks_never_open_factory; authority_errors_preserved_and_no_lease_retained | owned callback guard rejects before factory; real SQL/reset matrix #191/#194/#198 |
+| U09/U12 | write_guard_serializes_commit_with_reset; role_change_first_rejects_old_write_guard_without_writes; write_guard_first_commits_before_role_change; late_owned_callbacks_never_open_factory; authority_errors_preserved_and_no_lease_retained | role-first rejects STALE_ROLE409/write0; guard-first commits before role change; owned callback guard rejects before factory; real SQL/reset/role matrix #191/#194/#198 |
 | U13/U14 | reset_handoff_releases_own_request_but_not_other_live_request | consumes retired scope/early release; real mark/handoff/rollback/receipt/disconnect #193/#194 |
 | U15/U16/U17 | authority_errors_preserved_and_no_lease_retained; namespace_identity_and_retired_cleanup; drain_timeout_includes_waiting_for_transition; existing orphan/probe regressions | authority error and release semantics; actual TTL/shutdown/budget #191/#194 |
 | U18 | authority_errors_preserved_and_no_lease_retained; invalid_scope_is_rejected; namespace_identity_and_retired_cleanup | lifecycle BUSY409/INVALID422; authority errors propagated; HTTP/SSE terminal mapping #198/#201 |
@@ -146,3 +146,30 @@ outbound sockets blocked by existing conftest. No paid calls, production DB,
 Skipped/unverified: real #191 binding, G1/G3/G5, browser/live checks (CI).
 Risk: this branch supplies lifecycle boundaries; it does not yet make the whole
 application safe to serve in demo mode.
+
+## Repair R1 — reserved scope and role/write ordering
+
+Coordinator order `wo-192-repair1.md` repairs reviewed candidate `9f55275`.
+The demo branch now rejects the reserved NORMAL_SCOPE before normal dispatch;
+normal scope-only APIs and normal contexts retain their existing behavior.
+`test_invalid_demo_namespace_never_enters_normal_scope` covers seven malformed
+namespaces across register/assert_current/write_guard/child_context and cancellation
+via scope_for(ctx), always preserving the existing normal token and cancel signal.
+The focused red run reproduced all five sentinel bypasses: 5 failed, 32 passed.
+
+U09 now explicitly covers role-first → DEMO_STALE_ROLE409/write0 and
+write-guard-first → commit before role change, using the local authority double
+and an Event barrier. The old reset-only test name was corrected. Real SQL and
+#191/G1/G3 role/reset integration remain pending.
+
+With `UV_PROJECT_ENVIRONMENT=/tmp/w192-demo-lifecycle-venv`:
+- Requested three-file targeted command: **147 passed**, 17 warnings, 59.29 seconds.
+- `uv run --frozen ruff check .`: passed.
+- `uv run --frozen black --check .`: passed, 355 files unchanged.
+- Full suite: not rerun, as ordered. Reuse the source-candidate `ea2ba63` / evidence
+  `9f55275` result of 2085 passed. This repair changes only demo sentinel validation,
+  its dedicated tests, and this evidence; the normal-context branch is unchanged.
+
+P2 verified-visitor binding is explicitly deferred to the coordinator's later
+binding order after #191 merges. The current UUID-versus-capability mismatch is
+not fixed here and remains a before-merge integration requirement.

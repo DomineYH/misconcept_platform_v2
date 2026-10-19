@@ -280,7 +280,7 @@ async def test_resource_reservations_are_scoped_and_serialized():
     assert entered.is_set()
 
 
-async def test_write_guard_serializes_commit_with_reset_and_role():
+async def test_write_guard_serializes_commit_with_reset():
     visitors = Visitors()
     registry = Lifecycle(visitors, lease_count=visitors.count)
     ctx = visitors.context()
@@ -814,3 +814,103 @@ async def test_missing_demo_context_fields_are_invalid_requests(missing):
         )
     assert error.value.status_code == 422
     assert error.value.detail["code"] == "DEMO_INVALID_REQUEST"
+
+
+@pytest.mark.parametrize(
+    "visitor_id,generation",
+    [
+        ("normal", 0),
+        ("normal", 1),
+        ("invalid", 1),
+        ("00000000-0000-1000-8000-000000000001", 1),
+        (uuid4(), 0),
+        (uuid4(), -1),
+        (uuid4(), True),
+    ],
+)
+@pytest.mark.parametrize(
+    "operation",
+    ["register", "assert_current", "write_guard", "child_context", "cancel"],
+)
+async def test_invalid_demo_namespace_never_enters_normal_scope(
+    visitor_id, generation, operation
+):
+    from types import SimpleNamespace
+
+    from src.demo.lifecycle import NORMAL_SCOPE, scope_for
+
+    registry = Lifecycle()
+    cancelled = asyncio.Event()
+    normal = await registry.register(
+        NormalContext(),
+        "run",
+        "existing",
+        TaskControl(cancelled.set, asyncio.Event()),
+    )
+    ctx = SimpleNamespace(
+        app_mode="demo",
+        visitor_id=visitor_id,
+        generation=generation,
+        auth_epoch=1,
+        lease=object(),
+        factory=object(),
+    )
+    with pytest.raises(HTTPException) as error:
+        if operation == "register":
+            await registry.register(
+                ctx, "run", "demo", TaskControl(lambda: None, asyncio.Event())
+            )
+        elif operation == "assert_current":
+            await registry.assert_current(ctx)
+        elif operation == "write_guard":
+            async with registry.write_guard(ctx):
+                pytest.fail("Invalid demo context entered write guard")
+        elif operation == "child_context":
+            async with registry.child_context(ctx):
+                pytest.fail("Invalid demo context retained a child context")
+        else:
+            registry.cancel(scope_for(ctx), "run", "existing")
+    assert error.value.status_code == 422
+    assert error.value.detail["code"] == "DEMO_INVALID_REQUEST"
+    assert registry.tokens(NORMAL_SCOPE) == (normal,)
+    assert not cancelled.is_set() and not normal.completed
+    normal.task_control.done.set()
+    assert await registry.pop(*normal.key, normal)
+
+
+async def test_role_change_first_rejects_old_write_guard_without_writes():
+    visitors = Visitors()
+    registry = Lifecycle(visitors, lease_count=visitors.count)
+    ctx = visitors.context()
+    writes = []
+    async with visitors.transition(ctx.visitor_id):
+        visitors.epoch += 1
+    with pytest.raises(HTTPException) as error:
+        async with registry.write_guard(ctx):
+            writes.append("commit")
+    assert error.value.detail["code"] == "DEMO_STALE_ROLE"
+    assert error.value.status_code == 409
+    assert writes == []
+
+
+async def test_write_guard_first_commits_before_role_change():
+    visitors = Visitors()
+    registry = Lifecycle(visitors, lease_count=visitors.count)
+    ctx = visitors.context()
+    attempting_role_change = asyncio.Event()
+    changes = []
+
+    async def change_role():
+        attempting_role_change.set()
+        async with visitors.transition(ctx.visitor_id):
+            visitors.epoch += 1
+            changes.append("role changed")
+
+    async with registry.write_guard(ctx):
+        task = asyncio.create_task(change_role())
+        await asyncio.wait_for(attempting_role_change.wait(), 2)
+        assert changes == [] and visitors.epoch == ctx.auth_epoch
+        changes.append("commit")
+    await asyncio.wait_for(task, 2)
+    assert changes == ["commit", "role changed"]
+    assert visitors.epoch == ctx.auth_epoch + 1

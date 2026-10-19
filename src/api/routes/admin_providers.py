@@ -1,5 +1,6 @@
 """Administrator-only provider snapshots and encrypted credential writes."""
 
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
@@ -27,6 +28,9 @@ from src.api.dependencies import (
     get_db_session,
 )
 from src.config import config
+from src.demo.database import DemoError
+from src.demo.lifecycle import NORMAL_SCOPE
+from src.demo.session import Provenance
 from src.i18n import display_language, translate
 from src.models.provider_connection import ProviderAuditLog, ProviderConnection
 from src.models.scenario import Scenario
@@ -76,6 +80,41 @@ class CredentialRoute(APIRoute):
 
 
 router = APIRouter(tags=["Admin Providers"], route_class=CredentialRoute)
+
+
+async def demo_read_only(user: User = Depends(get_admin_user)):
+    """§20: refuse demo writes before body keys, reauth, SDK or reservations."""
+    if config.APP_MODE == "demo":
+        raise DemoError("ACTION_FORBIDDEN")
+    return user
+
+
+def execution_scope(request):
+    """Cancel only the current visitor's tasks; normal keeps its own scope."""
+    if config.APP_MODE == "demo":
+        return request.state.demo_context.scope
+    return NORMAL_SCOPE
+
+
+def request_factory(db):
+    """§6: demo work reuses the guarded request session, never db.bind."""
+
+    @asynccontextmanager
+    async def session():
+        yield db
+
+    return session
+
+
+@contextmanager
+def demo_missing():
+    """§20: a missing visitor record is the §11 404, not the normal body."""
+    try:
+        yield
+    except HTTPException as error:
+        if config.APP_MODE == "demo" and error.status_code == 404:
+            raise DemoError("RESOURCE_NOT_FOUND") from None
+        raise
 
 
 class CredentialChange(BaseModel):
@@ -173,6 +212,12 @@ async def provider_state(
     configuration = await configuration_state(
         db, connections, display_language(request), app_mode=config.APP_MODE
     )
+    # §20: demo AI settings are seed examples; visitors cannot change them.
+    demo = (
+        {"provenance": Provenance(record_origin="seed_prepared").model_dump()}
+        if config.APP_MODE == "demo"
+        else {}
+    )
     scenarios = (
         await db.execute(
             select(
@@ -211,6 +256,7 @@ async def provider_state(
                     for p in PROVIDERS
                 ],
                 **configuration,
+                **demo,
             }
         ),
         headers={"Cache-Control": "no-store"},
@@ -222,7 +268,7 @@ async def save_key(
     request: Request,
     provider: Provider,
     data: KeyChange,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     await reauthenticate(request, user, data.current_password)
@@ -323,7 +369,7 @@ async def set_enabled(
     request: Request,
     provider: Provider,
     data: EnabledChange,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     await reauthenticate(request, user, data.current_password)
@@ -352,7 +398,7 @@ async def delete_key(
     request: Request,
     provider: Provider,
     data: CredentialChange,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     await reauthenticate(request, user, data.current_password)

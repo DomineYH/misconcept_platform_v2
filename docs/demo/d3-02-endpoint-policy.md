@@ -1,6 +1,6 @@
 # D3-02 관리자 endpoint demo 정책 대응표 (#200)
 
-상태: 초안 — PR1(CSV·삭제)은 구현, PR2(위험 endpoint guard)·PR3(허용 CRUD quota)는 예정. 이 문서는 정책의 대응표이며 구현 증거(`d3-02-guards-evidence.md`)는 PR4에서 따로 쓴다.
+상태: PR1(CSV·삭제)·PR2(위험 endpoint guard)는 구현, PR3(허용 CRUD quota)는 예정. 이 문서는 정책의 대응표이며 구현 증거(`d3-02-guards-evidence.md`)는 PR4에서 따로 쓴다.
 
 ## 1. 목적과 규칙
 
@@ -8,7 +8,11 @@
 - 의미는 계약 `d0-03-v1-r3`([d0-03-contract-v1.md](d0-03-contract-v1.md)) §20–§23, §24.1, §26에 바인딩한다. 이 문서는 계약값(오류 code, 열 이름, 파일명)을 바꾸지 않는다.
 - mode 판정은 `config.APP_MODE == "demo"` 하나뿐이다. 요청 상태·`TESTING`·monkeypatch를 mode로 읽지 않는다. normal 동작과 normal CSV는 byte 단위로 불변이다.
 - 오류 code는 계약 §11 표의 code만 쓴다: `DEMO_ACTION_FORBIDDEN` 403, `DEMO_RESOURCE_NOT_FOUND` 404, `DEMO_LIMIT_REACHED` 429, `DEMO_UPLOAD_TOO_LARGE` 413, `DEMO_INVALID_REQUEST` 422.
-- demo guard helper는 새 모듈을 만들지 않는다. `admin_providers.py`(catalog/models/probes/ai_settings가 이미 import)와 `admin_comparisons.py`(comparison_conversations가 import) 안에 둔다.
+- demo guard helper는 새 모듈을 만들지 않고 `admin_providers.py`에 둔다. 다른 위험 route는 이 파일에서 import한다.
+  - `demo_read_only`: `get_admin_user` 위의 dependency다. demo에서 403 `DEMO_ACTION_FORBIDDEN`을 낸다. FastAPI는 dependency를 body 검증보다 먼저 풀기 때문에 body의 키·비밀번호를 검증하거나 읽기 전에 거절한다(잘못된 JSON 문법만 먼저 422다).
+  - `demo_missing`: demo에서 기존 404를 `DEMO_RESOURCE_NOT_FOUND`로 바꾼다.
+  - `execution_scope`: 취소·삭제 서비스에 현재 방문객 scope를 넘긴다. normal은 `NORMAL_SCOPE`(기본값)다.
+  - `request_factory`: demo에서 `db.bind`로 factory를 만들지 않고 guard가 걸린 요청 session을 쓴다.
 - 교사는 기존 admin 권한 거절을 유지한다(`get_admin_user`의 demo 교사 403 `DEMO_ACTION_FORBIDDEN`, 또는 route 안의 admin 역할 검사). 아래 "허용 역할"은 모두 demo 관리자다.
 - 공통 순서: 요청 context/User/CSRF 검증 뒤 demo guard가 body의 키·비밀번호 처리, 외부 SDK, 재인증, 작업 예약보다 먼저 실행된다.
 
@@ -18,7 +22,7 @@
 - `FORBID` = 403 `DEMO_ACTION_FORBIDDEN`. 거절된 요청은 catalog/probe/비교 run/원장·사용량 row를 만들지 않고 outbound 호출이 없다.
 - `NF` = 없거나 다른 scope의 ID이면 404 `DEMO_RESOURCE_NOT_FOUND`.
 - `READ` = 현재 방문객 DB(factory)에서만 읽는 조회. 전용 오류는 `NF`.
-- `CANCEL` = `lifecycle.lookup(ctx.scope, kind, id)`가 존재할 때만 `lifecycle.cancel(ctx.scope, kind, id)`. 부재 404, 다른 scope 취소 0. kind는 `probe|run|comparison`.
+- `CANCEL` = 현재 방문객 DB에 있는 기록만 대상이다. 실행 취소는 `ctx.scope`의 lifecycle token에만 한다(비교 stop은 기존 서비스가 `registry.cancel(scope, "run", generation_id)`, probe는 `lifecycle.lookup(ctx.scope, "probe", probe_id)`). 부재 404, 다른 scope 취소 0.
 - `CRUD` = `write_guard(ctx)` 아래 허용. quota 초과 429 `DEMO_LIMIT_REACHED`, count 확인과 insert/commit은 한 transaction.
 
 ## 2. 대응표
@@ -27,7 +31,7 @@
 
 | method | path | 행위 | 허용 역할(demo) | demo 정책 | 결과/오류 | 구현 위치 | 단계 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/admin/ai/state` | AI 상태·저장된 모델/역할 | 관리자 | READ(정적 예시, unknown usage) | 200 | `admin_providers.py:provider_state` | PR2 |
+| GET | `/admin/ai/state` | AI 상태·저장된 모델/역할 | 관리자 | READ(정적 예시, unknown usage). demo 응답에 §19 `provenance`(`record_origin=seed_prepared`; demo에서 AI 설정은 변경할 수 없는 seed 예시) | 200 | `admin_providers.py:provider_state` | PR2 |
 | POST | `/admin/ai/providers/{provider}/key` | provider 키 저장·교체 | 관리자 | FORBID. `reauthenticate`·키 처리 전에 거절 | 403 | `admin_providers.py:save_key` | PR2 |
 | POST | `/admin/ai/providers/{provider}/enabled` | provider 활성 전환 | 관리자 | FORBID | 403 | `admin_providers.py:set_enabled` | PR2 |
 | POST | `/admin/ai/providers/{provider}/delete` | provider 키 삭제 | 관리자 | FORBID | 403 | `admin_providers.py:delete_key` | PR2 |
@@ -36,7 +40,7 @@
 | POST | `/admin/ai/models/{model_id}/update` | 모델 활성/옵션 변경 | 관리자 | FORBID(읽기 전용) | 403 | `admin_models.py:update_model` | PR2 |
 | POST | `/admin/ai/models/{model_id}/probes` | 역할 시험 예약 | 관리자 | FORBID. 로컬/외부 모두 거절 | 403 | `admin_probes.py:reserve_probe` | PR2 |
 | GET | `/admin/ai/probes/{request_id}` | probe 상태 | 관리자 | READ(같은 방문객 DB의 기존 상태만) | 200 / `NF` | `admin_probes.py:probe_status` | PR2 |
-| POST | `/admin/ai/probes/{request_id}/cancel` | probe 취소 | 관리자 | CANCEL(kind=`probe`). `db.bind` factory 대신 `lifecycle.child_context(ctx)` | 기존 성공 응답 / `NF` | `admin_probes.py:cancel_probe` | PR2 |
+| POST | `/admin/ai/probes/{request_id}/cancel` | probe 취소 | 관리자 | CANCEL(kind=`probe`). demo는 `db.bind` factory·normal `active_probes`를 쓰지 않고 `cancel_reserved_probe(ctx.factory, id, ctx=ctx)` | 기존 성공 응답 / `NF` | `admin_probes.py:cancel_probe` | PR2 |
 | POST | `/admin/ai/settings/update` | AI 설정 변경 | 관리자 | FORBID(읽기 전용) | 403 | `admin_ai_settings.py:update_settings` | PR2 |
 
 ### 2.2 구형 단일 역할 비교 (§20)
@@ -48,9 +52,9 @@
 | GET | `/admin/comparisons/{comparison_id}/panels/{panel_id}/model` | panel model | 관리자 | READ | 200 / `NF` | `admin_comparisons.py:comparison_model` | PR2 |
 | POST | `/admin/comparisons` | 비교 실행 | 관리자 | FORBID | 403 | `admin_comparisons.py:start_comparison` | PR2 |
 | POST | `/admin/comparisons/{comparison_id}/panels/{panel_id}/retry` | panel 재시도 | 관리자 | FORBID | 403 | `admin_comparisons.py:retry_panel` | PR2 |
-| POST | `/admin/comparisons/{comparison_id}/panels/{panel_id}/stop` | panel 중지 | 관리자 | CANCEL(kind=`comparison`) | 기존 결과 / `NF` | `admin_comparisons.py:stop_panel` | PR2 |
-| POST | `/admin/comparisons/{comparison_id}/stop` | 비교 전체 중지 | 관리자 | CANCEL(kind=`comparison`) | 기존 결과 / `NF` | `admin_comparisons.py:stop_all` | PR2 |
-| DELETE | `/admin/comparisons/{comparison_id}` | 비교 기록 삭제 | 관리자 | 기존 권한·비용 원장 보존의 방문객 기록 삭제만 | 기존 204 / `NF` | `admin_comparisons.py:remove_comparison` | PR2 |
+| POST | `/admin/comparisons/{comparison_id}/panels/{panel_id}/stop` | panel 중지 | 관리자 | CANCEL(기존 stop 서비스, `scope=ctx.scope`) | 기존 결과 / `NF` | `admin_comparisons.py:stop_panel` | PR2 |
+| POST | `/admin/comparisons/{comparison_id}/stop` | 비교 전체 중지 | 관리자 | CANCEL(기존 stop 서비스, `scope=ctx.scope`) | 기존 결과 / `NF` | `admin_comparisons.py:stop_all` | PR2 |
+| DELETE | `/admin/comparisons/{comparison_id}` | 비교 기록 삭제 | 관리자 | 기존 권한·비용 원장 보존의 방문객 기록 삭제만(`scope=ctx.scope`로 busy 판정) | 기존 204 / `NF` | `admin_comparisons.py:remove_comparison` | PR2 |
 
 ### 2.3 새 비교 대화 (§20)
 
@@ -68,8 +72,8 @@
 | POST | `BASE/{identifier}/mentor` | 멘토 실행 | 관리자 | FORBID | 403 | `:mentor` | PR2 |
 | POST | `BASE/{identifier}/end` | 대화 종료 | 관리자 | FORBID | 403 | `:end` | PR2 |
 | POST | `BASE/{identifier}/children/{child_id}/panels/{panel_id}/retry` | panel 재시도 | 관리자 | FORBID | 403 | `:retry` | PR2 |
-| POST | `BASE/{identifier}/stop` | 대화 중지 | 관리자 | CANCEL(kind=`comparison`) | 기존 결과 / `NF` | `:stop` | PR2 |
-| DELETE | `BASE/{identifier}` | 대화 기록 삭제 | 관리자 | 기존 권한·비용 원장 보존의 방문객 기록 삭제만 | 기존 204 / `NF` | `:delete` | PR2 |
+| POST | `BASE/{identifier}/stop` | 대화 중지 | 관리자 | CANCEL(기존 stop 서비스, `scope=ctx.scope`) | 기존 결과 / `NF` | `:stop` | PR2 |
+| DELETE | `BASE/{identifier}` | 대화 기록 삭제 | 관리자 | 기존 권한·비용 원장 보존의 방문객 기록 삭제만(`scope=ctx.scope`로 busy 판정) | 기존 204 / `NF` | `:delete` | PR2 |
 
 ### 2.4 재인증 서비스 (§26)
 
@@ -131,13 +135,13 @@
 | POST | `/admin/about/{contributor_id}/update` | 기여자 수정 | 관리자 | CRUD | 기존 응답 | `admin_about.py:update_contributor` | PR3 |
 | POST | `/admin/about/{contributor_id}/delete` | 기여자 삭제 | 관리자 | CRUD | 기존 응답 | `admin_about.py:delete_contributor` | PR3 |
 
-### 2.7 계약이 분류하지 않은 route
+### 2.7 계약 표에 없던 분석·종료 route (가장 가까운 규칙으로 분류)
 
 | method | path | 행위 | 허용 역할(demo) | demo 정책 | 결과/오류 | 구현 위치 | 단계 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| POST | `/admin/sessions/{session_id}/end` | 관리자 세션 종료 + 분석 예약(`request_analysis`) | 관리자 | NEEDS_DECISION | 미정 | `admin_session_actions.py:end_session` | 미정 |
-| POST | `/admin/sessions/{session_id}/analyze_regenerate` | 분석 재생성 예약 | 관리자 | NEEDS_DECISION | 미정 | `admin_session_actions.py:regenerate_analysis` | 미정 |
-| POST | `/admin/sessions/{session_id}/analysis/runs/{run_id}/cancel` | 분석 run 취소 | 관리자 | NEEDS_DECISION | 미정 | `admin_session_actions.py:cancel_admin_analysis_run` | 미정 |
+| POST | `/admin/sessions/{session_id}/end` | 관리자 세션 종료 + 분석 예약(`request_analysis`) | 관리자 | 허용. 방문객 여정의 일부다(§22 "정상 여정은 먼저 대화를 종료", §24.1 dialogue_complete/analysis_ready). 종료 저장은 §6 write_guard, 분석 예약·실행은 #198 공통 admission과 §16 request_id 예약 계약을 따른다. 삭제 세션은 `NF`. **현재 route는 `mark_session_ended`/`request_analysis`에 `ctx`를 넘기지 않는다(후속).** | 기존 응답 / `NF` | `admin_session_actions.py:end_session` | 후속(ctx 전달) |
+| POST | `/admin/sessions/{session_id}/analyze_regenerate` | 분석 재생성 예약(채택 보고서 보존) | 관리자 | 허용. §16의 명시적 retry 규칙을 따른다: 같은 request_id+같은 입력은 기존 run 반환, 다른 body는 `DEMO_REQUEST_CONFLICT`, 자동 retry 0(교사 분석의 1회 재시도 규칙만 예외), 정상 완료 결과를 새 예시로 바꾸지 않음. 외부 호출 없음(§14). **현재 route는 `request_analysis`에 `ctx`를 넘기지 않는다(후속).** | 기존 응답 | `admin_session_actions.py:regenerate_analysis` | 후속(ctx 전달) |
+| POST | `/admin/sessions/{session_id}/analysis/runs/{run_id}/cancel` | 분석 run 취소 | 관리자 | 허용. 방문객 여정의 일부이며 §20 stop/cancel 규칙과 같다: 현재 namespace에 있는 run만 취소, 다른 scope 취소 0, 부재·삭제 세션 `NF`. 취소는 `analysis_runs.cancel_analysis(..., ctx=ctx)`의 `ctx.scope` 경로여야 한다. **현재 이 route는 `ctx`를 넘기지 않아 demo에서 NormalContext로 동작한다(방문객 token 취소 0, 다른 방문객 영향 없음). 수정은 PR2 쓰기 범위 밖이라 후속으로 남긴다.** | 202 / `NF` | `admin_session_actions.py:cancel_admin_analysis_run` | 후속(ctx 전달) |
 
 ### 2.8 다른 소유자
 
@@ -175,10 +179,6 @@
 - 비교 실행·채택 체험 추가. 안전한 stop/delete 허용은 비교 실행의 MVP 포함을 뜻하지 않는다.
 - 외부 호출, 운영 자료/secret, 새 dependency, 공용 conftest/CI 수정. 계약값은 이 문서에서 바꾸지 않는다.
 
-## 6. 미분류 (NEEDS_DECISION)
+## 6. 분류 기록
 
-계약 §20/§21 표가 다루지 않는 route다. 정책을 추측하지 않고 계약 소유자(#190)의 결정을 기다린다.
-
-- `POST /admin/sessions/{session_id}/end`: 세션 종료와 동시에 분석을 예약한다.
-- `POST /admin/sessions/{session_id}/analyze_regenerate`: 분석 재생성을 예약한다.
-- `POST /admin/sessions/{session_id}/analysis/runs/{run_id}/cancel`: 분석 run 취소다. CANCEL 규칙을 적용할지, 분석 lifecycle 소유(#192/#198)와의 경계가 필요하다.
+S1 초안의 미분류 3건(§2.7)은 coordinator 결정(2026-10-20)에 따라 위 표처럼 분류했다. 세션 종료와 run 취소는 방문객 여정으로 허용하고, 분석 재생성은 §16 retry 규칙을 따른다. 세 route는 모두 `admin_session_actions.py`가 분석 서비스(`mark_session_ended`, `request_analysis`, `cancel_analysis`)에 `ctx=request.state.demo_context`를 넘겨야 demo의 write_guard·scope·provider 경로를 탄다. 이 파일은 PR2 쓰기 범위 밖이므로 후속 변경으로 요청한다.

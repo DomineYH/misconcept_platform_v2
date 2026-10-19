@@ -6,14 +6,19 @@ import json
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.api.dependencies import get_admin_user, get_db_session
-from src.api.routes.admin_providers import CredentialRoute
+from src.api.routes.admin_providers import (
+    CredentialRoute,
+    demo_missing,
+    demo_read_only,
+)
+from src.config import config
 from src.models import (
     AppSetting,
     ModelConfig,
@@ -55,7 +60,7 @@ def public_probe(probe):
 async def reserve_probe(
     model_id: int,
     data: ProbeRequest,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     async with execution_lock():
@@ -224,7 +229,8 @@ async def probe_status(
         )
     )
     if probe is None:
-        raise HTTPException(404, detail={"code": "probe_not_found"})
+        with demo_missing():
+            raise HTTPException(404, detail={"code": "probe_not_found"})
     response.headers["Cache-Control"] = "no-store"
     return public_probe(probe)
 
@@ -235,6 +241,7 @@ class CancelRequest(BaseModel):
 
 @router.post("/admin/ai/probes/{request_id}/cancel")
 async def cancel_probe(
+    request: Request,
     request_id: UUID,
     data: CancelRequest,
     user: User = Depends(get_admin_user),
@@ -250,9 +257,15 @@ async def cancel_probe(
         )
     )
     if probe is None:
-        raise HTTPException(404, detail={"code": "probe_not_found"})
+        with demo_missing():
+            raise HTTPException(404, detail={"code": "probe_not_found"})
     probe_id = probe.id
     pending = probe.status == "verifying"
+    if config.APP_MODE == "demo":
+        await db.rollback()
+        if pending:
+            await _cancel_demo_probe(request.state.demo_context, probe_id)
+        return {"status": "cancel_requested"}
     factory = async_sessionmaker(db.bind, expire_on_commit=False)
     await db.rollback()
     if pending:
@@ -265,3 +278,18 @@ async def cancel_probe(
         except InvocationError as error:
             raise HTTPException(503, detail={"code": error.code}) from None
     return {"status": "cancel_requested"}
+
+
+async def _cancel_demo_probe(ctx, probe_id):
+    """Cancel only this visitor's own probe; never the normal registry."""
+    from src.demo.lifecycle import lifecycle
+    from src.services.probe_lifecycle import cancel_reserved_probe
+
+    token = lifecycle.lookup(ctx.scope, "probe", probe_id)
+    if token is not None:
+        token.request_cancel()
+        await token.wait_done()
+    try:
+        await cancel_reserved_probe(ctx.factory, probe_id, ctx=ctx)
+    except InvocationError as error:
+        raise HTTPException(503, detail={"code": error.code}) from None

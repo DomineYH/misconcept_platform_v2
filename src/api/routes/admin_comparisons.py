@@ -3,11 +3,17 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.api.dependencies import get_admin_user, get_db_session
+from src.api.routes.admin_providers import (
+    demo_missing,
+    demo_read_only,
+    execution_scope,
+    request_factory,
+)
 from src.api.routes.comparison_input import ComparisonRoute
 from src.api.schemas.comparison import (
     ComparisonRequest,
@@ -17,6 +23,7 @@ from src.api.schemas.comparison import (
     ComparisonStopTarget,
 )
 from src.api.schemas.scenario_config import ResolvedModelConfig
+from src.config import config
 from src.models import User
 from src.services.comparison_history import delete_comparison, list_comparisons
 from src.services.comparison_runs import reserve_comparison
@@ -37,6 +44,8 @@ PanelId = Annotated[
 
 
 async def comparison_factory(db):
+    if config.APP_MODE == "demo":
+        return request_factory(db)
     factory = async_sessionmaker(
         db.bind, expire_on_commit=False, autoflush=False
     )
@@ -66,11 +75,13 @@ async def comparison_model(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    comparison = await owned_comparison(db, str(comparison_id), user.id)
+    with demo_missing():
+        comparison = await owned_comparison(db, str(comparison_id), user.id)
     snapshot = await comparison_snapshot(db, comparison)
     if comparison_busy(snapshot):
         raise HTTPException(409, detail={"code": "comparison_busy"})
-    panel = find_panel(snapshot, panel_id)
+    with demo_missing():
+        panel = find_panel(snapshot, panel_id)
     try:
         selection = ResolvedModelConfig.model_validate(panel["model_config"])
         await resolve_frozen_model(
@@ -92,7 +103,7 @@ async def comparison_model(
 @router.post("/admin/comparisons")
 async def start_comparison(
     body: ComparisonRequest,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     if (
@@ -112,7 +123,7 @@ async def retry_panel(
     comparison_id: UUID,
     panel_id: PanelId,
     body: ComparisonRetry,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     factory = await comparison_factory(db)
@@ -130,7 +141,8 @@ async def get_comparison(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    comparison = await owned_comparison(db, str(comparison_id), user.id)
+    with demo_missing():
+        comparison = await owned_comparison(db, str(comparison_id), user.id)
     return JSONResponse(
         await comparison_snapshot(db, comparison),
         headers={"Cache-Control": "no-store"},
@@ -139,16 +151,21 @@ async def get_comparison(
 
 @router.delete("/admin/comparisons/{comparison_id}", status_code=204)
 async def remove_comparison(
+    request: Request,
     comparison_id: UUID,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    await delete_comparison(db, str(comparison_id), user.id)
+    with demo_missing():
+        await delete_comparison(
+            db, str(comparison_id), user.id, scope=execution_scope(request)
+        )
     return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/admin/comparisons/{comparison_id}/panels/{panel_id}/stop")
 async def stop_panel(
+    request: Request,
     comparison_id: UUID,
     panel_id: PanelId,
     body: ComparisonStopGeneration,
@@ -156,8 +173,8 @@ async def stop_panel(
     db: AsyncSession = Depends(get_db_session),
 ):
     factory = await comparison_factory(db)
-    return JSONResponse(
-        await stop_comparison(
+    with demo_missing():
+        result = await stop_comparison(
             factory,
             str(comparison_id),
             user.id,
@@ -166,26 +183,27 @@ async def stop_panel(
                     panel_id=panel_id, generation_id=body.generation_id
                 )
             ],
-        ),
-        headers={"Cache-Control": "no-store"},
-    )
+            scope=execution_scope(request),
+        )
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/admin/comparisons/{comparison_id}/stop")
 async def stop_all(
+    request: Request,
     comparison_id: UUID,
     body: ComparisonStop,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     factory = await comparison_factory(db)
-    return JSONResponse(
-        await stop_comparison(
+    with demo_missing():
+        result = await stop_comparison(
             factory,
             str(comparison_id),
             user.id,
             body.generations,
             all_panels=True,
-        ),
-        headers={"Cache-Control": "no-store"},
-    )
+            scope=execution_scope(request),
+        )
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})

@@ -9,6 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_admin_user, get_db_session
 from src.api.routes.admin_comparisons import PanelId, comparison_factory
+from src.api.routes.admin_providers import (
+    demo_missing,
+    demo_read_only,
+    execution_scope,
+)
 from src.api.routes.comparison_input import ComparisonRoute
 from src.api.schemas.comparison_conversation import (
     ConversationAction,
@@ -44,7 +49,7 @@ def json_result(snapshot, status_code=200):
 @router.post(BASE)
 async def create(
     body: ConversationCreate,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     snapshot, created = await create_conversation(
@@ -59,11 +64,9 @@ async def get(
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    return json_result(
-        await conversation_snapshot(
-            db, await owned_conversation(db, str(identifier), user.id)
-        )
-    )
+    with demo_missing():
+        parent = await owned_conversation(db, str(identifier), user.id)
+    return json_result(await conversation_snapshot(db, parent))
 
 
 async def execute(db, user, identifier, action, body):
@@ -82,7 +85,7 @@ async def execute(db, user, identifier, action, body):
 async def turn(
     identifier: UUID,
     body: ConversationTurn,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     return await execute(db, user, identifier, "turn", body)
@@ -92,7 +95,7 @@ async def turn(
 async def adopt(
     identifier: UUID,
     body: ConversationAdopt,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     return await execute(db, user, identifier, "adopt", body)
@@ -107,15 +110,16 @@ async def model(
 ):
     from src.services.comparison_conversations import conversation_model
 
-    parent = await owned_conversation(db, str(identifier), user.id)
-    return json_result(await conversation_model(db, parent, panel_id))
+    with demo_missing():
+        parent = await owned_conversation(db, str(identifier), user.id)
+        return json_result(await conversation_model(db, parent, panel_id))
 
 
 @router.post(BASE + "/{identifier}/mentor")
 async def mentor(
     identifier: UUID,
     body: ConversationMentor,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     return await execute(db, user, identifier, "mentor", body)
@@ -125,7 +129,7 @@ async def mentor(
 async def end(
     identifier: UUID,
     body: ConversationAction,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     return await execute(db, user, identifier, "end", body)
@@ -144,6 +148,7 @@ async def history(
 
 @router.delete(BASE + "/{identifier}", status_code=204)
 async def delete(
+    request: Request,
     identifier: UUID,
     user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
@@ -152,7 +157,10 @@ async def delete(
 
     from src.services.comparison_conversation_history import delete_conversation
 
-    await delete_conversation(db, str(identifier), user.id)
+    with demo_missing():
+        await delete_conversation(
+            db, str(identifier), user.id, scope=execution_scope(request)
+        )
     return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
@@ -162,7 +170,7 @@ async def retry(
     child_id: UUID,
     panel_id: PanelId,
     body: ConversationRetry,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     from src.services.comparison_conversation_recovery import recover_action
@@ -180,6 +188,7 @@ async def retry(
 
 @router.post(BASE + "/{identifier}/stop")
 async def stop(
+    request: Request,
     identifier: UUID,
     body: ConversationStop,
     user: User = Depends(get_admin_user),
@@ -188,9 +197,15 @@ async def stop(
     from src.services.comparison_conversation_recovery import recover_action
 
     factory = await comparison_factory(db)
-    snapshot, _ = await recover_action(
-        factory, user, str(identifier), "stop", body
-    )
+    with demo_missing():
+        snapshot, _ = await recover_action(
+            factory,
+            user,
+            str(identifier),
+            "stop",
+            body,
+            scope=execution_scope(request),
+        )
     return json_result(snapshot)
 
 
@@ -206,13 +221,11 @@ async def page(
     from src.api.routes.admin_scenarios import editor_models
     from src.services.scenario_drafts import draft_view, native_scenario
 
-    snapshot = (
-        await conversation_snapshot(
-            db, await owned_conversation(db, str(conversation_id), user.id)
-        )
-        if conversation_id
-        else None
-    )
+    snapshot = None
+    if conversation_id:
+        with demo_missing():
+            parent = await owned_conversation(db, str(conversation_id), user.id)
+        snapshot = await conversation_snapshot(db, parent)
     source = (
         await draft_view(db, await native_scenario(db, scenario_id))
         if scenario_id is not None

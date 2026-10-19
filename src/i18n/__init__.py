@@ -45,6 +45,6 @@ def ui_strings(language: str, areas=()) -> dict:
     """Only ship the shared and explicitly requested page sections."""
     return {
         f"{area}.{name}": translate(f"{area}.{name}", language)
-        for area in dict.fromkeys(("common", "about", *areas))
+        for area in dict.fromkeys(("common", "about", "demo", *areas))
         for name in CATALOG.get(area, {})
     }

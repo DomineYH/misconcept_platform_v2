@@ -35,6 +35,7 @@ def run_case(case, tmp_path, **extra):
         TESTING="false",
         ENV="production",
         DEMO_DATA_ROOT=str(tmp_path / "demo"),
+        DEMO_SEED_DIR=str(tmp_path / "seed"),
         DEMO_ORIGIN="https://demo.test",
         NORMAL_ORIGIN="https://normal.test",
         DEMO_SESSION_SECRET=SECRETS[0],
@@ -114,6 +115,7 @@ def test_demo_import_refuses_invalid_configuration(extra, tmp_path):
         TESTING="false",
         ENV="production",
         DEMO_DATA_ROOT=str(tmp_path / "demo"),
+        DEMO_SEED_DIR=str(tmp_path / "seed"),
         DEMO_ORIGIN="https://demo.test",
         NORMAL_ORIGIN="https://normal.test",
         DEMO_SESSION_SECRET=SECRETS[0],
@@ -331,14 +333,19 @@ async def make_seed(root_path):
     )
 
 
-def install_seed(main, spec):
+def install_seed(spec, **refs):
     from types import SimpleNamespace
 
-    # Test-only stand-in for #197's product SeedSpec/TourContent provider.
-    main.demo_seed = lambda: (
-        spec,
-        SimpleNamespace(seed_refs={"admin": 1, "teacher": 2}),
-    )
+    seed_refs = json.loads(spec.manifest_path.read_text())["seed_refs"] | refs
+
+    def load_seed(seed_dir):
+        assert seed_dir == os.environ["DEMO_SEED_DIR"], seed_dir
+        return spec, SimpleNamespace(
+            seed_refs={k: v for k, v in seed_refs.items() if v is not None}
+        )
+
+    # Test-only stand-in for #197's src.demo.seed, behind the real demo_seed().
+    sys.modules["src.demo.seed"] = SimpleNamespace(load_seed=load_seed)
 
 
 CLIENTS = []
@@ -444,10 +451,15 @@ async def case_refusal(tmp):
         assert getattr(app.state, "demo_request_db", None) is None
         assert getattr(app.state, "demo_session", None) is None
 
-    # Product startup refuses until #197's verified seed provider is bound.
+    # Fail closed while #197's src.demo.seed cannot be imported.
+    sys.modules["src.demo.seed"] = None
     await refused("DEMO_CONFIGURATION_INVALID")
     spec = await make_seed(root_path)
-    install_seed(main, spec)
+    # Tour seed_refs must equal the validated manifest's, completed_session too.
+    for refs in ({"completed_session": 2}, {"completed_session": None}):
+        install_seed(spec, **refs)
+        await refused("DEMO_VERSION_MISMATCH")
+    install_seed(spec)
 
     holder = DatabaseRoot(root_path).open()
     await refused("DEMO_CONFIGURATION_INVALID")  # second worker/process
@@ -479,6 +491,8 @@ async def case_refusal(tmp):
     async with app.router.lifespan_context(app):
         response = await client_for(app).get("/health")
         assert response.status_code == 200, response.text
+        manifest = json.loads(spec.manifest_path.read_text())
+        assert app.state.demo_request_db.seed_refs == manifest["seed_refs"]
 
 
 async def case_requests(tmp):
@@ -487,7 +501,7 @@ async def case_requests(tmp):
     from src import main
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     async with app.router.lifespan_context(app):
         stranger = client_for(app, "10.0.0.9")
         response = await stranger.get("/metrics")
@@ -614,21 +628,34 @@ async def case_errors(tmp):
 
     from src import main
     from src.api import dependencies as deps
+    from src.demo.database import DemoError
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     global_db = []
     main.AsyncSessionLocal = lambda *a, **k: global_db.append(1)
+    captured = []
+    render = deps.templates.TemplateResponse
+
+    def spy(*args, **kwargs):
+        response = render(*args, **kwargs)
+        captured.append(response.context)
+        return response
+
+    deps.templates.TemplateResponse = spy
 
     @app.get("/probe-missing")
     async def probe_missing(
         request: Request, user=Depends(deps.get_current_user)
     ):
-        if request.query_params.get("mode") == "reset":
+        mode = request.query_params.get("mode")
+        if mode == "reset":
             ctx = request.state.demo_context
             await app.state.demo_request_db.visitors.reset_visit(
                 ctx, str(uuid4())
             )
+        if mode == "stale":
+            raise DemoError("STALE_GENERATION", generation=7, auth_epoch=1)
         raise HTTPException(status_code=404)
 
     @app.get("/probe-crash")
@@ -639,6 +666,24 @@ async def case_errors(tmp):
         route.app = request_response(
             deps.demo_request_handler(route.get_route_handler())
         )
+
+    def page(response, error_code, **detail):
+        # §11: HTML uses the envelope's status and recovery key, without a DB.
+        error = DemoError(error_code, **detail)
+        assert response.status_code == error.status_code, response.text
+        assert response.headers["content-type"].startswith("text/html")
+        assert response.headers["cache-control"] == "no-store"
+        assert "set-cookie" not in response.headers
+        assert "nav-username" not in response.text
+        context = captured[-1]
+        assert context["status_code"] == error.status_code
+        assert context["demo_error"] == error.detail
+        assert context["demo_error"]["recovery"].startswith("demo.")
+        assert context["user"] is None
+        assert context["demo_config"]["browser_scope_id"] is None
+        assert context["demo_config"]["generation"] is None
+        assert os.environ["DEMO_DATA_ROOT"] not in response.text
+
     html = {"accept": "text/html"}
     async with app.router.lifespan_context(app):
         stranger = client_for(app, "10.0.0.9")
@@ -648,11 +693,29 @@ async def case_errors(tmp):
         assert response.headers["cache-control"] == "no-store"
         assert "nav-username" not in response.text
         assert "set-cookie" not in response.headers
+        page(response, "DEMO_RESOURCE_NOT_FOUND")
         response = await stranger.get("/nope")
         assert response.status_code == 404
         assert code(response) == "DEMO_RESOURCE_NOT_FOUND"
-        response = await stranger.get("/probe-missing", headers=html)
-        assert code(response) == "DEMO_SESSION_REQUIRED"
+        captured.clear()
+        response = await stranger.get(
+            "/probe-missing", headers={"accept": "text/html;q=0.9,*/*"}
+        )
+        page(response, "DEMO_SESSION_REQUIRED")
+        assert captured[-1]["demo_error"]["recovery"] == "demo.start_required"
+        # Non-navigations keep the JSON envelope.
+        for other in (
+            {},
+            {"accept": "application/json"},
+            {**html, "hx-request": "1"},
+        ):
+            response = await stranger.get("/probe-missing", headers=other)
+            assert code(response) == "DEMO_SESSION_REQUIRED"
+        # Errors from the /demo control routes render the same way.
+        response = await stranger.get("/demo", params={"x": "1"}, headers=html)
+        page(response, "DEMO_INVALID_REQUEST")
+        response = await stranger.get("/demo", params={"x": "1"})
+        assert code(response) == "DEMO_INVALID_REQUEST"
 
         client = client_for(app)
         state = await start(client, "admin")
@@ -672,6 +735,15 @@ async def case_errors(tmp):
         assert response.status_code == 404
         assert "nav-username" not in response.text
         assert "Traceback" not in response.text
+        # A DemoError raised after the user resolved names neither user nor space.
+        client = client_for(app, "10.0.0.3")
+        state = await start(client, "admin")
+        response = await client.get(
+            "/probe-missing",
+            params={**namespace(state), "mode": "stale"},
+            headers=html,
+        )
+        page(response, "DEMO_STALE_GENERATION", generation=7, auth_epoch=1)
         # §11: unknown failures are a safe envelope without exception text.
         client = client_for(app, "10.0.0.2")
         state = await start(client, "admin")
@@ -679,6 +751,11 @@ async def case_errors(tmp):
         assert response.status_code == 503
         assert code(response) == "DEMO_CONFIGURATION_INVALID"
         assert os.environ["DEMO_DATA_ROOT"] not in response.text
+        response = await client.get(
+            "/probe-crash", params=namespace(state), headers=html
+        )
+        page(response, "DEMO_CONFIGURATION_INVALID")
+        assert "Traceback" not in response.text
     assert global_db == []
 
 
@@ -693,7 +770,7 @@ async def case_template(tmp):
     from src.demo.session import DemoState
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     captured = []
     render = deps.templates.TemplateResponse
 
@@ -842,7 +919,7 @@ async def case_health(tmp):
 
     app = main.app
     spec = await make_seed(Path(os.environ["DEMO_DATA_ROOT"]))
-    install_seed(main, spec)
+    install_seed(spec)
     built = len(OPENED)
     healthy = {"status": "healthy", "database": "healthy"}
     degraded = {"status": "degraded", "database": "unhealthy"}
@@ -940,7 +1017,7 @@ async def case_limits(tmp):
             return super().monotonic() + self.offset
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     async with app.router.lifespan_context(app):
         clock = OffsetClock()
         app.state.demo_request_db.visitors.clock = clock
@@ -965,6 +1042,16 @@ async def case_limits(tmp):
             assert response.status_code == 200, response.text
         response = await a.get("/metrics", params=namespace(state_a))
         assert code(response) == "DEMO_RATE_LIMITED"
+        assert 1 <= int(response.headers["retry-after"]) <= 60
+        # §11: an HTML navigation gets the same status and Retry-After.
+        response = await a.get(
+            "/metrics",
+            params=namespace(state_a),
+            headers={"accept": "text/html"},
+        )
+        assert response.status_code == 429
+        assert response.headers["content-type"].startswith("text/html")
+        assert response.headers["cache-control"] == "no-store"
         assert 1 <= int(response.headers["retry-after"]) <= 60
 
         async def without_csrf(client, state):
@@ -1024,7 +1111,7 @@ async def case_shutdown(tmp):
 
     app = main.app
     root_path = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(main, await make_seed(root_path))
+    install_seed(await make_seed(root_path))
     async with app.router.lifespan_context(app):
         runtime = app.state.demo_request_db
         held = client_for(app)
@@ -1050,7 +1137,7 @@ async def case_restart(tmp):
 
     app = main.app
     root_path = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(main, main_spec(root_path))
+    install_seed(main_spec(root_path))
     assert len(visitor_files(root_path)) == 1
     async with app.router.lifespan_context(app):
         visitors = app.state.demo_request_db.visitors

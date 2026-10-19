@@ -1,6 +1,7 @@
 """Main FastAPI application entry point."""
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -26,6 +27,7 @@ from src.api.dependencies import (
     AuthenticationRequired,
     DemoRequestDB,
     get_current_user,
+    html_navigation,
     templates,
 )
 from src.config import config
@@ -198,12 +200,13 @@ class SecurityHeadersMiddleware:
 
 
 def demo_seed():
-    """Return the verified product (SeedSpec, TourContent) pair.
-
-    #197 owns the product seed and tour content; until it is bound here,
-    demo startup refuses instead of serving unverified data.
-    """
-    raise DemoError("CONFIGURATION_INVALID")
+    """Return #197's (SeedSpec, TourContent) pair for DEMO_SEED_DIR."""
+    try:
+        from src.demo.seed import load_seed
+    except ImportError:
+        # Fail closed until #197's seed module is installed.
+        raise DemoError("CONFIGURATION_INVALID") from None
+    return load_seed(config.DEMO_SEED_DIR)
 
 
 async def _demo_cleanup(visitors, interval):
@@ -247,6 +250,16 @@ async def demo_lifespan(app: FastAPI):
         ).open()
         spec, tour_content = demo_seed()
         root.validate_seed(spec)
+        # Tour refs must equal the validated manifest's, completed_session too;
+        # JSON comparison keeps True distinct from 1.
+        manifest = spec.manifest_path.read_bytes()
+        refs = json.dumps(json.loads(manifest)["seed_refs"], sort_keys=True)
+        if hashlib.sha256(
+            manifest
+        ).hexdigest() != root.seed_manifest_sha256 or refs != json.dumps(
+            dict(tour_content.seed_refs), sort_keys=True
+        ):
+            raise DemoError("VERSION_MISMATCH")
         lifecycle = Lifecycle()
         visitors = VisitorRegistry(root, lifecycle=lifecycle, settings=settings)
         lifecycle.visitors = visitors
@@ -363,25 +376,18 @@ async def html_http_error_handler(
 ) -> Response:
     """Render safe document errors while preserving the default API contract."""
     demo = config.APP_MODE == "demo"
-    if (
-        exc.status_code not in (403, 404)
-        or request.method not in ("GET", "HEAD")
-        or "HX-Request" in request.headers
-        or not any(
-            value.partition(";")[0].strip().lower() == "text/html"
-            for value in request.headers.get("accept", "").split(",")
+    error = None
+    if demo and exc.status_code in (403, 404):
+        error = DemoError(
+            "ACTION_FORBIDDEN"
+            if exc.status_code == 403
+            else "RESOURCE_NOT_FOUND"
         )
-    ):
-        if demo and exc.status_code in (403, 404):
+    if exc.status_code not in (403, 404) or not html_navigation(request):
+        if error is not None:
             from src.api.routes.demo import error_response
 
-            return error_response(
-                DemoError(
-                    "ACTION_FORBIDDEN"
-                    if exc.status_code == 403
-                    else "RESOURCE_NOT_FOUND"
-                )
-            )
+            return error_response(error)
         response = await http_exception_handler(request, exc)
         if demo:
             response.headers["Cache-Control"] = "no-store"
@@ -403,7 +409,12 @@ async def html_http_error_handler(
                 user = await db.get(User, user_id)
     response = templates.TemplateResponse(
         "error.html",
-        {"request": request, "user": user, "status_code": exc.status_code},
+        {
+            "request": request,
+            "user": user,
+            "status_code": exc.status_code,
+            "demo_error": error and error.detail,
+        },
         status_code=exc.status_code,
         headers=exc.headers,
     )

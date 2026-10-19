@@ -2,6 +2,7 @@
 
 import asyncio
 import hmac
+import json
 import logging
 import math
 import secrets
@@ -76,6 +77,18 @@ templates = Jinja2Templates(
 templates.env.globals.update(
     t=t, display_language=display_language, ui_strings=ui_strings
 )
+
+
+def html_navigation(request: Request) -> bool:
+    """A browser document load: GET/HEAD accepting text/html, not HTMX."""
+    return (
+        request.method in ("GET", "HEAD")
+        and "HX-Request" not in request.headers
+        and any(
+            value.partition(";")[0].strip().lower() == "text/html"
+            for value in request.headers.get("accept", "").split(",")
+        )
+    )
 
 
 def md_filter(text: str | None) -> Markup:
@@ -787,6 +800,31 @@ def demo_request_handler(handler):
                         response = error_response(
                             DemoError("CONFIGURATION_INVALID")
                         )
+        if (
+            response.status_code >= 400
+            and response.headers.get("content-type") == "application/json"
+            and html_navigation(request)
+        ):
+            detail = json.loads(response.body).get("detail")
+            if isinstance(detail, dict) and "recovery" in detail:
+                # §11: same status and recovery key as the envelope, without a DB;
+                # the failed request's snapshot is not current.
+                request.state.demo_display = None
+                response = templates.TemplateResponse(
+                    "error.html",
+                    {
+                        "request": request,
+                        "user": None,
+                        "status_code": response.status_code,
+                        "demo_error": detail,
+                    },
+                    status_code=response.status_code,
+                    headers={
+                        key: value
+                        for key, value in response.headers.items()
+                        if key in ("cache-control", "retry-after")
+                    },
+                )
         if (
             request.method != "GET"
             or request.url.path not in ("/demo", "/demo/state")

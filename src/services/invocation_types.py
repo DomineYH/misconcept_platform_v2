@@ -17,6 +17,9 @@ class TextRequest:
     request_id: str
     service_tier: Literal["default"] | None = field(default=None, kw_only=True)
     context_budget_json: dict | None = field(default=None, kw_only=True)
+    # Server-built demo binding; provider payload builders never read these.
+    demo_context: object | None = field(default=None, kw_only=True)
+    demo_selection: object | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)

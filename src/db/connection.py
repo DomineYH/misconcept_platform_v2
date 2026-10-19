@@ -12,22 +12,12 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import declarative_base
 
 from src.config import config
+from src.demo.database import DemoError
 
 logger = logging.getLogger(__name__)
 
-# Create async engine with SQLite
-engine: AsyncEngine = create_async_engine(
-    config.DATABASE_URL,
-    echo=False,  # Set to True for SQL query logging
-    future=True,
-    connect_args={
-        "check_same_thread": False,  # Allow multi-threaded access
-    },
-)
-
 
 # Configure SQLite for better concurrency with WAL mode
-@event.listens_for(engine.sync_engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
     """Set SQLite pragmas for better performance and concurrency."""
     cursor = dbapi_conn.cursor()
@@ -42,14 +32,28 @@ def set_sqlite_pragma(dbapi_conn, connection_record):
     cursor.close()
 
 
-# Create async session factory
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
-)
+def _forbid_normal_database(*args, **kwargs):
+    raise DemoError("ACTION_FORBIDDEN")
+
+
+engine: AsyncEngine | None = None
+if config.APP_MODE == "normal":
+    engine = create_async_engine(
+        config.DATABASE_URL,
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    event.listen(engine.sync_engine, "connect", set_sqlite_pragma)
+    AsyncSessionLocal = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+else:
+    AsyncSessionLocal = _forbid_normal_database
 
 # Declarative base for models
 Base = declarative_base()
@@ -57,6 +61,8 @@ Base = declarative_base()
 
 async def init_db():
     """Development boot uses the official installer; production upgrades explicitly."""
+    if config.APP_MODE != "normal":
+        _forbid_normal_database()
     if config.is_production:
         return
     from src.db.migrations.migrate import run_all_migrations
@@ -66,4 +72,6 @@ async def init_db():
 
 async def close_db():
     """Close database connections."""
+    if config.APP_MODE != "normal":
+        _forbid_normal_database()
     await engine.dispose()

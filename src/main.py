@@ -193,6 +193,11 @@ class SecurityHeadersMiddleware:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
+    if config.APP_MODE == "demo":
+        from src.demo.database import DemoError
+
+        # shortcut: demo wiring is incomplete, remove at stage 3 integration.
+        raise DemoError("CONFIGURATION_INVALID")
     # Startup - validate config in non-test mode
     if not config.TESTING:
         config.validate()

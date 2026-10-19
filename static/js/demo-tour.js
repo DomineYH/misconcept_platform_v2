@@ -326,8 +326,9 @@ window.demoTour = (() => {
     let name = 'demo:state';
     if (s.state === 'expired') name = 'demo:expired';
     else if (s.state === 'resetting') { if (prev.state !== 'resetting') name = 'demo:reset-started'; }
+    // A failed reset only reaches ready again through a successful reset retry (same generation).
     else if (s.state === 'ready' && ((prev.generation != null && s.generation > prev.generation) ||
-        prev.state === 'resetting')) name = 'demo:reset-completed';
+        prev.state === 'resetting' || prev.state === 'reset_failed')) name = 'demo:reset-completed';
     else if (prev.generation === s.generation && s.auth_epoch > prev.auth_epoch) name = 'demo:role-changed';
 
     confirmed = {scope: s.browser_scope_id, generation: s.generation, auth_epoch: s.auth_epoch};

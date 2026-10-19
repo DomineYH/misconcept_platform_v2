@@ -70,6 +70,7 @@
 | 독립 cleanup CLI engine | 명시적 DB 파일에 ro/rw URI engine·factory를 만들고 비교 정리 후 dispose. 웹 resolver를 거치지 않음 | `src/cli/cleanup_comparisons.py`: `run`, `main`; `src/services/comparison_retention.py`: `cleanup_comparisons` | demo 방문객 DB의 정리와 일반 비교 보존기간 정리를 구분. 웹 guard만으로 보호되지 않음 | 경계 조정 D1-04 #194 + lifecycle D1-02 #192; CLI 파일 쓰기 배정 #190 |
 | 독립 provider smoke CLI engine | 별도 DB engine. execute는 승인 입력 필수, TESTING=true·격리 DB·base URL 제한 검사 후 승인된 실행만 공통 호출로 전달. dry run을 유료 실행이라고 단정할 수 없음 | `src/cli/provider_smoke.py`: `run`, `main`; `src/services/provider_smoke_execution.py`: `execute_plan` | demo에 키가 없어도 된다는 사실만으로 smoke 무호출 보장 불가. 실행/모드 차단 정책 필요 | 공통 AI D2-04 #198; CLI 조정 D1-04 #194; 쓰기 배정 #190 |
 | DB 관리 CLI·복사/전환 | conversion·S2/S6 rehearsal은 별도 engine 또는 sqlite3 backup/readonly 연결. 비밀번호 회전은 전역 factory/engine. 과거 migrate_015는 sqlite3 파일 직접 연결 | `src/db/convert_scenarios.py`: `convert_copy`; `src/db/s2_cutover.py`: `rehearse`; `src/db/s2_verification.py`: `readonly`, `consistent_backup`; `src/db/s6_cutover.py`: `rehearse`; `src/db/s6_legacy.py`: `rehearse_legacy`; `src/db/s6_verification.py`: `upgrade`, `official_schema`, `restore`; `src/db/rotate_default_passwords.py`: `rotate_default_passwords`; `src/db/migrations/migrate_015.py`: `migrate` | 운영 복사본 절차를 demo seed로 재사용하지 않음. CLI는 요청 context가 없으므로 입력 DB/모드·운영 분리 정책을 명시해야 함 | DB/시작 조정 D1-04 #194; installer D2-01 #195; 추가 쓰기 배정 #190 |
+| 독립 복원 자격 증명 검증 CLI | `main`이 `--restored-db`를 받고 `verify_credentials`가 `readonly(restored_db)`로 복원 DB를 직접 열어 무결성·암호화 자격 증명을 오프라인 검증. 웹 resolver를 거치지 않음 | `src/db/s6_credentials.py`: `main`, `verify_credentials`; `src/db/s2_verification.py`: `readonly` | 읽기 전용 DB라도 demo에서 파일/DB 접근 전 CLI 진입 차단 필요. 운영 복원 자료를 demo seed로 사용하지 않음 | D0-03 §26에서 확정된 단독 소유 D1-04 #194 |
 | 공식 migration installer | 전역 engine 기본값, 명시적 `db_engine`도 받음. baseline 후 024 이후 순서 적용, 재구축 시 FK를 껐다가 검사, 031에는 보존 receipt 확인 | `src/db/migrations/migrate.py`: `run_all_migrations`, `run_migration`; `src/db/init_schema.py`: `init_schema` | 방문객 seed를 명시적 engine에 설치하고 기본 engine fallback 방지. 기존 migration 편집 대신 후속 migration 필요 | D2-01 #195; 방문객 복제 D1-01 #191, seed D2-03 #197 |
 | provider/key DB·schema 제약 | provider 3종 CHECK, key material CHECK, generation provider CHECK, provider Literal/옵션·한도 필드가 demo를 수용하지 않음 | `src/models/provider_connection.py`: `ProviderConnection`, `ProviderAuditLog`; `src/models/generation_run.py`: `GenerationRun`; `src/api/schemas/scenario_config.py`: `ResolvedModelConfig`; `src/api/schemas/ai_settings.py`: `CallLimits` | adapter 하나 추가로 keyless demo를 저장/실행할 수 없음. §5의 migration 계보와 같이 변경해야 함 | D2-01 #195 |
 
@@ -236,3 +237,8 @@ DB에 저장되는 cache/singleton도 전역 메모리와 구별해야 한다. `
 | 수정 | `c1c9cc58abb64228f56613c8750e42f8c46018d2`: 전달부 → #198, 비교 소비자 5개 → #192(namespace 호환 한정), 남은 #190 전달 항목을 (a) 패치 필요 여부 / (b) 파일 소유로 구분 |
 | 재검토 | `c1c9cc58abb64228f56613c8750e42f8c46018d2`: **ACCEPT**. §4 소유 78개가 위임 답변 소유 표와 일치, 인용 경로 존재, 변경 파일 1개 |
 | 미실행 | 앱·테스트·migration·브라우저·네트워크. 정적 검토이며 격리·reset 경합 안전·AI egress 0을 입증하지 않는다 |
+
+
+## 9. D0 마감 조사 보완
+
+`427890033d206a4f043ffc946009bd8ce6a437c2`에서 `src/db/s6_credentials.py`의 독립 `readonly(restored_db)` 진입점을 추가 확인했다. 기존 D0-03 §26의 #194 배정을 조사 목록에 반영하며 새 파일 소유권이나 제품 동작을 만들지 않는다. §8의 원 조사·재검토 증거와 고정 입력 SHA는 그대로 보존한다. 이번 보완은 정적 소스 확인이며 CLI를 실행하거나 복원 DB·자격 증명을 읽은 증거가 아니다.

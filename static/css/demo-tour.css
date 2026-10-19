@@ -1,0 +1,9 @@
+/* D3-01 demo banner; loaded only in demo mode. */
+.demo-banner {
+  padding: 0.5rem 1rem;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border-medium);
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  text-align: center;
+}

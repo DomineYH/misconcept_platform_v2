@@ -389,7 +389,7 @@ PASS 로그 사이 간격의 추정치를 실제 계측값으로 교체했으며
 바꾸지 않는다. 과거 PASS timestamp 간격의 추정치 출처는 매니페스트의
 `historicalBaseline`에도 남겼다. 두 실행 사이에는 D1 변경도 포함되어 있으므로
 위 시간 차이를 1단계 최적화의 효과로 귀속하지 않는다. 실행 환경 변동도
-구분해야 하며, 2단계 병렬 분할의 효과는 실제 2단계 성공 CI 전까지 미측정이다.
+구분해야 한다. 2단계 첫 성공 실행의 관측 결과는 아래 절에 별도로 기록한다.
 
 모듈을 가중치 내림차순으로 정렬하고 동률은 파일명 사전순으로 정한다.
 누적 가중치 합계가 가장 작은 shard에 순서대로 배정하고 shard 동률은 작은
@@ -420,6 +420,48 @@ PASS 로그 사이 간격의 추정치를 실제 계측값으로 교체했으며
 별도 runner 3개가 Python/npm/Chromium 설치를 반복하므로 wall time을 줄이더라도
 runner-minutes/청구 비용은 증가할 수 있다. 집계 runner 비용도 있다.
 취소·대기 시간과 실제 실행 시간, 전체 사용 분을 각각 기록한 뒤 판단한다.
+
+### 2단계 첫 성공 실행의 관측 결과
+
+[PR #216](https://github.com/DomineYH/misconcept_platform_v2/pull/216)의
+[실행 39189447071](https://github.com/DomineYH/misconcept_platform_v2/actions/runs/39189447071)은
+5개 job이 모두 SUCCESS였다. 이 기록은 문서 갱신 전의 아래 head에서 관측한
+결과이며, 이후 문서 변경 head나 미래 실행의 성공을 뜻하지 않는다.
+
+- PR head: `99f948117bced2c33622e044594778fbd5e29d00`
+- PR base: `2d3a1b352ecb158c10a31a98c387c12536ce7811`
+- 실제 checkout 합성 merge commit: `90fea6e7c35f60dbc9d04e4f4cd7463fd80cb0f7`
+- `test`, `browser-shard (1)`, `(2)`, `(3)`, 집계 `browser`: 모두 SUCCESS
+- pytest: 2,125 passed, 요약 906.30초, pytest 단계 15분 15초, `test` job 15분 37초
+- 브라우저 검사 단계: shard 1은 13분 33초, shard 2는 10분 06초,
+  shard 3은 10분 21초
+- 집계 결과: 3개 shard에서 기존 142개 모듈 모두 PASS, inventory ID는
+  `3234689b322d5813f60e3a7eb154c2d29587755af2ceae7ca4e4d6ff9e1ff5f8`
+
+wall time은 GitHub job의 `started_at`부터 `completed_at`까지로 일관되게
+계산한다. 브라우저 fleet은 첫 shard 시작부터 집계 job 완료까지이며,
+전체 CI는 첫 job 시작부터 마지막 job 완료까지다. 아래 비율은 앞서 기록한
+1단계 PR 실행 39186456508과 이번 실행 사이의 관측 차이이며 보장값이 아니다.
+
+- 브라우저 fleet: 2026-10-19 02:19:53 → 02:34:09 UTC, 14분 16초
+  (856초). 1단계 단일 `browser` job의 34분 08초(2,048초)보다 관측상 약 58.2% 짧다
+- 전체 CI: 02:19:53 → 02:35:30 UTC, 15분 37초(937초).
+  1단계 전체 CI의 34분 08초보다 관측상 약 54.2% 짧다
+- 브라우저 관련 job-seconds 합계: shard 1의 845초 + shard 2의 637초 +
+  shard 3의 658초 + 집계 8초 = 2,148초(35분 48초).
+  1단계 `browser` job의 2,048초보다 약 4.9% 많다
+
+병렬 wall time 단축과 runner 사용량은 서로 다른 지표다. 위 job-seconds는
+청구 금액이 아니며, 분 단위 올림·runner 요율·무료 할당을 반영하지 않는다.
+설치·기동은 각 shard에서 반복되므로 비용 절감을 보장하지 않는다.
+1단계 `test` job은 10분 37초였지만 이번에는 15분 37초였다. Python 검사 속도가
+개선되었다고 주장하지 않으며, 실행 환경 변동과 단계별 차이는 따로 살펴야 한다.
+브라우저 모듈 142개와 기존 단언을 그대로 유지했고 검사 범위 축소는 없었다.
+
+최종 문서 변경 head와 병합 후 main의 검증 결과는 PR #216 대화에 실행 URL과
+head/base/합성 SHA를 함께 기록할 수 있다. 검증할 때마다 시간 기록만 추가하는
+커밋을 반복하지 않는다. 위 첫 실행의 관측값은 해당 head의 증거로 보존하고,
+최신 head/main 성공은 그에 맞는 별도 실행으로 확인한다.
 
 ### 로컬 준비, 목록과 합집합 확인
 

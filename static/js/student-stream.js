@@ -8,8 +8,8 @@ export function mountStudentStream(ui) {
   const input = document.getElementById('teacher-input');
   const submit = form.querySelector('[type="submit"]');
   const container = document.getElementById('messages-container');
-  const storageKey = `chat-run-${ui.sessionId}`;
-  const draftKey = `chat-draft-${ui.sessionId}`;
+  const storageKey = uiLanguage.storageKey(`chat-run-${ui.sessionId}`);
+  const draftKey = uiLanguage.storageKey(`chat-draft-${ui.sessionId}`);
   let pending, teacher, student, status, actions, retry;
   let lookupBusy = false;
   let sessionEnded = false;

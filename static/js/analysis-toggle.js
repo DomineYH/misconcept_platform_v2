@@ -1,10 +1,8 @@
 /* Issue #28 / #33 — Analysis detail panel toggle and tab navigation */
 
 function getAnalysisCsrfHeaders() {
-  var match = document.cookie.match(
-    /(?:^|;\s*)csrftoken=([^;]*)/
-  );
-  return match ? { 'x-csrf-token': match[1] } : {};
+  var token = uiLanguage.csrfToken();
+  return token !== null ? { [uiLanguage.csrfHeader]: token } : {};
 }
 
 function activateAnalysisTab(panel, tabId) {

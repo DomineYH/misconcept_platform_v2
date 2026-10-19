@@ -175,7 +175,7 @@ async function save(action) {
   const submittedEdits = edits;
   try {
     const response = await fetch(data.id == null ? '/admin/scenarios' : `/admin/scenarios/${data.id}/update`, {
-      method:'POST', credentials:'same-origin', headers:uiLanguage.headers('/admin/scenarios', {'Content-Type':'application/json', 'x-csrf-token':document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || ''}), body:JSON.stringify(payload(action))
+      method:'POST', credentials:'same-origin', headers:uiLanguage.headers('/admin/scenarios', {'Content-Type':'application/json', [uiLanguage.csrfHeader]:uiLanguage.csrfToken() || ''}), body:JSON.stringify(payload(action))
     });
     if (response.status === 422) {
       const result = await response.json();

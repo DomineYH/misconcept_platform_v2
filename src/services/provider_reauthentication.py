@@ -7,11 +7,17 @@ from limits import parse
 from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
 
+from src.config import config
+from src.demo.database import DemoError
+
 reauth_limiter = MovingWindowRateLimiter(MemoryStorage())
 FAILURES = parse("5/5minutes")
 
 
 async def reauthenticate(request, user, password):
+    # §26: demo fails closed before the password check or the global limiter.
+    if config.APP_MODE == "demo":
+        raise DemoError("ACTION_FORBIDDEN")
     limited = HTTPException(
         429,
         detail={"code": "reauthentication_limited"},

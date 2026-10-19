@@ -23,6 +23,7 @@ from src.api.schemas.scenario_config import (
     RevisionInput,
     ScenarioConfig,
 )
+from src.config import config
 from src.i18n import display_language
 from src.i18n.admin import scenario_view
 from src.models.scenario import Scenario
@@ -279,13 +280,15 @@ async def editor_models(db, language="ko"):
         c.provider: c
         for c in (await db.scalars(select(ProviderConnection))).all()
     }
-    state = await configuration_state(db, connections, language)
+    state = await configuration_state(
+        db, connections, language, app_mode=config.APP_MODE
+    )
     choices = [
         dict(
             model,
             provider_connection_id=connections[model["provider"]].id,
             connection_available=connection_ready(
-                connections[model["provider"]]
+                connections[model["provider"]], app_mode=config.APP_MODE
             ),
         )
         for model in state["models"]

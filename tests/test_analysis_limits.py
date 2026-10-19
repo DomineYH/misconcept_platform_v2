@@ -45,7 +45,9 @@ def test_smaller_openai_catalog_capacity_blocks_but_unknown_stays_unknown():
 def test_shared_definition_change_stales_every_role(monkeypatch, role):
     from src.services import model_verification
 
-    monkeypatch.setattr(model_verification, "connection_ready", lambda _: True)
+    monkeypatch.setattr(
+        model_verification, "connection_ready", lambda _, *, app_mode: True
+    )
     connection = SimpleNamespace(
         provider="openai", credential_revision=1, connection_version=1
     )
@@ -66,6 +68,8 @@ def test_shared_definition_change_stales_every_role(monkeypatch, role):
         },
     )
     assert (
-        model_verification.effective_roles(model, connection)[role]["status"]
+        model_verification.effective_roles(
+            model, connection, app_mode="normal"
+        )[role]["status"]
         == "stale"
     )

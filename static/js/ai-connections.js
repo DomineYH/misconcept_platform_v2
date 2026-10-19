@@ -27,7 +27,7 @@ async function request(path, body) {
   const headers = {};
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
-    headers['x-csrf-token'] = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)?.[1] || '';
+    headers[uiLanguage.csrfHeader] = uiLanguage.csrfToken() || '';
   }
   const response = await fetch(`/admin/ai/${path}`, {method:body === undefined ? 'GET' : 'POST',
     credentials:'same-origin', headers:uiLanguage.headers(`/admin/ai/${path}`, headers), ...(body === undefined ? {} : {body:JSON.stringify(body)})});

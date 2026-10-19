@@ -1,0 +1,19 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/mentor/after_first/A/A/manual/none",
+  "role": "mentor",
+  "content_state": "after_first",
+  "branch": "A",
+  "input_kind": "A",
+  "trigger": "manual",
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "should_intervene": true,
+    "feedback": "학생봇이 분모의 크기로 판단하는 이유를 말했습니다. 다음에는 같은 크기의 종이띠를 등분했을 때 한 조각을 비교하게 해 보세요.",
+    "reason_summary": "완료된 대상 턴에 대한 수동 도움 요청에 코칭한다."
+  },
+  "partial_text": null
+}

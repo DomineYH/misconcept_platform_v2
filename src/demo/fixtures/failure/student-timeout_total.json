@@ -1,0 +1,15 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "timeout_total/student/initial/B/B/none/none",
+  "role": "student",
+  "content_state": "initial",
+  "branch": "B",
+  "input_kind": "B",
+  "trigger": null,
+  "analysis_phase": "none",
+  "terminal": "error",
+  "error_code": "timeout_total",
+  "text": null,
+  "structured": null,
+  "partial_text": null
+}

@@ -12,13 +12,21 @@ from uuid import UUID
 from sqlalchemy import text
 
 from src.demo.database import DemoError
+from src.demo.output_binding import bind_output
 from src.demo.visitors import DemoContext
+from src.services.analysis_output_contract import (
+    MergeAnalysisOutput,
+    UnifiedAnalysisOutput,
+)
 from src.services.call_policy import CallDeadline
 from src.services.invocation_types import (
     CallEvent,
     InvocationError,
+    StructuredRequest,
     empty_usage,
 )
+from src.services.role_output_contracts import MentorOutput
+from src.services.structured_output import structured_event
 
 VERSIONS = dict(
     contract_version="d0-03-v1-r3",
@@ -710,7 +718,97 @@ class DemoProvider:
     async def generate_structured(
         self, request, secret, timeouts, *, deadline=None
     ):
-        # Structured output is connected only in the stacked binding change.
-        return CallEvent(
-            "error", error_code="configuration_unavailable", usage=empty_usage()
-        )
+        received = False
+        owned = deadline is None
+        try:
+            if not isinstance(request, StructuredRequest):
+                raise InvocationError("INVALID_REQUEST")
+            if request.role not in ("mentor", "analysis"):
+                raise InvocationError("VERSION_MISMATCH")
+            deadline = deadline or CallDeadline(timeouts, request.role)
+            async with deadline.total() if owned else nullcontext():
+                envelope, _ = await self._prepare(request, secret)
+                selection = request.demo_selection
+                schema = (
+                    MentorOutput
+                    if selection.role == "mentor"
+                    else (
+                        MergeAnalysisOutput
+                        if selection.analysis_phase == "merge"
+                        else UnifiedAnalysisOutput
+                    )
+                )
+                if request.output_schema is not schema:
+                    raise InvocationError("VERSION_MISMATCH")
+                self._timeout(deadline, first=True)
+                if envelope["terminal"] != "completed":
+                    return CallEvent(
+                        envelope["terminal"],
+                        usage=empty_usage(),
+                        error_code=envelope["error_code"],
+                        response_received=envelope["terminal"] == "refused",
+                    )
+                received = True
+                bound = await bind_output(
+                    envelope["structured"],
+                    context=request.demo_context,
+                    visitors=self.visitors,
+                    session_id=self.session_id,
+                    selection=selection,
+                    validation_context=request.validation_context,
+                    inputs=self.inputs,
+                )
+                if request.role == "mentor":
+                    expected = (
+                        selection.trigger == "manual"
+                        or selection.input_kind in ("A", "B", "C")
+                    )
+                    if (
+                        bound.get("should_intervene") is not expected
+                        or request.validation_context.get(
+                            "trigger", selection.trigger
+                        )
+                        != selection.trigger
+                    ):
+                        raise InvocationError("invalid_output")
+                await asyncio.sleep(0)
+                await self.visitors.check(request.demo_context)
+                self._timeout(deadline, first=True)
+                return structured_event(
+                    request,
+                    CallEvent(
+                        "completed",
+                        text=json.dumps(
+                            bound, ensure_ascii=False, allow_nan=False
+                        ),
+                        usage=empty_usage(),
+                        response_received=True,
+                    ),
+                )
+        except asyncio.CancelledError:
+            now = (
+                self.clock()
+                if self.clock is not None
+                else asyncio.get_running_loop().time()
+            )
+            expired = deadline is not None and now >= deadline.ends
+            return CallEvent(
+                "error" if expired else "interrupted",
+                usage=empty_usage(),
+                error_code="timeout_total" if expired else "interrupted",
+                response_received=received,
+            )
+        except TimeoutError:
+            return CallEvent(
+                "error",
+                usage=empty_usage(),
+                error_code="timeout_total",
+                response_received=received,
+            )
+        except (InvocationError, DemoError) as error:
+            return CallEvent(
+                "error",
+                usage=empty_usage(),
+                error_code=error.code,
+                response_received=received,
+            )

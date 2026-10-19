@@ -4880,5 +4880,151 @@
       "ko": "{field} 보완 필요",
       "en": "Complete {field}."
     }
+  },
+  "demo": {
+    "banner": {
+      "ko": "데모 · 준비된 예시 응답 · 실제 AI 품질 평가용 아님",
+      "en": "Demo · Prepared example responses · Not for evaluating real AI quality"
+    },
+    "content_language": {
+      "ko": "예시 콘텐츠는 한국어입니다. 표시 언어를 바꾸어도 콘텐츠는 번역되지 않습니다.",
+      "en": "Example content is in Korean. Changing the display language does not translate content."
+    },
+    "supported_only": {
+      "ko": "현재 단계의 추천 입력으로 체험해 주세요. 실제 개인정보는 입력하지 마세요.",
+      "en": "Use the suggested input for this step. Do not enter real personal information."
+    },
+    "role_deleted": {
+      "ko": "교사 역할이 삭제되었습니다. 내 데모 초기화로 복원하세요.",
+      "en": "The teacher role has been deleted. Reset your demo to restore it."
+    },
+    "reset_confirm": {
+      "ko": "내 데모 초기화",
+      "en": "Reset my demo"
+    },
+    "expired": {
+      "ko": "체험이 만료되었습니다. 새 체험을 시작해 주세요.",
+      "en": "Your demo has expired. Start a new demo."
+    },
+    "start_required": {
+      "ko": "진행 중인 체험이 없습니다. 새 체험을 시작해 주세요.",
+      "en": "No active demo was found. Start a new demo."
+    },
+    "tour.start": {
+      "ko": "시작",
+      "en": "Start"
+    },
+    "tour.scenario": {
+      "ko": "시나리오",
+      "en": "Scenario"
+    },
+    "tour.dialogue": {
+      "ko": "대화·멘토",
+      "en": "Conversation and mentor"
+    },
+    "tour.analysis": {
+      "ko": "종료·사후 분석",
+      "en": "End and post-session analysis"
+    },
+    "tour.admin_csv": {
+      "ko": "관리자·CSV",
+      "en": "Admin and CSV"
+    },
+    "tour.reset": {
+      "ko": "삭제·초기화",
+      "en": "Delete and reset"
+    },
+    "public_link": {
+      "ko": "데모 체험하기",
+      "en": "Try the demo"
+    },
+    "stale_generation": {
+      "ko": "이전 체험 공간의 화면입니다. 현재 공간에서 다시 열어 주세요.",
+      "en": "This page belongs to an earlier demo space. Open it again in the current space."
+    },
+    "stale_role": {
+      "ko": "역할이 바뀌었습니다. 현재 역할의 화면에서 다시 시도해 주세요.",
+      "en": "Your role has changed. Try again from the page for your current role."
+    },
+    "preparing": {
+      "ko": "체험 공간을 준비하고 있습니다. 잠시 기다려 주세요.",
+      "en": "Your demo space is being prepared. Please wait."
+    },
+    "prepare_failed": {
+      "ko": "체험 공간을 준비하지 못했습니다. 다시 시도해 주세요.",
+      "en": "Your demo space could not be prepared. Please try again."
+    },
+    "resetting": {
+      "ko": "내 데모를 초기화하고 있습니다. 잠시 기다려 주세요.",
+      "en": "Your demo is being reset. Please wait."
+    },
+    "reset_failed": {
+      "ko": "내 데모를 초기화하지 못했습니다. 다시 시도해 주세요.",
+      "en": "Your demo could not be reset. Please try again."
+    },
+    "retry_later": {
+      "ko": "잠시 후 다시 시도해 주세요.",
+      "en": "Please try again shortly."
+    },
+    "wait_or_stop": {
+      "ko": "진행 중인 작업이 있습니다. 끝날 때까지 기다리거나 중지한 뒤 다시 시도해 주세요.",
+      "en": "A task is in progress. Wait for it to finish or stop it, then try again."
+    },
+    "action_forbidden": {
+      "ko": "데모에서는 사용할 수 없는 기능입니다.",
+      "en": "This action is not available in the demo."
+    },
+    "csrf_refresh": {
+      "ko": "보안 확인이 만료되었습니다. 화면을 새로 고친 뒤 다시 실행해 주세요.",
+      "en": "The security check has expired. Refresh the page and run it again."
+    },
+    "limit_reached": {
+      "ko": "이 체험 공간의 사용 한도에 도달했습니다.",
+      "en": "This demo space has reached its usage limit."
+    },
+    "capacity": {
+      "ko": "지금은 체험 공간이 모두 사용 중입니다. 잠시 후 다시 시도해 주세요.",
+      "en": "All demo spaces are in use. Please try again shortly."
+    },
+    "storage_limit": {
+      "ko": "이 체험 공간의 저장 한도에 도달했습니다.",
+      "en": "This demo space has reached its storage limit."
+    },
+    "upload_limit": {
+      "ko": "파일이 너무 큽니다. 더 작은 파일을 올려 주세요.",
+      "en": "The file is too large. Upload a smaller file."
+    },
+    "unavailable": {
+      "ko": "지금은 데모를 사용할 수 없습니다.",
+      "en": "The demo is currently unavailable."
+    },
+    "check_input": {
+      "ko": "입력 내용을 확인해 주세요.",
+      "en": "Check your input."
+    },
+    "refresh_state": {
+      "ko": "현재 상태와 맞지 않는 요청입니다. 화면을 새로 고쳐 주세요.",
+      "en": "This request does not match the current state. Refresh the page."
+    },
+    "not_found": {
+      "ko": "요청한 자료를 찾을 수 없습니다.",
+      "en": "The requested item could not be found."
+    },
+    "output_failed": {
+      "ko": "예시 응답을 표시하지 못했습니다.",
+      "en": "The example response could not be shown."
+    },
+    "stopped": {
+      "ko": "작업이 중지되었습니다.",
+      "en": "The task was stopped."
+    },
+    "output_refused": {
+      "ko": "이 요청에는 응답이 제공되지 않았습니다.",
+      "en": "No response was provided for this request."
+    },
+    "back_to_entry": {
+      "ko": "데모 처음 화면으로",
+      "en": "Back to the demo start"
+    }
   }
 }

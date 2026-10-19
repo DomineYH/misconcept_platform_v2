@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% set i18n_areas = ['admin'] %}
+{% set csrf_cookie = demo_config.csrf_cookie_name if demo_config is defined and demo_config and demo_config.mode == 'demo' and demo_config.csrf_cookie_name else 'csrftoken' %}
 
 {% block title %}{{ t('admin.about_management_admin') }}{% endblock %}
 
@@ -234,7 +235,7 @@ let editBaseline;
   'use strict';
 
   function getCsrf() {
-    var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+    var m = document.cookie.match(/(?:^|;\s*){{ csrf_cookie }}=([^;]*)/);
     return m ? m[1] : '';
   }
 

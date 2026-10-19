@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% set i18n_areas = ['teacher'] %}
+{% set demo_ns = {'ds': demo_config.browser_scope_id, 'dg': demo_config.generation, 'da': demo_config.auth_epoch}|urlencode if demo_config is defined and demo_config and demo_config.mode == 'demo' and demo_config.browser_scope_id else '' %}
 
 {% block title %}{{ t('teacher.analysis_title') }}{% endblock %}
 
@@ -9,7 +10,7 @@
         <h1>{{ t('teacher.analysis_report') }}</h1>
         {% if scenario_title %}<p>{{ scenario_title }} · {{ student_name }}</p>{% endif %}
         <p>{{ t('teacher.session_ended_at') }} {{ session_ended_at }}</p>
-        <a href="/sessions/{{ session_id }}">{{ t('teacher.view_original') }}</a>
+        <a href="/sessions/{{ session_id }}{% if demo_ns %}?{{ demo_ns }}{% endif %}">{{ t('teacher.view_original') }}</a>
     </div>
     {% include "partials/snapshot_provenance.html" %}
 
@@ -99,7 +100,7 @@
     {% endif %}
 
     <div class="analysis-actions">
-        <a href="/sessions/{{ session_id }}/export.csv" class="btn btn-primary">
+        <a href="/sessions/{{ session_id }}/export.csv{% if demo_ns %}?{{ demo_ns }}{% endif %}" class="btn btn-primary">
             {{ t('teacher.download_csv') }}
         </a>
         <a href="/scenarios" class="btn btn-secondary">

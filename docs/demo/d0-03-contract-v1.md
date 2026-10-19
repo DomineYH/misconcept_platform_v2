@@ -2,7 +2,7 @@
 
 ## 1. 기준·범위와 읽는 법
 
-계약 버전은 `d0-03-v1-r3`이다. 상태는 **G0 승인 후보**이며 구현 완료·소비자 리뷰·독립 리뷰·maintainer 승인을 뜻하지 않는다. 승인 기록은 [G0 기록](d0-03-g0-acceptance.md), 설계 이유는 [ADR-0013](../adr/0013-demo-isolation-and-keyless-provider.md)에 둔다. 용어는 [GLOSSARY](../../GLOSSARY.md)를 따른다.
+현재 편집본은 **`d0-03-v2` 승인 개정안**이다. 승인된 기준은 `d0-03-v1-r3`, 입력 `f6551482fb895da7af90a4bd481c3e25fd9d5c19`, 후보 `d6455d10c2d75acde811f85a53143be086d67545`이며 소비자·독립 재검토 ACCEPT와 maintainer G0 승인이 완료되었다. v1-r3 승인은 그대로 유효하다. v2는 §31의 C14/C27 패치 필요성 정정에 한정하며 정확한 변경 후보에 대한 별도 검토 대체·G0 변경 승인은 §31에 기록한다. 구현 완료를 뜻하지 않는다. 승인 기록은 [G0 기록](d0-03-g0-acceptance.md), 설계 이유는 [ADR-0013](../adr/0013-demo-isolation-and-keyless-provider.md)에 둔다. 용어는 [GLOSSARY](../../GLOSSARY.md)를 따른다.
 
 | 고정 입력 | merge SHA | 파일 버전·최종 파일 commit·blob |
 | --- | --- | --- |
@@ -348,7 +348,7 @@ normal의 `AUTH_EXPIRED`와 demo의 미방문/만료를 혼동하지 않는다. 
 
 `approve_call`/`admit_call`/`recheck_call`은 서버 mode, 현재 context/lease, provider/model/evidence를 확인한다. normal은 demo를 거절, demo는 demo 외 provider 및 catalog/probe/comparison operation을 거절한다. `execute_call`도 permit과 요청 provider/model/role/mode를 독립 재검사하고 demo일 때 로컬 adapter만 등록한다. secret은 None이며 fake permit로 외부 SDK에 진입할 수 없다.
 
-기존 `student_bot.py`, `tutor_bot.py`, utility의 legacy OpenAI 직접 생성·분석, retry/readmission, catalog/probe, 관리자 직접 요청, startup/cleanup까지 동일 정책을 적용한다. 기존 OpenAI utility를 호출해야 하는 demo 경로는 내부에서 mode를 확인해 외부 client 생성 전에 거절하며 로컬 fixture로 조용히 성공 대체하지 않는다. 공통 경계의 거절을 잡아서 외부 경로로 fallback하지 않는다.
+기존 `student_bot.py`와 `tutor_bot.py`의 공통 admission/execution 호출, retry/readmission, catalog/probe, 관리자 직접 요청, startup/cleanup까지 동일 정책을 적용한다. 실제 외부 SDK 생성 경계(`openai_generation.py`, `anthropic_generation.py`, `google_generation.py`, 각 catalog와 `google_client.py`)에 도달하기 전에 demo 외부 호출을 거절하며 로컬 fixture로 조용히 성공 대체하지 않는다. `src/utils/openai_helpers.py`는 응답 파서이고 `src/utils/session_feedback.py`는 전달받은 DB의 저장 보고서 reader이므로 SDK 생성 guard를 추가할 대상이 아니다. reader에는 검증된 방문객 DB를 전달하고 기존 접근·삭제 정책을 유지한다. 공통 경계의 거절을 잡아서 외부 경로로 fallback하지 않는다.
 
 SDK constructor·HTTP transport·outbound socket 감시에서 외부 AI 시도가 **0**이어야 통과다. 키를 비운 사실만으로 통과하지 않는다. 인프라 outbound allowlist/운영 mount 부재·권한 증명은 #206 문서와 D5 승인 범위에서 추가 검증한다. 이 문서로 인프라를 변경하지 않는다.
 
@@ -670,7 +670,7 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 | `src/api/routes/admin_groups.py`, `src/api/routes/admin_scenarios.py`, `src/api/routes/admin_about.py` | 예. 허용 CRUD quota/현재성/지원 범위 표시 연결 | #200 |
 | `src/services/admin_scenario_ops.py`, `src/services/admin_user_bulk.py` | 예. 최종 transaction의 quota·지원 상태, upload의 bounded 읽기/rows 재검사 | #200 |
 | `src/api/routes/admin_api_usage.py` | 예. unknown usage/provenance의 방문객 집계 표시, 삭제 내용 비노출 확인 | #200 |
-| `src/utils/openai_helpers.py`, `src/utils/session_feedback.py` | 예. demo legacy 직접 호출을 SDK 생성 전 거절, 외부 fallback 없음 | #198 |
+| `src/utils/openai_helpers.py`, `src/utils/session_feedback.py` | 아니오. 각각 응답 파싱과 전달받은 DB의 저장 보고서 조회이며 직접 SDK 생성·외부 호출이 없음. 외부 호출 차단은 §14의 실제 호출 경계에서 유지 | 패치 없음, #198 읽기 참조; 추가 수정 필요 시 §27 변경관리 |
 | `src/services/role_output_contracts.py`, `src/services/analysis_output_contract.py` | 아니오. 기존 strict 출력/근거 검증 그대로 소비; demo 예외 추가 없음 | 패치 없음, #196/#198 읽기 참조 |
 | `static/js/htmx.min.js` | 아니오. 앱의 event/header와 cache 복구로 연결 | vendored 수정 없음 |
 
@@ -704,7 +704,7 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 
 | gate | 소유/승인과 통과 증거 |
 | --- | --- |
-| G0 | #190의 고정 입력·계약에 DB/provider/UI/검증 소비자 리뷰와 작성자와 별도 reviewer 결과, 결함 해결, @DomineYH 명시 승인. 기록은 G0 문서. 현재 모두 pending |
+| G0 | #190의 고정 입력·계약에 DB/provider/UI/검증 소비자 리뷰와 작성자와 별도 reviewer 결과, 결함 해결, @DomineYH 명시 승인. 기록은 G0 문서 §3–5. v1-r3 재검토 ACCEPT·승인 완료; §31의 v2 변경은 보조 독립 검토 ACCEPT·명시 workflow 예외·maintainer 변경 승인 완료; CI/통합은 별도 확인 |
 | G1 | #194: #191–193 lifecycle/실제 DB resolver/middleware/no-context/CSRF 연결. 작은 테스트 seed 허용, 실제 AI 저장 성공은 G3에서 검사 |
 | G2 | #195: 실제 새 migration/FK·인덱스·자료 보존, 명시적 mode의 keyless/schema/model/evidence. G1과 상대 병합 순서는 독립 |
 | G3 | #198: G1+G2+#196+#197의 실제 학생/멘토/분석·원장·최종 저장/reset race/egress 0 |
@@ -774,7 +774,7 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 
 ## 29. 후보 r2 변경 기록·재검토 범위
 
-`d0-03-v1` 후보 `83f7ec0fff0895aed872114ad4e5d66ce3b38a5c`에 대한 1차 독립 검토 뒤, conditional_repair impl-190-r2로 **`d0-03-v1-r2`**를 작성했다. 아래는 설계 정정이며 구현/실행 증거가 아니다. 실제 수정 commit은 G0 기록과 REPORT-impl-190에서 고정하고 재검토/maintainer 승인은 pending이다. 기존79 소유 배정·ADR-0001/0005·CSV27/20+5·비교 제외·mode 전환 금지·session/CSRF 수명 분리는 유지한다.
+`d0-03-v1` 후보 `83f7ec0fff0895aed872114ad4e5d66ce3b38a5c`에 대한 1차 독립 검토 뒤, conditional_repair impl-190-r2로 **`d0-03-v1-r2`**를 작성했다. 아래는 설계 정정이며 구현/실행 증거가 아니다. 당시 수정 commit과 후속 재검토 결과는 G0 기록 §2–5에 고정했다. r2의 잔여 지적은 r3에서 해결되어 ACCEPT·maintainer 승인이 완료되었다. 기존79 소유 배정·ADR-0001/0005·CSV27/20+5·비교 제외·mode 전환 금지·session/CSRF 수명 분리는 유지한다.
 
 | repair / 검토 finding | 규범·관찰 기대값 위치 | 영향을 받는 소비자·단독 구현 소유 |
 | --- | --- | --- |
@@ -789,11 +789,11 @@ normal은 검증된 `DEMO_PUBLIC_URL`을 template의 `demo_config.public_url`로
 | R9 / P2 | §16.1 exact projection·679-byte canonical vector/digest·편집 예 | #195 공유 helper, #196/#197/#198 재사용, #203 검증 |
 | R10 / F3 | §3 lease-before-User·거절 해제 | #194 resolver, #191/#192 lease, #203 검증 |
 
-r1 리뷰에서 위 인터페이스/여정에 걸린 미결 판정은 재검토로 해소해야 하며 r1의 긍정 검토를 r2 승인으로 재사용하지 않는다. G1/G2/G3의 source API 및 G4/G5 검사 입력은 새 계약 버전을 소비한다. G0 기록의 1차 판정은 보존한다. r2 재검토 결과는 G0 §3.2에 기록하고 후속 S1–S5 정정 및 r3 재검토 대기는 아래 §30에 기록한다.
+r1 리뷰에서 위 인터페이스/여정에 걸린 미결 판정은 재검토로 해소해야 하며 r1의 긍정 검토를 r2 승인으로 재사용하지 않는다. G1/G2/G3의 source API 및 G4/G5 검사 입력은 새 계약 버전을 소비한다. G0 기록의 1차 판정은 보존한다. r2 재검토 결과는 G0 §3.2에 기록하고 후속 S1–S5 정정 및 완료된 r3 재검토는 아래 §30과 G0 기록 §3.3–5에 기록한다.
 
 ## 30. 후보 r3 변경 기록·재검토 범위
 
-후보 `e0b8cc38f491e1178f8d39c7fe7bacedd02bcf76`(`d0-03-v1-r2`)의 다섯 재검토 결과는 모두 ACCEPT_WITH_FIXES다. 기존 R1–R10의 정정은 보존하고, 마지막 자동 conditional_repair impl-190-r3에서 아래 다섯 공백만 정정해 **d0-03-v1-r3**로 올렸다. r3 재검토와 @DomineYH G0 승인은 pending이다.
+후보 `e0b8cc38f491e1178f8d39c7fe7bacedd02bcf76`(`d0-03-v1-r2`)의 다섯 재검토 결과는 모두 ACCEPT_WITH_FIXES다. 기존 R1–R10의 정정은 보존하고, 마지막 자동 conditional_repair impl-190-r3에서 아래 다섯 공백만 정정해 **d0-03-v1-r3**로 올렸다. r3 후보 `d6455d10c2d75acde811f85a53143be086d67545`의 다섯 lens 재검토는 ACCEPT이며 @DomineYH G0 승인은 완료되었다(G0 기록 §3.3–5).
 
 | repair / finding | 규범·관찰 기대값 위치 | 영향 소비자·구현 소유 |
 | --- | --- | --- |
@@ -803,4 +803,22 @@ r1 리뷰에서 위 인터페이스/여정에 걸린 미결 판정은 재검토�
 | S4 / P4/F4 | §17.1 MergeAnalysisOutput의 정확한 여섯 key 및 chunk의 literal 필드명. message_classifications는 merge에 없음, validator 불변 | #196/#197/#198, #202/#203/#205 phase 호환 검증 |
 | S5 / UI-3 | §24.1 단일/선택 export의 같은 echo/row-count, S1-only 관찰 인정·혼합은 다운로드만 허용·기대 map | #200 응답, #201 선택 검증/event, #199 최종 map, #202/#204 검증 |
 
-79개 기존 소유·고정 입력·ADR 원칙·CSV27/20+5·cookie 분리·mode 전환 금지·비교 제외는 바꾸지 않았다. 신규 제품 구현/실행 증거가 아니라 계약 문구 정정이며 소비자와 독립 reviewer가 실제 r3 후보에 재검토해야 한다.
+79개 기존 소유·고정 입력·ADR 원칙·CSV27/20+5·cookie 분리·mode 전환 금지·비교 제외는 바꾸지 않았다. 신규 제품 구현/실행 증거가 아니라 계약 문구 정정이다. 실제 r3 후보에 대한 소비자·독립 재검토 완료와 승인 기록은 G0 기록 §3.3–5를 따른다.
+
+
+## 31. D0 마감 변경 후보 — C14/C27 정정
+
+§27 변경관리에 따라 승인된 `d0-03-v1-r3`에서 `d0-03-v2`로 C14/C27을 정정한다. 확인 기준 main은 `427890033d206a4f043ffc946009bd8ce6a437c2`다. 승인된 입력·후보 SHA와 G0 기록 §1–5는 변경하지 않는다. 기존 승인은 취소하지 않으며 새 변경 승인은 아래 정확한 후보에 별도로 기록한다.
+
+- 이유/변경: §14/26이 파서 `src/utils/openai_helpers.py`와 저장 보고서 reader `src/utils/session_feedback.py`를 SDK 직접 생성 경계로 잘못 분류했다. 두 파일의 불필요한 SDK guard 패치 요구만 제거한다. 실제 SDK/admission/execution 차단과 외부 fallback 금지, 방문객 DB·접근/삭제 보호는 유지한다
+- C-item/소비자: C14/C27, #198 및 독립 검증 #203/#205. C03의 `s6_credentials.py` 조사 보완은 이미 승인된 #194 소유·CLI 차단을 재확인하며 배정을 바꾸지 않는다
+- 무효 evidence 범위: v1-r3의 ACCEPT·승인은 그 정확한 후보에 보존한다. 이를 이 v2 변경의 승인 증거로 재사용하지 않는다. §14/26 패치 필요성 판단은 영향 소비자와 독립 reviewer가 변경 후보 전체 SHA로 다시 검토해야 한다. 다른 인터페이스·오류·기본값·보안 불변식의 의미는 바꾸지 않는다
+- SHA/결과: 실제 변경 후보 전체 SHA·PR·검사 결과는 게시 후 #182/#190에 기록한다. 자기 참조 SHA를 만들지 않는다. 영향 소비자·지정 독립 reviewer 재검토, @DomineYH의 정확한 v2 후보 G0 변경 승인, 이후 대상 branch 통합 확인 전에는 이 변경을 승인된 구현 입력으로 승격하지 않는다
+- manifest: 후속 구현에서 v2를 소비하려면 위 승인 후 `contract_version/contract_commit`을 함께 갱신한다. 이 문서 정리에서는 제품·manifest·D1 구현·배포를 수행하지 않는다
+
+### 31.1 정확한 변경 후보 승인
+
+- 승인 대상: 입력/main `427890033d206a4f043ffc946009bd8ce6a437c2`, `d0-03-v2` 변경 후보 `e9610b532216ff29259e0bd274883c19693c1166`, PR #213의 문서 4개
+- 검토: 작성자와 별도 보조 독립 검토 ACCEPT, 지적 없음. 지정 `agy/gemini-4-argon/high` 실행은 불가하여 maintainer가 이번 문서 변경에 한해 이 보조 검토로 대체하는 workflow 예외를 명시 승인했다. 지정 도구를 실행했다고 주장하지 않는다
+- 승인: @DomineYH, 2026-10-19 UTC, [승인 기록](https://github.com/DomineYH/misconcept_platform_v2/pull/213#issuecomment-6257186149). C14/C27 개정안 및 CI 통과 후 PR 병합·#182 완료 처리 승인. 제품 코드·D1·배포 승인으로 확대하지 않는다
+- 후속 상태: 이 승인 상태 기록만 반영하는 후속 head도 정확한 CI를 확인한다. 최종 head/통합 SHA·post-merge CI 결과는 #182/PR #213에 기록하며 통합 확인 전 완료 처리하지 않는다

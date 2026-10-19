@@ -31,7 +31,7 @@ async def test_s4_wal_copy_migration_restore_preserves_hashes_readers_and_acl(
         for path in migrate.DIRECTORY.glob("*.sql")
         if path.name[0].isdigit() and int(path.name.split("_", 1)[0]) >= 24
     ]
-    assert max(numbers) == 36 and len(numbers) == len(set(numbers))
+    assert max(numbers) == 37 and len(numbers) == len(set(numbers))
     workspace = tmp_path / "s3"
     await rehearse(
         source,

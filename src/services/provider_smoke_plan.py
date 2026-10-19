@@ -181,9 +181,14 @@ async def build_plan(factory, selections, owner_id, plan_id):
             if connection is None:
                 raise InvocationError("configuration_unavailable")
             options = validate_model_and_options(
-                connection.provider, model.model_id, selection.options
+                connection.provider,
+                model.model_id,
+                selection.options,
+                app_mode="normal",
             )
-            if not model_available(model, connection, selection.role, options):
+            if not model_available(
+                model, connection, selection.role, options, app_mode="normal"
+            ):
                 raise InvocationError("configuration_unavailable")
             identity = (connection.provider, selection.role)
             if identity in seen:

@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.config import config
 from src.services.call_admission import admit_call
 from src.services.call_execution import execute_call
 from src.services.context_budget import fit_context
@@ -90,7 +91,10 @@ class StudentBot:
             except HTTPException:
                 raise InvocationError("configuration_unavailable") from None
             connection, model, options = await resolve_frozen_model(
-                db, lesson.config.student.resolved_model_config, "student"
+                db,
+                lesson.config.student.resolved_model_config,
+                "student",
+                app_mode=config.APP_MODE,
             )
             history = await load_completed_turns(
                 db,

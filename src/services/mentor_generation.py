@@ -12,6 +12,7 @@ from src.api.routes.session_helpers import (
     require_native_session,
     validate_scenario_access,
 )
+from src.config import config
 from src.i18n import translate
 from src.models import (
     AppSetting,
@@ -249,7 +250,10 @@ async def _reserve_mentor(
             turn_id,
         )
         connection, model, options = await resolve_frozen_model(
-            db, lesson.config.mentor.resolved_model_config, "mentor"
+            db,
+            lesson.config.mentor.resolved_model_config,
+            "mentor",
+            app_mode=config.APP_MODE,
         )
         request = build_mentor_request(
             lesson, history, trigger, options, request_id

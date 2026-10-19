@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass, field
 from weakref import WeakKeyDictionary
 
+from src.config import config
 from src.models import AppSetting, ModelConfig, ModelProbe, ProviderConnection
 from src.services.invocation_types import InvocationError
 from src.services.model_capabilities import capabilities, metadata_conflict
@@ -148,7 +149,11 @@ async def admit_call(
                         or model.provider_connection_id != connection_id
                         or model.config_version != expected_model_version
                         or not model_available(
-                            model, connection, role, options=model_options
+                            model,
+                            connection,
+                            role,
+                            options=model_options,
+                            app_mode=config.APP_MODE,
                         )
                     ):
                         raise InvocationError("configuration_unavailable")
@@ -233,6 +238,7 @@ async def recheck_call(permit):
                             connection,
                             permit.role,
                             options=permit.model_options,
+                            app_mode=config.APP_MODE,
                         )
                     )
                 ):

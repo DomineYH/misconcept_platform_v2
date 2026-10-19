@@ -1,5 +1,7 @@
 """Public model/settings views and revision-aware role availability."""
 
+from typing import Literal
+
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -99,7 +101,9 @@ def connection_impact(
     return impact
 
 
-def public_model(model, connection, language="ko"):
+def public_model(
+    model, connection, language="ko", *, app_mode: Literal["normal", "demo"]
+):
     definition = capabilities(connection.provider, model.model_id, language)
     if definition:
         definition["metadata_conflict"] = metadata_conflict(
@@ -123,12 +127,16 @@ def public_model(model, connection, language="ko"):
         config_version=model.config_version,
         capabilities=definition,
         default_options=model.default_options_json,
-        verification_state=effective_roles(model, connection),
+        verification_state=effective_roles(
+            model, connection, app_mode=app_mode
+        ),
         probe_budgets=budgets,
     )
 
 
-async def configuration_state(db, connections, language="ko"):
+async def configuration_state(
+    db, connections, language="ko", *, app_mode: Literal["normal", "demo"]
+):
     by_id = {c.id: c for c in connections.values()}
     models = (
         await db.scalars(select(ModelConfig).order_by(ModelConfig.id))
@@ -150,11 +158,17 @@ async def configuration_state(db, connections, language="ko"):
                     available=bool(
                         model
                         and model_available(
-                            model, by_id[model.provider_connection_id], role
+                            model,
+                            by_id[model.provider_connection_id],
+                            role,
+                            app_mode=app_mode,
                         )
                     ),
                 )
             )
+        if app_mode == "normal":
+            # The normal administrator form has no demo limit field.
+            del limits["demo"]
         settings = dict(
             settings_version=setting.settings_version,
             defaults=defaults,
@@ -163,7 +177,9 @@ async def configuration_state(db, connections, language="ko"):
         )
     return dict(
         models=[
-            public_model(m, by_id[m.provider_connection_id], language)
+            public_model(
+                m, by_id[m.provider_connection_id], language, app_mode=app_mode
+            )
             for m in models
         ],
         models_available=True,

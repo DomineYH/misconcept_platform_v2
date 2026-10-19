@@ -15,6 +15,7 @@ from src.api.routes.session_helpers import (
     validate_scenario_access,
 )
 from src.api.schemas.scenario_config import ConfigValue, ScenarioConfig
+from src.config import config
 from src.i18n import translate
 from src.models import Session, User
 from src.services.invocation_types import InvocationError
@@ -179,6 +180,7 @@ async def start_lesson(db, scenario_id, user, *, reuse=False, language="ko"):
                     db,
                     getattr(snapshot.config, role).resolved_model_config,
                     role,
+                    app_mode=config.APP_MODE,
                 )
             except InvocationError:
                 raise configuration_error() from None

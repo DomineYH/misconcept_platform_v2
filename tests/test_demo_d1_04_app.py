@@ -11,7 +11,7 @@ import pytest
 SECRETS = ("s" * 48, "c" * 48, "n" * 48)
 
 
-def run_case(case, tmp_path, **extra):
+def demo_env(tmp_path, **extra):
     env = {
         key: value
         for key, value in os.environ.items()
@@ -44,9 +44,13 @@ def run_case(case, tmp_path, **extra):
         PYTHONPATH=str(Path(__file__).resolve().parents[1]),
         **extra,
     )
+    return env
+
+
+def run_case(case, tmp_path, **extra):
     result = subprocess.run(
         [sys.executable, __file__, case, str(tmp_path)],
-        env=env,
+        env=demo_env(tmp_path, **extra),
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
@@ -86,6 +90,26 @@ def run_case(case, tmp_path, **extra):
 )
 def test_demo_app(case, extra, tmp_path):
     run_case(case, tmp_path, **extra)
+
+
+def test_demo_boots_on_a_cli_built_seed(tmp_path):
+    built = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.demo.seed",
+            "build",
+            "--out",
+            str(tmp_path / "seed"),
+        ],
+        env=demo_env(tmp_path),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert built.returncode == 0, built.stdout + built.stderr
+    run_case("real_seed", tmp_path)
 
 
 def test_demo_shutdown_retains_leased_files_until_restart(tmp_path):
@@ -1148,6 +1172,74 @@ async def case_limits(tmp):
             await start(client, "admin", status=status)
 
 
+async def case_real_seed(tmp):
+    import sqlite3
+
+    from src import main
+    from src.demo import seed
+    from src.demo.database import DemoError
+
+    app = main.app
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    seed_dir = Path(os.environ["DEMO_SEED_DIR"])
+    manifest = json.loads(seed.MANIFEST.read_text())
+    async with app.router.lifespan_context(app):
+        # No stand-in: demo_seed() -> load_seed(DEMO_SEED_DIR) -> validate_seed.
+        assert app.state.demo_seed.path == seed_dir / seed.SEED_NAME
+        response = await client_for(app, "10.0.0.9").get("/health")
+        assert response.status_code == 200, response.text
+        refs = app.state.demo_request_db.seed_refs
+        assert refs == manifest["seed_refs"] and "completed_session" in refs
+        assert dict(app.state.demo_session.tour_content.seed_refs) == refs
+
+        a, b = client_for(app, "10.0.0.1"), client_for(app, "10.0.0.2")
+        state_a, state_b = await start(a, "admin"), await start(b, "admin")
+        assert state_a["browser_scope_id"] != state_b["browser_scope_id"]
+        assert len(visitor_files(root)) == 2
+        counts = [
+            (await client.get("/metrics", params=namespace(state))).json()
+            for client, state in ((a, state_a), (b, state_b))
+        ]
+        assert counts[0]["database"] == counts[1]["database"]
+        assert counts[0]["database"]["users"] > 0
+        ns = namespace(state_a)
+        response = await a.post(
+            "/admin/groups",
+            json={"name": "Visitor A only"},
+            headers=headers(a)
+            | {
+                "x-demo-scope": ns["ds"],
+                "x-demo-generation": str(ns["dg"]),
+                "x-demo-auth-epoch": str(ns["da"]),
+            },
+        )
+        assert response.status_code == 201, response.text
+        pages = [
+            await client.get(
+                "/admin/groups",
+                params=namespace(state),
+                headers={"accept": "text/html"},
+            )
+            for client, state in ((a, state_a), (b, state_b))
+        ]
+        assert all(page.status_code == 200 for page in pages), pages[1].text
+        assert "Visitor A only" in pages[0].text
+        assert "Visitor A only" not in pages[1].text
+
+    # A tampered seed refuses startup and binds nothing.
+    with sqlite3.connect(seed_dir / seed.SEED_NAME) as db:
+        db.execute(
+            "UPDATE \"user\" SET nickname = nickname || '!' WHERE id = 1"
+        )
+    db.close()
+    try:
+        async with app.router.lifespan_context(app):
+            raise AssertionError("tampered seed started")
+    except DemoError as error:
+        assert error.code == "DEMO_VERSION_MISMATCH", error.code
+    assert getattr(app.state, "demo_request_db", None) is None
+
+
 async def case_shutdown(tmp):
     import time
 
@@ -1271,8 +1363,13 @@ if __name__ == "__main__":
 
     asyncio.run(run())
     root = os.environ["DEMO_DATA_ROOT"]
-    # No normal DB file is created or opened in demo.
-    assert all(p == ":memory:" or p.find(root) >= 0 for p in OPENED), OPENED
+    # No normal DB file is created or opened in demo; only root and seed dir.
+    assert all(
+        p == ":memory:"
+        or p.find(root) >= 0
+        or p.find(os.environ["DEMO_SEED_DIR"]) >= 0
+        for p in OPENED
+    ), OPENED
     assert not any("dialogue_sim" in path for path in OPENED)
     text = logs.getvalue()
     values = [*SECRETS, root]

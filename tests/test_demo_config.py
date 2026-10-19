@@ -446,7 +446,8 @@ async def check():
             async with main.lifespan(main.app):
                 raise AssertionError("demo startup allowed")
         except DemoError as error:
-            assert error.code == "DEMO_CONFIGURATION_INVALID"
+            # load_seed finds no built seed in DEMO_SEED_DIR.
+            assert error.code == "DEMO_VERSION_MISMATCH", error.code
     for action in (connection.init_db, connection.close_db):
         try:
             await action()

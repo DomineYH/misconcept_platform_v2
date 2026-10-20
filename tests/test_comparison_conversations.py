@@ -139,7 +139,7 @@ async def test_saved_comparison_create_and_turn_replay_freeze_one_history(
     assert (await client.get(path)).status_code == 403
 
 
-async def begin(client, student, saved):
+async def begin(client, student, saved, tell_apart=None):
     created = await client.post("/admin/scenarios", json=saved)
     assert created.status_code == 201, created.text
     created = await client.post(
@@ -152,7 +152,15 @@ async def begin(client, student, saved):
                 dict(
                     panel_id=panel,
                     model_config_id=student.model.id,
-                    role_options={"analysis": {"max_output_tokens": 8192}},
+                    role_options={
+                        "analysis": {"max_output_tokens": 8192},
+                        # Concurrent panels send identical calls; b's size tells them apart.
+                        **(
+                            {tell_apart: {"max_output_tokens": 8191}}
+                            if tell_apart and panel == "b"
+                            else {}
+                        ),
+                    },
                 )
                 for panel in ["a", "b"]
             ],
@@ -162,6 +170,18 @@ async def begin(client, student, saved):
     return (
         "/admin/comparison-conversations/" + created.json()["conversation_id"]
     )
+
+
+def by_panel(replies):
+    queues = {size: iter(items) for size, items in replies.items()}
+
+    def create(**kwargs):
+        reply = next(queues[kwargs["max_output_tokens"]])
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    return create
 
 
 async def act(client, path, action, **values):
@@ -290,11 +310,10 @@ async def test_failed_panel_retry_is_durable_and_aggregate_delete_keeps_ledger(
     from src.services.invocation_types import InvocationError
 
     login(client, data.admin)
-    path = await begin(client, student, saved)
-    student.responses.create.side_effect = [
-        student.stream,
-        InvocationError("transient"),
-    ]
+    path = await begin(client, student, saved, "student")
+    student.responses.create.side_effect = by_panel(
+        {1024: [student.stream], 8191: [InvocationError("transient")]}
+    )
     response = await act(client, path, "turn", message="Same question")
     assert response.status_code == 200
     state = (await client.get(path)).json()
@@ -605,7 +624,7 @@ async def test_mentor_counts_and_intervals_are_per_panel_with_retry_deduplicatio
         max_interventions=1,
         window_turns=10,
     )
-    path = await begin(client, student, saved)
+    path = await begin(client, student, saved, "mentor")
     target = await add_pair(client, path)
 
     def result(coaching):
@@ -618,11 +637,12 @@ async def test_mentor_counts_and_intervals_are_per_panel_with_retry_deduplicatio
 
     from src.services.invocation_types import InvocationError
 
-    student.responses.create.side_effect = [
-        result("Coach panel a"),
-        result(None),
-        InvocationError("transient"),
-    ]
+    student.responses.create.side_effect = by_panel(
+        {
+            1024: [result("Coach panel a")],
+            8191: [result(None), InvocationError("transient")],
+        }
+    )
     checked = await act(
         client, path, "mentor", target_turn_id=target, trigger="auto"
     )
@@ -870,7 +890,7 @@ async def test_ended_analysis_degraded_retry_keeps_successful_sibling_and_final_
             )
         ],
     )
-    path = await begin(client, student, saved)
+    path = await begin(client, student, saved, "analysis")
     await add_pair(client, path)
     seen = []
 
@@ -878,7 +898,8 @@ async def test_ended_analysis_degraded_retry_keeps_successful_sibling_and_final_
         inputs = prompt_inputs(payload)
         seen.append(inputs)
         reply = analysis_reply(inputs["messages"])
-        if len(seen) == 2:
+        # Panel b degrades on its first call only; its retry is the third call.
+        if payload["max_output_tokens"] == 8191 and len(seen) <= 2:
             reply["message_classifications"][0]["quote"] = "Unverified quote"
         return httpx2.Response(
             200, json=response_body(json.dumps(reply), USAGE)

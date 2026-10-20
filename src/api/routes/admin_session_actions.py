@@ -41,7 +41,6 @@ from src.services.analysis_results import (
 from src.services.analysis_runs import (
     cancel_analysis,
     get_run,
-    request_analysis,
     run_response,
 )
 from src.services.session_history import session_display
@@ -76,12 +75,23 @@ async def demo_delete(request, delete, *, teacher_id=None, session_id=None):
     return result
 
 
-def analysis_context(request):
-    """Demo analysis runs under the visitor guard and its bound lifecycle."""
-    return {
-        "ctx": getattr(request.state, "demo_context", None),
-        "registry": execution_registry(request),
-    }
+def analysis_context(request, session=None):
+    """Demo analysis runs under the visitor guard and its bound lifecycle;
+    a reservation for `session` also gets that session's local adapter."""
+    ctx = getattr(request.state, "demo_context", None)
+    if ctx is not None and session is not None:
+        # #198's teacher helper; late import, session_analysis imports us.
+        from src.api.routes.session_analysis import demo_analysis
+
+        return demo_analysis(request, session)
+    return {"ctx": ctx, "registry": execution_registry(request)}
+
+
+async def reserve_analysis(request, *args, **kwargs):
+    """#198's request_analysis wrapper: §16/§11 demo envelopes, normal as is."""
+    from src.api.routes.session_analysis import reserve_analysis_run
+
+    return await reserve_analysis_run(request, *args, **kwargs)
 
 
 @asynccontextmanager
@@ -142,14 +152,15 @@ async def end_session(
             language=display_language(request),
             **analysis_context(request),
         )
-        accepted = await request_analysis(
+        accepted = await reserve_analysis(
+            request,
             work,
             session_id,
             user.id,
             body.request_id if body else str(uuid4()),
             plan_hash=body.plan_hash if body else None,
             language=display_language(request),
-            **analysis_context(request),
+            **analysis_context(request, session),
         )
     if body is not None:
         return accepted
@@ -370,7 +381,13 @@ async def regenerate_analysis(
 ):
     """Reserve a new analysis while preserving the accepted report."""
     async with analysis_db(request, db) as work:
-        return await request_analysis(
+        session = None
+        if config.APP_MODE == "demo":
+            session = await work.get(Session, session_id)
+            if session is None or session.deleted_at is not None:
+                raise session_missing(request)
+        return await reserve_analysis(
+            request,
             work,
             session_id,
             user.id,
@@ -378,7 +395,7 @@ async def regenerate_analysis(
             regenerate=True,
             plan_hash=body.plan_hash,
             language=display_language(request),
-            **analysis_context(request),
+            **analysis_context(request, session),
         )
 
 

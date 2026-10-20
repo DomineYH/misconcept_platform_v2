@@ -132,8 +132,8 @@
 | GET | `/admin/scenarios/new` | 편집기(신규) | 관리자 | READ | 200 | `admin_scenarios.py:new_scenario_editor` | PR3 |
 | GET | `/admin/scenarios/{scenario_id}` | 시나리오 draft | 관리자 | READ | 200 / `NF` | `admin_scenarios.py:get_scenario_draft` | PR3 |
 | GET | `/admin/scenarios/{scenario_id}/edit` | 편집기(수정) | 관리자 | READ | 200 / `NF` | `admin_scenarios.py:edit_scenario_draft` | PR3 |
-| POST | `/admin/scenarios` | 시나리오 생성 | 관리자 | CRUD. `DEMO_MAX_SCENARIOS`, 공통 demo 모델 검증 | 201 / 429 `DEMO_LIMIT_REACHED` | `admin_scenarios.py:create_scenario`, `src/services/admin_scenario_ops.py` | PR3 |
-| POST | `/admin/scenarios/{scenario_id}/update` | 시나리오 수정 | 관리자 | CRUD. 기존 completeness/review/`expected_version` 검사 유지 | 기존 응답 | `admin_scenarios.py:update_scenario`, `src/services/admin_scenario_ops.py` | PR3 |
+| POST | `/admin/scenarios` | 시나리오 생성 | 관리자 | CRUD. `DEMO_MAX_SCENARIOS`, 공통 demo 모델 검증 | 201 / 429 `DEMO_LIMIT_REACHED` / 422 `DEMO_UNSUPPORTED_CONFIGURATION` | `admin_scenarios.py:create_scenario`, `src/services/admin_scenario_ops.py` | PR3 |
+| POST | `/admin/scenarios/{scenario_id}/update` | 시나리오 수정 | 관리자 | CRUD. 기존 completeness/review/`expected_version` 검사 유지 | 기존 응답 / 422 `DEMO_UNSUPPORTED_CONFIGURATION` | `admin_scenarios.py:update_scenario`, `src/services/admin_scenario_ops.py` | PR3 |
 | POST | `/admin/scenarios/{scenario_id}/delete` | 시나리오 삭제 | 관리자 | CRUD | 기존 응답 | `admin_scenarios.py:delete_scenario` | PR3 |
 | GET | `/admin/about` | 기여자 화면 | 관리자 | READ | 200 | `admin_about.py:admin_about_page` | PR3 |
 | POST | `/admin/about` | 기여자 생성 | 관리자 | CRUD. `DEMO_MAX_CONTRIBUTORS`. 외부 URL fetch 없음 | 201 / 429 `DEMO_LIMIT_REACHED` | `admin_about.py:create_contributor` | PR3 |

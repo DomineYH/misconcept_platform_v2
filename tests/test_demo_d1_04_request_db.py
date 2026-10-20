@@ -245,7 +245,9 @@ class Harness:
             self.visitors,
             self.lifecycle,
             self.runtime,
-            tour_content=SimpleNamespace(seed_refs={"admin": 1, "teacher": 2}),
+            tour_content=SimpleNamespace(
+                seed_refs={"admin": 1, "teacher": 2, "completed_session": 1}
+            ),
             drain_seconds=1,
         )
         self.contexts = []
@@ -1009,7 +1011,9 @@ async def restart_recovery(h):
         h.visitors,
         h.lifecycle,
         h.runtime,
-        tour_content=SimpleNamespace(seed_refs={"admin": 1, "teacher": 2}),
+        tour_content=SimpleNamespace(
+            seed_refs={"admin": 1, "teacher": 2, "completed_session": 1}
+        ),
         drain_seconds=1,
     )
     h.app.state.demo_request_db = h.runtime

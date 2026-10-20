@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
+    HTTPException,
     Query,
     Request,
     status,
@@ -29,6 +30,7 @@ from src.api.schemas.scenario_config import (
     ScenarioConfig,
 )
 from src.config import config
+from src.demo.database import DemoError
 from src.i18n import display_language
 from src.i18n.admin import scenario_view
 from src.models.scenario import Scenario
@@ -47,8 +49,23 @@ from src.services.scenario_drafts import (
 )
 
 logger = logging.getLogger(__name__)
+MODEL_REFUSALS = {"model_identity_mismatch", "model_unavailable"}
 
 router = APIRouter(tags=["Admin Scenarios"], route_class=ScenarioRoute)
+
+
+async def save_selected(db, data, user_id, scenario_id=None):
+    """§20: demo refuses an injected model at selection, not per field."""
+    try:
+        return await save_scenario(db, data, user_id, scenario_id)
+    except HTTPException as error:
+        if (
+            config.APP_MODE == "demo"
+            and isinstance(error.detail, list)
+            and any(item.get("code") in MODEL_REFUSALS for item in error.detail)
+        ):
+            raise DemoError("UNSUPPORTED_CONFIGURATION") from None
+        raise
 
 
 @router.get("/admin/scenarios", response_class=HTMLResponse)
@@ -143,7 +160,7 @@ async def create_scenario(
                 config.DEMO_MAX_SCENARIOS,
                 Scenario.deleted_at.is_(None),
             )
-            saved = await save_scenario(own, scenario_data, user.id)
+            saved = await save_selected(own, scenario_data, user.id)
             await own.commit()
         return scenario_view(saved, request)
     return scenario_view(
@@ -165,7 +182,7 @@ async def update_scenario(
     """POST /admin/scenarios/{id}/update - Update scenario (T079, T080)."""
 
     return scenario_view(
-        await save_scenario(db, scenario_data, user.id, scenario_id), request
+        await save_selected(db, scenario_data, user.id, scenario_id), request
     )
 
 

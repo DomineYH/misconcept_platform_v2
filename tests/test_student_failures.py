@@ -192,6 +192,7 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
     data, client, student, monkeypatch
 ):
     import asyncio
+    import contextlib
 
     from test_student_generation import FakeStream
 
@@ -202,6 +203,7 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
         async def iterate(self):
             budget, timer = armed
             timer.reschedule(asyncio.get_running_loop().time() + budget)
+            reading.set()
             for _ in range(1000):
                 await asyncio.sleep(0.005)
                 yield event(
@@ -226,6 +228,18 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
         return timer
 
     monkeypatch.setattr(CallDeadline, "first", first_unarmed)
+    reading, stream_student = asyncio.Event(), student_stream.stream_student
+    pings = []
+
+    async def observed(*args):
+        async with contextlib.aclosing(stream_student(*args)) as chunks:
+            async for chunk in chunks:
+                if chunk == ": ping\n\n":
+                    # Setup pings can't prove heartbeats continue while reasoning.
+                    pings.append(reading.is_set() and not student.stream.closed)
+                yield chunk
+
+    monkeypatch.setattr(student_stream, "stream_student", observed)
     student.stream = ReasoningStream([])
     student.responses.create.return_value = student.stream
     login(client, data.owner)
@@ -234,6 +248,7 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
         json={"request_id": str(uuid4()), "content": "Reasoning question"},
     )
     assert ": ping\n\n" in response.text
+    assert any(pings)
     assert "PRIVATE REASONING" not in response.text
     assert frames(response)[-1][1]["code"] == "first_output_timeout"
     assert student.stream.closed

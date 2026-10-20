@@ -798,6 +798,13 @@ async def case_analysis(tmp):
 
     analysis_runs.reserve_analysis = reserve
     analysis_runs.run_response = rendered
+    # The stand-in seed has no fixture INPUTS; the real adapter path runs
+    # in test_demo_d3_02_real.py[admin_analysis] on the product seed.
+    from src.api.routes import session_analysis
+
+    session_analysis.demo_binding = lambda request, ctx: SimpleNamespace(
+        adapter=lambda session: None
+    )
     spies = Spies()
     root = Path(os.environ["DEMO_DATA_ROOT"])
     async with app.router.lifespan_context(app):

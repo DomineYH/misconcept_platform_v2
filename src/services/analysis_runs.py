@@ -163,10 +163,11 @@ async def reserve_analysis(
 ):
     ctx = ctx if ctx is not None else NormalContext(factory)
     factory = ctx.factory
+    # Lock order: admission, then the visitor transition, then the DB.
     async with (
+        execution_lock(),
         registry.write_guard(ctx),
         registry.resource_lock(scope_for(ctx), "session", session_id),
-        execution_lock(),
     ):
         async with factory() as db:
             await db.execute(text("BEGIN IMMEDIATE"))

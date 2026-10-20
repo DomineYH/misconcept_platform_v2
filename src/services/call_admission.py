@@ -114,10 +114,14 @@ def approve_call(
         demo and connection.encrypted_key is not None
     ):
         raise InvocationError("configuration_unavailable")
-    scope = scope_for(ctx) if demo else NORMAL_SCOPE
     limits, timeouts = settings_values(setting)
-    # Database limits are per scope; the demo hard caps span scopes.
-    mine = [c for c in active_calls if c.scope == scope]
+    # Demo database limits are per scope and its hard caps span scopes;
+    # normal keeps counting every active call.
+    if demo:
+        scope = scope_for(ctx)
+        mine = [c for c in active_calls if c.scope == scope]
+    else:
+        mine = active_calls
     total = len(mine)
     provider = sum(c.provider == connection.provider for c in mine)
     administrators = sum(c.admin for c in mine)
@@ -266,7 +270,7 @@ def cancel_connection(connection_id, *, scope=NORMAL_SCOPE):
     for call in list(registered_calls):
         if (
             call.connection_id == connection_id
-            and call.scope == scope
+            and (config.APP_MODE != "demo" or call.scope == scope)
             and not call.task.done()
         ):
             call.task.cancel()

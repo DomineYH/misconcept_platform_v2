@@ -9,11 +9,14 @@ belongs to #202.
 
 ## 1. Tested revision and stack
 
-- Tested SHA: `f571d9d123f0206b843a775f2b9775ca044d02ec` (main `1a40dc2` plus
-  `tests/test_demo_d3_02_real.py`, repair r1). The tree was clean during the
-  run. The docs commits change no code or tests. The first PR4 run was on
-  `aa6f172`; that commit differs from `f571d9d` only in the `[exports]`
-  case, which gained the seed-session deletion block.
+- Tested SHA: `56b14d42cfe63267ac150f69e89c5640ed22630b`. This is main
+  `1a40dc2` plus `tests/test_demo_d3_02_real.py`, the repair r1 case, and the
+  D3 fix in `src/api/routes/admin_scenarios.py` (§7). The tree was clean
+  during the run, and the docs commits change no code or tests.
+- Earlier runs:
+  - `aa6f172`, the first PR4 run.
+  - `f571d9d`, after repair r1 added the seed-session deletion block to the
+    `[exports]` case.
 - Environment: CPython 3.12.3, own uv venv, `TMPDIR` outside `/tmp`, serial
   pytest, 1 worker.
 - The real stack in `tests/test_demo_d3_02_real.py`:
@@ -31,7 +34,7 @@ belongs to #202.
   the config maximum. Each case sends more than the default 60 requests a
   minute, and with the default the per-visitor limiter answered 429.
 
-### Seed receipt (build at `aa6f172`; `f571d9d` changes only tests, so the seed inputs are the same)
+### Seed receipt (build at `aa6f172`; later commits change no seed input)
 
 | field | value |
 | --- | --- |
@@ -53,13 +56,18 @@ Command per file: `<venv>/bin/python -m pytest -q -p no:cacheprovider tests/<fil
 
 | file | revision | fresh/reused | collected | passed | failed/skipped | pytest time |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| `tests/test_demo_d3_02_real.py` | `f571d9d` | fresh | 2 | 2 | 0 | 233 s |
-| `tests/test_demo_d3_02_guards.py` | `aa6f172` | reused (file unchanged since) | 13 | 13 | 0 | 289 s |
-| `tests/test_demo_d3_02_exports.py` | `aa6f172` | reused (file unchanged since) | 39 | 39 | 0 | 151 s |
-| `tests/test_demo_d1_04_app.py` | `aa6f172` | reused (file unchanged since) | 23 | 23 | 0 | 349 s |
+| `tests/test_demo_d3_02_real.py` | `56b14d4` | fresh | 2 | 2 | 0 | 66 s |
+| `tests/test_demo_d3_02_guards.py` | `56b14d4` | fresh | 15 | 15 | 0 | 104 s |
+| `tests/test_scenario_api.py` | `56b14d4` | fresh | 30 | 30 | 0 | 16 s |
+| `tests/test_scenario_drafts.py` | `56b14d4` | fresh | 72 | 72 | 0 | 55 s |
+| `tests/test_scenario_publication.py` | `56b14d4` | fresh | 48 | 48 | 0 | 84 s |
+| `tests/test_scenario_screens.py` | `56b14d4` | fresh | 25 | 25 | 0 | 3 s |
+| `tests/test_scenario_retirement.py` | `56b14d4` | fresh | 23 | 23 | 0 | 32 s |
+| `tests/test_demo_d3_02_exports.py` | `aa6f172` | reused: file unchanged; the D3 fix touches only scenario routes | 39 | 39 | 0 | 151 s |
+| `tests/test_demo_d1_04_app.py` | `aa6f172` | reused: file unchanged; the D3 fix touches only scenario routes | 23 | 23 | 0 | 349 s |
 
-On `f571d9d`, `ruff check .` passed and `black --check .` reported 390 files
-unchanged. The CSV samples written by the `f571d9d` run are byte-identical
+On `56b14d4`, `ruff check .` passed and `black --check .` reported 390 files
+unchanged. The CSV samples written by the `56b14d4` run are byte-identical
 to the ones committed here.
 
 ## 3. Acceptance → test → result
@@ -76,6 +84,8 @@ in-process unit, or patched config.
 | CSRF before guard/CRUD | `POST /admin/groups` and a forbidden POST are sent with: no token, a forged token, a foreign `Origin`, and no `Origin`. All four get 403 `DEMO_CSRF_INVALID`, and the group count is unchanged. A control request with valid headers creates a group (201) | R:guards | pass |
 | §20 reads | `/admin/ai/state` returns 200 with §19 provenance (`seed_prepared`). Comparison and conversation lists are empty. Missing probe, comparison and conversation IDs → 404 `DEMO_RESOURCE_NOT_FOUND` | R:guards | pass |
 | §20 stop/cancel/delete | probe cancel, comparison stop/panel stop, conversation stop, and both DELETEs on absent IDs → 404 `DEMO_RESOURCE_NOT_FOUND` (no foreign-scope cancel) | R:guards | pass |
+| §20 scenario API model injection | three injected selections on all three roles: an unregistered model 99 on the openai connection; the demo row relabelled `openai/gpt-5.5`; the demo model on the openai connection. Each is sent with `save_draft` and with `publish`, to both `POST /admin/scenarios` and `/admin/scenarios/1/update`, and all 12 requests → 422 `DEMO_UNSUPPORTED_CONFIGURATION`. The scenario rows (id, version, config) and the 8 run/ledger/usage table counts are unchanged | R:guards | pass (Red before the fix: field-error list, §7) |
+| normal scenario errors unchanged | in normal mode, `save_selected` re-raises the identical `model_identity_mismatch`/`model_unavailable` field-error exception | `test_demo_d3_02_guards.py::test_normal_scenario_save_keeps_model_field_errors[*]` | pass |
 | teacher refusal | after `/demo/role` → teacher, a forbidden POST and `GET /admin/ai/state` → 403 `DEMO_ACTION_FORBIDDEN` | R:guards | pass |
 | §23 single CSV | seed session download: filename `demo_d0-02-v1_admin_session-1.csv` (ASCII), UTF-8 BOM, parsed with `csv.DictReader`. 27 + 5 = 32 columns in order. 6 rows: teacher 2, student 2, tutor 1, summary 1. Suffix values `prepared_example`/`false`/`d0-02-v1`/`demo-fixture-v1`/`seed_prepared`. `X-Demo-Export-Request-ID` is echoed, `X-Demo-Export-Row-Count` is 6 | R:exports | pass |
 | §23 selected/all/user CSV | selected `[seed, visitor]` → `..._selected.csv` with both sessions, origins `seed_prepared`/`visitor_generated`, echo and row count. `..._all.csv` and `..._user-2.csv` → both sessions, no `x-demo-*` headers | R:exports | pass |
@@ -149,4 +159,21 @@ missing deleted check. Mutation: with `admin_session_actions.py:285` reduced
 to `if not session:`, the `[exports]` case fails (modal 503 instead of 404).
 The file was restored.
 
-No product file was changed in this PR.
+## 7. Product fix D3 (`admin_scenarios.py`, #200-owned)
+
+- **Defect** (found by #203): in demo, scenario create and update with an
+  external model returned 422 field errors
+  `[{"path":"config.<role>.resolved_model_config","code":"model_identity_mismatch"}]`
+  from `src/services/scenario_drafts.py:137`. Contract §20 (d0-03 l.520)
+  requires 422 `DEMO_UNSUPPORTED_CONFIGURATION` at the selection step.
+- **Fix:** both routes now call `save_selected`. In demo it maps a
+  `model_identity_mismatch` or `model_unavailable` refusal from
+  `save_scenario` to `DemoError("UNSUPPORTED_CONFIGURATION")`. In normal mode
+  it re-raises the same exception, so normal responses do not change.
+  `scenario_drafts.py` is not changed.
+- **No rows:** the demo create still runs inside the quota write guard. The
+  refusal happens before any insert and rolls back.
+- **Red:** before the fix, the new `[guards]` block failed on the first
+  request, because `detail` was the field-error list (log `d3-red.log`).
+
+The only product file changed in this PR is `src/api/routes/admin_scenarios.py` (D3).

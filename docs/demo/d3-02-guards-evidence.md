@@ -9,9 +9,11 @@ belongs to #202.
 
 ## 1. Tested revision and stack
 
-- Tested SHA: `aa6f172b306906bc64a63704497a9d3896b9be14` (main `1a40dc2` plus
-  `tests/test_demo_d3_02_real.py`). The tree was clean during the run. The
-  docs commit that adds this page changes no code or tests.
+- Tested SHA: `f571d9d123f0206b843a775f2b9775ca044d02ec` (main `1a40dc2` plus
+  `tests/test_demo_d3_02_real.py`, repair r1). The tree was clean during the
+  run. The docs commits change no code or tests. The first PR4 run was on
+  `aa6f172`; that commit differs from `f571d9d` only in the `[exports]`
+  case, which gained the seed-session deletion block.
 - Environment: CPython 3.12.3, own uv venv, `TMPDIR` outside `/tmp`, serial
   pytest, 1 worker.
 - The real stack in `tests/test_demo_d3_02_real.py`:
@@ -29,7 +31,7 @@ belongs to #202.
   the config maximum. Each case sends more than the default 60 requests a
   minute, and with the default the per-visitor limiter answered 429.
 
-### Seed receipt (build at the tested SHA)
+### Seed receipt (build at `aa6f172`; `f571d9d` changes only tests, so the seed inputs are the same)
 
 | field | value |
 | --- | --- |
@@ -43,26 +45,30 @@ belongs to #202.
 
 The receipt's `command` field holds a host path and is left out here.
 
-## 2. Commands and counts (fresh, on `aa6f172`)
+## 2. Commands and counts
 
 Command per file: `<venv>/bin/python -m pytest -q -p no:cacheprovider tests/<file>.py`.
 `test_demo_d3_02_real.py` ran under `flock /tmp/mp2-heavy.lock`, with
 `D3_02_EVIDENCE_DIR` set so that it also saved the CSV samples.
 
-| file | collected | passed | failed/skipped | pytest time |
-| --- | ---: | ---: | ---: | ---: |
-| `tests/test_demo_d3_02_real.py` | 2 | 2 | 0 | 152 s |
-| `tests/test_demo_d3_02_guards.py` | 13 | 13 | 0 | 289 s |
-| `tests/test_demo_d3_02_exports.py` | 39 | 39 | 0 | 151 s |
-| `tests/test_demo_d1_04_app.py` | 23 | 23 | 0 | 349 s |
+| file | revision | fresh/reused | collected | passed | failed/skipped | pytest time |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `tests/test_demo_d3_02_real.py` | `f571d9d` | fresh | 2 | 2 | 0 | 233 s |
+| `tests/test_demo_d3_02_guards.py` | `aa6f172` | reused (file unchanged since) | 13 | 13 | 0 | 289 s |
+| `tests/test_demo_d3_02_exports.py` | `aa6f172` | reused (file unchanged since) | 39 | 39 | 0 | 151 s |
+| `tests/test_demo_d1_04_app.py` | `aa6f172` | reused (file unchanged since) | 23 | 23 | 0 | 349 s |
 
-Also: `ruff check .` passed, and `black --check .` reported 390 files unchanged.
+On `f571d9d`, `ruff check .` passed and `black --check .` reported 390 files
+unchanged. The CSV samples written by the `f571d9d` run are byte-identical
+to the ones committed here.
 
 ## 3. Acceptance → test → result
 
 Key: `R:guards` = `test_demo_d3_02_real.py::test_demo_d3_02_on_real_seed_and_middleware[guards]`,
-`R:exports` = the `[exports]` case. "Real seed" means that every row in
-this table was proven on the CLI-built product seed with real middleware.
+`R:exports` = the `[exports]` case. Only rows whose test id is `R:guards`
+or `R:exports` were proven on the CLI-built product seed with real
+middleware. The last three rows give their own scope: synthetic seed,
+in-process unit, or patched config.
 
 | acceptance (§) | real-stack check | test id | result |
 | --- | --- | --- | --- |
@@ -75,6 +81,7 @@ this table was proven on the CLI-built product seed with real middleware.
 | §23 selected/all/user CSV | selected `[seed, visitor]` → `..._selected.csv` with both sessions, origins `seed_prepared`/`visitor_generated`, echo and row count. `..._all.csv` and `..._user-2.csv` → both sessions, no `x-demo-*` headers | R:exports | pass |
 | §23/§25 other visitor | visitor B's all export holds only the seed session and none of A's visitor text. B's download of A's session ID → 404 `DEMO_RESOURCE_NOT_FOUND` | R:exports | pass |
 | §22 session soft delete | A deletes its visitor session → 200; a second delete → 400 (existing rule). Download and analysis API → 404 `DEMO_RESOURCE_NOT_FOUND`. The detail modal returns 200 as a tombstone without the body. All, user, and selected exports exclude the session; selected with only the deleted ID returns no CSV. The row is kept with `deleted_at` set | R:exports | pass |
+| §22 analyzed session soft delete | visitor B deletes seed session 1. The session has a stored `session_feedback_report` and a completed `operation='analysis'` run, and before the delete B's all export carries report text. After the delete: analysis modal, analysis JSON, analysis-run status and download each → 404 `DEMO_RESOURCE_NOT_FOUND`. The detail tombstone, the all export, the user-2 export and the selected export contain no report text and no message text, and selected returns no CSV. The row is tombstoned in B's DB only; A's copy stays live. The readable-before-delete API check is not run: see §6 | R:exports | pass (pre-delete API read blocked, §6) |
 | §22 teacher delete | delete of seed teacher 2 → `{"status":"deleted"}`. Sessions are kept with `teacher_id` NULL, and the seed session keeps its 5 messages. User export of ID 2 → 404 `DEMO_RESOURCE_NOT_FOUND`. All export still has 6 rows with an empty `teacher_id` | R:exports | pass |
 | §24.1 delete facts | `/demo/state?include_tour=true` for A: `teacher_deleted` true, `session_deleted` true, `journey_session_id` = the deleted visitor session. For B: both false, and B's seed session still has teacher 2 | R:exports | pass |
 | §21/§8 quotas | groups/contributors/users/bulk/scenario quotas and the last-slot race, on the real app and middleware. `scenario_race` uses the real product seed; the other cases use the synthetic `make_seed` behind the real `demo_seed()` | `test_demo_d3_02_guards.py::test_demo_allowed_crud_quotas[*]` | pass (13/13 in file) |
@@ -112,4 +119,34 @@ dialogue would go through #198's admission path, which is out of #200 scope.
 - Two-process or real-socket server (uvicorn): the cases use ASGI in-process
   transport inside a clean subprocess, with the same app object and middleware stack.
 
-Product defects found: none. No product file was changed.
+## 6. Product defect found (not #200-owned; NEEDS_DECISION)
+
+On the real demo stack, every admin analysis read of the analyzed seed
+session returns 503 `DEMO_CONFIGURATION_INVALID`. The demo error boundary
+logs the cause as `KeyError`. Affected requests:
+
+- `GET /admin/sessions/1/detail`
+- `GET /admin/sessions/1/analysis_modal`
+- `GET /admin/sessions/1/analysis`
+- `GET /admin/sessions/1/analysis/runs/<run>`
+
+Reproduced in-process on a copy of the seed DB. The call path:
+
+1. `admin_session_actions.py` (via `_load_analysis_response`) or `analysis_runs.py:82` `run_response`
+2. `src/services/analysis_results.py:395` `load_plan`
+3. `src/services/analysis_plan.py:375` `build_plan`
+4. `:182` `estimate_request`
+5. `:67` → `src/services/context_budget.py:13` `PROVIDER_ADAPTERS[request.provider]`
+
+`src/services/call_execution.py:33` `PROVIDER_ADAPTERS` has no `"demo"`
+entry, but the seed's analysis model uses provider `demo`. These files are
+not in #200's §26 list; `analysis_results.py` and `call_execution.py` are
+#198's. For that reason, this PR does not assert that the analysis is
+readable before the delete.
+
+The post-delete 404 checks run before that code, so they still catch a
+missing deleted check. Mutation: with `admin_session_actions.py:285` reduced
+to `if not session:`, the `[exports]` case fails (modal 503 instead of 404).
+The file was restored.
+
+No product file was changed in this PR.

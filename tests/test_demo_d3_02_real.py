@@ -55,7 +55,7 @@ def run_real(case, tmp_path):
     assert str(tmp_path) not in output, output
 
 
-@pytest.mark.parametrize("case", ["guards", "exports", "regenerate"])
+@pytest.mark.parametrize("case", ["guards", "exports", "admin_analysis"])
 def test_demo_d3_02_on_real_seed_and_middleware(case, tmp_path):
     run_real(case, tmp_path)
 
@@ -606,11 +606,18 @@ async def admin_run(client, state, session_id, run_id):
     raise AssertionError(latest)
 
 
-async def case_regenerate(tmp):
-    """§16/§19: admin regenerate of the analyzed seed session runs the
-    session's local adapter; replay and conflict follow §16."""
-    from test_demo_d1_04_app import client_for, start, visitor_files
-    from test_demo_d2_04_g3 import assert_ledger, rows
+async def case_admin_analysis(tmp):
+    """§14/§16/§19: admin regenerate and admin end run the session's local
+    adapter; replay and conflict follow §16."""
+    from test_demo_d1_04_app import client_for, headers, start, visitor_files
+    from test_demo_d2_04_g3 import (
+        PROVENANCE,
+        as_teacher,
+        assert_ledger,
+        new_session,
+        rows,
+        student_turn,
+    )
     from test_demo_d3_02_guards import Spies, call
 
     app, seed, manifest = real_app()
@@ -682,6 +689,38 @@ async def case_regenerate(tmp):
             auth_epoch=state["auth_epoch"],
         ), response.text
         assert totals() == before
+
+        # Admin end of a visitor's live session reserves a local analysis.
+        refs = app.state.demo_request_db.seed_refs
+        state = await as_teacher(client, state)
+        session_id = await new_session(client, state, refs["scenario"])
+        frames = await student_turn(client, state, session_id, seed.INPUTS["A"])
+        assert frames[-1][0] == "output.completed", frames
+        response = await client.post(
+            "/demo/role",
+            json={
+                "request_id": str(uuid4()),
+                "role": "admin",
+                "expected_generation": state["generation"],
+                "expected_auth_epoch": state["auth_epoch"],
+            },
+            headers=headers(client),
+        )
+        assert response.status_code == 200, response.text
+        state = (await client.get("/demo/state")).json()
+        response = await call(
+            client,
+            state,
+            "POST",
+            f"/admin/sessions/{session_id}/end",
+            {"request_id": str(uuid4())},
+        )
+        assert response.status_code == 202, response.text
+        run_id = response.json()["run_id"]
+        latest = await admin_run(client, state, session_id, run_id)
+        assert latest["status"] == "ok" and latest["adopted"], latest
+        assert latest["outcome"]["provenance"] == PROVENANCE, latest
+        assert_ledger(db, run_id)
         spies.clean()
 
 

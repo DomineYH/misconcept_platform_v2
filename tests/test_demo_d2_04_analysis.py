@@ -1,9 +1,11 @@
 """D2-04 PR3: demo analysis ctx, child lease, write guard, retry and provenance.
 
-Admission runs PR2's real §14 validator in demo server mode; recheck and
-the context_budget demo branch are stubbed at their module boundary unless a
-test restores them. Everything else is the real #191 visitor DB, #192
-lifecycle, guarded ledger and #196 DemoProvider with fictional content.
+Admission runs PR2's real §14 validator in demo server mode; recheck is
+stubbed at its module boundary unless a test restores it. Everything else is
+the real #191 visitor DB, #192 lifecycle, guarded ledger and #196
+DemoProvider with fictional content. The #195 config hash stays the provider
+fixture's stub: its fictional config is no ScenarioConfig. The real helper
+is bound in tests/test_demo_d2_04_g3.py.
 """
 
 import asyncio
@@ -38,7 +40,6 @@ from src.services import (
     analysis_chunks,
     analysis_invocations,
     analysis_pipeline,
-    analysis_plan,
     anthropic_generation,
     call_admission,
     call_execution,
@@ -210,12 +211,6 @@ async def demo(prepared, visitors, monkeypatch):
     )
     monkeypatch.setattr(
         analysis_pipeline, "load_analysis_lesson", load_analysis_lesson
-    )
-    # PR2's context_budget demo branch: a fixed local adapter has no SDK body.
-    monkeypatch.setattr(
-        analysis_plan,
-        "provider_parameters",
-        lambda request: dict(messages=request.messages),
     )
     async with ctx.factory() as db:
         messages = list(

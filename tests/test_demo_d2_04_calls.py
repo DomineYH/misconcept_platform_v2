@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import dataclasses
 import json
+import math
 import time
 from contextlib import aclosing, asynccontextmanager, suppress
 from copy import deepcopy
@@ -41,6 +42,7 @@ from src.models import (
 )
 from src.models import Session as LessonSession
 from src.services import (
+    analysis_plan,
     anthropic_catalog,
     anthropic_generation,
     call_admission,
@@ -54,6 +56,7 @@ from src.services import (
     student_stream,
     tutor_bot,
 )
+from src.services.analysis_output_contract import UnifiedAnalysisOutput
 from src.services.call_admission import (
     CallPermit,
     active_calls,
@@ -1104,6 +1107,23 @@ def test_s2_demo_structured_budget_without_provider_parameters(
         request, prior_pair_count=0, configured_prior_turn_limit=None
     )
     assert fitted.context_budget_json["reserved_output_tokens"] == 8192
+
+
+def test_s2_demo_analysis_plan_estimate_needs_no_sdk_adapter():
+    # G3 found load_plan's estimate looking up a "demo" SDK adapter.
+    request = s2_demo_request(
+        StructuredRequest, output_schema=UnifiedAnalysisOutput
+    )
+    request = replace(request, role="analysis")
+    serialized = json.dumps(
+        dict(system_instruction="sys", messages=request.messages),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    assert analysis_plan.estimate_request(request) == math.ceil(
+        len(serialized.encode()) * 1.2
+    )
 
 
 def test_s2_openai_budget_still_uses_provider_parameters(monkeypatch):

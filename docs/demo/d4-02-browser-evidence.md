@@ -89,6 +89,30 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 
 스크린샷·내려받은 CSV는 실행 tree의 `test-results/d4-02/`(gitignore)에 남고 commit하지 않았다. 최종 G4 실행분만 `docs/demo/d4-02-evidence/`에 둔다.
 
+## 실행 5 — Phase 3, #198 수정 뒤 (2026-10-20, 작성 중 확인, pending G4 candidate)
+
+- 기준: `feat/204-final` `e5a9887`. origin/main `fbbcad7`(#251 = #198 PR4 `ae8c76d`: context_budget demo 분기, `/end`·`/analyze` demo adapter, close_session demo scope, 분석 REQUEST_CONFLICT envelope; #250 seed provenance)을 병합했다. 이 문서는 실행 뒤 다음 commit에서 수정했고 test 파일은 바뀌지 않았다.
+- 환경: WSL2 Linux(load average 약 2–3), Python 3.12.3(uv venv), Node 24, Playwright Chromium headless. 실행 tree는 `git archive e5a9887`를 ext4 임시 디렉터리에 푼 것이다(실행 4와 같은 drvfs 이유).
+- 명령: `flock /tmp/mp2-heavy.lock -c 'npm run test:browser -- browser_demo_isolation browser_demo_journey browser_demo_recovery'`(worker 1개). log: `logs-w204/p3/final.log`.
+- receipt: `source_commit` `e5a988709f1f…`, `logical_data_sha256` `93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141`(#250으로 바뀜), `manifest_sha256` `60cc355c…0516`, `seed_sha256` `dcce23bb…89ec`(isolation)·`e12f2872…abf5`(journey)·`40f34e23…5e94`(recovery).
+
+| 모듈 | 결과 | 범위 |
+| --- | --- | --- |
+| `browser_demo_isolation.mjs` | passed (22.8 s) | 실행 1–3 항목 + seed 세션 관리자 분석 상세(`ANALYSIS_DETAIL`) |
+| `browser_demo_journey.mjs` | failed (412.9 s): 투어 map·관찰 7건만, 아래 결함 하나에서 나옴. 자료 단계 1–7은 모두 통과 | A 여섯 단계·CSV·삭제·reset, B |
+| `browser_demo_recovery.mjs` | passed (21.7 s): I1–I7 | I 복구·언어·접근성 |
+
+이번 실행에서 처음 실제 앱으로 통과한 것:
+
+- A 4단계: 이중 확인 뒤 `POST /sessions/<id>/end` 200/202, 분석 modal 200, TourFacts `analysis_ready`, 이력 화면 `/sessions/<id>` 분석 결과 표시.
+- A 5단계: UI로 관리자 전환(`auth_epoch`+1, root namespace 일치), 관리자 세션 목록에서 대상 분석 열람, `GET /admin/sessions/<id>/analysis` 200. 내려받은 파일 `demo_d0-02-v1_admin_session-<id>.csv` 파싱: 관리자 27열 + suffix 5열 순서, 6행(teacher 2·student 2·tutor 1·summary 1), 모든 행 대상 session_id·`prepared_example`·`false`·`visitor_generated`, 교사 식별 열 채움. 투어 CSV 버튼은 숨겨져 있어(아래 결함) 같은 관리자 export인 행의 CSV 링크로 받았다.
+- B: A의 대화 뒤와 분석·CSV 뒤 두 번, B의 총계·사용자·그룹·세션 목록 불변, A의 세션·run ID는 B에서 404 `DEMO_RESOURCE_NOT_FOUND`.
+- A 6단계(§22): 교사 삭제 → TourFacts `teacher_deleted`, 새 CSV 6행에 교사 식별 열 빈 값. 세션 삭제 → `session_deleted`, 단일 다운로드·관리자 분석 API·modal·`/sessions/<id>`·`/sessions/<id>/analysis` 404, 전체 export에 해당 행 없음, 선택 export CSV 없음, 목록 API·화면에 없음.
+- A 7단계: UI reset 응답 뒤 새 generation, 이전 탭의 `POST /demo/role`과 이전 namespace URL은 409 `DEMO_STALE_GENERATION`, 새로고침 뒤 새 세대 root·TourFacts 초기값·map, B 불변.
+- I2: start·전송·종료 이중 클릭 뒤 POST 수 1/2/1, `/metrics` 세션 +1, 종료 세션 이력 200, 분석 JSON의 teacher/student 메시지 2/2. 분석 실행 중 role 전환은 409 `DEMO_BUSY`(retryable, `demo.wait_or_stop`)이므로 검사는 그 동안 재시도한다.
+
+실패(모두 같은 결함, 단계를 멈추지 않도록 모아서 끝에 실패시킴): map `step 4`·`step 5 after the role switch`(`C C C X P P` ≠ `C C C C X P`), 관찰 `admin_record_viewed` 없음, `#demo-tour-csv` 숨김, map `step 5`·`step 6 before reset`(`C C C X P P` ≠ `C C C C C X`), reset 직후 일회 완료 표시(`X P P P P P` ≠ `C C C C C C`; 완주하지 않은 여정은 완료로 표시하지 않는 §24.1 규칙의 결과).
+
 ## 작성 중 대체(최종 evidence 전에 제거)
 
 1. seed 바인딩: 제거됨(실행 4). #194 S4로 `src.main.demo_seed`가 `load_seed(DEMO_SEED_DIR)`를 읽고, helper는 seed CLI를 `DEMO_SEED_DIR`로 빌드만 한다.
@@ -99,14 +123,9 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 pending G4 candidate(#202 통합 SHA·manifest):
 - 위 세 모듈의 최종 실행과 `docs/demo/d4-02-evidence/`(CSV·스크린샷·log).
 
-product defect -> #198(아래). 결함이 고쳐지기 전에는 다음이 실패하거나 실행되지 않는다:
-- isolation `ANALYSIS_DETAIL`(B의 seed 세션 관리자 분석 상세 불변).
-- journey 4단계(종료·분석·이력), 5단계(관리자 기록·CSV 파일 파싱 27+5열·6행·출처값), 6단계(교사·세션 삭제와 §22 비노출), 7단계(reset·이전 탭 409), A 분석·CSV 뒤 B 격리. 5–7단계 코드는 아직 실제 앱에서 한 번도 실행되지 않았다.
-- recovery I2의 종료 세션 이력 화면 턴 수.
+product defect(아래)가 고쳐지기 전에는 journey의 투어 map(4단계 이후)·`history_viewed`/`admin_record_viewed`/`csv_received` 관찰·투어 CSV 버튼 검사가 실패한다.
 
 ## 발견한 제품 결함
 
-- #198: demo에서 분석 계획을 만드는 모든 경로가 503 `DEMO_CONFIGURATION_INVALID`다. `src/services/analysis_plan.py:67` `estimate_request`가 `context_budget.provider_parameters`를 부르고, 이것이 `PROVIDER_ADAPTERS["demo"]`를 찾다 `KeyError: 'demo'`(`src/services/context_budget.py:13`). #198 PR2는 `estimate_input`의 demo 분기만 추가했다. 실행 4 traceback으로 확인한 경로:
-  - `POST /sessions/{id}/end` → `request_analysis` → `reserve_analysis`(`src/services/analysis_runs.py:206`) → `load_plan` → `build_plan`(`analysis_plan.py:182`) → `estimate_request`.
-  - `GET /admin/sessions/{id}/analysis` → `load_analysis_response`(`src/services/analysis_results.py:395`) → `load_plan` → 같은 지점.
-  - `GET /sessions/{id}`(종료 세션 이력, `src/api/routes/sessions.py:83`)도 `load_analysis_response`를 거쳐 503.
+- 해결됨(실행 5): #198 demo 분석 계획 503(`src/services/analysis_plan.py:67` → `context_budget.provider_parameters` KeyError 'demo'). #251로 `/end`, 관리자 분석 상세, 종료 세션 이력이 200이 되었다.
+- 열림 → #194(§26 `src/api/dependencies.py` 소유), 소비자 #201/#199: 모든 demo 페이지의 `#demo-config`가 `"tour_facts": null`이다. `DemoRequestDB.display()`(`src/api/dependencies.py:334-344`)가 `public_state(snapshot)`만 돌려 TourFacts를 넣지 않는다(§24는 `demo_config.tour_facts`를 요구). 그래서 `uiLanguage.observe`(`static/js/display-language.js:117-120`)가 `journey_session_id`를 찾지 못해 `demo:tour-observed`를 보내지 않고, `history_viewed`·`admin_record_viewed`가 생기지 않는다. 같은 시점 `GET /demo/state?include_tour=true`는 `journey_session_id: 2`, `analysis_ready: true`를 돌려준다. 결과로 map이 `C C C X P P`에서 멈추고 투어 CSV 버튼(`static/js/demo-tour.js:312-313`, `map.analysis === 'complete'` 조건)도 숨겨진다. 진단: `logs-w204/p3/diag-1.log`(이력 화면의 `#demo-config`, 관찰 이벤트 0, `demoTour.snapshot()`).

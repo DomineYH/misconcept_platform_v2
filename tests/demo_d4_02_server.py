@@ -61,6 +61,8 @@ def configure(normal, tmp, port, other_port):
         NORMAL_ORIGIN=f"http://localhost:{other_port}",
         DEMO_SESSION_SECRET=secrets.token_urlsafe(48),
         DEMO_CSRF_SECRET=secrets.token_urlsafe(48),
+        # Config maximum: the checks poll /demo/state every 100 ms (#200, #202 do the same).
+        DEMO_REQUESTS_PER_MINUTE="600",
     )
 
 

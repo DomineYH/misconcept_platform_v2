@@ -43,7 +43,9 @@ async function expectRoot(page, label) {
   return current;
 }
 
-const facts = async page => (await page.evaluate(async () => (await fetch('/demo/state?include_tour=true')).json())).tour_facts;
+// Retries across navigations: the users page reloads itself after the delete alert (users.html).
+const facts = async page => (await until(() => page.evaluate(async () => (await fetch('/demo/state?include_tour=true')).json()).catch(() => null),
+  'GET /demo/state?include_tour=true')).tour_facts;
 const factsWhere = (page, key, message) => until(async () => { const f = await facts(page); return f?.[key] && f; }, message);
 const nsOf = async page => namespace(await state(page));
 
@@ -111,8 +113,6 @@ async function runChecks(browser, {base}, pageErrors, defects) {
   watch(pageB, pageErrors);
   await mkdir(OUT, {recursive: true});
   const soft = async (name, fn) => { try { await fn(); } catch (error) { defects.push(`${name}: ${error.message}`); } };
-  // The tour map is collected, not step-fatal: the data steps after it still run (§24.1 observations depend on #194/#199/#201).
-  const map = (target, want, label) => soft('tour map', () => expectMap(target, want, label));
 
   // B: admin start; its totals, lists and session list must not move while A works (§28 row 1).
   await pageB.goto(`${base}/demo`);
@@ -146,7 +146,7 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     await page.click('[data-demo-action="start"][data-demo-role="teacher"]');
     await page.waitForURL(url => url.pathname === '/scenarios');
     await expectRoot(page, 'step 1');
-    await map(page, 'C X P P P P', 'step 1');
+    await expectMap(page, 'C X P P P P', 'step 1');
     const f = await facts(page);
     assert.deepEqual([f.teacher_entered, f.scenario_created, f.dialogue_complete, f.analysis_ready, f.journey_session_id], [true, false, false, false, null], 'step 1: TourFacts');
     await page.screenshot({path: `${OUT}/journey-1-teacher.png`});
@@ -162,7 +162,7 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     ids.session = f.journey_session_id;
     assert(Number.isInteger(ids.session), 'step 2: journey_session_id');
     assert.equal(JSON.parse(await page.locator('#chat-config').textContent()).sessionId, ids.session);
-    await map(page, 'C C X P P P', 'step 2');
+    await expectMap(page, 'C C X P P P', 'step 2');
   });
 
   await step('3 dialogue', async () => {
@@ -179,7 +179,7 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     assert(await page.locator('.mentor-slot').nth(1).locator('p.message-meta').isVisible(), 'step 3: no-intervention note');
     await factsWhere(page, 'dialogue_complete', 'dialogue_complete');
     await page.reload(); // §25: a refresh re-syncs the map from the server facts
-    await map(page, 'C C C X P P', 'step 3');
+    await expectMap(page, 'C C C X P P', 'step 3');
     assert.equal(logA.dialogs.filter(type => type !== 'confirm').length, 0, 'step 1-3: no alert dialog');
   });
 
@@ -211,7 +211,7 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     await factsWhere(page, 'analysis_ready', 'analysis_ready');
     await page.goto(await aUrl(`/sessions/${ids.session}`)); // the history detail of the journey session
     await page.locator('[data-analysis-result] .coach-msg-list').waitFor({state: 'attached'});
-    await map(page, 'C C C C X P', 'step 4');
+    await expectMap(page, 'C C C C X P', 'step 4');
     await page.screenshot({path: `${OUT}/journey-4-history.png`});
   });
 
@@ -221,28 +221,22 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     await page.waitForURL(url => url.pathname === '/admin/scenarios');
     const admin = await expectRoot(page, 'step 5');
     assert.deepEqual([admin.role, admin.auth_epoch, admin.generation], ['admin', before.auth_epoch + 1, before.generation], 'step 5: role switch');
-    await map(page, 'C C C C X P', 'step 5 after the role switch');
+    await expectMap(page, 'C C C C X P', 'step 5 after the role switch');
     await page.click('a[href^="/admin/sessions-page"]');
     await page.waitForURL(url => url.pathname === '/admin/sessions-page');
     await page.click(`.view-analysis-btn[data-session-id="${ids.session}"]`);
-    await soft('tour observation', () => until(() => page.evaluate(() => window.demoTour.snapshot().observations.some(o => o.kind === 'admin_record_viewed')), 'admin_record_viewed'));
-    await soft(`GET /admin/sessions/${ids.session}/analysis is 200`, async () => {
-      const response = await A.get(await aUrl(`/admin/sessions/${ids.session}/analysis`));
-      assert.equal(response.status(), 200, await response.text());
-    });
+    await until(() => page.evaluate(() => window.demoTour.snapshot().observations.some(o => o.kind === 'admin_record_viewed')), 'admin_record_viewed');
+    const analysis = await A.get(await aUrl(`/admin/sessions/${ids.session}/analysis`));
+    assert.equal(analysis.status(), 200, await analysis.text());
     // Close the record's analysis modal first: its overlay covers the page.
     await page.locator('#analysis-modal .close-modal-btn').click();
     await page.locator('#analysis-modal').waitFor({state: 'hidden'});
-    // The tour button needs the analysis step complete (demo-tour.js); the row's own link is the same admin export.
-    const tourCsv = await page.locator('#demo-tour-csv').waitFor({state: 'visible', timeout: 30000}).then(() => true, () => false);
-    if (!tourCsv) defects.push('tour CSV button: #demo-tour-csv still hidden');
-    const [download] = await Promise.all([page.waitForEvent('download'),
-      tourCsv ? page.click('#demo-tour-csv') : page.click(`a[href^="/admin/sessions/${ids.session}/download"]`)]);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#demo-tour-csv')]);
     // §23 pattern demo_d0-02-v1_<admin|teacher>_<session-ID|selected|all|user-ID>.csv.
     assert.equal(download.suggestedFilename(), `demo_d0-02-v1_admin_session-${ids.session}.csv`);
     await download.saveAs(`${OUT}/journey-admin.csv`);
     ids.teacher = expectCsv(await readFile(`${OUT}/journey-admin.csv`, 'utf8'), ids.session, true, 'downloaded CSV')[0].teacher_id;
-    await map(page, 'C C C C C X', 'step 5');
+    await expectMap(page, 'C C C C C X', 'step 5');
     await page.screenshot({path: `${OUT}/journey-5-admin.png`});
     assert.equal(logA.posts.filter(path => path === '/demo/role').length, 1, 'one POST /demo/role');
   });
@@ -295,7 +289,7 @@ async function runChecks(browser, {base}, pageErrors, defects) {
 
   await step('7 reset', async () => {
     await page.goto(`${base}/admin/sessions-page`);
-    await map(page, 'C C C C C X', 'step 6 before reset');
+    await expectMap(page, 'C C C C C X', 'step 6 before reset');
     const old = await contexts.A.newPage();
     const logOld = watch(old, pageErrors);
     await old.goto(`${base}/admin/sessions-page`);
@@ -306,7 +300,7 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     assert([200, 202].includes(reset.status()), `POST /demo/reset ${reset.status()}`);
     const fresh = await ready(page, previous.generation + 1);
     assert.equal(logA.posts.filter(path => path === '/demo/reset').length, 1, 'one POST /demo/reset');
-    await map(page, 'C C C C C C', 'reset success shows the old journey complete once (§24.1 row 14a)');
+    await expectMap(page, 'C C C C C C', 'reset success shows the old journey complete once (§24.1 row 14a)');
     // §9.1/§10: the previous namespace is refused for the old tab and for the old URL of the journey session.
     const stale = await control(old, '/demo/role', {request_id: randomUUID(), role: 'admin', expected_generation: previous.generation, expected_auth_epoch: previous.auth_epoch});
     assert.equal(stale.status, 409, JSON.stringify(stale.body));
@@ -319,7 +313,7 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     assert.equal(now.generation, fresh.generation);
     const f = await facts(page);
     assert.deepEqual([f.journey_session_id, f.scenario_created, f.dialogue_complete, f.analysis_ready, f.teacher_deleted, f.session_deleted], [null, false, false, false, false, false], 'new generation TourFacts');
-    await map(page, now.role === 'teacher' ? 'C X P P P P' : 'X P P P P P', 'after reset');
+    await expectMap(page, now.role === 'teacher' ? 'C X P P P P' : 'X P P P P P', 'after reset');
     await page.screenshot({path: `${OUT}/journey-7-reset.png`});
   });
   if (!failed) assert.deepEqual(await view(), bBefore, 'after A reset: B unchanged');

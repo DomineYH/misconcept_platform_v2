@@ -53,6 +53,7 @@ def configure(normal, tmp, port, other_port):
     os.environ.update(
         APP_MODE="demo",
         DEMO_DATA_ROOT=str(tmp / "demo"),
+        DEMO_SEED_DIR=str(tmp / "seed"),
         DEMO_ORIGIN=f"http://127.0.0.1:{port}",
         NORMAL_ORIGIN=f"http://localhost:{other_port}",
         DEMO_SESSION_SECRET=secrets.token_urlsafe(48),

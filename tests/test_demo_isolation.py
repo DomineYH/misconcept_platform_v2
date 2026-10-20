@@ -44,7 +44,6 @@ SUFFIX = [
     "demo_fixture_version",
     "demo_record_origin",
 ]
-REFS = dict(admin=1, teacher=2, group=1, scenario=1, completed_session=1)
 QUERIES = {
     "users": 'SELECT id, nickname FROM "user" ORDER BY id',
     "groups": "SELECT id, name FROM user_group ORDER BY id",
@@ -205,6 +204,7 @@ def run_case(case, tmp_path, **extra):
         TESTING="false",
         ENV="production",
         DEMO_DATA_ROOT=str(tmp_path / "demo"),
+        DEMO_SEED_DIR=str(tmp_path / "seed"),
         DEMO_ORIGIN="https://demo.test",
         NORMAL_ORIGIN="https://normal.test",
         DEMO_SESSION_SECRET=SECRETS[0],
@@ -287,7 +287,8 @@ async def rich_seed(tmp):
     main.demo_seed = lambda: (
         spec,
         SimpleNamespace(
-            seed_refs=REFS,
+            # Startup requires exactly the manifest's refs.
+            seed_refs=json.loads(spec.manifest_path.read_text())["seed_refs"],
             first_inputs=frozenset(),
             common_input="",
             supported_snapshot=lambda row: False,

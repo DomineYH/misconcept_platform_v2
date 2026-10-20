@@ -62,21 +62,51 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 - skip case 확인: 같은 모듈의 임시 사본에서 skip만 끈 실행은 `503 !== 200`으로 실패했다(`logs-w195/204/browser-isolation-r1-unskipped.log`, 사본은 삭제). 즉 검사는 보존되어 있고 #198 수정 전에는 여전히 빨갛다.
 - 시작 protocol 진단(브라우저 없음): 가짜 helper로 분할 수신 receipt는 정상 해석, 깨진 JSON과 receipt 부재는 promise 거절, uncaught 예외 0(`logs-w195/204/receipt-diag.log`).
 
+## 실행 4 — Phase 2 (2026-10-20, 작성 중 확인, pending G4 candidate)
+
+- 기준: main `1a40dc2`(#198 PR2 context_budget demo 분기, #194 S4 `demo_seed` → `load_seed(DEMO_SEED_DIR)` 병합 포함) 위 `feat/204-final` `2f9c6ba`. 이 문서는 실행 뒤 같은 branch의 다음 commit에서 수정했고 test 파일은 바뀌지 않았다.
+- 환경: WSL2 Linux(8 core, load average 약 20), Python 3.12.3(uv venv), Node 24, Playwright Chromium headless. 실행 tree는 `git archive 2f9c6ba`를 ext4 임시 디렉터리에 푼 것이다. 저장소가 있는 `/mnt/d`(drvfs)에서는 demo provider가 호출마다 fixture 84개를 다시 읽느라(`src/demo/provider.py` `_fixture`) 약 10 s가 걸려 seed의 학생 첫 출력 제한 5 s(`src/demo/seed.py` `DEMO_TIMEOUTS`)를 넘고 `first_output_timeout`으로 실패한다. 이는 실행 위치 문제이며 ext4(CI 포함)에서는 재현되지 않았다.
+- 명령: `flock /tmp/mp2-heavy.lock -c 'npm run test:browser -- browser_demo_isolation browser_demo_journey browser_demo_recovery'`(worker 1개, 5분 7초). log: `logs-w204/p2/final.log`.
+- receipt: 모듈마다 helper가 seed CLI를 실제 실행한다. `source_commit` `2f9c6bae8105dc958f9807967fb42edbfa1b8aab`, `seed_sha256` `0060fac9…d2f6`(isolation), `3c23e4e9…044d`(journey), `50952ea6…aede`(recovery), 나머지는 위 공통 값과 같다.
+
+| 모듈 | 결과 | 범위 |
+| --- | --- | --- |
+| `browser_demo_isolation.mjs` | failed: #198 결함 1건만. 나머지 검사는 모두 통과 | 실행 1–3 항목 + seed 세션 관리자 분석 상세 |
+| `browser_demo_journey.mjs` | failed: 4단계 `POST /sessions/2/end` 503(#198). 1–3단계와 B 격리 통과, 5–7단계 not run | A 여섯 단계·CSV·삭제·reset, B |
+| `browser_demo_recovery.mjs` | failed: I2의 종료 세션 이력 `GET /sessions/2` 503(#198). I1·I3·I4·I5·I6·I7 passed | I 복구·언어·접근성 |
+
+이번 실행에서 실제 앱으로 확인한 것(앱 origin interception 없음, 제품 seed 바인딩, 테스트 측 seed 바인딩 제거):
+
+- A 1–3단계(§24·§24.1, 체험 명세 §7): 교사 start → 시나리오 → B 입력·공통 입력으로 완료 턴 2·자동 코칭 1·미개입. 단계마다 root `data-demo-*`가 `/demo/state`와 같고 투어 map(`C X P P P P` → `C C X P P P` → `C C C X P P`)과 TourFacts(`teacher_entered`, `scenario_created`·`journey_session_id`, `dialogue_complete`)가 일치.
+- B(§28 1행·§3): A의 대화 뒤 B의 `/metrics` 총계·사용자·그룹·세션 목록 불변. A의 세션 ID와 학생 run ID를 B의 namespace로 요청(`/admin/sessions/<id>/download`, `/admin/sessions/<id>/analysis`, `/runs/<run>`, `/sessions/<id>/runs?request_id=`) → 404 `DEMO_RESOURCE_NOT_FOUND`, no-store, A의 본문 없음.
+- I1: 새로고침·뒤로·앞으로 뒤 root namespace가 `/demo/state`와 같고 미전송 초안 보존, 이동 중 POST 0. `pageshow.persisted`는 Chromium headless에서 항상 false(기록만, BFCache 복원은 확인 불가).
+- I2: start·send·end 이중 클릭에 `POST /demo/start` 1, `turns/stream` 2(두 번 전송), `/end` 1, `/metrics` 세션 +1. 종료 세션 이력 화면은 #198 결함으로 확인 실패.
+- I3: 투어 닫기/건너뛰기/재개는 패널·localStorage `demo:<scope>:<gen>:tour-v1` 플래그만 바꾸고 TourFacts·map 불변, POST 0.
+- I4: 두 번째 탭의 role 전환·reset 뒤 첫 탭에 `demo.stale_role`·`demo.stale_generation` 안내, 입력 잠금. 첫 탭의 이전 namespace 쓰기 → 409 `DEMO_STALE_ROLE`/`DEMO_STALE_GENERATION`, 총계 불변.
+- I5: 미전송 초안이 있으면 언어 전환이 `common.guard_input`으로 거절되고 초안 유지. 빈 입력에서 en 전환 시 한국어 콘텐츠·투어 map·namespace 유지.
+- I6: 390×844와 200% 확대(1280×844의 절반 viewport 640×422)에서 입력·전송·종료 조작이 viewport 안에서 가려지지 않음. 키보드만으로 start·전송 완료.
+- I7: helper 테스트 시계(대체 ②, `ADVANCE`)로 idle TTL을 넘기면 `/demo/state` 410 `DEMO_EXPIRED`, 이전 namespace URL 거절, GET/이동으로 새 scope가 생기지 않고 명시 start로만 새 `browser_scope_id`.
+
+스크린샷·내려받은 CSV는 실행 tree의 `test-results/d4-02/`(gitignore)에 남고 commit하지 않았다. 최종 G4 실행분만 `docs/demo/d4-02-evidence/`에 둔다.
+
 ## 작성 중 대체(최종 evidence 전에 제거)
 
-1. seed 바인딩: `src.main.demo_seed`가 main에서 아직 CONFIGURATION_INVALID다(`src/main.py:200`, #194 S4 = PR #242 검토 중). helper는 #197 seed CLI로 실제 product seed를 새로 만들고 `src.main.demo_seed`를 `load_seed(seed_dir)`로 바인딩한다(brief의 대체 ①). 실행 1의 합성 seed(`make_seed`)는 제거했다. #194 S4가 병합되면 helper의 바인딩도 제거한다.
-2. 만료 재진입용 helper 시계(`VisitorRegistry.clock`): 아직 없음. recovery 모듈 작성 때 추가한다.
+1. seed 바인딩: 제거됨(실행 4). #194 S4로 `src.main.demo_seed`가 `load_seed(DEMO_SEED_DIR)`를 읽고, helper는 seed CLI를 `DEMO_SEED_DIR`로 빌드만 한다.
+2. 만료 재진입용 helper 시계: `tests/demo_d4_02_server.py`의 `TestClock`이 `src.demo.visitors.SystemClock`을 대신하고, stdin `ADVANCE <seconds>`일 때만 앞당긴다. I7만 사용하며 최종 evidence에도 테스트 시계 사용으로 명시한다.
 
 ## Pending
 
-needs G4 / #202:
-- A: 여섯 단계 DOM `data-demo-step`·TourFacts, reset 후 이전 URL/탭 409, CSV 파일 파싱(27+5열, 6행, 출처값, 삭제 후 비노출).
-- B: A의 대화·분석 뒤 B 불변, A의 run ID를 B에서 요청 시 404 `DEMO_RESOURCE_NOT_FOUND`(demo 학생/멘토/분석 실행, #198).
-- I: 새로고침·뒤로/앞으로·BFCache, 중복 클릭, 투어 닫기/건너뛰기/재개, 두 탭 stale, 한/영 전환, 390×844·키보드·200% 확대, 만료 재진입.
+pending G4 candidate(#202 통합 SHA·manifest):
+- 위 세 모듈의 최종 실행과 `docs/demo/d4-02-evidence/`(CSV·스크린샷·log).
 
-product defect -> #198:
-- B: B의 seed 세션 관리자 분석 상세가 A 편집 뒤 불변. `ANALYSIS_DETAIL` case(요청·status 200·전후 비교)로 남아 있고 `skip` 문자열을 null로 바꾸면 실행된다.
+product defect -> #198(아래). 결함이 고쳐지기 전에는 다음이 실패하거나 실행되지 않는다:
+- isolation `ANALYSIS_DETAIL`(B의 seed 세션 관리자 분석 상세 불변).
+- journey 4단계(종료·분석·이력), 5단계(관리자 기록·CSV 파일 파싱 27+5열·6행·출처값), 6단계(교사·세션 삭제와 §22 비노출), 7단계(reset·이전 탭 409), A 분석·CSV 뒤 B 격리. 5–7단계 코드는 아직 실제 앱에서 한 번도 실행되지 않았다.
+- recovery I2의 종료 세션 이력 화면 턴 수.
 
 ## 발견한 제품 결함
 
-- #198(PR2의 context_budget demo 분기): demo에서 `GET /admin/sessions/{id}/analysis`가 503 `DEMO_CONFIGURATION_INVALID`다. `load_analysis_response` → `load_plan` → `build_plan` → `estimate_request` → `context_budget.provider_parameters`가 `PROVIDER_ADAPTERS["demo"]`를 찾다 `KeyError: 'demo'`(`src/services/context_budget.py:13`). 재현: `provider_parameters(TextRequest("demo","demo-classroom-v1","analysis","",[],{"max_output_tokens":4096},"r"))` → KeyError. 이 분기는 coordinator 결정으로 #198 PR2(w198) 담당이다.
+- #198: demo에서 분석 계획을 만드는 모든 경로가 503 `DEMO_CONFIGURATION_INVALID`다. `src/services/analysis_plan.py:67` `estimate_request`가 `context_budget.provider_parameters`를 부르고, 이것이 `PROVIDER_ADAPTERS["demo"]`를 찾다 `KeyError: 'demo'`(`src/services/context_budget.py:13`). #198 PR2는 `estimate_input`의 demo 분기만 추가했다. 실행 4 traceback으로 확인한 경로:
+  - `POST /sessions/{id}/end` → `request_analysis` → `reserve_analysis`(`src/services/analysis_runs.py:206`) → `load_plan` → `build_plan`(`analysis_plan.py:182`) → `estimate_request`.
+  - `GET /admin/sessions/{id}/analysis` → `load_analysis_response`(`src/services/analysis_results.py:395`) → `load_plan` → 같은 지점.
+  - `GET /sessions/{id}`(종료 세션 이력, `src/api/routes/sessions.py:83`)도 `load_analysis_response`를 거쳐 503.

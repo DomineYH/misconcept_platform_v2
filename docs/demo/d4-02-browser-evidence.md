@@ -132,30 +132,43 @@ D5 없이 이 branch만으로는 실행 5와 같이 투어 map·관찰·투어 C
 ## G4 최종 실행 — 후보 de3054a (2026-10-20)
 
 - 후보(`candidate_commit`): main `de3054a00282e1bbfc97784918059f653ac08811`. D3 제품 PR(#194–#201 최종 PR, #248(#200), #251(#198), #250(D2), #252(D5), #249(flake))을 모두 포함한다. 후보에는 `docs/demo/d3-04-integration-manifest.json`이 없어 SHA는 coordinator 지시(G4 order)로 고정했다.
-- 실행 commit(`tested_commit`): `feat/204-final` `ca1e5f2b00adc767617eec0aae2725a08cf2e848` = 후보 + 이 branch의 test·doc commit(병합 `ca1e5f2`, 충돌 없음). 후보 대비 제품 diff 0(`tests/`·`docs/`만 다름). 이 문서와 `d4-02-evidence/`는 실행 뒤 다음 commit에서 추가했다.
+- 실행 commit(`tested_commit`): `feat/204-final` `fdb3096da0fabdb4fc92c902c20ec0eccd829f09` = 후보(병합 `ca1e5f2`, 충돌 없음) + 이 branch의 test·doc commit. 후보 대비 제품 diff 0(`tests/`·`docs/`만 다름). 이 문서와 `d4-02-evidence/`는 실행 뒤 다음 commit에서 고쳤다.
+- 이전 G4 실행(`ca1e5f2`, 독립 리뷰 r204g4 FAIL)은 이 실행으로 대체한다. 리뷰 지적에 따라 삭제 검사의 status·형식 확인, 빠진 삭제 경로, BFCache 분리를 `fdb3096`에서 고친 뒤 다시 실행했다.
 - 계약: `d0-03-v1-r3`.
-- 환경: 로컬 WSL2 Linux(시작 load average 4.6), Python 3.12.3(uv venv, `--frozen`), Node v24.21.0, Playwright Chromium 153.0.8010.12 headless, worker 1개. 실행 tree는 committed tree의 ext4 `git clone --shared`(clean, untracked `node_modules` symlink만). 앱 origin interception 없음, 외부 AI 호출 없음.
+- 환경: 로컬 WSL2 Linux(시작 load average 3.2), Python 3.12.3(uv venv, `--frozen`), Node v24.21.0, Playwright 1.63.0 Chromium 153.0.8010.12 headless, worker 1개. 실행 tree는 committed tree의 ext4 `git clone --shared`(clean, untracked `node_modules` symlink만). 앱 origin interception 없음, 외부 AI 호출 없음.
 - 명령: `flock /tmp/mp2-heavy.lock -c 'npm run test:browser -- browser_demo_isolation browser_demo_journey browser_demo_recovery'`, exit 0.
-- receipt(모듈마다 helper가 seed CLI `python -m src.demo.seed build --out <tmp>/seed`를 실제 실행): `source_commit` `ca1e5f2b00adc767617eec0aae2725a08cf2e848`, `db_schema_version` `037_demo_provider.sql`, `logical_data_sha256` `93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141`, `manifest_sha256` `60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516`, `seed_sha256`(물리 bytes, 기동마다 다름) `7f8072b1…b79a`(isolation)·`fa59041f…7e5b`(journey)·`b2b4612d…da59`(recovery). 전체 값은 log의 `RECEIPT` 행.
+- receipt(모듈마다 helper가 seed CLI `python -m src.demo.seed build --out <tmp>/seed`를 실제 실행): `source_commit` `fdb3096da0fabdb4fc92c902c20ec0eccd829f09`, `db_schema_version` `037_demo_provider.sql`, `logical_data_sha256` `93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141`, `manifest_sha256` `60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516`, `seed_sha256`(물리 bytes, 기동마다 다름) `bd8e85d1…5614`(isolation)·`d8bec9f7…4fd0`(journey)·`b5003996…ac10`(recovery). 전체 값은 log의 `RECEIPT` 행.
 
-| 모듈 | 후보 | 실행 commit | 결과 | 범위 | log |
+| 모듈·case | 후보 | 실행 commit | 결과 | 범위 | log |
 | --- | --- | --- | --- | --- | --- |
-| `browser_demo_isolation.mjs` | `de3054a` | `ca1e5f2` | passed (23.5 s) | 실행 1–3 항목(§9·§9.1·§10 쿠키·CSRF·namespace, B/F 격리, normal mode 404) + seed 세션 관리자 분석 상세 | [`browser-de3054a.log`](d4-02-evidence/browser-de3054a.log) |
-| `browser_demo_journey.mjs` | `de3054a` | `ca1e5f2` | passed (28.5 s) | A 여섯 단계: 단계별 root `data-demo-*`·TourFacts·map `C X P P P P` → … → `C C C C C X`, reset 성공 일회 `C C C C C C`; `admin_record_viewed` 관찰은 직접, `history_viewed`·`csv_received`는 그것이 있어야 넘어가는 map 단계(4·5단계 완료)로 확인; 투어 CSV 버튼 파일 파싱(§23 27+5열, 6행, 출처값); 삭제 §22; reset 뒤 이전 탭·URL 409; B 격리 세 번(§28) | 같음 |
-| `browser_demo_recovery.mjs` | `de3054a` | `ca1e5f2` | passed (35.5 s): I1–I7 | I 복구·이중 클릭·투어 닫기·두 탭·ko/en·390 px/200%/키보드·만료 재진입(테스트 시계) | 같음 |
+| `browser_demo_isolation.mjs` | `de3054a` | `fdb3096` | passed (20.7 s) | 실행 1–3 항목(§9·§9.1·§10 쿠키·CSRF·namespace, B/F 격리, normal mode 404) + seed 세션 관리자 분석 상세 | [`browser-de3054a.log`](d4-02-evidence/browser-de3054a.log) |
+| `browser_demo_journey.mjs` | `de3054a` | `fdb3096` | passed (25.8 s) | A 여섯 단계: 단계별 root `data-demo-*`·TourFacts·map `C X P P P P` → … → `C C C C C X`, reset 성공 일회 `C C C C C C`; `admin_record_viewed` 관찰은 직접, `history_viewed`·`csv_received`는 그것이 있어야 넘어가는 map 단계(4·5단계 완료)로 확인; 투어 CSV 버튼 파일 파싱(§23 27+5열, 6행, 출처값); 삭제 §22(아래 경로); reset 뒤 이전 탭·URL 409; B 격리 세 번(§28) | 같음 |
+| `browser_demo_recovery.mjs` I1 | `de3054a` | `fdb3096` | passed | 새로고침·뒤로·앞으로(일반 navigation) 뒤 namespace 재동기화, POST 0, 초안 유지 | 같음 |
+| `browser_demo_recovery.mjs` I1b | `de3054a` | `fdb3096` | **not run**: headless Chromium did not restore from BFCache. Chromium `notRestoredReasons`: `response-cache-control-no-store`, `response-cache-control-no-store-with-js-network-request`, `masked` | BFCache 복원 뒤 재동기화(§25) | 같음 |
+| `browser_demo_recovery.mjs` I2–I7 | `de3054a` | `fdb3096` | passed (모듈 36.2 s) | 이중 클릭·투어 닫기·두 탭·ko/en·390 px/200%/키보드·만료 재진입(테스트 시계) | 같음 |
 | 전체 pytest·전체 browser suite·live(H1) | `de3054a` | — | not run (로컬): PR head의 CI가 실행한다 | 회귀 전체 | CI |
+
+journey가 실제로 요청한 §22 삭제 경로(이 목록 밖의 경로는 주장하지 않는다):
+
+- 교사 삭제 뒤(세션 보존): 단일 관리자 CSV의 교사 식별 열 빈 값; 삭제 교사의 사용자별 export `/admin/user-conversations/<teacher>/export` 404 `DEMO_RESOURCE_NOT_FOUND`; 삭제 교사 역할 전환 409 `DEMO_ROLE_DELETED`.
+- 교사 경로는 교사가 이미 삭제되어(체험 명세 §8 순서: 교사 삭제 → 세션 삭제) 교사 context가 없으므로 같은 방문객의 관리자로 요청했다. 세션 삭제 **전** 6개 교사 경로는 비소유자 403이고, 삭제 **후** 404다. 그래서 404는 삭제에서 나온다(`load_session`이 삭제 여부를 소유자 확인보다 먼저 본다). 경로: `/sessions/<id>`, `/sessions/<id>/analysis`, `/sessions/<id>/analysis_page`, `/sessions/<id>/analysis_modal`, `/sessions/<id>/analysis/runs/<run>`(분석 실행 상태), `/sessions/<id>/export.csv`.
+- 세션 삭제 뒤 관리자 경로: `/admin/sessions/<id>/download`·`/admin/sessions/<id>/analysis` 404 `DEMO_RESOURCE_NOT_FOUND`; `/admin/sessions/<id>/analysis_modal`·`/admin/sessions/<id>/analysis/runs/<run>` 404; 삭제 교사 export 404 `DEMO_RESOURCE_NOT_FOUND`; 전체 export 200 CSV에 해당 행 없음; 선택 export 200 `text/plain`이며 CSV 없음; `GET /admin/sessions` 200, `{sessions, total}` 형식, seed 세션은 있고 삭제 세션은 없음; 관리자 세션 화면에 없음.
 
 `d4-02-evidence/`의 파일(모두 이 실행에서 생성, 내용은 demo fixture·seed 자료뿐이며 비밀·cookie·host 경로 없음):
 
 | 파일 | 내용 |
 | --- | --- |
 | [`browser-de3054a.log`](d4-02-evidence/browser-de3054a.log) | 머리말(후보·실행 commit·계약·환경·명령·exit) + 러너 출력 전체 |
-| [`journey-admin.csv`](d4-02-evidence/journey-admin.csv) | 5단계 투어 CSV 버튼으로 받은 `demo_d0-02-v1_admin_session-2.csv`(관리자 27열 + suffix 5열, 6행) |
+| [`journey-admin.csv`](d4-02-evidence/journey-admin.csv) | 5단계 투어 CSV 버튼으로 받은 `demo_d0-02-v1_admin_session-2.csv`(관리자 27열 + suffix 5열, 6행, 받은 그대로 CRLF 줄끝) |
 | [`journey-1-teacher.png`](d4-02-evidence/journey-1-teacher.png), [`journey-4-history.png`](d4-02-evidence/journey-4-history.png), [`journey-5-admin.png`](d4-02-evidence/journey-5-admin.png), [`journey-7-reset.png`](d4-02-evidence/journey-7-reset.png) | A 1·4·5·7단계 화면(5단계: map `C C C C C X`, 투어 CSV 버튼 표시; 7단계: reset·새로고침 뒤 새 세대 초기 map) |
 | [`recovery-stale-role.png`](d4-02-evidence/recovery-stale-role.png), [`recovery-stale-generation.png`](d4-02-evidence/recovery-stale-generation.png) | I4 첫 탭의 `demo.stale_role`·`demo.stale_generation` 안내 |
 | [`recovery-layout-390.png`](d4-02-evidence/recovery-layout-390.png), [`recovery-layout-640.png`](d4-02-evidence/recovery-layout-640.png) | I6 390×844, 200% 확대(640×422) 배치 |
 
-확인 한계: `pageshow.persisted`는 Chromium headless에서 항상 false라 BFCache 복원 자체는 확인하지 못했다(I1은 기록만). I7은 아래 테스트 시계를 쓴다.
+### BFCache(I1b)가 실행되지 않은 이유
+
+- Playwright는 Chromium을 `--disable-back-forward-cache`로 띄운다. I1b는 이 기본 인자를 빼고(`ignoreDefaultArgs`) new headless(`channel: 'chromium'`)로 띄운다. 합성 이벤트·interception은 쓰지 않는다.
+- 대조(저장소 밖 진단, `logs-w204/g4r1/bfcache-probe.log`): 같은 설정에서 앱 코드 없는 loopback 페이지는 `no-store` 유무와 관계없이 `pageshow.persisted=true`로 복원되었다. headless shell은 복원하지 않았다(`masked`).
+- demo 페이지는 복원되지 않으며 Chromium이 이유로 `response-cache-control-no-store`·`response-cache-control-no-store-with-js-network-request`를 보고한다. demo 응답의 `Cache-Control: no-store`는 `src/api/dependencies.py:827`가 붙이고 계약 §11(`d0-03-contract-v1.md:269`, "모든 demo 상태·자료·오류 응답은 no-store")이 요구한다. 페이지는 `/demo/state` 등 JS 요청을 한다. 따라서 Chromium 153에서는 §25(`:629`)의 BFCache 복원 경로에 도달할 수 없다. 이는 계약 두 조항 사이의 결정 사항으로 기록하며, 검사에서 우회하지 않는다.
 
 ## 테스트 대체
 
@@ -168,3 +181,4 @@ D5 없이 이 branch만으로는 실행 5와 같이 투어 map·관찰·투어 C
 - 해결됨(실행 5): #198 demo 분석 계획 503(`src/services/analysis_plan.py:67` → `context_budget.provider_parameters` KeyError 'demo'). #251로 해결.
 - 해결됨(G4): `demo_config.tour_facts`가 모든 demo 페이지에서 null이었다(`DemoRequestDB.display()`, `src/api/dependencies.py`, §26 #194). 그래서 관찰이 보내지지 않고 map이 `analysis`에서 멈췄다. D5(#252)로 해결되어 G4 실행의 journey가 통과했다.
 - 열린 제품 결함 없음(이 세 모듈 범위).
+- 결정 필요(결함으로 단정하지 않음): demo 페이지의 `Cache-Control: no-store`(`src/api/dependencies.py:827`, §26 #194; 계약 §11 `d0-03-contract-v1.md:269`) 때문에 Chromium이 BFCache 복원을 하지 않아 §25의 BFCache 복원 수락(`:629`, `:765`)을 실행할 수 없다. 위 "BFCache(I1b)가 실행되지 않은 이유" 참고.

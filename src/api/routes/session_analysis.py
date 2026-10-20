@@ -1,5 +1,6 @@
 """Session analysis routes."""
 
+from contextlib import asynccontextmanager
 from datetime import timezone
 from uuid import NAMESPACE_URL, uuid5
 
@@ -10,6 +11,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
+from src.api.routes.admin_session_export import demo_seed_session
 from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
@@ -18,6 +20,7 @@ from src.api.schemas import AnalysisRequest
 from src.config import config
 from src.i18n import display_language, translate
 from src.models import (
+    Session,
     UiEvent,
     User,
 )
@@ -36,6 +39,30 @@ router = APIRouter(tags=["Sessions"])
 limiter = Limiter(key_func=get_remote_address, enabled=not config.TESTING)
 
 
+def demo_scope(request):
+    """The request's demo ctx and its bound registry; normal keeps defaults."""
+    ctx = getattr(request.state, "demo_context", None)
+    if ctx is None:
+        return {}
+    # The module-level lifecycle has no visitors; demo uses the runtime's one.
+    return dict(ctx=ctx, registry=request.app.state.demo_request_db.lifecycle)
+
+
+@asynccontextmanager
+async def guarded_db(request, db):
+    """The session for helpers that hold write_guard(ctx) themselves.
+
+    In demo the request session guards its own DML, which would re-enter
+    that held guard; the helpers get a plain session of the same factory.
+    """
+    ctx = getattr(request.state, "demo_context", None)
+    if ctx is None:
+        yield db
+        return
+    async with ctx.factory() as raw:
+        yield raw
+
+
 @router.post("/sessions/{session_id}/end")
 @limiter.limit("10/minute")
 async def end_session(
@@ -49,27 +76,35 @@ async def end_session(
     session = await load_session(
         session_id, user, db, language=display_language(request)
     )
-    ended_at, _ = await mark_session_ended(
-        session, db, force=True, language=display_language(request)
-    )
-    request_id = (
-        body.request_id
-        if body
-        else str(
-            uuid5(
-                NAMESPACE_URL,
-                f"teacher-end:{session_id}:{user.id}:{ended_at.replace(tzinfo=timezone.utc).isoformat()}",
+    async with guarded_db(request, db) as write_db:
+        if write_db is not db:
+            session = await write_db.get(Session, session.id)
+        ended_at, _ = await mark_session_ended(
+            session,
+            write_db,
+            force=True,
+            language=display_language(request),
+            **demo_scope(request),
+        )
+        request_id = (
+            body.request_id
+            if body
+            else str(
+                uuid5(
+                    NAMESPACE_URL,
+                    f"teacher-end:{session_id}:{user.id}:{ended_at.replace(tzinfo=timezone.utc).isoformat()}",
+                )
             )
         )
-    )
-    return await request_analysis(
-        db,
-        session_id,
-        user.id,
-        request_id,
-        plan_hash=body.plan_hash if body else None,
-        language=display_language(request),
-    )
+        return await request_analysis(
+            write_db,
+            session_id,
+            user.id,
+            request_id,
+            plan_hash=body.plan_hash if body else None,
+            language=display_language(request),
+            **demo_scope(request),
+        )
 
 
 @router.post("/sessions/{session_id}/analyze")
@@ -83,14 +118,16 @@ async def analyze_session_endpoint(
 ):
     """Reserve an analysis independently of the response connection."""
     await load_session(session_id, user, db, language=display_language(request))
-    return await request_analysis(
-        db,
-        session_id,
-        user.id,
-        body.request_id,
-        plan_hash=body.plan_hash,
-        language=display_language(request),
-    )
+    async with guarded_db(request, db) as write_db:
+        return await request_analysis(
+            write_db,
+            session_id,
+            user.id,
+            body.request_id,
+            plan_hash=body.plan_hash,
+            language=display_language(request),
+            **demo_scope(request),
+        )
 
 
 @router.get("/sessions/{session_id}/analysis")
@@ -215,7 +252,9 @@ async def export_session(
 
     exporter = CSVExporter()
     try:
-        csv_content = await exporter.export_session(session_id, db)
+        csv_content = await exporter.export_session(
+            session_id, db, demo_seed_session_id=demo_seed_session(request)
+        )
     except ValueError:
         raise HTTPException(
             status_code=404,
@@ -229,7 +268,9 @@ async def export_session(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                f"attachment; filename=session_{session_id}_analysis.csv"
+                f"attachment; filename=demo_d0-02-v1_teacher_session-{session_id}.csv"
+                if config.APP_MODE == "demo"
+                else f"attachment; filename=session_{session_id}_analysis.csv"
             )
         },
     )
@@ -263,6 +304,12 @@ async def cancel_analysis_run(
     db: AsyncSession = Depends(get_db_session),
 ):
     await load_session(session_id, user, db, language=display_language(request))
-    return await cancel_analysis(
-        db, session_id, run_id, user.id, language=display_language(request)
-    )
+    async with guarded_db(request, db) as write_db:
+        return await cancel_analysis(
+            write_db,
+            session_id,
+            run_id,
+            user.id,
+            language=display_language(request),
+            **demo_scope(request),
+        )

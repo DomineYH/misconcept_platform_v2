@@ -16,6 +16,7 @@ from src.api.routes.session_helpers import (
     validate_scenario_access,
 )
 from src.config import config
+from src.demo.lifecycle import lifecycle
 from src.i18n import translate
 from src.models import (
     ApiUsageLog,
@@ -89,6 +90,9 @@ async def run_llm_pipeline(
     *,
     request_id=None,
     run_id=None,
+    ctx=None,
+    registry=lifecycle,
+    demo_adapter=None,
 ) -> tuple[
     dict,
     list[QuestionAnalysis],
@@ -109,6 +113,10 @@ async def run_llm_pipeline(
         actor_id=actor_id,
         request_id=request_id,
         run_id=run_id,
+        ctx=ctx,
+        registry=registry,
+        demo_adapter=demo_adapter,
+        messages=all_messages,
     )
     messages = [
         dict(id=m.id, role=m.role, content=m.content) for m in all_messages
@@ -187,6 +195,8 @@ async def run_llm_pipeline(
         error_code=error_code,
         outcome="no_dialogue" if not messages else status,
     )
+    if demo_adapter is not None:
+        payload["metadata"]["provenance"] = caller.provenance()
     return (
         distribution,
         questions,

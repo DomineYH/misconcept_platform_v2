@@ -1,5 +1,6 @@
 """Sequential execution of a confirmed, frozen analysis plan."""
 
+from src.demo.lifecycle import lifecycle
 from src.models.provider_connection import now
 from src.services.analysis_invocations import AnalysisCaller
 from src.services.analysis_merge_budget import merge_prompt
@@ -41,6 +42,9 @@ async def run_chunk_pipeline(
     *,
     request_id=None,
     run_id=None,
+    ctx=None,
+    registry=lifecycle,
+    demo_adapter=None,
     plan,
 ):
     assert len(plan["chunks"]) <= 8, "Analysis plans support at most 8 chunks"
@@ -54,6 +58,10 @@ async def run_chunk_pipeline(
         actor_id=actor_id,
         request_id=request_id,
         run_id=run_id,
+        ctx=ctx,
+        registry=registry,
+        demo_adapter=demo_adapter,
+        messages=all_messages,
     )
     messages = [
         dict(id=m.id, role=m.role, content=m.content) for m in all_messages
@@ -247,6 +255,8 @@ async def run_chunk_pipeline(
         error_code=code,
         outcome=status,
     )
+    if demo_adapter is not None:
+        payload["metadata"]["provenance"] = caller.provenance()
     return (
         distribution,
         questions,

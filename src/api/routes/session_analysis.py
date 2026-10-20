@@ -16,9 +16,13 @@ from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
 )
-from src.api.routes.student_generation import demo_binding
+from src.api.routes.student_generation import (
+    demo_binding,
+    demo_error_response,
+)
 from src.api.schemas import AnalysisRequest
 from src.config import config
+from src.demo.database import DemoError
 from src.i18n import display_language, translate
 from src.models import (
     Session,
@@ -56,6 +60,26 @@ def demo_analysis(request, session):
         binding = demo_binding(request, scope["ctx"])
         scope["demo_adapter"] = binding.adapter(session)
     return scope
+
+
+def ctx_error(ctx, code):
+    return DemoError(code, generation=ctx.generation, auth_epoch=ctx.auth_epoch)
+
+
+async def reserve_analysis_run(request, *args, **kwargs):
+    """request_analysis; demo refusals get the §11 E(code) envelope."""
+    try:
+        return await request_analysis(*args, **kwargs)
+    except HTTPException as error:
+        ctx = getattr(request.state, "demo_context", None)
+        detail = error.detail if isinstance(error.detail, dict) else {}
+        if ctx is not None and detail.get("code") == "request_conflict":
+            # §16: the same request_id with another analysis input.
+            raise ctx_error(ctx, "REQUEST_CONFLICT") from None
+        response = demo_error_response(error, ctx)
+        if response is None:
+            raise
+        return response
 
 
 @asynccontextmanager
@@ -106,7 +130,8 @@ async def end_session(
                 )
             )
         )
-        return await request_analysis(
+        return await reserve_analysis_run(
+            request,
             write_db,
             session_id,
             user.id,
@@ -131,7 +156,8 @@ async def analyze_session_endpoint(
         session_id, user, db, language=display_language(request)
     )
     async with guarded_db(request, db) as write_db:
-        return await request_analysis(
+        return await reserve_analysis_run(
+            request,
             write_db,
             session_id,
             user.id,

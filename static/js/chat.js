@@ -336,17 +336,17 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   // CSRF Token Helper
   // ========================================
   function getCsrfHeaders() {
-    var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+    var token = uiLanguage.csrfToken();
     var headers = { 'Content-Type': 'application/json' };
-    if (match) {
-      headers['x-csrf-token'] = match[1];
+    if (token !== null) {
+      headers[uiLanguage.csrfHeader] = token;
     }
     return headers;
   }
 
   function getDraftStorageKey() {
     if (!window.currentSessionId) return null;
-    return `chat-draft-${window.currentSessionId}`;
+    return uiLanguage.storageKey(`chat-draft-${window.currentSessionId}`);
   }
 
   function saveDraftMessage() {

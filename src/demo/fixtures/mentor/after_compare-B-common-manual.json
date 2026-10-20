@@ -1,0 +1,19 @@
+{
+  "fixture_version": "demo-fixture-v1",
+  "case_id": "normal/mentor/after_compare/B/common/manual/none",
+  "role": "mentor",
+  "content_state": "after_compare",
+  "branch": "B",
+  "input_kind": "common",
+  "trigger": "manual",
+  "analysis_phase": "none",
+  "terminal": "completed",
+  "error_code": null,
+  "text": null,
+  "structured": {
+    "should_intervene": true,
+    "feedback": "학생봇이 같은 전체에서 한 조각의 크기를 설명했습니다. 이 표현만으로 실제 이해를 확정하지 말고, 다음 연습에서는 다른 단위분수도 같은 방법으로 설명하도록 물어보세요.",
+    "reason_summary": "완료된 대상 턴에 대한 수동 도움 요청에 코칭한다."
+  },
+  "partial_text": null
+}

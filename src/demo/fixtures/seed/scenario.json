@@ -1,0 +1,67 @@
+{
+  "title": "같은 크기의 종이띠, 1/4과 1/8",
+  "subject": "수학",
+  "target_grade": "초등학교 3학년",
+  "config_schema_version": 1,
+  "config": {
+    "problem": {
+      "public_text": "같은 길이와 너비의 종이띠 두 개가 있습니다. 하나는 똑같이 4조각, 다른 하나는 똑같이 8조각으로 나눕니다. 각 종이띠에서 한 조각씩 비교합니다. 가온은 “8이 4보다 크니까 1/8이 1/4보다 커요”라고 생각합니다. 가온의 생각을 확인하고, 한 조각의 크기를 설명하도록 대화해 보세요.",
+      "learning_objective": "같은 크기의 전체를 똑같이 나눌 때 조각 수가 많을수록 한 조각은 작아짐을 근거로 1/4과 1/8을 비교하여 설명한다."
+    },
+    "student": {
+      "name": "가온",
+      "public_profile": "가온은 수와 그림을 연결해 설명하는 연습을 하는 허구의 학생봇입니다. 자신의 생각을 짧게 말하며, 구체적인 비교 질문을 받으면 이유를 덧붙입니다.",
+      "internal_profile": "자연수의 크기 비교를 분모에 그대로 적용한다. 정답을 들었다고 곧바로 이유까지 이해한 것처럼 말하지 않는다. 준비된 동일 전체 비교 질문에서만 비교 설명 예시로 이동한다. 이 내용은 공개 학생 소개에 자동으로 넣지 않는다.",
+      "misconception": "같은 전체의 단위분수에서 분모가 클수록 한 조각도 크다고 생각한다.",
+      "behavior_instruction": "§4의 현재 단계와 지원 입력에 해당하는 준비된 응답만 사용한다. 미지원 입력에는 §5의 일반 응답을 사용한다. 실제 사람의 이해 상태를 흉내 내어 평가하거나 임의 정답을 생성하지 않는다.",
+      "resolved_model_config": null
+    },
+    "mentor": {
+      "mode": "auto",
+      "name": "멘토",
+      "welcome_message": "준비된 학생봇 응답과 멘토 코칭을 살펴보세요. 실제 개인정보는 입력하지 마세요.",
+      "behavior_instruction": "완료된 대상 턴에 관해 교사에게만 짧게 코칭한다. 학생봇 대신 답하거나 내부 학생 프로필·판단 근거를 공개하지 않는다.",
+      "intervention_policy": {
+        "condition": "첫 지원 응답에서 드러난 분모 중심 생각에 대해, 같은 전체와 한 조각의 크기를 묻도록 한 번 코칭한다. 공통 비교 응답 후에는 추가 자동 코칭을 하지 않는다.",
+        "start_turn": 1,
+        "min_interval_turns": 1,
+        "window_turns": 10,
+        "max_interventions": 3
+      },
+      "resolved_model_config": null
+    },
+    "analysis": {
+      "context": "같은 크기의 전체, 등분, 한 조각의 크기를 다루는 두 턴의 허구 연습이다.",
+      "expected_understanding": "같은 크기 종이띠의 1/4 조각이 1/8 조각보다 크며, 등분 수가 많아지면 한 조각은 작아진다고 설명한다.",
+      "instruction": "종료된 실제 저장 대화에 있는 문장만 인용한다. 학생봇의 표현 변화와 교사 발화의 특징을 기록하고, 실제 학습 성취·교사 개입의 인과적 효과를 단정하지 않는다.",
+      "rubric_name": "단위분수 비교 대화",
+      "rubric_description": "교사가 무엇을 확인하거나 설명했는지 분류하는 예시",
+      "category_name": "교사 발화 유형",
+      "classification_enabled": true,
+      "rubric": [
+        {
+          "id": "r1",
+          "name": "생각 확인",
+          "criteria": "학생의 판단과 이유 또는 표상을 묻는다",
+          "level": "high"
+        },
+        {
+          "id": "r2",
+          "name": "정답 제시",
+          "criteria": "크기 관계를 먼저 알려 주고 이유 설명을 요구하지 않는다",
+          "level": "low"
+        },
+        {
+          "id": "r3",
+          "name": "같은 전체의 근거 비교",
+          "criteria": "동일 전체·등분·한 조각 크기를 연결해 설명을 요구한다",
+          "level": "high"
+        }
+      ],
+      "resolved_model_config": null
+    },
+    "runtime": {
+      "context_turn_limit": 10
+    }
+  }
+}

@@ -1,0 +1,188 @@
+# D4-03 evidence: pytest (#205), CI 발췌
+# 실행 SHA: ba64b82ef74226094a5b51888b1bbcb1734bb062 (수정 전 기준선, main push)
+# worktree: CI checkout (actions/checkout@v4, clean)
+# 환경: GitHub Actions ubuntu-24.04 runner, CPython 3.12.3 (uv sync --frozen --extra dev --python 3.12), Node 24
+# CI run: https://github.com/DomineYH/misconcept_platform_v2/actions/runs/39392009613 attempt 1, job `test` (id 118525536944), step `uv run --frozen python -m pytest -q --durations=30`
+# exit: 0 (step success, job conclusion success)
+# 가림: runner 작업 경로 <workspace>/<runner_temp>/<toolcache>, ANSI 색 코드 제거. 그 밖의 줄은 CI 로그 그대로.
+2026-10-20T08:15:10.8469643Z ##[group]Run uv run --frozen python -m pytest -q --durations=30
+2026-10-20T08:15:10.8470166Z uv run --frozen python -m pytest -q --durations=30
+2026-10-20T08:15:10.8521698Z shell: /usr/bin/bash -e {0}
+2026-10-20T08:15:10.8521962Z env:
+2026-10-20T08:15:10.8522215Z   UV_CACHE_DIR: <runner_temp>/setup-uv-cache
+2026-10-20T08:15:10.8522539Z ##[endgroup]
+2026-10-20T08:16:16.9981084Z ........................................................................ [  2%]
+2026-10-20T08:16:46.7470138Z ........................................................................ [  4%]
+2026-10-20T08:17:19.9917450Z ........................................................................ [  6%]
+2026-10-20T08:18:05.8538561Z ........................................................................ [  9%]
+2026-10-20T08:18:22.8689060Z ........................................................................ [ 11%]
+2026-10-20T08:18:40.1903398Z ........................................................................ [ 13%]
+2026-10-20T08:19:27.1291824Z ........................................................................ [ 15%]
+2026-10-20T08:19:39.2523413Z ........................................................................ [ 18%]
+2026-10-20T08:19:58.1332088Z ........................................................................ [ 20%]
+2026-10-20T08:20:03.3638445Z ........................................................................ [ 22%]
+2026-10-20T08:20:03.7344746Z ........................................................................ [ 25%]
+2026-10-20T08:20:09.3439456Z ........................................................................ [ 27%]
+2026-10-20T08:20:12.0249365Z ........................................................................ [ 29%]
+2026-10-20T08:21:04.0153589Z ........................................................................ [ 31%]
+2026-10-20T08:21:35.4022576Z ........................................................................ [ 34%]
+2026-10-20T08:21:43.1488696Z ........................................................................ [ 36%]
+2026-10-20T08:21:52.4083566Z ........................................................................ [ 38%]
+2026-10-20T08:22:02.0677209Z ........................................................................ [ 40%]
+2026-10-20T08:22:08.0535274Z ........................................................................ [ 43%]
+2026-10-20T08:22:34.3054586Z ........................................................................ [ 45%]
+2026-10-20T08:23:17.0668617Z ........................................................................ [ 47%]
+2026-10-20T08:24:13.7545396Z ........................................................................ [ 50%]
+2026-10-20T08:24:19.4284490Z ........................................................................ [ 52%]
+2026-10-20T08:26:50.1770151Z ........................................................................ [ 54%]
+2026-10-20T08:27:08.0765336Z ........................................................................ [ 56%]
+2026-10-20T08:27:43.7405507Z ........................................................................ [ 59%]
+2026-10-20T08:28:25.9692711Z ........................................................................ [ 61%]
+2026-10-20T08:28:36.3588844Z ........................................................................ [ 63%]
+2026-10-20T08:28:50.8965752Z ........................................................................ [ 65%]
+2026-10-20T08:29:23.7961041Z ........................................................................ [ 68%]
+2026-10-20T08:29:50.2496371Z ........................................................................ [ 70%]
+2026-10-20T08:30:30.9556717Z ........................................................................ [ 72%]
+2026-10-20T08:30:46.2338651Z ........................................................................ [ 75%]
+2026-10-20T08:32:46.5805613Z ........................................................................ [ 77%]
+2026-10-20T08:33:04.7261899Z ........................................................................ [ 79%]
+2026-10-20T08:33:51.6801135Z ........................................................................ [ 81%]
+2026-10-20T08:34:26.0319545Z ........................................................................ [ 84%]
+2026-10-20T08:34:53.0469326Z ........................................................................ [ 86%]
+2026-10-20T08:35:21.9095782Z ........................................................................ [ 88%]
+2026-10-20T08:35:48.0840749Z ........................................................................ [ 90%]
+2026-10-20T08:36:33.6070939Z ........................................................................ [ 93%]
+2026-10-20T08:36:41.9300816Z ........................................................................ [ 95%]
+2026-10-20T08:37:12.7138058Z ........................................................................ [ 97%]
+2026-10-20T08:37:31.3078797Z ......................................................................   [100%]
+2026-10-20T08:37:31.3079959Z =============================== warnings summary ===============================
+2026-10-20T08:37:31.3081375Z .venv/lib/python3.12/site-packages/pythonjsonlogger/jsonlogger.py:11
+2026-10-20T08:37:31.3083683Z   <workspace>/.venv/lib/python3.12/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+2026-10-20T08:37:31.3085499Z     warnings.warn(
+2026-10-20T08:37:31.3085921Z 
+2026-10-20T08:37:31.3086506Z tests/test_admission_missing_configuration.py: 3 warnings
+2026-10-20T08:37:31.3087436Z tests/test_ai_admin_page.py: 2 warnings
+2026-10-20T08:37:31.3088551Z tests/test_analysis_chunk_evidence.py: 9 warnings
+2026-10-20T08:37:31.3089379Z tests/test_analysis_chunk_interruptions.py: 4 warnings
+2026-10-20T08:37:31.3090302Z tests/test_analysis_chunk_lifecycle.py: 9 warnings
+2026-10-20T08:37:31.3103876Z tests/test_analysis_chunk_merge.py: 10 warnings
+2026-10-20T08:37:31.3104518Z tests/test_analysis_chunks.py: 10 warnings
+2026-10-20T08:37:31.3105106Z tests/test_analysis_concurrency.py: 11 warnings
+2026-10-20T08:37:31.3105694Z tests/test_analysis_failures.py: 14 warnings
+2026-10-20T08:37:31.3106253Z tests/test_analysis_invocations.py: 8 warnings
+2026-10-20T08:37:31.3106824Z tests/test_analysis_plan_api.py: 18 warnings
+2026-10-20T08:37:31.3107361Z tests/test_analysis_runs.py: 20 warnings
+2026-10-20T08:37:31.3108102Z tests/test_anthropic_catalog.py: 4 warnings
+2026-10-20T08:37:31.3108687Z tests/test_anthropic_controls.py: 7 warnings
+2026-10-20T08:37:31.3109240Z tests/test_anthropic_probes.py: 6 warnings
+2026-10-20T08:37:31.3109762Z tests/test_api_usage_screen.py: 6 warnings
+2026-10-20T08:37:31.3110301Z tests/test_authoring_defaults.py: 12 warnings
+2026-10-20T08:37:31.3110851Z tests/test_bulk_passwords.py: 4 warnings
+2026-10-20T08:37:31.3111370Z tests/test_call_admission.py: 7 warnings
+2026-10-20T08:37:31.3111885Z tests/test_call_cancellation.py: 6 warnings
+2026-10-20T08:37:31.3112418Z tests/test_call_execution.py: 7 warnings
+2026-10-20T08:37:31.3112913Z tests/test_call_retry.py: 13 warnings
+2026-10-20T08:37:31.3113407Z tests/test_comparison_apply.py: 1 warning
+2026-10-20T08:37:31.3113989Z tests/test_comparison_conversations.py: 3 warnings
+2026-10-20T08:37:31.3114582Z tests/test_comparison_history.py: 3 warnings
+2026-10-20T08:37:31.3115122Z tests/test_comparison_student.py: 1 warning
+2026-10-20T08:37:31.3115679Z tests/test_deleted_session_access.py: 14 warnings
+2026-10-20T08:37:31.3116282Z tests/test_demo_d1_03_session.py: 135 warnings
+2026-10-20T08:37:31.3116814Z tests/test_demo_d1_04_app.py: 1 warning
+2026-10-20T08:37:31.3117339Z tests/test_demo_d2_d2_provenance.py: 3 warnings
+2026-10-20T08:37:31.3118045Z tests/test_demo_reset.py: 9 warnings
+2026-10-20T08:37:31.3118539Z tests/test_demo_security.py: 1 warning
+2026-10-20T08:37:31.3119451Z tests/test_display_language.py: 48 warnings
+2026-10-20T08:37:31.3119978Z tests/test_google_catalog.py: 3 warnings
+2026-10-20T08:37:31.3120755Z tests/test_google_probes.py: 11 warnings
+2026-10-20T08:37:31.3121277Z tests/test_html_error_pages.py: 17 warnings
+2026-10-20T08:37:31.3121832Z tests/test_legacy_session_history.py: 47 warnings
+2026-10-20T08:37:31.3122399Z tests/test_lesson_snapshots.py: 110 warnings
+2026-10-20T08:37:31.3122961Z tests/test_mentor_context_budget.py: 1 warning
+2026-10-20T08:37:31.3123511Z tests/test_mentor_lifecycle.py: 1 warning
+2026-10-20T08:37:31.3124041Z tests/test_mentor_snapshots.py: 3 warnings
+2026-10-20T08:37:31.3124574Z tests/test_model_management.py: 10 warnings
+2026-10-20T08:37:31.3125128Z tests/test_model_native_options.py: 17 warnings
+2026-10-20T08:37:31.3125662Z tests/test_native_analysis.py: 26 warnings
+2026-10-20T08:37:31.3126226Z tests/test_native_analysis_providers.py: 3 warnings
+2026-10-20T08:37:31.3126783Z tests/test_openai_catalog.py: 6 warnings
+2026-10-20T08:37:31.3127294Z tests/test_phase_a_cutover.py: 10 warnings
+2026-10-20T08:37:31.3127815Z tests/test_phase_a_history.py: 1 warning
+2026-10-20T08:37:31.3128553Z tests/test_probe_lifecycle.py: 16 warnings
+2026-10-20T08:37:31.3129071Z tests/test_probe_reservation.py: 4 warnings
+2026-10-20T08:37:31.3129609Z tests/test_provider_connections.py: 18 warnings
+2026-10-20T08:37:31.3130131Z tests/test_regressions.py: 1 warning
+2026-10-20T08:37:31.3130618Z tests/test_role_probes.py: 32 warnings
+2026-10-20T08:37:31.3131090Z tests/test_s1_load.py: 6 warnings
+2026-10-20T08:37:31.3131557Z tests/test_s2_cutover.py: 5 warnings
+2026-10-20T08:37:31.3132047Z tests/test_s2_integration.py: 222 warnings
+2026-10-20T08:37:31.3132545Z tests/test_s3_integration.py: 48 warnings
+2026-10-20T08:37:31.3133035Z tests/test_s3_load.py: 2 warnings
+2026-10-20T08:37:31.3133497Z tests/test_s3_migration.py: 1 warning
+2026-10-20T08:37:31.3133976Z tests/test_s4_analysis.py: 12 warnings
+2026-10-20T08:37:31.3134459Z tests/test_s4_cutover.py: 2 warnings
+2026-10-20T08:37:31.3134948Z tests/test_s4_integration.py: 34 warnings
+2026-10-20T08:37:31.3135487Z tests/test_s4_partial_results.py: 12 warnings
+2026-10-20T08:37:31.3136062Z tests/test_s4_quality_comparison.py: 12 warnings
+2026-10-20T08:37:31.3136594Z tests/test_s4_records.py: 66 warnings
+2026-10-20T08:37:31.3137109Z tests/test_s6_credentials_readers.py: 3 warnings
+2026-10-20T08:37:31.3137663Z tests/test_s6_cutover_readers.py: 18 warnings
+2026-10-20T08:37:31.3138394Z tests/test_s6_pagination.py: 11 warnings
+2026-10-20T08:37:31.3138898Z tests/test_scenario_api.py: 3 warnings
+2026-10-20T08:37:31.3139417Z tests/test_scenario_conversion.py: 33 warnings
+2026-10-20T08:37:31.3139985Z tests/test_scenario_drafts.py: 105 warnings
+2026-10-20T08:37:31.3140545Z tests/test_scenario_publication.py: 53 warnings
+2026-10-20T08:37:31.3141123Z tests/test_scenario_retirement.py: 29 warnings
+2026-10-20T08:37:31.3141678Z tests/test_student_connections.py: 9 warnings
+2026-10-20T08:37:31.3142234Z tests/test_student_context_access.py: 1 warning
+2026-10-20T08:37:31.3142767Z tests/test_student_lifecycle.py: 1 warning
+2026-10-20T08:37:31.3143276Z tests/test_student_probe.py: 9 warnings
+2026-10-20T08:37:31.3143804Z tests/test_student_snapshot_start.py: 11 warnings
+2026-10-20T08:37:31.3144325Z tests/test_transactions.py: 2 warnings
+2026-10-20T08:37:31.3144792Z tests/test_turn_context.py: 1 warning
+2026-10-20T08:37:31.3145286Z tests/test_uiux_admin_http.py: 4 warnings
+2026-10-20T08:37:31.3145772Z tests/test_uiux_entry.py: 6 warnings
+2026-10-20T08:37:31.3146275Z tests/test_usage_pricing_ledger.py: 10 warnings
+2026-10-20T08:37:31.3148242Z   <workspace>/.venv/lib/python3.12/site-packages/starlette/templating.py:162: DeprecationWarning: The `name` is not the first parameter anymore. The first parameter should be the `Request` instance.
+2026-10-20T08:37:31.3150194Z   Replace `TemplateResponse(name, {"request": request})` by `TemplateResponse(request, name)`.
+2026-10-20T08:37:31.3150896Z     warnings.warn(
+2026-10-20T08:37:31.3151291Z 
+2026-10-20T08:37:31.3151533Z tests/test_s2_integration.py: 6 warnings
+2026-10-20T08:37:31.3152269Z tests/test_s3_integration.py: 3 warnings
+2026-10-20T08:37:31.3152752Z tests/test_seed.py: 2 warnings
+2026-10-20T08:37:31.3154637Z   <workspace>/.venv/lib/python3.12/site-packages/aiosqlite/core.py:105: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
+2026-10-20T08:37:31.3156333Z     result = function()
+2026-10-20T08:37:31.3156540Z 
+2026-10-20T08:37:31.3157009Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-10-20T08:37:31.3158055Z ============================= slowest 30 durations =============================
+2026-10-20T08:37:31.3159042Z 12.63s call     tests/test_demo_d1_04_app.py::test_demo_shutdown_retains_leased_files_until_restart
+2026-10-20T08:37:31.3160163Z 8.59s call     tests/test_demo_reset.py::test_reset_alone_drains_and_separate_live_lease_times_out
+2026-10-20T08:37:31.3161438Z 8.06s call     tests/test_comparison_retention.py::test_cleanup_ownerless_candidates_skip_live_generations_and_usage
+2026-10-20T08:37:31.3162850Z 8.03s call     tests/test_comparison_retention.py::test_cleanup_dry_run_execute_batches_and_repeat_preserve_unknown_usage
+2026-10-20T08:37:31.3164220Z 7.89s call     tests/test_rotate_default_passwords.py::test_rotation_cli_dry_run_then_rotates_only_default_accounts
+2026-10-20T08:37:31.3165312Z 7.63s call     tests/test_demo_security.py::test_demo_runs_make_no_external_calls
+2026-10-20T08:37:31.3166380Z 7.55s call     tests/test_demo_reset.py::test_reset_close_failure_is_db_locked_and_keeps_lease_and_file
+2026-10-20T08:37:31.3167633Z 7.31s call     tests/test_demo_isolation.py::test_http_delete_and_csv_export_stay_private_and_skip_deleted_rows
+2026-10-20T08:37:31.3169335Z 7.27s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[analysis_commit-reset_first]
+2026-10-20T08:37:31.3170780Z 7.19s call     tests/test_demo_isolation.py::test_http_visitors_are_isolated_through_mutation_forgery_and_reset
+2026-10-20T08:37:31.3172263Z 7.19s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[analysis_commit-write_first]
+2026-10-20T08:37:31.3173713Z 7.07s call     tests/test_demo_isolation.py::test_conversation_analysis_and_run_ledger_stay_private_per_visitor
+2026-10-20T08:37:31.3174943Z 7.04s call     tests/test_demo_d3_02_real.py::test_demo_d3_02_on_real_seed_and_middleware[admin_analysis]
+2026-10-20T08:37:31.3176335Z 7.00s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[mentor_stream-reset_first]
+2026-10-20T08:37:31.3177628Z 6.99s call     tests/test_demo_d3_02_real.py::test_demo_d3_02_on_real_seed_and_middleware[exports]
+2026-10-20T08:37:31.3178913Z 6.95s call     tests/test_demo_isolation.py::test_teacher_csv_has_prefix_20_and_demo_suffix_5
+2026-10-20T08:37:31.3180079Z 6.90s call     tests/test_demo_d3_02_real.py::test_demo_d3_02_on_real_seed_and_middleware[guards]
+2026-10-20T08:37:31.3181451Z 6.89s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[mentor_stream-write_first]
+2026-10-20T08:37:31.3183020Z 6.79s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[ledger_finish-write_first]
+2026-10-20T08:37:31.3184602Z 6.73s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[student_chunk-reset_first]
+2026-10-20T08:37:31.3186169Z 6.71s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[ledger_start-write_first]
+2026-10-20T08:37:31.3187392Z 6.65s call     tests/test_demo_security.py::test_demo_rejects_injected_external_model
+2026-10-20T08:37:31.3188893Z 6.64s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[student_chunk-write_first]
+2026-10-20T08:37:31.3190373Z 6.64s call     tests/test_demo_reset.py::test_two_tabs_send_different_reset_ids_concurrently
+2026-10-20T08:37:31.3191851Z 6.62s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[ledger_start-reset_first]
+2026-10-20T08:37:31.3193379Z 6.62s call     tests/test_demo_reset.py::test_reset_during_student_mentor_analysis_and_shield_ledger_writes[ledger_finish-reset_first]
+2026-10-20T08:37:31.3194651Z 6.60s call     tests/test_demo_security.py::test_demo_admin_dangerous_endpoints_are_forbidden
+2026-10-20T08:37:31.3195737Z 6.57s call     tests/test_demo_reset.py::test_caller_disconnect_after_mark_still_completes_reset
+2026-10-20T08:37:35.5434329Z 6.56s call     tests/test_demo_security.py::test_demo_lifecycle_makes_no_external_calls
+2026-10-20T08:37:35.5435844Z 6.55s call     tests/test_demo_d1_04_app.py::test_demo_boots_on_a_cli_built_seed
+2026-10-20T08:37:35.5437005Z 3166 passed, 1489 warnings in 1338.76s (0:22:18)

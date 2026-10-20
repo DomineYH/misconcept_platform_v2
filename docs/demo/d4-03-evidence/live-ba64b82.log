@@ -1,0 +1,25 @@
+# D4-03 evidence: live (#205), CI 발췌
+# 실행 SHA: ba64b82ef74226094a5b51888b1bbcb1734bb062 (수정 전 기준선, main push)
+# worktree: CI checkout (actions/checkout@v4, clean)
+# 환경: GitHub Actions ubuntu-24.04 runner, CPython 3.12.3 (uv sync --frozen --extra dev --python 3.12), Node 24
+# CI run: https://github.com/DomineYH/misconcept_platform_v2/actions/runs/39392009613 attempt 1, job `test` (id 118525536944), step `uv run --frozen python tests/check_student_live.py`
+# exit: 0 (step success, job conclusion success)
+# 가림: runner 작업 경로 <workspace>/<runner_temp>/<toolcache>, ANSI 색 코드 제거. 그 밖의 줄은 CI 로그 그대로.
+2026-10-20T08:37:39.2362512Z ##[group]Run uv run --frozen python tests/check_student_live.py
+2026-10-20T08:37:39.2363049Z uv run --frozen python tests/check_student_live.py
+2026-10-20T08:37:39.2414971Z shell: /usr/bin/bash -e {0}
+2026-10-20T08:37:39.2415237Z env:
+2026-10-20T08:37:39.2415486Z   UV_CACHE_DIR: <runner_temp>/setup-uv-cache
+2026-10-20T08:37:39.2415813Z ##[endgroup]
+2026-10-20T08:37:42.6156969Z Database initialized
+2026-10-20T08:37:42.6159215Z {"timestamp": 1792485462.615417, "level": "INFO", "name": "root", "message": "Request started", "request_id": "1792485462.6153796", "method": "GET", "path": "/health", "client": "127.0.0.1", "logger": "root"}
+2026-10-20T08:37:42.6196929Z {"timestamp": 1792485462.6194596, "level": "INFO", "name": "root", "message": "Request completed", "request_id": "1792485462.6153796", "method": "GET", "path": "/health", "status_code": 200, "duration": 0.004, "logger": "root"}
+2026-10-20T08:37:42.6617663Z {"timestamp": 1792485462.6614647, "level": "INFO", "name": "root", "message": "Request started", "request_id": "1792485462.6614406", "method": "POST", "path": "/sessions/1/turns/stream", "client": "127.0.0.1", "logger": "root"}
+2026-10-20T08:37:42.8418528Z {"timestamp": 1792485462.8414187, "level": "INFO", "name": "root", "message": "Request started", "request_id": "1792485462.8413906", "method": "GET", "path": "/runs/47418ea2-9418-4188-9700-4e94c65fbdd0", "client": "127.0.0.1", "logger": "root"}
+2026-10-20T08:37:43.2297821Z {"timestamp": 1792485463.229394, "level": "INFO", "name": "root", "message": "Request completed", "request_id": "1792485462.8413906", "method": "GET", "path": "/runs/47418ea2-9418-4188-9700-4e94c65fbdd0", "status_code": 200, "duration": 0.388, "logger": "root"}
+2026-10-20T08:37:43.2423560Z {"timestamp": 1792485463.2420504, "level": "INFO", "name": "root", "message": "Request completed", "request_id": "1792485462.6614406", "method": "POST", "path": "/sessions/1/turns/stream", "status_code": 200, "duration": 0.581, "logger": "root"}
+2026-10-20T08:37:43.2429168Z {"timestamp": 1792485463.2426398, "level": "INFO", "name": "root", "message": "Request started", "request_id": "1792485463.2426207", "method": "POST", "path": "/sessions/1/turns/stream", "client": "127.0.0.1", "logger": "root"}
+2026-10-20T08:37:43.2500942Z {"timestamp": 1792485463.2497768, "level": "INFO", "name": "root", "message": "Request completed", "request_id": "1792485463.2426207", "method": "POST", "path": "/sessions/1/turns/stream", "status_code": 200, "duration": 0.007, "logger": "root"}
+2026-10-20T08:37:43.4364448Z {"student_calls": 1, "mentor_calls_in_student_path": 0, "misconception_calls": 0, "first_output_ms": 150.204, "completed_ms": 546.9309999999999}
+2026-10-20T08:37:43.4366182Z PASS: real localhost incremental delta, active CSRF, real SDK parsing/max_retries=0/close, durable replay; 1 call
+2026-10-20T08:37:43.4367087Z Database connections closed

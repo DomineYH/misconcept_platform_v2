@@ -9,7 +9,7 @@
 - 실행 방식: 모듈이 자체 demo와 normal uvicorn 서버를 `TESTING=false`로 띄운다. seed는 `python -m src.demo.seed build --out <tmp>/seed`로 만든다. 러너의 fixture 화면은 backend 증거로 쓰지 않는다(계약 §28). 여정은 화면 조작(시작·대화 시작·입력·종료·투어 역할/reset 버튼·CSV 링크)으로 진행하고, 판정은 `/demo/state?include_tour=true`, 관리자 JSON(먼저 HTTP 200 확인), 내려받은 CSV를 직접 파싱해 확인한다.
 - demo 서버 설정은 계약 기본값을 따르되 `DEMO_REQUESTS_PER_MINUTE`만 §8 상한 600으로 둔다. 자동 여정은 D0-02 §7의 5분 대신 수십 초에 끝나 기본 60회/분을 넘기 때문이다(실행 2 직전 시험에서 step 6이 429).
 - 단계 판정: 앞 단계가 passed가 아니면 뒤 단계는 `not run (blocked by step N)`이다. 실패 단계는 약화·생략하지 않고 failed로 남긴다. 부가 확인(E*)과 normal(N1)은 별도 방문객/서버라 여정과 독립이다.
-- 상태: 후보에서 실행 4 **PASS**(E4 not run). G4 판정은 아래 'G4 승인' 절에 maintainer가 기록한다.
+- 상태: 후보에서 실행 4 **PASS**(E4 not run). maintainer가 2026-10-20 G4를 승인했다(아래 'G4 승인' 절).
 
 ## 실행 기록
 
@@ -66,12 +66,15 @@ D3-04와 같은 시기의 실제 서버 검사(#202 smoke, #203, #204)에서 나
 
 ## manifest
 
-값 묶음(후보/계약/fixture/seed/migration/검사)은 [`d3-04-integration-manifest.json`](d3-04-integration-manifest.json)을 본다. `settings_sha256`과 `g4_final_commit`은 null이며 이유는 manifest의 `notes`에 있다.
+값 묶음(후보/계약/fixture/seed/migration/검사)은 [`d3-04-integration-manifest.json`](d3-04-integration-manifest.json)을 본다. `g4_final_commit`은 승인된 후보 SHA다. `settings_sha256`은 null이며 이유는 manifest의 `notes`에 있다.
 
 ## G4 승인
 
-maintainer가 기록한다. 비어 있으면 G4는 승인되지 않은 것이다. 승인되면 manifest의 `g4_final_commit`에 승인 SHA를 넣는다.
+maintainer가 승인했고 coordinator가 전달한 내용을 기록했다. manifest의 `g4_final_commit`도 같은 SHA다.
 
-- 승인자:
-- 날짜:
-- 승인한 후보 SHA:
+- 승인자: @DomineYH
+- 날짜: 2026-10-20
+- 승인한 후보 SHA: `de3054a00282e1bbfc97784918059f653ac08811`
+- 승인 시 수용한 알려진 제한:
+  - E4(만료 후 재진입)는 실행하지 않았다. `DEMO_IDLE_TTL_SECONDS` 하한이 300초(`src/demo/visitors.py:49`)라 CI shard에서 기다릴 수 없다.
+  - BFCache 복원은 실행하지 않았다. §11의 `no-store`가 우선하므로 페이지가 BFCache에 남지 않는다.

@@ -1,11 +1,11 @@
 {
   "schema": "d3-04-integration-manifest-v1",
-  "status": "g4-candidate-run-4",
+  "status": "g4-approved",
   "candidate_commit": "de3054a00282e1bbfc97784918059f653ac08811",
   "normal_commit": "de3054a00282e1bbfc97784918059f653ac08811",
   "demo_commit": "de3054a00282e1bbfc97784918059f653ac08811",
   "tested_commit": "7c8b6e1516c9302baa63f1d550b031f06a52ac61",
-  "g4_final_commit": null,
+  "g4_final_commit": "de3054a00282e1bbfc97784918059f653ac08811",
   "contract_version": "d0-03-v1-r3",
   "contract_commit": "d6455d10c2d75acde811f85a53143be086d67545",
   "contract_g0_approval_merge": "427890033d206a4f043ffc946009bd8ce6a437c2",
@@ -260,7 +260,7 @@
   ],
   "notes": {
     "candidate_commit": "G4 후보는 main de3054a00282e1bbfc97784918059f653ac08811(#248, #249, #250, #251, #252 병합 포함)다. normal_commit/demo_commit은 같은 전체 SHA다. 이후 제품 코드는 고정이다.",
-    "g4_final_commit": "maintainer가 G4를 승인할 때까지 null이다. 승인란은 d3-04-integration-evidence.md의 'G4 승인' 절에 있다.",
+    "g4_final_commit": "maintainer @DomineYH가 2026-10-20 후보 de3054a를 G4로 승인했다. 승인 시 수용한 알려진 제한은 E4 미실행(TTL 하한 300초)과 BFCache 복원 미실행(§11 no-store 우선)이다. 기록은 d3-04-integration-evidence.md의 'G4 승인' 절에 있다.",
     "settings_sha256": "계약 §28은 비밀 제외 정규화 설정과 비밀 주입 참조/버전만 hash하도록 요구한다. 저장소에 정규화 canonical 절차가 없고 배포 설정/주입 참조도 아직 없다(D5-02 입력). 만들어 내지 않고 산출하지 않았다.",
     "checks.smoke.result": "실행 4(7c8b6e1, 후보 de3054a): step 1–6, E1–E3, E5, E6, N1 passed; E4 not run(TTL 하한 300초). 실행 3(ff4ddae)도 같은 결과였고, 실행 4는 4단계 재열람 보고서와 6단계 tombstone 본문 assertion을 더했다. 실행 1(4dcdf40)은 step 4/E6 failed, 실행 2(40ef3b6)는 passed였다. 단계별 기록은 d3-04-integration-evidence.md에 있다.",
     "run_commit": "smoke 실행 SHA 7c8b6e1. seed receipt의 source_commit도 이 SHA다.",

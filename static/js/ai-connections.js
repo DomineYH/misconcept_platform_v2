@@ -17,7 +17,8 @@ function showError(code, location = document.activeElement.closest('#ai-editor, 
   const messages = {401:uiLanguage.t('admin.please_log_in'), 403:uiLanguage.t('admin.check_your_permissions_or_security_token'),
     409:uiLanguage.t('admin.a_change_or_running_task_caused_a_conflict_reload_the_settings'),
     422:uiLanguage.t('admin.check_your_input_or_current_password'), 429:uiLanguage.t('admin.the_task_limit_has_been_reached_try_again_shortly')};
-  error.textContent = messages[code] || uiLanguage.t('admin.could_not_complete_the_task_check_connection_settings_and_service_status');
+  // A demo recovery hint arrives as a string and is shown as-is.
+  error.textContent = typeof code === 'string' ? code : messages[code] || uiLanguage.t('admin.could_not_complete_the_task_check_connection_settings_and_service_status');
   if (location) location.append(error);
   error.hidden = false;
   error.focus();
@@ -29,11 +30,24 @@ async function request(path, body) {
     headers['Content-Type'] = 'application/json';
     headers[uiLanguage.csrfHeader] = uiLanguage.csrfToken() || '';
   }
-  const response = await fetch(`/admin/ai/${path}`, {method:body === undefined ? 'GET' : 'POST',
-    credentials:'same-origin', headers:uiLanguage.headers(`/admin/ai/${path}`, headers), ...(body === undefined ? {} : {body:JSON.stringify(body)})});
+  const token = uiLanguage.capture();
+  const stale = uiLanguage.t('demo.stale_generation');
+  let response;
+  try {
+    response = await fetch(`/admin/ai/${path}`, {method:body === undefined ? 'GET' : 'POST', signal:token.signal,
+      credentials:'same-origin', headers:uiLanguage.headers(`/admin/ai/${path}`, headers), ...(body === undefined ? {} : {body:JSON.stringify(body)})});
+  } catch (code) {
+    throw uiLanguage.current(token) ? code : stale; // An aborted stale request shows the generic stale notice.
+  }
   // Never display raw server detail, validation input, or exception text.
-  if (!response.ok) throw response.status;
-  return response.status === 204 ? null : response.json();
+  if (!response.ok) {
+    const hint = await uiLanguage.responseRecovery(response);
+    if (hint) throw hint;
+    throw response.status;
+  }
+  const result = response.status === 204 ? null : await response.json();
+  if (!uiLanguage.current(token)) throw stale; // A late success must not touch the page.
+  return result;
 }
 
 async function load() {

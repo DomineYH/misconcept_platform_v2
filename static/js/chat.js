@@ -26,6 +26,14 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   });
   let pollingAuthFailCount = 0;
   const MAX_POLLING_AUTH_FAILS = 3;
+  // §25: a newer namespace, expiry or reset ends this chat page; nothing is resent.
+  let demoStopped = false;
+  uiLanguage.registerStale(message => {
+    demoStopped = true;
+    authExpiredHandled = true;
+    window.closeAnalysisModal?.();
+    lockChatUI(message);
+  });
 
   function syncComposer() {
     const disabled = authExpiredHandled || chatClosed || messageSending;
@@ -436,12 +444,26 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     }
   }
 
+  // A stale demo stop surfaces as AUTH_EXPIRED so callers take their existing silent path.
+  function staleError() {
+    const error = new Error('DEMO_STOPPED');
+    error.code = 'AUTH_EXPIRED';
+    return error;
+  }
+
   async function fetchWithAuthGuard(url, options) {
-    const response = await fetch(url, {
-      credentials: 'same-origin',
-      ...options,
-      headers: uiLanguage.headers(url, options?.headers)
-    });
+    const token = uiLanguage.capture();
+    let response;
+    try {
+      response = await fetch(url, {
+        credentials: 'same-origin',
+        ...options,
+        signal: options?.signal ?? token.signal,
+        headers: uiLanguage.headers(url, options?.headers)
+      });
+    } catch (error) {
+      throw demoStopped ? staleError() : error;
+    }
 
     if (isAuthExpiredResponse(response)) {
       const redirectUrl = extractRedirectUrl(response.headers.get('HX-Trigger'));
@@ -450,6 +472,9 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       authError.code = 'AUTH_EXPIRED';
       throw authError;
     }
+    // A stale demo envelope or a late success already locked the chat; callers stop on their AUTH_EXPIRED path.
+    await uiLanguage.responseRecovery(response);
+    if (demoStopped) throw staleError();
 
     return response;
   }
@@ -483,22 +508,25 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
       if (response.ok) {
         const data = await safeReadJson(response);
+        if (demoStopped) return;
         console.log('Session closed:', data);
         clearDraftMessage();
         document.dispatchEvent(new Event('chat:ended'));
         lockChatUI(uiLanguage.t('teacher.chat_ended'));
 
         setTimeout(() => {
-          window.location.href = url;
+          if (!demoStopped) window.location.href = url;
         }, 500);
       } else {
         const error = await safeReadJson(response);
+        if (demoStopped) return;
         console.error('Failed to close session:', error);
         alert(uiLanguage.t('teacher.close_failed_navigation'));
         window.location.href = url;
       }
     } catch (error) {
-      if (error && error.code === 'AUTH_EXPIRED') {
+      // An invalidation can abort the body after the headers arrived; the lock notice stays.
+      if (demoStopped || (error && error.code === 'AUTH_EXPIRED')) {
         return;
       }
       console.error('Network error closing session:', error);
@@ -628,6 +656,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       });
 
       const analysisResult = await safeReadJson(analyzeResponse);
+      if (demoStopped) return;
       analysisUnresolved = analyzeResponse.status >= 500 || analyzeResponse.status === 202 ||
         analysisResult.latest_run?.status === 'running' || analysisResult.detail?.code === 'analysis_busy';
       if (analyzeResponse.ok) document.dispatchEvent(new Event('chat:ended'));
@@ -647,7 +676,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         setAnalysisState('ready-to-analyze');
       }
     } catch (error) {
-      if (error && error.code === 'AUTH_EXPIRED') {
+      if (demoStopped || (error && error.code === 'AUTH_EXPIRED')) {
         return;
       }
       console.error('Failed to analyze session:', error);
@@ -888,6 +917,13 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
   });
 
   document.body.addEventListener('htmx:responseError', (event) => {
+    if (event.detail.demoRecovery) {
+      if (!demoStopped && !event.detail.pathInfo.requestPath.includes('/messages/updates')) {
+        restoreInputOnError();
+        finishSending();
+      }
+      return;
+    }
     const xhr = event.detail.xhr;
     const path = event.detail.pathInfo.requestPath;
     const triggerHeader = xhr.getResponseHeader('HX-Trigger');
@@ -1043,6 +1079,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     isLocked: () => authExpiredHandled || chatClosed,
     expire: () => handleAuthExpired('student-stream'),
     end: () => {
+      if (demoStopped) return;
       lockChatUI(uiLanguage.t('teacher.chat_ended'));
       setAnalysisState('ready-to-analyze');
       document.dispatchEvent(new Event('chat:ended'));

@@ -22,9 +22,12 @@
     if (root.dataset.mounted) return;
     root.dataset.mounted = '1';
     const prefix = `analysis-result-${++nextId}`;
-    let data, announcement, pending, busy = false, planHidden = false;
+    let data, announcement, pending, busy = false, planHidden = false, dead = false;
     let pollTimer, pollController, statusError = false;
-    const readGuard = () => ({busy: busy || Boolean(pending) || data?.latest_run?.status === 'running'});
+    const token = uiLanguage.capture();
+    const stale = () => dead || !uiLanguage.current(token);
+    // A dead view must not keep the language switch blocked.
+    const readGuard = () => ({busy: !dead && (busy || Boolean(pending) || data?.latest_run?.status === 'running')});
     const unregister = uiLanguage.registerGuard(readGuard);
     function publishState() {
       document.dispatchEvent(new CustomEvent('analysis:state', {
@@ -36,20 +39,28 @@
       clearTimeout(pollTimer);
       if (pollController) pollController.abort();
     }
+    // §25: an invalidated view stays dead; it never fetches, renders or polls again.
+    const unregisterStale = uiLanguage.registerStale(notice => {
+      dead = true;
+      stopPolling();
+      root.querySelectorAll('button').forEach(b => b.disabled = true);
+      if (announcement) announcement.textContent = notice;
+    });
     function schedulePolling() {
-      if (root.isConnected && data.latest_run?.status === 'running' && data.actions.status) {
+      if (!dead && root.isConnected && data.latest_run?.status === 'running' && data.actions.status) {
         pollTimer = setTimeout(checkStatus, 1000);
       }
     }
     async function checkStatus() {
-      if (!root.isConnected || busy) return;
+      if (!root.isConnected || busy || stale()) return;
       pollController = new AbortController();
       const signal = pollController.signal;
       try {
         const response = await fetch(data.actions.status, {credentials: 'same-origin', signal, headers: uiLanguage.headers(data.actions.status)});
+        if (!response.ok && await uiLanguage.responseRecovery(response)) return;
         if (!response.ok) throw new Error();
         const result = await projection(response);
-        if (signal.aborted || !root.isConnected) return;
+        if (signal.aborted || !root.isConnected || stale()) return;
         const announce = statusError || data.latest_run?.status !== result.latest_run?.status;
         const changed = statusError || JSON.stringify(data) !== JSON.stringify(result);
         statusError = false;
@@ -60,7 +71,7 @@
         }
         schedulePolling();
       } catch {
-        if (signal.aborted || !root.isConnected) return;
+        if (signal.aborted || !root.isConnected || stale()) return;
         statusError = true;
         render();
         announcement.textContent = uiLanguage.t('teacher.analysis_status_error');
@@ -69,6 +80,7 @@
     const observer = new MutationObserver(() => {
       if (!root.isConnected) {
         unregister();
+        unregisterStale();
         stopPolling();
         observer.disconnect();
       }
@@ -82,11 +94,22 @@
     function button(parent, label, action) {
       const el = node(parent, 'button', label, 'btn btn-secondary');
       el.type = 'button';
-      el.disabled = busy;
+      el.disabled = busy || dead;
       el.addEventListener('click', action);
     }
+    const drop = () => { busy = false; pending = null; };
+    // §11/§25: a demo refusal or a newer namespace ends this request; nothing is resent.
+    async function refused(response) {
+      const hint = await uiLanguage.responseRecovery(response);
+      if (!hint && !stale()) return false;
+      drop();
+      render();
+      if (hint) announcement.textContent = hint;
+      announcement.focus();
+      return true;
+    }
     async function send(url, body) {
-      if (busy) return;
+      if (busy || stale()) return;
       stopPolling();
       busy = true;
       pending = {url, body};
@@ -94,12 +117,14 @@
       announcement.textContent = uiLanguage.t('teacher.analysis_requesting');
       try {
         const response = await fetch(url, {
-          method: 'POST', credentials: 'same-origin',
+          method: 'POST', credentials: 'same-origin', signal: token.signal,
           headers: uiLanguage.headers(url, {...getAnalysisCsrfHeaders(), 'Content-Type': 'application/json'}),
           body: JSON.stringify(body),
         });
+        if (await refused(response)) return;
         if (!response.ok && ![409, 422].includes(response.status)) throw new Error();
         const conflict = response.status === 409 ? (await response.clone().json()).detail : null;
+        if (stale()) return drop();
         if (conflict?.code === 'request_conflict') {
           busy = false;
           pending = null;
@@ -109,14 +134,17 @@
           announcement.focus();
           return;
         }
+        let result;
         if (conflict?.code === 'analysis_busy') {
           const statusUrl = url.replace(/\/analyze(?:_regenerate)?$/, `/analysis/runs/${encodeURIComponent(conflict.run_id)}`);
-          const active = await fetch(statusUrl, {credentials: 'same-origin', headers: uiLanguage.headers(statusUrl)});
+          const active = await fetch(statusUrl, {credentials: 'same-origin', signal: token.signal, headers: uiLanguage.headers(statusUrl)});
+          if (await refused(active)) return;
           if (!active.ok) throw new Error();
-          data = await projection(active);
-        } else data = await projection(response);
-        busy = false;
-        pending = null;
+          result = await projection(active);
+        } else result = await projection(response);
+        if (stale()) return drop();
+        data = result;
+        drop();
         planHidden = false;
         render();
         schedulePolling();
@@ -128,6 +156,7 @@
           ? uiLanguage.t('teacher.analysis_plan_limit')
           : uiLanguage.t('teacher.analysis_request_result');
       } catch {
+        if (stale()) return drop(); // keep the invalidation notice
         busy = false;
         render();
         announcement.textContent = uiLanguage.t('teacher.request_unknown');
@@ -328,10 +357,23 @@
       render();
       return;
     }
-    fetch(root.dataset.resultUrl, {credentials: 'same-origin', headers: uiLanguage.headers(root.dataset.resultUrl)})
-      .then(response => { if (!response.ok) throw new Error(); return projection(response); })
-      .then(result => { data = result; render(); schedulePolling(); })
-      .catch(() => { node(root, 'p', uiLanguage.t('teacher.analysis_load_failed')); });
+    fetch(root.dataset.resultUrl, {credentials: 'same-origin', signal: token.signal, headers: uiLanguage.headers(root.dataset.resultUrl)})
+      .then(async response => {
+        if (!response.ok) throw (await uiLanguage.responseRecovery(response)) ?? new Error();
+        return projection(response);
+      })
+      .then(result => {
+        if (stale()) return;
+        data = result;
+        render();
+        schedulePolling();
+        // §24.1: an opened journey history/analysis detail; comparisons are not history.
+        if (!root.dataset.comparison) uiLanguage.observe('history_viewed', root.dataset.sessionId, token);
+      })
+      .catch(error => {
+        if (typeof error !== 'string' && stale()) return;
+        node(root, 'p', typeof error === 'string' ? error : uiLanguage.t('teacher.analysis_load_failed'));
+      });
   }
   window.showAnalysisResult = (root, data) => mount(root, data);
   window.mountAnalysisResults = (parent = document) => {

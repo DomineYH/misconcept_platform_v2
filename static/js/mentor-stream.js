@@ -22,6 +22,7 @@ export function mountMentorStream(ui) {
   const help = document.getElementById('request-mentor');
   const helpStatus = document.getElementById('mentor-help-status');
   const storageKey = uiLanguage.storageKey(`chat-mentor-${ui.sessionId}`);
+  const token = uiLanguage.capture();
   let saved = {};
   try { saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}'); } catch {}
   let leftPage = false;
@@ -112,8 +113,10 @@ export function mountMentorStream(ui) {
         turn.bubble.hidden = false;
       }
     } else if (['failed', 'interrupted', 'cancelled'].includes(data.status)) {
-      finish(turn, data.status, data.status === 'cancelled' ?
-        uiLanguage.t('teacher.mentor_session_ended') : failureText(data.code || data.error_code), data.retryable);
+      const hint = uiLanguage.recovery(data);
+      if (hint && ui.isLocked()) return;
+      finish(turn, data.status, hint ?? (data.status === 'cancelled' ?
+        uiLanguage.t('teacher.mentor_session_ended') : failureText(data.code || data.error_code)), data.retryable);
       if (data.status === 'cancelled') ui.end();
     } else {
       turn.runId = data.run_id;
@@ -150,7 +153,16 @@ export function mountMentorStream(ui) {
         finish(turn, 'unknown', uiLanguage.t('teacher.mentor_unknown_request'), true);
         turn.check.hidden = false;
       } else if (response.ok) {
-        apply(turn, await response.json());
+        const data = await response.json();
+        // Demo captures only (normal has no signal): late or foreign receipts are dropped.
+        if (token.signal) {
+          if (turn.requestId !== requestId || leftPage || ui.isLocked()) return;
+          if (!uiLanguage.receipt(token, data, requestId)) {
+            finish(turn, 'unknown', uiLanguage.t('demo.refresh_state'));
+            return;
+          }
+        }
+        apply(turn, data);
         if (turn.running) {
           const elapsed = [1000, 3000, 7000, 15000, 30000][turn.recoveryStep++];
           if (elapsed !== undefined && Date.now() < turn.recoveryStarted + 30000) {
@@ -200,7 +212,10 @@ export function mountMentorStream(ui) {
       if (!response.ok) {
         const payload = await response.json();
         const data = payload.detail || payload;
-        if (data.code === 'mentor_busy') {
+        const hint = uiLanguage.recovery(data);
+        if (hint) {
+          finish(turn, 'failed', hint, data.retryable === true);
+        } else if (data.code === 'mentor_busy') {
           finish(turn, 'busy', uiLanguage.t('teacher.mentor_busy'), true);
         } else if (data.code === 'mentor_limit') {
           finish(turn, 'limit', uiLanguage.t('teacher.mentor_limit'));
@@ -227,9 +242,18 @@ export function mountMentorStream(ui) {
         return;
       }
       if (response.headers.get('Content-Type')?.includes('application/json')) {
-        apply(turn, await response.json());
+        const data = await response.json();
+        if (token.signal) {
+          if (turn.requestId !== requestId || leftPage || !turn.running || ui.isLocked()) return;
+          if (!uiLanguage.receipt(token, data, requestId)) {
+            finish(turn, 'unknown', uiLanguage.t('demo.refresh_state'));
+            return;
+          }
+        }
+        apply(turn, data);
       } else await readSSE(response.body, (type, data) => {
         if (turn.requestId !== requestId || !turn.running || ui.isLocked()) return false;
+        if (!uiLanguage.current(token, data)) return false;
         if (data.turn_id !== turnId) return true;
         if (type === 'run.accepted' && data.request_id === requestId && data.operation === 'mentor') {
           turn.runId = data.run_id;
@@ -301,6 +325,7 @@ export function mountMentorStream(ui) {
   refreshHelp();
   document.addEventListener('chat:locked', e => stop('cancelled', e.detail.authExpired ?
     uiLanguage.t('teacher.mentor_auth_expired') : uiLanguage.t('teacher.mentor_session_ended')));
+  uiLanguage.registerStale(message => stop('cancelled', message));
   window.addEventListener('pagehide', () => {
     leftPage = true;
     stop('interrupted', uiLanguage.t('teacher.mentor_page_left'));

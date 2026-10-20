@@ -26,6 +26,32 @@ window.uiLanguage = (() => {
     return namespace?.scope == null ? key :
       `demo:${namespace.scope}:${namespace.generation}:${namespace.epoch}:${key}`;
   }
+  // §25: pending work registers here; any later namespace, expiry or reset stops it with a hint.
+  const staleHandlers = new Set();
+  function registerStale(handler) {
+    staleHandlers.add(handler);
+    return () => staleHandlers.delete(handler);
+  }
+  // A capture token pins the namespace and an abort signal; any invalidation voids both.
+  // ponytail: controllers are only released by invalidation; add a release call if a page captures per poll.
+  let serial = 0;
+  const controllers = new Set();
+  function capture() {
+    if (!demo) return {prefix:'', serial:0, signal:undefined};
+    const controller = new AbortController();
+    controllers.add(controller);
+    return {prefix:storageKey(''), serial, signal:controller.signal};
+  }
+  function invalidate(key) {
+    serial++;
+    for (const controller of controllers) controller.abort();
+    controllers.clear();
+    notify(t(key));
+    for (const handler of [...staleHandlers]) handler(t(key));
+  }
+  // Change 3: one state-check per authoritative answer; #199 alone emits the five state events.
+  const STATE_CHECK = ['DEMO_SESSION_REQUIRED', 'DEMO_EXPIRED', 'DEMO_STALE_GENERATION', 'DEMO_STALE_ROLE'];
+  let checking = false;
   // Authoritative #199 events only move the namespace forward within the same scope.
   for (const type of ['demo:state', 'demo:role-changed', 'demo:reset-completed']) {
     document.addEventListener(type, ({detail}) => {
@@ -34,8 +60,72 @@ window.uiLanguage = (() => {
       if (namespace.scope != null && (detail.browser_scope_id !== namespace.scope ||
         detail.generation < namespace.generation ||
         detail.generation === namespace.generation && detail.auth_epoch < namespace.epoch)) return;
+      const before = storageKey('');
       Object.assign(namespace, {scope:detail.browser_scope_id, generation:detail.generation, epoch:detail.auth_epoch});
+      if (before && storageKey('') !== before) invalidate(type === 'demo:role-changed' ? 'demo.stale_role' : 'demo.stale_generation');
     });
+  }
+  for (const [type, key] of [['demo:expired', 'demo.expired'], ['demo:reset-started', 'demo.resetting']]) {
+    document.addEventListener(type, ({detail}) => {
+      if (namespace?.scope != null && detail?.browser_scope_id === namespace.scope) invalidate(key);
+    });
+  }
+  for (const type of ['demo:state', 'demo:role-changed', 'demo:reset-started', 'demo:reset-completed', 'demo:expired']) {
+    document.addEventListener(type, () => { checking = false; });
+  }
+  // §11: a demo envelope (API detail or SSE terminal frame) yields its hint; null keeps normal handling.
+  function recovery(detail) {
+    if (!demo || typeof detail?.recovery !== 'string') return null;
+    const key = Object.hasOwn(strings, detail.recovery) ? detail.recovery : 'demo.refresh_state';
+    if (!STATE_CHECK.includes(detail.code)) {
+      notify(t(key));
+      return t(key);
+    }
+    invalidate(key);
+    if (!checking) {
+      checking = true;
+      document.dispatchEvent(new CustomEvent('demo:state-check', {detail:{reason:detail.code}}));
+    }
+    return t(key);
+  }
+  async function responseRecovery(response) {
+    if (!demo || response.ok) return null;
+    try { return recovery((await response.clone().json()).detail); } catch { return null; }
+  }
+  // §25: work keeps its capture token; any invalidation since, or a frame of another namespace, voids it.
+  function current(token, frame) {
+    if (!demo) return true;
+    if (token.serial !== serial || storageKey('') !== token.prefix) return false;
+    if (typeof frame?.browser_scope_id !== 'string' ||
+      `demo:${frame.browser_scope_id}:${frame.generation}:${frame.auth_epoch}:` === token.prefix) return true;
+    recovery({code:'DEMO_STALE_GENERATION', recovery:'demo.stale_generation'});
+    return false;
+  }
+  // §25: a JSON run receipt must be current, not historical, and answer the request that was sent.
+  function receipt(token, data, requestId) {
+    if (!demo) return true;
+    if (data?.historical === true) {
+      recovery({code:'DEMO_STALE_GENERATION', recovery:'demo.stale_generation'});
+      return false;
+    }
+    if (!current(token, data)) return false;
+    if (data?.request_id === requestId) return true;
+    notify(t('demo.refresh_state'));
+    return false;
+  }
+  // §24.1: only the journey target, still in the namespace the caller captured.
+  function observe(kind, sessionId, token, requestId = crypto.randomUUID()) {
+    const journey = demo?.tour_facts?.journey_session_id;
+    if (!Number.isInteger(journey) || String(sessionId) !== String(journey) || namespace.scope == null ||
+      !current(token)) return;
+    document.dispatchEvent(new CustomEvent('demo:tour-observed', {detail:{schema_version:1,
+      browser_scope_id:namespace.scope, generation:namespace.generation, auth_epoch:namespace.epoch,
+      journey_session_id:journey, kind, request_id:requestId}}));
+  }
+  // §25: after BFCache, saved work is only looked up once #199 has confirmed the state.
+  function afterState(callback) {
+    if (!demo) callback();
+    else document.addEventListener('demo:state', () => callback(), {once:true});
   }
   function t(key, values = {}) {
     const text = Object.hasOwn(strings, key) ? strings[key] : '표시할 수 없는 안내입니다.';
@@ -53,6 +143,12 @@ window.uiLanguage = (() => {
     }
     return result;
   }
+  function notify(text) {
+    const notice = document.getElementById('language-notice');
+    if (!notice) return;
+    notice.hidden = false;
+    notice.textContent = text;
+  }
   function registerGuard(readState) {
     guards.add(readState);
     return () => guards.delete(readState);
@@ -62,11 +158,7 @@ window.uiLanguage = (() => {
     const states = [...guards].map(readState => readState());
     const reason = states.some(state => state.busy) ? 'guard_busy' :
       states.some(state => state.dirty) ? 'guard_input' : null;
-    const notice = document.getElementById('language-notice');
-    function announce(key) {
-      notice.hidden = false;
-      notice.textContent = t(`common.${key}`);
-    }
+    const announce = key => notify(t(`common.${key}`));
     if (reason) { announce(reason); return; }
     try {
       document.cookie = `ui_lang=${language}; Max-Age=31536000; Path=/; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
@@ -80,6 +172,10 @@ window.uiLanguage = (() => {
     }
     location.reload();
   }
+  // Capture runs before page handlers, which skip their own alert when this hint is set.
+  document.addEventListener('htmx:responseError', event => {
+    try { event.detail.demoRecovery = recovery(JSON.parse(event.detail.xhr.responseText).detail); } catch {}
+  }, true);
   document.addEventListener('htmx:configRequest', event => {
     const url = new URL(event.detail.path, location.href);
     for (const name of Object.keys(event.detail.headers)) {
@@ -103,5 +199,7 @@ window.uiLanguage = (() => {
       document.body.style.setProperty('--nav-notice-height', `${notices.getBoundingClientRect().height}px`);
     }).observe(notices);
   });
-  return {t, headers, registerGuard, csrfHeader, csrfToken, storageKey};
+  return {t, headers, registerGuard, csrfHeader, csrfToken, storageKey, registerStale, recovery, responseRecovery,
+    capture, current, receipt, observe, afterState, notify,
+    versions:demo && {content:demo.content_version, fixture:demo.fixture_version}};
 })();

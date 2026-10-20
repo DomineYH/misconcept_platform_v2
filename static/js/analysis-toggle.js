@@ -64,7 +64,7 @@ function toggleAnalysisDetail(btn) {
         method: 'POST',
         headers: uiLanguage.headers('/sessions/' + sessionId + '/analysis/detail-opened', getAnalysisCsrfHeaders()),
         credentials: 'same-origin',
-      }).catch(function () { /* silent */ });
+      }).then(uiLanguage.responseRecovery).catch(function () { /* silent */ });
     }
   }
 }

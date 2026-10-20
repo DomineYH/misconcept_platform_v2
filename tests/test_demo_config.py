@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEMO_ENV = {
     "APP_MODE": "demo",
     "DEMO_DATA_ROOT": "/tmp/isolated-demo-root",
+    "DEMO_SEED_DIR": "/tmp/isolated-demo-seed",
     "DEMO_ORIGIN": "https://demo.invalid",
     "NORMAL_ORIGIN": "https://normal.invalid",
     "DEMO_SESSION_SECRET": "s" * 40,
@@ -71,6 +72,7 @@ defaults = {
 }
 assert all(getattr(config, "DEMO_" + name) == value for name, value in defaults.items())
 assert config.demo_settings.workers == 1
+assert config.DEMO_SEED_DIR == "/tmp/isolated-demo-seed"
 assert Config(_env_file=".env").APP_MODE == "demo"
 os.environ["APP_MODE"] = "normal"
 assert Config().APP_MODE == "demo"
@@ -103,6 +105,8 @@ cases = [
     {"DATABASE_URL": "sqlite:///sensitive.db"},
     {"DEMO_DATA_ROOT": ""}, {"DEMO_DATA_ROOT": "relative"},
     {"DEMO_DATA_ROOT": "/tmp/../demo"},
+    {"DEMO_SEED_DIR": ""}, {"DEMO_SEED_DIR": "relative"},
+    {"DEMO_SEED_DIR": "/tmp/../seed"},
     {"DEMO_SESSION_SECRET": "short"},
     {"DEMO_SESSION_SECRET": ""}, {"DEMO_CSRF_SECRET": ""},
     {"DEMO_SESSION_SECRET": "example" + "x" * 40},
@@ -383,11 +387,13 @@ def test_normal_dotenv_mode_and_demo_settings_preservation(tmp_path):
         "APP_MODE=demo\nSESSION_SECRET="
         + "n" * 40
         + "\nDEMO_WORKERS=bad\nDEMO_DATA_ROOT=relative\nOPENAI_API_KEY=normal-key\n"
+        + "DEMO_SEED_DIR=relative\n"
     )
     result = run_python(
         """
 from src.config import config
 assert config.APP_MODE == "normal"
+assert config.DEMO_SEED_DIR == ""
 assert config.OPENAI_API_KEY == "normal-key"
 assert config.DATABASE_URL == "sqlite+aiosqlite:///./dialogue_sim.db"
 """,
@@ -440,7 +446,8 @@ async def check():
             async with main.lifespan(main.app):
                 raise AssertionError("demo startup allowed")
         except DemoError as error:
-            assert error.code == "DEMO_CONFIGURATION_INVALID"
+            # load_seed finds no built seed in DEMO_SEED_DIR.
+            assert error.code == "DEMO_VERSION_MISMATCH", error.code
     for action in (connection.init_db, connection.close_db):
         try:
             await action()

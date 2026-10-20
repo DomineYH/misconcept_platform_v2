@@ -62,6 +62,7 @@ def run_case(case, tmp_path, **settings):
         TESTING="false",
         ENV="production",
         DEMO_DATA_ROOT=str(tmp_path / "demo"),
+        DEMO_SEED_DIR=str(tmp_path / "seed"),
         DEMO_ORIGIN="https://demo.test",
         NORMAL_ORIGIN="https://normal.test",
         DEMO_SESSION_SECRET=SECRETS[0],
@@ -321,7 +322,7 @@ async def boot(seed=None):
     from src import main
 
     root = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(main, await (seed or make_seed)(root))
+    install_seed(await (seed or make_seed)(root))
     return main.app, client_for, start
 
 

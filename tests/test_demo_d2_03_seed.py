@@ -450,6 +450,7 @@ def test_tour_content_exposes_manifest_refs_and_supported_snapshots(
 DEMO_ENV = {
     "APP_MODE": "demo",
     "DEMO_DATA_ROOT": "/nonexistent/isolated-demo-root",
+    "DEMO_SEED_DIR": "/nonexistent/isolated-demo-seed",
     "DEMO_ORIGIN": "https://demo.invalid",
     "NORMAL_ORIGIN": "https://normal.invalid",
     "DEMO_SESSION_SECRET": "s" * 40,

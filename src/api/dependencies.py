@@ -2,6 +2,7 @@
 
 import asyncio
 import hmac
+import json
 import logging
 import math
 import secrets
@@ -10,6 +11,7 @@ from functools import wraps
 from typing import AsyncGenerator
 from urllib.parse import urlencode, urlsplit
 
+import anyio
 import markdown as md_lib
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -52,6 +54,9 @@ def demo_template_context(request: Request) -> dict:
             "fixture_version": FIXTURE_VERSION,
             "csrf_cookie_name": "demo_csrftoken",
             "csrf_header_name": "x-csrf-token",
+            # Server policy, not visit data: known before any visit.
+            "idle_ttl_seconds": config.DEMO_IDLE_TTL_SECONDS,
+            "absolute_ttl_seconds": config.DEMO_ABSOLUTE_TTL_SECONDS,
         }
     else:
         fields = display.model_dump(mode="json")
@@ -76,6 +81,18 @@ templates = Jinja2Templates(
 templates.env.globals.update(
     t=t, display_language=display_language, ui_strings=ui_strings
 )
+
+
+def html_navigation(request: Request) -> bool:
+    """A browser document load: GET/HEAD accepting text/html, not HTMX."""
+    return (
+        request.method in ("GET", "HEAD")
+        and "HX-Request" not in request.headers
+        and any(
+            value.partition(";")[0].strip().lower() == "text/html"
+            for value in request.headers.get("accept", "").split(",")
+        )
+    )
 
 
 def md_filter(text: str | None) -> Markup:
@@ -708,13 +725,42 @@ def get_demo_session(request: Request):
     return session
 
 
+async def _abort(abort):
+    try:
+        await abort()
+    except Exception as error:
+        logging.getLogger(__name__).error(
+            "Demo abort failed", extra={"code": type(error).__name__}
+        )
+
+
+async def _discard(owned, sent):
+    """#198: abort, exactly once, a handler response the boundary will not send.
+
+    Returns a cancellation that arrived meanwhile; the caller re-raises it
+    after its own cleanup.
+    """
+    if not owned or owned[0] is sent:
+        return None
+    abort = getattr(owned.pop(), "demo_abort", None)
+    if abort is None:
+        return None
+    # A cancelled request still finishes releasing the reserved work: the
+    # AnyIO shield covers scope cancellation, the owned task Task.cancel().
+    task, pending = asyncio.ensure_future(_abort(abort)), None
+    with anyio.CancelScope(shield=True):
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError as error:
+                pending = error
+    return pending
+
+
 def demo_request_handler(handler):
     """Stage 3 wraps all demo route handlers before body/dependency parsing."""
 
-    @wraps(handler)
-    async def guarded(request):
-        if config.APP_MODE != "demo":
-            return await handler(request)
+    async def serve(request, owned):
         from src.api.routes.demo import error_response
 
         runtime = None
@@ -756,6 +802,7 @@ def demo_request_handler(handler):
             ):
                 await runtime.validate_namespace(request, bootstrap)
             response = await handler(request)
+            owned.append(response)
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and not request.url.path.startswith("/demo/"):
                 if response.status_code < 400:
@@ -776,7 +823,12 @@ def demo_request_handler(handler):
                 "Demo request failed", extra={"code": type(error).__name__}
             )
             response = error_response(DemoError("CONFIGURATION_INVALID"))
+        except BaseException:
+            response = None  # Cancelled: nothing from this request is sent.
+            raise
         finally:
+            # Before release, while the request's lease is still held.
+            cancelled = await _discard(owned, response)
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and runtime is not None:
                 try:
@@ -787,6 +839,34 @@ def demo_request_handler(handler):
                         response = error_response(
                             DemoError("CONFIGURATION_INVALID")
                         )
+            if cancelled is not None:
+                raise cancelled
+        if (
+            request.method == "GET"
+            and response.status_code >= 400
+            and response.headers.get("content-type") == "application/json"
+            and html_navigation(request)
+        ):
+            detail = json.loads(response.body).get("detail")
+            if isinstance(detail, dict) and "recovery" in detail:
+                # §11: same status and recovery key as the envelope, without a DB;
+                # the failed request's snapshot is not current.
+                request.state.demo_display = None
+                response = templates.TemplateResponse(
+                    "error.html",
+                    {
+                        "request": request,
+                        "user": None,
+                        "status_code": response.status_code,
+                        "demo_error": detail,
+                    },
+                    status_code=response.status_code,
+                    headers={
+                        key: value
+                        for key, value in response.headers.items()
+                        if key in ("cache-control", "retry-after")
+                    },
+                )
         if (
             request.method != "GET"
             or request.url.path not in ("/demo", "/demo/state")
@@ -796,6 +876,20 @@ def demo_request_handler(handler):
             if "set-cookie" in response.headers:
                 del response.headers["set-cookie"]
         return response
+
+    @wraps(handler)
+    async def guarded(request):
+        if config.APP_MODE != "demo":
+            return await handler(request)
+        owned, response = [], None
+        try:
+            response = await serve(request, owned)
+            return response
+        finally:
+            # Also covers cancellation during release and later replacements.
+            cancelled = await _discard(owned, response)
+            if cancelled is not None:
+                raise cancelled
 
     return guarded
 

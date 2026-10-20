@@ -113,6 +113,7 @@ class Config(BaseSettings):
         default=PROCESS_APP_MODE, frozen=True
     )
     DEMO_DATA_ROOT: str = ""
+    DEMO_SEED_DIR: str = ""
     DEMO_ORIGIN: str = ""
     NORMAL_ORIGIN: str = ""
     DEMO_SESSION_SECRET: SecretStr = SecretStr("")
@@ -212,9 +213,9 @@ class Config(BaseSettings):
             return self
         if self.TESTING or self.BOOTSTRAP_ADMIN_ON_STARTUP:
             raise DemoError("CONFIGURATION_INVALID")
-        path = Path(self.DEMO_DATA_ROOT)
-        if not path.is_absolute() or ".." in path.parts:
-            raise DemoError("CONFIGURATION_INVALID")
+        for path in map(Path, (self.DEMO_DATA_ROOT, self.DEMO_SEED_DIR)):
+            if not path.is_absolute() or ".." in path.parts:
+                raise DemoError("CONFIGURATION_INVALID")
         if (
             normal_host is None
             or _url_host(self.DEMO_ORIGIN, development=development, paths=("",))

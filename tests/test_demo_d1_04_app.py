@@ -11,7 +11,7 @@ import pytest
 SECRETS = ("s" * 48, "c" * 48, "n" * 48)
 
 
-def run_case(case, tmp_path, **extra):
+def demo_env(tmp_path, **extra):
     env = {
         key: value
         for key, value in os.environ.items()
@@ -35,6 +35,7 @@ def run_case(case, tmp_path, **extra):
         TESTING="false",
         ENV="production",
         DEMO_DATA_ROOT=str(tmp_path / "demo"),
+        DEMO_SEED_DIR=str(tmp_path / "seed"),
         DEMO_ORIGIN="https://demo.test",
         NORMAL_ORIGIN="https://normal.test",
         DEMO_SESSION_SECRET=SECRETS[0],
@@ -43,9 +44,13 @@ def run_case(case, tmp_path, **extra):
         PYTHONPATH=str(Path(__file__).resolve().parents[1]),
         **extra,
     )
+    return env
+
+
+def run_case(case, tmp_path, **extra):
     result = subprocess.run(
         [sys.executable, __file__, case, str(tmp_path)],
-        env=env,
+        env=demo_env(tmp_path, **extra),
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
@@ -87,6 +92,26 @@ def test_demo_app(case, extra, tmp_path):
     run_case(case, tmp_path, **extra)
 
 
+def test_demo_boots_on_a_cli_built_seed(tmp_path):
+    built = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.demo.seed",
+            "build",
+            "--out",
+            str(tmp_path / "seed"),
+        ],
+        env=demo_env(tmp_path),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert built.returncode == 0, built.stdout + built.stderr
+    run_case("real_seed", tmp_path)
+
+
 def test_demo_shutdown_retains_leased_files_until_restart(tmp_path):
     settings = {"DEMO_DRAIN_SECONDS": "1", "DEMO_CLEANUP_INTERVAL_SECONDS": "5"}
     run_case("shutdown", tmp_path, **settings)
@@ -114,6 +139,7 @@ def test_demo_import_refuses_invalid_configuration(extra, tmp_path):
         TESTING="false",
         ENV="production",
         DEMO_DATA_ROOT=str(tmp_path / "demo"),
+        DEMO_SEED_DIR=str(tmp_path / "seed"),
         DEMO_ORIGIN="https://demo.test",
         NORMAL_ORIGIN="https://normal.test",
         DEMO_SESSION_SECRET=SECRETS[0],
@@ -197,6 +223,213 @@ async def test_demo_cleanup_tick_retries_demo_errors_and_stops_otherwise(
 
 # --------------------------------------------------------------------------
 # Subprocess cases (APP_MODE=demo, TESTING=false, isolated environment).
+
+
+def boundary(monkeypatch, runtime, verify):
+    """The real demo_request_handler with fake demo security and runtime."""
+    from types import SimpleNamespace
+
+    from src.api import dependencies as deps
+
+    async def namespace(request):
+        request.state.demo_invalid_selector = False
+
+    demo = SimpleNamespace(
+        APP_MODE="demo",
+        DEMO_PUBLIC_URL="",
+        DEMO_IDLE_TTL_SECONDS=1800,
+        DEMO_ABSOLUTE_TTL_SECONDS=7200,
+    )
+    monkeypatch.setattr(deps, "config", demo)
+    monkeypatch.setattr(deps, "_demo_runtime", lambda _: runtime)
+    monkeypatch.setattr(
+        deps,
+        "get_demo_security",
+        lambda _: SimpleNamespace(verified_bootstrap=verify),
+    )
+    monkeypatch.setattr(deps, "_namespace", namespace)
+    return deps
+
+
+def boundary_request(method, path, headers=()):
+    from starlette.requests import Request
+
+    return Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "query_string": b"",
+            "headers": list(headers),
+            "scheme": "https",
+            "server": ("demo.test", 443),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "send",
+        "no_hook",
+        "finish_error",
+        "release_error",
+        "cancel_finish_asyncio",
+        "cancel_release_asyncio",
+        "cancel_finish_anyio",
+    ],
+)
+async def test_demo_boundary_aborts_discarded_owned_response_once(
+    mode, monkeypatch
+):
+    """#198 hook: completes exactly once even when the request is cancelled."""
+    import asyncio
+    from types import SimpleNamespace
+
+    import anyio
+    from starlette.responses import PlainTextResponse
+
+    from src.demo.database import DemoError
+
+    events = []
+    entered, hold = asyncio.Event(), asyncio.Event()
+    response = PlainTextResponse("owned")
+
+    async def abort():
+        events.append("abort_started")
+        await anyio.lowlevel.checkpoint()
+        events.append("abort_finished")
+
+    if mode != "no_hook":
+        response.demo_abort = abort
+
+    async def finish(ctx):
+        if mode == "finish_error":
+            raise DemoError("STALE_GENERATION")
+        if mode == "cancel_finish_anyio":
+            scope.cancel()
+            await anyio.lowlevel.checkpoint()
+        if mode == "cancel_finish_asyncio":
+            entered.set()
+            await hold.wait()
+
+    async def release(ctx):
+        events.append("release")
+        if mode == "release_error":
+            raise RuntimeError("/real/demo/root")
+        if mode == "cancel_release_asyncio":
+            entered.set()
+            await hold.wait()
+
+    async def verify(request, **kwargs):
+        return object()
+
+    async def handler(request):
+        request.state.demo_context = object()
+        return response
+
+    runtime = SimpleNamespace(
+        visitors=SimpleNamespace(visitor_for_bootstrap=lambda _: None),
+        finish=finish,
+        release_request_db=release,
+    )
+    deps = boundary(monkeypatch, runtime, verify)
+    guarded = deps.demo_request_handler(handler)
+    # "/demo" skips validate_namespace but still finishes the request DB.
+    request = boundary_request("GET", "/demo")
+    if mode == "cancel_finish_anyio":
+        # Scenario B: cancelled inside finish() by an AnyIO cancel scope.
+        with anyio.CancelScope() as scope:
+            await guarded(request)
+    elif mode.startswith("cancel_"):
+        # Scenario A (release) and a plain task cancel during finish().
+        task = asyncio.create_task(guarded(request))
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        result = await guarded(request)
+        assert (result is response) == (mode in ("send", "no_hook"))
+    expected = 0 if mode in ("send", "no_hook") else 1
+    assert events.count("abort_started") == expected, events
+    assert events.count("abort_finished") == expected, events
+    assert events.count("release") == 1, events
+    if mode in ("finish_error", "cancel_finish_asyncio", "cancel_finish_anyio"):
+        # Aborted while the request DB lease is still held.
+        assert events.index("abort_finished") < events.index("release"), events
+
+
+async def test_demo_boundary_defers_task_cancel_until_abort_and_release(
+    monkeypatch,
+):
+    """The first Task.cancel() lands inside abort; cleanup still completes."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from starlette.responses import PlainTextResponse
+
+    from src.demo.database import DemoError
+
+    events = []
+    entered, hold = asyncio.Event(), asyncio.Event()
+    response = PlainTextResponse("owned")
+
+    async def abort():
+        events.append("abort_started")
+        entered.set()
+        await hold.wait()
+        events.append("abort_finished")
+
+    response.demo_abort = abort
+
+    async def finish(ctx):
+        raise DemoError("STALE_GENERATION")
+
+    async def release(ctx):
+        events.append("release")
+
+    async def verify(request, **kwargs):
+        return object()
+
+    async def handler(request):
+        request.state.demo_context = object()
+        return response
+
+    runtime = SimpleNamespace(
+        visitors=SimpleNamespace(visitor_for_bootstrap=lambda _: None),
+        finish=finish,
+        release_request_db=release,
+    )
+    deps = boundary(monkeypatch, runtime, verify)
+    guarded = deps.demo_request_handler(handler)
+    task = asyncio.create_task(guarded(boundary_request("GET", "/demo")))
+    await entered.wait()
+    task.cancel()  # The first cancellation, while abort is suspended.
+    await asyncio.sleep(0)
+    hold.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert events == ["abort_started", "abort_finished", "release"], events
+
+
+async def test_demo_boundary_html_error_page_is_get_only(monkeypatch):
+    from types import SimpleNamespace
+
+    from src.demo.database import DemoError
+
+    async def verify(request, **kwargs):
+        raise DemoError("SESSION_REQUIRED")
+
+    deps = boundary(monkeypatch, SimpleNamespace(), verify)
+    guarded = deps.demo_request_handler(None)
+    html = [(b"accept", b"text/html")]
+    result = await guarded(boundary_request("HEAD", "/probe", html))
+    assert result.status_code == 401
+    assert result.headers["content-type"] == "application/json"
+    result = await guarded(boundary_request("GET", "/probe", html))
+    assert result.status_code == 401
+    assert result.headers["content-type"].startswith("text/html")
 
 
 async def make_seed(root_path):
@@ -331,14 +564,19 @@ async def make_seed(root_path):
     )
 
 
-def install_seed(main, spec):
+def install_seed(spec, **refs):
     from types import SimpleNamespace
 
-    # Test-only stand-in for #197's product SeedSpec/TourContent provider.
-    main.demo_seed = lambda: (
-        spec,
-        SimpleNamespace(seed_refs={"admin": 1, "teacher": 2}),
-    )
+    seed_refs = json.loads(spec.manifest_path.read_text())["seed_refs"] | refs
+
+    def load_seed(seed_dir):
+        assert seed_dir == os.environ["DEMO_SEED_DIR"], seed_dir
+        return spec, SimpleNamespace(
+            seed_refs={k: v for k, v in seed_refs.items() if v is not None}
+        )
+
+    # Test-only stand-in for #197's src.demo.seed, behind the real demo_seed().
+    sys.modules["src.demo.seed"] = SimpleNamespace(load_seed=load_seed)
 
 
 CLIENTS = []
@@ -444,10 +682,15 @@ async def case_refusal(tmp):
         assert getattr(app.state, "demo_request_db", None) is None
         assert getattr(app.state, "demo_session", None) is None
 
-    # Product startup refuses until #197's verified seed provider is bound.
+    # Fail closed while #197's src.demo.seed cannot be imported.
+    sys.modules["src.demo.seed"] = None
     await refused("DEMO_CONFIGURATION_INVALID")
     spec = await make_seed(root_path)
-    install_seed(main, spec)
+    # Tour seed_refs must equal the validated manifest's, completed_session too.
+    for refs in ({"completed_session": 2}, {"completed_session": None}):
+        install_seed(spec, **refs)
+        await refused("DEMO_VERSION_MISMATCH")
+    install_seed(spec)
 
     holder = DatabaseRoot(root_path).open()
     await refused("DEMO_CONFIGURATION_INVALID")  # second worker/process
@@ -479,6 +722,8 @@ async def case_refusal(tmp):
     async with app.router.lifespan_context(app):
         response = await client_for(app).get("/health")
         assert response.status_code == 200, response.text
+        manifest = json.loads(spec.manifest_path.read_text())
+        assert app.state.demo_request_db.seed_refs == manifest["seed_refs"]
 
 
 async def case_requests(tmp):
@@ -487,7 +732,7 @@ async def case_requests(tmp):
     from src import main
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     async with app.router.lifespan_context(app):
         stranger = client_for(app, "10.0.0.9")
         response = await stranger.get("/metrics")
@@ -614,31 +859,87 @@ async def case_errors(tmp):
 
     from src import main
     from src.api import dependencies as deps
+    from src.demo.database import DemoError
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     global_db = []
     main.AsyncSessionLocal = lambda *a, **k: global_db.append(1)
+    captured = []
+    render = deps.templates.TemplateResponse
+
+    def spy(*args, **kwargs):
+        response = render(*args, **kwargs)
+        captured.append(response.context)
+        return response
+
+    deps.templates.TemplateResponse = spy
 
     @app.get("/probe-missing")
     async def probe_missing(
         request: Request, user=Depends(deps.get_current_user)
     ):
-        if request.query_params.get("mode") == "reset":
+        mode = request.query_params.get("mode")
+        if mode == "reset":
             ctx = request.state.demo_context
             await app.state.demo_request_db.visitors.reset_visit(
                 ctx, str(uuid4())
             )
+        if mode == "stale":
+            raise DemoError("STALE_GENERATION", generation=7, auth_epoch=1)
         raise HTTPException(status_code=404)
 
     @app.get("/probe-crash")
     async def probe_crash(user=Depends(deps.get_current_user)):
         raise RuntimeError(os.environ["DEMO_DATA_ROOT"])
 
-    for route in app.routes[-2:]:
+    aborts = []
+
+    @app.get("/probe-owned")
+    async def probe_owned(
+        request: Request, user=Depends(deps.get_current_user)
+    ):
+        from fastapi.responses import PlainTextResponse
+
+        mode = request.query_params["mode"]
+        # Stands in for #198's response that owns a reserved run.
+        response = PlainTextResponse("owned")
+
+        async def demo_abort():
+            aborts.append(mode)
+            if mode == "fail":
+                raise RuntimeError(os.environ["DEMO_DATA_ROOT"])
+
+        response.demo_abort = demo_abort
+        if mode != "send":
+            # Reset lands between the reservation and the boundary's finish.
+            await app.state.demo_request_db.visitors.reset_visit(
+                request.state.demo_context, str(uuid4())
+            )
+        return response
+
+    for route in app.routes[-3:]:
         route.app = request_response(
             deps.demo_request_handler(route.get_route_handler())
         )
+
+    def page(response, error_code, **detail):
+        # §11: HTML uses the envelope's status and recovery key, without a DB.
+        error = DemoError(error_code, **detail)
+        assert response.status_code == error.status_code, response.text
+        assert response.headers["content-type"].startswith("text/html")
+        assert response.headers["cache-control"] == "no-store"
+        assert "set-cookie" not in response.headers
+        assert "nav-username" not in response.text
+        context = captured[-1]
+        assert context["status_code"] == error.status_code
+        assert context["demo_error"] == error.detail
+        assert context["demo_error"]["recovery"].startswith("demo.")
+        assert context["user"] is None
+        assert context["demo_config"]["browser_scope_id"] is None
+        assert context["demo_config"]["generation"] is None
+        assert os.environ["DEMO_DATA_ROOT"] not in response.text
+
     html = {"accept": "text/html"}
     async with app.router.lifespan_context(app):
         stranger = client_for(app, "10.0.0.9")
@@ -648,11 +949,29 @@ async def case_errors(tmp):
         assert response.headers["cache-control"] == "no-store"
         assert "nav-username" not in response.text
         assert "set-cookie" not in response.headers
+        page(response, "DEMO_RESOURCE_NOT_FOUND")
         response = await stranger.get("/nope")
         assert response.status_code == 404
         assert code(response) == "DEMO_RESOURCE_NOT_FOUND"
-        response = await stranger.get("/probe-missing", headers=html)
-        assert code(response) == "DEMO_SESSION_REQUIRED"
+        captured.clear()
+        response = await stranger.get(
+            "/probe-missing", headers={"accept": "text/html;q=0.9,*/*"}
+        )
+        page(response, "DEMO_SESSION_REQUIRED")
+        assert captured[-1]["demo_error"]["recovery"] == "demo.start_required"
+        # Non-navigations keep the JSON envelope.
+        for other in (
+            {},
+            {"accept": "application/json"},
+            {**html, "hx-request": "1"},
+        ):
+            response = await stranger.get("/probe-missing", headers=other)
+            assert code(response) == "DEMO_SESSION_REQUIRED"
+        # Errors from the /demo control routes render the same way.
+        response = await stranger.get("/demo", params={"x": "1"}, headers=html)
+        page(response, "DEMO_INVALID_REQUEST")
+        response = await stranger.get("/demo", params={"x": "1"})
+        assert code(response) == "DEMO_INVALID_REQUEST"
 
         client = client_for(app)
         state = await start(client, "admin")
@@ -672,6 +991,15 @@ async def case_errors(tmp):
         assert response.status_code == 404
         assert "nav-username" not in response.text
         assert "Traceback" not in response.text
+        # A DemoError raised after the user resolved names neither user nor space.
+        client = client_for(app, "10.0.0.3")
+        state = await start(client, "admin")
+        response = await client.get(
+            "/probe-missing",
+            params={**namespace(state), "mode": "stale"},
+            headers=html,
+        )
+        page(response, "DEMO_STALE_GENERATION", generation=7, auth_epoch=1)
         # §11: unknown failures are a safe envelope without exception text.
         client = client_for(app, "10.0.0.2")
         state = await start(client, "admin")
@@ -679,6 +1007,31 @@ async def case_errors(tmp):
         assert response.status_code == 503
         assert code(response) == "DEMO_CONFIGURATION_INVALID"
         assert os.environ["DEMO_DATA_ROOT"] not in response.text
+        response = await client.get(
+            "/probe-crash", params=namespace(state), headers=html
+        )
+        page(response, "DEMO_CONFIGURATION_INVALID")
+        assert "Traceback" not in response.text
+
+        # A discarded owned response is aborted exactly once; a sent one never.
+        client = client_for(app, "10.0.0.4")
+        state = await start(client, "admin")
+        response = await client.get(
+            "/probe-owned", params={**namespace(state), "mode": "send"}
+        )
+        assert response.status_code == 200 and response.text == "owned"
+        assert aborts == []
+        for index, mode in enumerate(("reset", "fail")):
+            client = client_for(app, f"10.0.2.{index}")
+            state = await start(client, "admin")
+            response = await client.get(
+                "/probe-owned", params={**namespace(state), "mode": mode}
+            )
+            assert response.status_code >= 400, response.text
+            assert code(response).startswith("DEMO_")
+            # The abort error is logged by type name only (checked in __main__).
+            assert os.environ["DEMO_DATA_ROOT"] not in response.text
+        assert aborts == ["reset", "fail"]
     assert global_db == []
 
 
@@ -693,7 +1046,7 @@ async def case_template(tmp):
     from src.demo.session import DemoState
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     captured = []
     render = deps.templates.TemplateResponse
 
@@ -767,8 +1120,14 @@ async def case_template(tmp):
         assert not any(secret in text for secret in (*SECRETS, str(tmp)))
 
     def assert_unbound(value):
+        from src.config import config
+
         assert_safe(value)
         assert all(value[key] is None for key in namespace_keys), value
+        # TTLs are server policy, known before any visit.
+        assert value["idle_ttl_seconds"] == config.DEMO_IDLE_TTL_SECONDS
+        assert value["absolute_ttl_seconds"] == config.DEMO_ABSOLUTE_TTL_SECONDS
+        assert value["idle_ttl_seconds"] and value["absolute_ttl_seconds"]
 
     html = {"accept": "text/html"}
     async with app.router.lifespan_context(app):
@@ -819,9 +1178,9 @@ async def case_template(tmp):
         assert_unbound(captured[0])
         assert captured[0]["ui_language"] == "ko"
 
-        # A request without a current visit carries no namespace.
+        # An unvisited request (as GET /demo renders) carries no namespace.
         request = Request(
-            {"type": "http", "path": "/", "headers": [], "app": app}
+            {"type": "http", "path": "/demo", "headers": [], "app": app}
         )
         value = render(
             request, "error.html", {"user": None, "status_code": 404}
@@ -842,7 +1201,7 @@ async def case_health(tmp):
 
     app = main.app
     spec = await make_seed(Path(os.environ["DEMO_DATA_ROOT"]))
-    install_seed(main, spec)
+    install_seed(spec)
     built = len(OPENED)
     healthy = {"status": "healthy", "database": "healthy"}
     degraded = {"status": "degraded", "database": "unhealthy"}
@@ -940,7 +1299,7 @@ async def case_limits(tmp):
             return super().monotonic() + self.offset
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     async with app.router.lifespan_context(app):
         clock = OffsetClock()
         app.state.demo_request_db.visitors.clock = clock
@@ -965,6 +1324,16 @@ async def case_limits(tmp):
             assert response.status_code == 200, response.text
         response = await a.get("/metrics", params=namespace(state_a))
         assert code(response) == "DEMO_RATE_LIMITED"
+        assert 1 <= int(response.headers["retry-after"]) <= 60
+        # §11: an HTML navigation gets the same status and Retry-After.
+        response = await a.get(
+            "/metrics",
+            params=namespace(state_a),
+            headers={"accept": "text/html"},
+        )
+        assert response.status_code == 429
+        assert response.headers["content-type"].startswith("text/html")
+        assert response.headers["cache-control"] == "no-store"
         assert 1 <= int(response.headers["retry-after"]) <= 60
 
         async def without_csrf(client, state):
@@ -1016,6 +1385,74 @@ async def case_limits(tmp):
             await start(client, "admin", status=status)
 
 
+async def case_real_seed(tmp):
+    import sqlite3
+
+    from src import main
+    from src.demo import seed
+    from src.demo.database import DemoError
+
+    app = main.app
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    seed_dir = Path(os.environ["DEMO_SEED_DIR"])
+    manifest = json.loads(seed.MANIFEST.read_text())
+    async with app.router.lifespan_context(app):
+        # No stand-in: demo_seed() -> load_seed(DEMO_SEED_DIR) -> validate_seed.
+        assert app.state.demo_seed.path == seed_dir / seed.SEED_NAME
+        response = await client_for(app, "10.0.0.9").get("/health")
+        assert response.status_code == 200, response.text
+        refs = app.state.demo_request_db.seed_refs
+        assert refs == manifest["seed_refs"] and "completed_session" in refs
+        assert dict(app.state.demo_session.tour_content.seed_refs) == refs
+
+        a, b = client_for(app, "10.0.0.1"), client_for(app, "10.0.0.2")
+        state_a, state_b = await start(a, "admin"), await start(b, "admin")
+        assert state_a["browser_scope_id"] != state_b["browser_scope_id"]
+        assert len(visitor_files(root)) == 2
+        counts = [
+            (await client.get("/metrics", params=namespace(state))).json()
+            for client, state in ((a, state_a), (b, state_b))
+        ]
+        assert counts[0]["database"] == counts[1]["database"]
+        assert counts[0]["database"]["users"] > 0
+        ns = namespace(state_a)
+        response = await a.post(
+            "/admin/groups",
+            json={"name": "Visitor A only"},
+            headers=headers(a)
+            | {
+                "x-demo-scope": ns["ds"],
+                "x-demo-generation": str(ns["dg"]),
+                "x-demo-auth-epoch": str(ns["da"]),
+            },
+        )
+        assert response.status_code == 201, response.text
+        pages = [
+            await client.get(
+                "/admin/groups",
+                params=namespace(state),
+                headers={"accept": "text/html"},
+            )
+            for client, state in ((a, state_a), (b, state_b))
+        ]
+        assert all(page.status_code == 200 for page in pages), pages[1].text
+        assert "Visitor A only" in pages[0].text
+        assert "Visitor A only" not in pages[1].text
+
+    # A tampered seed refuses startup and binds nothing.
+    with sqlite3.connect(seed_dir / seed.SEED_NAME) as db:
+        db.execute(
+            "UPDATE \"user\" SET nickname = nickname || '!' WHERE id = 1"
+        )
+    db.close()
+    try:
+        async with app.router.lifespan_context(app):
+            raise AssertionError("tampered seed started")
+    except DemoError as error:
+        assert error.code == "DEMO_VERSION_MISMATCH", error.code
+    assert getattr(app.state, "demo_request_db", None) is None
+
+
 async def case_shutdown(tmp):
     import time
 
@@ -1024,7 +1461,7 @@ async def case_shutdown(tmp):
 
     app = main.app
     root_path = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(main, await make_seed(root_path))
+    install_seed(await make_seed(root_path))
     async with app.router.lifespan_context(app):
         runtime = app.state.demo_request_db
         held = client_for(app)
@@ -1050,7 +1487,7 @@ async def case_restart(tmp):
 
     app = main.app
     root_path = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(main, main_spec(root_path))
+    install_seed(main_spec(root_path))
     assert len(visitor_files(root_path)) == 1
     async with app.router.lifespan_context(app):
         visitors = app.state.demo_request_db.visitors
@@ -1139,8 +1576,13 @@ if __name__ == "__main__":
 
     asyncio.run(run())
     root = os.environ["DEMO_DATA_ROOT"]
-    # No normal DB file is created or opened in demo.
-    assert all(p == ":memory:" or p.find(root) >= 0 for p in OPENED), OPENED
+    # No normal DB file is created or opened in demo; only root and seed dir.
+    assert all(
+        p == ":memory:"
+        or p.find(root) >= 0
+        or p.find(os.environ["DEMO_SEED_DIR"]) >= 0
+        for p in OPENED
+    ), OPENED
     assert not any("dialogue_sim" in path for path in OPENED)
     text = logs.getvalue()
     values = [*SECRETS, root]

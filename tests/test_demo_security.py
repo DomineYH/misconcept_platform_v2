@@ -66,6 +66,7 @@ def demo_env(tmp_path, **extra):
         TESTING="false",
         ENV="production",
         DEMO_DATA_ROOT=str(tmp_path / "demo"),
+        DEMO_SEED_DIR=str(tmp_path / "seed"),
         DEMO_ORIGIN=DEMO,
         NORMAL_ORIGIN="https://normal.test",
         DEMO_SESSION_SECRET=SECRETS[0],
@@ -491,7 +492,7 @@ async def case_csrf(tmp):
 
     app = main.app
     root = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(main, await make_seed(root))
+    install_seed(await make_seed(root))
     async with app.router.lifespan_context(app):
         a, b = client_for(app, "10.0.0.1"), client_for(app, "10.0.0.2")
         # §10 cookie attributes on the bootstrap response.
@@ -713,9 +714,9 @@ async def case_auth(tmp):
     app = main.app
     spec = await make_seed(Path(os.environ["DEMO_DATA_ROOT"]))
     await keep_real_tables(spec, tmp)
-    # The delete route's tour-fact capture needs the full seed_refs set that
-    # the shared stand-in omits (#197 supplies the product one).
-    refs = dict(admin=1, teacher=2, group=1, scenario=1, completed_session=1)
+    # The delete route's tour-fact capture needs the full seed_refs set, and
+    # startup requires exactly the manifest's (#197 supplies the product one).
+    refs = json.loads(spec.manifest_path.read_text())["seed_refs"]
     main.demo_seed = lambda: (
         spec,
         SimpleNamespace(seed_refs=refs, supported_snapshot=lambda row: False),
@@ -896,7 +897,7 @@ async def case_dangerous(tmp):
 
     app = main.app
     root = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(main, await make_seed(root))
+    install_seed(await make_seed(root))
     async with app.router.lifespan_context(app):
         admin = client_for(app)
         state = await start(admin, "admin")
@@ -922,7 +923,7 @@ async def case_egress(tmp):
     from src import main
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
     async with app.router.lifespan_context(app):
         runtime = app.state.demo_request_db
         client = client_for(app)

@@ -434,6 +434,7 @@ def run_case(case, tmp_path, **extra):
         TESTING="false",
         ENV="production",
         DEMO_DATA_ROOT=str(tmp_path / "demo"),
+        DEMO_SEED_DIR=str(tmp_path / "seed"),
         DEMO_ORIGIN="https://demo.test",
         NORMAL_ORIGIN="https://normal.test",
         DEMO_SESSION_SECRET="s" * 48,
@@ -476,7 +477,7 @@ async def case_two_tabs(tmp):
 
     app = main.app
     root_path = Path(os.environ["DEMO_DATA_ROOT"])
-    app_tests.install_seed(main, await app_tests.make_seed(root_path))
+    app_tests.install_seed(await app_tests.make_seed(root_path))
     async with app.router.lifespan_context(app):
         visitors = app.state.demo_request_db.visitors
         tab_a = app_tests.client_for(app)
@@ -536,7 +537,7 @@ async def case_two_tabs(tmp):
 
 async def seed_app(app_tests, main):
     app_tests.install_seed(
-        main, await app_tests.make_seed(Path(os.environ["DEMO_DATA_ROOT"]))
+        await app_tests.make_seed(Path(os.environ["DEMO_DATA_ROOT"]))
     )
 
 

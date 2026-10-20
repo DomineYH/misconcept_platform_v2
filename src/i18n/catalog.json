@@ -5025,6 +5025,86 @@
     "back_to_entry": {
       "ko": "데모 처음 화면으로",
       "en": "Back to the demo start"
+    },
+    "tour.title": {
+      "ko": "데모 안내",
+      "en": "Demo guide"
+    },
+    "tour.complete": {
+      "ko": "완료",
+      "en": "Done"
+    },
+    "tour.current": {
+      "ko": "지금 단계",
+      "en": "Current step"
+    },
+    "tour.pending": {
+      "ko": "대기",
+      "en": "Not yet"
+    },
+    "tour.close": {
+      "ko": "안내 닫기",
+      "en": "Close guide"
+    },
+    "tour.skip": {
+      "ko": "안내 건너뛰기",
+      "en": "Skip guide"
+    },
+    "tour.resume": {
+      "ko": "안내 다시 보기",
+      "en": "Show guide"
+    },
+    "tour.restart": {
+      "ko": "안내 다시 시작",
+      "en": "Restart guide"
+    },
+    "role_teacher": {
+      "ko": "교사로 전환",
+      "en": "Switch to teacher"
+    },
+    "role_admin": {
+      "ko": "관리자로 전환",
+      "en": "Switch to administrator"
+    },
+    "reset_question": {
+      "ko": "내 데모를 초기화할까요? 이 방문의 임시 자료가 모두 처음 예시 상태로 바뀝니다.",
+      "en": "Reset your demo? All temporary data in this visit returns to the initial example state."
+    },
+    "reset_done": {
+      "ko": "초기화가 끝났습니다. 새 체험 공간에서 다시 시작합니다.",
+      "en": "Reset finished. The guide starts again in your new demo space."
+    },
+    "entry_title": {
+      "ko": "데모 체험",
+      "en": "Try the demo"
+    },
+    "entry_intro": {
+      "ko": "허구의 예시 자료와 미리 준비된 응답으로 교사·관리자 화면을 체험합니다. 외부 AI는 호출하지 않습니다.",
+      "en": "Explore the teacher and administrator screens with fictional sample data and prepared responses. No external AI is called."
+    },
+    "entry_retention": {
+      "ko": "체험 자료는 이 방문의 임시 공간에만 저장되며 {idle_minutes}분 동안 사용하지 않거나 시작 후 {absolute_hours}시간이 지나면 삭제됩니다.",
+      "en": "Demo data is kept only in this visit's temporary space and is deleted after {idle_minutes} minutes without use or {absolute_hours} hours after you start."
+    },
+    "choose_role": {
+      "ko": "체험할 역할을 고르세요",
+      "en": "Choose a role to explore"
+    },
+    "start_teacher": {
+      "ko": "교사로 시작",
+      "en": "Start as teacher"
+    },
+    "start_admin": {
+      "ko": "관리자로 시작",
+      "en": "Start as administrator"
+    },
+    "record_seed_prepared": {
+      "ko": "준비된 예시 기록",
+      "en": "Prepared example record"
+    },
+    "record_visitor_generated": {
+      "ko": "이 체험에서 만든 기록",
+      "en": "Record created in this demo"
     }
   }
 }

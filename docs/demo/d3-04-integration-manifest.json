@@ -1,9 +1,10 @@
 {
   "schema": "d3-04-integration-manifest-v1",
-  "status": "pr-a-run-2",
-  "candidate_commit": "40ef3b6b0e59da37e43842ad9bb0f556f2559078",
-  "normal_commit": "40ef3b6b0e59da37e43842ad9bb0f556f2559078",
-  "demo_commit": "40ef3b6b0e59da37e43842ad9bb0f556f2559078",
+  "status": "g4-candidate-run-3",
+  "candidate_commit": "de3054a00282e1bbfc97784918059f653ac08811",
+  "normal_commit": "de3054a00282e1bbfc97784918059f653ac08811",
+  "demo_commit": "de3054a00282e1bbfc97784918059f653ac08811",
+  "tested_commit": "ff4ddae7c91b506758f7ce13ca413f0720739fce",
   "g4_final_commit": null,
   "contract_version": "d0-03-v1-r3",
   "contract_commit": "d6455d10c2d75acde811f85a53143be086d67545",
@@ -13,10 +14,10 @@
   "manifest_sha256": "60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516",
   "db_schema_version": "037_demo_provider.sql",
   "migration_set_sha256": "d245be48d9b05c13264a43b146343388d85d81a43ad199490054ee45f79beec1",
-  "seed_sha256": "591614eb45d41c13a19f83dc0713dabb3ebbdab56442a43bb525c3320bbf7761",
+  "seed_sha256": "4fe0100c797d939682a295cf17ee5eefee28cf1ef23cdf084c76d06baa6076ac",
   "logical_data_sha256": "93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141",
   "seed_command": "python -m src.demo.seed build --out <tmp>/seed",
-  "seed_receipt_source_commit": "40ef3b6b0e59da37e43842ad9bb0f556f2559078",
+  "seed_receipt_source_commit": "ff4ddae7c91b506758f7ce13ca413f0720739fce",
   "settings_sha256": null,
   "inputs": [
     {
@@ -186,31 +187,38 @@
       "pr": 250,
       "branch": "fix/202-d2-provenance",
       "merge_commit": "0cc3fab04b6580b999b0ca95ca222687f7ffea85"
-    }
-  ],
-  "pending_inputs": [
+    },
     {
       "issue": "#198",
       "pr": 251,
-      "stage": "PR4 (G3: D1/D1b/close_session/REQUEST_CONFLICT)",
       "branch": "feat/198-g3",
-      "head_commit": "ae8c76dea86aa3a7abd01cf86366e9e0e81e85c7",
-      "merge_commit": null
+      "merge_commit": "fbbcad74f5e382c56cab7fbc1e42c53112125361"
     },
     {
       "issue": "#200",
       "pr": 248,
-      "stage": "PR4 (tests/docs)",
       "branch": "feat/200-evidence",
-      "head_commit": null,
-      "merge_commit": null
+      "merge_commit": "190d74baf317d6e267cfa0e342c067f8cb2f0f51"
+    },
+    {
+      "issue": "#204",
+      "pr": 252,
+      "branch": "fix/d5-tour-facts",
+      "merge_commit": "de3054a00282e1bbfc97784918059f653ac08811"
+    },
+    {
+      "issue": null,
+      "pr": 249,
+      "branch": "fix/ci-flakes",
+      "merge_commit": "23bbfbacaaddb255ed34c2cd679f35f8f8dc1812"
     }
   ],
+  "pending_inputs": [],
   "checks": [
     {
       "name": "smoke",
       "command": "npm run test:browser -- demo_d3_04",
-      "run_commit": "40ef3b6b0e59da37e43842ad9bb0f556f2559078",
+      "run_commit": "ff4ddae7c91b506758f7ce13ca413f0720739fce",
       "result": "passed (E4 not run)",
       "evidence": "docs/demo/d3-04-integration-evidence.md"
     },
@@ -218,45 +226,47 @@
       "name": "pytest full",
       "command": "uv run --frozen python -m pytest -q",
       "run_commit": null,
-      "result": "not run",
+      "result": "not run (CI on PR head)",
       "evidence": null
     },
     {
       "name": "ruff",
       "command": "uv run --frozen ruff check .",
       "run_commit": null,
-      "result": "not run",
+      "result": "not run (CI on PR head)",
       "evidence": null
     },
     {
       "name": "black",
       "command": "uv run --frozen black --check .",
       "run_commit": null,
-      "result": "not run",
+      "result": "not run (CI on PR head)",
       "evidence": null
     },
     {
       "name": "browser full",
       "command": "npm run test:browser",
       "run_commit": null,
-      "result": "not run",
+      "result": "not run (CI on PR head)",
       "evidence": null
     },
     {
       "name": "live",
       "command": "uv run --frozen python tests/check_student_live.py",
       "run_commit": null,
-      "result": "not run",
+      "result": "not run (CI on PR head)",
       "evidence": null
     }
   ],
   "notes": {
-    "candidate_commit": "실행 2의 tree SHA다(main 0cc3fab + #251 head ae8c76d merge 0f1bbd2 + smoke/docs commit, 제품 diff는 그 merge와 0). main에 같은 tree가 없으므로 G4 후보가 아니다. normal_commit/demo_commit은 같은 전체 SHA다.",
-    "g4_final_commit": "G4 고정 SHA가 아직 없다. #251(#198 PR4)은 열려 있고(head ae8c76d), #248(#200 PR4)도 열려 있다.",
+    "candidate_commit": "G4 후보는 main de3054a00282e1bbfc97784918059f653ac08811(#248, #249, #250, #251, #252 병합 포함)다. normal_commit/demo_commit은 같은 전체 SHA다. 이후 제품 코드는 고정이다.",
+    "g4_final_commit": "maintainer가 G4를 승인할 때까지 null이다. 승인란은 d3-04-integration-evidence.md의 'G4 승인' 절에 있다.",
     "settings_sha256": "계약 §28은 비밀 제외 정규화 설정과 비밀 주입 참조/버전만 hash하도록 요구한다. 저장소에 정규화 canonical 절차가 없고 배포 설정/주입 참조도 아직 없다(D5-02 입력). 만들어 내지 않고 산출하지 않았다.",
-    "checks.smoke.result": "실행 2(40ef3b6): step 1–6, E1–E3, E5, E6, N1 passed; E4 not run(TTL 하한 300초). 실행 1(4dcdf40, main 1a40dc2)은 step 4/E6 failed였다. 단계별 기록은 d3-04-integration-evidence.md에 있다.",
-    "run_commit": "smoke 실행 SHA 40ef3b6. seed receipt의 source_commit도 이 SHA다.",
-    "seed_sha256": "실행 2의 receipt 값이다. 물리 DB hash는 bcrypt salt 때문에 build마다 달라지고(§17), logical_data_sha256은 고정이다(#250으로 93808c61…로 바뀜).",
-    "checks.full": "PR-A는 필터링한 smoke만 로컬 실행한다. 전체 회귀(pytest/ruff/black/browser full/live) 증거는 PR head 또는 G4 SHA의 CI에서 얻으며 이 manifest의 PR-A 단계에서는 실행하지 않았다(run_commit null, evidence null)."
+    "checks.smoke.result": "실행 3(ff4ddae, 후보 de3054a): step 1–6, E1–E3, E5, E6, N1 passed; E4 not run(TTL 하한 300초). 실행 1(4dcdf40, main 1a40dc2)은 step 4/E6 failed, 실행 2(40ef3b6, main 0cc3fab + #251 head)는 passed였다. 단계별 기록은 d3-04-integration-evidence.md에 있다.",
+    "run_commit": "smoke 실행 SHA ff4ddae. seed receipt의 source_commit도 이 SHA다.",
+    "seed_sha256": "실행 3의 receipt 값이다. 물리 DB hash는 bcrypt salt 때문에 build마다 달라지고(§17), logical_data_sha256은 고정이다(#250 이후 93808c61…, 실행 2와 같음).",
+    "checks.full": "로컬에서는 필터링한 smoke만 실행했다. 전체 회귀(pytest/ruff/black/browser full/live)는 이 branch PR head의 CI 결과를 쓴다(run_commit null, evidence null).",
+    "tested_commit": "실행 3의 tree SHA ff4ddae7c91b506758f7ce13ca413f0720739fce는 후보 de3054a를 feat/202-smoke에 merge한 commit이다. 후보와의 diff는 smoke 모듈과 d3-04 문서뿐이고 제품 diff는 0이다.",
+    "inputs.249": "#249는 CI flake 두 개를 고친 test 전용 PR이며 연결 issue가 없다."
   }
 }

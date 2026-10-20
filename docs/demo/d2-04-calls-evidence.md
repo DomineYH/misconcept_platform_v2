@@ -3,8 +3,10 @@
 Gate: G3. Issue: #198 (D2-04), PR4. Tested code SHA:
 `f0a0c2175bd111612109e1f8fa48d078c8136a5a` on `feat/198-g3` (base main
 `1a40dc2`). A1 (`f969a3c9e849a4ea367eb6121d01a7b95299b4c4`) adds the
-close-session fix; its rerun is in the A1 section. Commits that change only
-this file change no code.
+close-session fix. Repair r1 (`b6e1abbdfc194841f5d814065d93344af153badb`)
+tightens the G3 test and fixes the demo analysis conflict code. The A1 and
+r1 sections hold their reruns; the acceptance table reflects r1. Commits
+that change only this file change no code.
 
 Contract binding: `d0-03-v1-r3`. The d0-03-v2 §31 note only removes the
 `openai_helpers` / `session_feedback` guard requirement. It changes no wire
@@ -85,6 +87,20 @@ A1 rerun at `f969a3c` (fresh; same setup):
 Red at `d802bb7` + the new test: `test_g3_close_during_stream_cancels_it`
 timed out waiting for the held stream.
 
+Repair r1 rerun at `b6e1abb` (fresh; same setup):
+
+| Command | Collected | Passed | Elapsed |
+| --- | --- | --- | --- |
+| `pytest -q tests/test_demo_d2_04_g3.py` | 4 | 4 | 39 s |
+| `pytest -q tests/test_demo_d2_04_calls.py tests/test_demo_d2_04_analysis.py tests/test_demo_d3_02_guards.py tests/test_demo_security.py` | 199 | 197 (+2 skipped) | 148 s |
+| `pytest -q` with the 20 suites that call `/end` or `/analyze` (listed in `r1-analysis-routes.log`) | 215 | 215 | 346 s |
+| `pytest -q tests/test_student_lifecycle.py tests/test_mentor_lifecycle.py tests/test_student_failures.py` | 40 | 40 | 30 s |
+| `ruff check .` / `black --check .` | n/a | pass | n/a |
+
+The 2 skips are pre-existing placeholders in `tests/test_demo_security.py`
+(#203's file; their reasons say "needs G4"). Red at `5d2b027`: the
+`/analyze` conflict returned `{"code": "request_conflict"}`.
+
 ## Acceptance
 
 Test ids are in `tests/test_demo_d2_04_g3.py` unless noted.
@@ -95,8 +111,10 @@ Test ids are in `tests/test_demo_d2_04_g3.py` unless noted.
 | Final saves exist only in the visitor's DB: student and mentor runs `completed`, analysis run `ok` and adopted, messages linked, session ended, no rows in the other visitor's DB | §6 | `test_g3_flow_on_real_seed` | PASS |
 | Ledger: one row per call (attempt 1), provider `demo`, `completed`, every usage, cost and pricing column null, `usage_complete` false | §19 | `test_g3_flow_on_real_seed` | PASS |
 | Provenance `prepared_example`, `external_ai_called=false` and `visitor_generated` on the SSE terminal, `/runs/{id}`, the analysis run and the analysis JSON | §19 | `test_g3_flow_on_real_seed` | PASS |
-| Reset during a held student stream: the stream ends with a body-free `run.*` terminal, the run row in the old DB is unchanged, it has no message or finished ledger row, the new generation has no such run, and cleanup removes the old DB without recreating it | §6, §7, C06 | `test_g3_reset_during_stream` | PASS |
-| Egress 0: SDK constructors (OpenAI/Anthropic/Gemini), the httpx and requests transports, `socket.connect`, `connect_ex` and `create_connection` all stay at 0 from before startup until after shutdown and cleanup. This covers every §20 forbidden POST (403 `DEMO_ACTION_FORBIDDEN`) plus the probe request for the seed model, and those leave 0 probe, comparison and external ledger rows. A canary proves each spy fires before the window opens | §14, §20, C14, C20 | both tests | PASS |
+| Reset during a held student stream: the stream ends with a `run.*` terminal that has no text/partial_text/content/delta key, no message object and none of the streamed delta text. The run row in the old DB is unchanged, it has no message or finished ledger row, the new generation has no such run, and cleanup removes the old DB without recreating it | §6, §7, C06 | `test_g3_reset_during_stream` | PASS |
+| Two-visitor isolation: visitor B holds a stream in a session with the same ID while A closes or resets. B is not cancelled (its run stays `running`), completes after release, and its DB survives A's reset cleanup | §27 C05, §6 | `test_g3_close_during_stream_cancels_it`, `test_g3_reset_during_stream` | PASS |
+| Manual demo analysis: close, then `POST /sessions/{id}/analyze` (202) runs to adopted `ok` with demo provenance and one attempt-1 null-usage ledger row. A replay returns the same run. The student turn's `request_id` returns 409 `DEMO_REQUEST_CONFLICT` with recovery `demo.refresh_state` and generation/auth_epoch. Neither creates a run or ledger row | §16, §11, §19 | `test_g3_analyze_route_on_real_seed` | PASS |
+| Egress 0: SDK constructors (OpenAI/Anthropic/Gemini), the httpx and requests transports, `socket.connect`, `connect_ex` and `create_connection` all stay at 0 from before startup until after shutdown and cleanup. Each hook records and raises; only AF_UNIX sockets reach the real functions, so no outbound connection is made. This covers every §20 forbidden POST (403 `DEMO_ACTION_FORBIDDEN`) plus the probe request for the seed model, and those leave 0 probe, comparison and external ledger rows. Before startup, a canary fires each of the 11 hooks once and checks its own label: connect, connect_ex, create_connection, httpx sync, awaited httpx async, requests, OpenAI, AsyncOpenAI, Anthropic, AsyncAnthropic, genai.Client. Then it clears the log | §14, §20, C14, C20 | all four tests | PASS |
 | Closing a demo session during a held stream cancels that stream in the visitor scope: `/sessions/{id}/close` returns 200, the stream ends with a non-completed `run.*` terminal without being released, the run is `cancelled` with no message, and egress stays 0 | §6, C05 | `test_g3_close_during_stream_cancels_it` (A1) | PASS |
 | The real `supported_config_sha256` from `src/services/model_configuration.py` is used; mismatches come from the manifest, not a faked helper | §16.1 | `tests/test_demo_d2_04_calls.py::test_s2r_*` | PASS |
 | A demo analysis plan estimate needs no SDK adapter | §14/§16 | `tests/test_demo_d2_04_calls.py::test_s2_demo_analysis_plan_estimate_needs_no_sdk_adapter` | PASS |
@@ -113,13 +131,15 @@ Test ids are in `tests/test_demo_d2_04_g3.py` unless noted.
 3. `close_session` (`sessions.py`) ended the session without the demo ctx,
    so a live demo stream was never signalled. Fixed in `f969a3c` (A1): it
    now uses `demo_scope` and `guarded_db`, as `end_session` does.
+4. A demo `/end` or `/analyze` request_id conflict returned the legacy
+   `{"code": "request_conflict"}` instead of §11 `DEMO_REQUEST_CONFLICT`.
+   Fixed in `b6e1abb` (r1): the analysis routes raise the demo error and map
+   other known refusals with `demo_error_response`.
 
 ## Not run / untested
 
 - Full pytest suite: CI on the PR head, per the testing policy.
 - `tests/check_student_live.py`: not run. No student stream file changed.
-- `/sessions/{id}/analyze` (manual re-analysis) in demo: not driven by G3.
-  It gets the same adapter wiring as `/end`.
 - Admin `analyze_regenerate` in demo has no demo adapter. That is #200's
   file and the coordinator has routed it there.
 

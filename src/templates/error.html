@@ -1,5 +1,9 @@
 {% extends "layout.html" %}
-{% set title_key = 'common.error_not_found_title' if status_code == 404 else 'common.error_forbidden_title' %}
+{% set demo_error = demo_error if demo_error is defined and demo_error else none %}
+{% set demo_page = demo_error or (demo_config is defined and demo_config and demo_config.mode == 'demo') %}
+{# 403/404 keep their own title; other demo statuses (§11) are titled by the recovery key. #}
+{% set own_title = status_code in (403, 404) or not demo_error %}
+{% set title_key = ('common.error_not_found_title' if status_code == 404 else 'common.error_forbidden_title') if own_title else demo_error.recovery %}
 {% set description_key = 'common.error_not_found_description' if status_code == 404 else 'common.error_forbidden_description' %}
 
 {% block title %}{{ status_code }} · {{ t(title_key) }}{% endblock %}
@@ -7,10 +11,10 @@
 {% block content %}
 <section class="empty-state" aria-labelledby="error-title">
   <p>{{ status_code }}</p>
-  <h2 class="empty-state-title" id="error-title">{{ t(title_key) }}</h2>
-  <p>{{ t(description_key) }}</p>
-  <a href="/scenarios" class="btn-primary">{{ t('common.error_back_to_scenarios') }}</a>{% if demo_config is defined and demo_config and demo_config.mode == 'demo' %}
-  <p>{{ t('demo.not_found' if status_code == 404 else 'demo.action_forbidden') }}</p>
+  <h2 class="empty-state-title" id="error-title">{{ t(title_key) }}</h2>{% if own_title %}
+  <p>{{ t(description_key) }}</p>{% endif %}
+  <a href="/scenarios" class="btn-primary">{{ t('common.error_back_to_scenarios') }}</a>{% if demo_page %}{% if own_title %}
+  <p>{{ t(demo_error.recovery if demo_error else 'demo.not_found' if status_code == 404 else 'demo.action_forbidden') }}</p>{% endif %}
   <a href="/demo" class="btn-secondary">{{ t('demo.back_to_entry') }}</a>{% endif %}
 </section>
 {% endblock %}

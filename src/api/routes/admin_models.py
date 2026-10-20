@@ -14,8 +14,12 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_admin_user, get_db_session
-from src.api.routes.admin_providers import CredentialRoute, Provider
+from src.api.dependencies import get_db_session
+from src.api.routes.admin_providers import (
+    CredentialRoute,
+    Provider,
+    demo_read_only,
+)
 from src.models.model_config import ModelConfig
 from src.models.provider_connection import ProviderConnection, now
 from src.models.user import User
@@ -53,7 +57,7 @@ class ModelRegistration(BaseModel):
 @router.post("/admin/ai/models")
 async def register_model(
     data: ModelRegistration,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     connection = await db.scalar(
@@ -120,7 +124,7 @@ async def commit_configuration(db, statement):
 async def update_model(
     model_id: int,
     data: ModelUpdate,
-    user: User = Depends(get_admin_user),
+    user: User = Depends(demo_read_only),
     db: AsyncSession = Depends(get_db_session),
 ):
     model = await db.get(ModelConfig, model_id)

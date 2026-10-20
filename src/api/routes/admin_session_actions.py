@@ -1,5 +1,6 @@
 """Admin session action routes."""
 
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import (
@@ -22,6 +23,7 @@ from src.api.dependencies import (
     get_demo_session,
     templates,
 )
+from src.api.routes.admin_providers import execution_registry
 from src.api.routes.session_helpers import (
     mark_session_ended,
     require_native_session,
@@ -74,6 +76,26 @@ async def demo_delete(request, delete, *, teacher_id=None, session_id=None):
     return result
 
 
+def analysis_context(request):
+    """Demo analysis runs under the visitor guard and its bound lifecycle."""
+    return {
+        "ctx": getattr(request.state, "demo_context", None),
+        "registry": execution_registry(request),
+    }
+
+
+@asynccontextmanager
+async def analysis_db(request, db):
+    """The services commit inside ctx's write guard, which the demo request
+    session's own guard would re-enter, so demo gives them a visitor session."""
+    if config.APP_MODE != "demo":
+        yield db
+        return
+    await db.commit()  # Ends the read so the HTML reload sees the end state.
+    async with request.state.demo_context.factory() as own:
+        yield own
+
+
 def session_missing(request):
     if config.APP_MODE == "demo":
         return DemoError("RESOURCE_NOT_FOUND")
@@ -112,17 +134,23 @@ async def end_session(
         raise session_missing(request)
 
     require_native_session(session, language=display_language(request))
-    await mark_session_ended(
-        session, db, force=True, language=display_language(request)
-    )
-    accepted = await request_analysis(
-        db,
-        session_id,
-        user.id,
-        body.request_id if body else str(uuid4()),
-        plan_hash=body.plan_hash if body else None,
-        language=display_language(request),
-    )
+    async with analysis_db(request, db) as work:
+        await mark_session_ended(
+            session if work is db else await work.get(Session, session_id),
+            work,
+            force=True,
+            language=display_language(request),
+            **analysis_context(request),
+        )
+        accepted = await request_analysis(
+            work,
+            session_id,
+            user.id,
+            body.request_id if body else str(uuid4()),
+            plan_hash=body.plan_hash if body else None,
+            language=display_language(request),
+            **analysis_context(request),
+        )
     if body is not None:
         return accepted
 
@@ -333,15 +361,17 @@ async def regenerate_analysis(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Reserve a new analysis while preserving the accepted report."""
-    return await request_analysis(
-        db,
-        session_id,
-        user.id,
-        body.request_id,
-        regenerate=True,
-        plan_hash=body.plan_hash,
-        language=display_language(request),
-    )
+    async with analysis_db(request, db) as work:
+        return await request_analysis(
+            work,
+            session_id,
+            user.id,
+            body.request_id,
+            regenerate=True,
+            plan_hash=body.plan_hash,
+            language=display_language(request),
+            **analysis_context(request),
+        )
 
 
 @router.get("/admin/sessions/{session_id}/analysis/runs/{run_id}")
@@ -376,11 +406,13 @@ async def cancel_admin_analysis_run(
     session = await db.get(Session, session_id)
     if session is None or session.deleted_at is not None:
         raise session_missing(request)
-    return await cancel_analysis(
-        db,
-        session_id,
-        run_id,
-        user.id,
-        admin=True,
-        language=display_language(request),
-    )
+    async with analysis_db(request, db) as work:
+        return await cancel_analysis(
+            work,
+            session_id,
+            run_id,
+            user.id,
+            admin=True,
+            language=display_language(request),
+            **analysis_context(request),
+        )

@@ -17,6 +17,7 @@ os.environ.update(
 )
 from src.api.dependencies import templates  # noqa: E402
 from src.i18n import display_language, translate  # noqa: E402
+from tests.demo_d3_01_fixtures import demo_fixture  # noqa: E402
 from tests.s2_screen_fixtures import editor_fixture  # noqa: E402
 from tests.s4_screen_fixtures import analysis_fixture  # noqa: E402
 from tests.s5_terminal_fixtures import terminal_fixtures  # noqa: E402
@@ -681,6 +682,10 @@ class Handler(BaseHTTPRequestHandler):
                 .encode()
             )
             mime = "text/html; charset=utf-8"
+        elif path.path.startswith("/fixtures/demo/"):
+            status_code, mime, body = demo_fixture(
+                path.path, query, self.display_request()
+            )
         elif path.path.startswith("/static/"):
             target = Path(path.path[1:]).resolve()
             if (

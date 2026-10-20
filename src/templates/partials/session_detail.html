@@ -1,5 +1,6 @@
 <div class="session-detail">
-  {% include "partials/snapshot_provenance.html" %}
+  {% include "partials/snapshot_provenance.html" %}{% if provenance is defined and provenance and provenance.record_origin in ('seed_prepared', 'visitor_generated') %}
+  <p class="demo-record-origin" data-record-origin="{{ provenance.record_origin }}">{{ t('demo.record_seed_prepared') if provenance.record_origin == 'seed_prepared' else t('demo.record_visitor_generated') }}</p>{% endif %}
   <div class="session-info">
     <dl>
       <dt>{{ t('teacher.session_id') }}</dt>

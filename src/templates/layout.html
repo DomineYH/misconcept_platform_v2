@@ -18,7 +18,8 @@
     {% endblock %}
   </title>
   <link rel="stylesheet" href="/static/css/styles.css">{% if demo_on %}
-  <link rel="stylesheet" href="/static/css/demo-tour.css">{% endif %}
+  <link rel="stylesheet" href="/static/css/demo-tour.css">
+  <script src="/static/js/demo-tour.js" defer></script>{% endif %}
   <script id="ui-strings" type="application/json">{{ ui_strings(ui_lang, i18n_areas|default([]))|tojson }}</script>{% if demo %}
   {#- §24 display-safe fields only; anything else the caller passes stays out. #}
   {%- set demo_json = {} %}
@@ -43,7 +44,7 @@
 </head>
 <body>
   <a href="#main-content" class="skip-link">{{ t('common.skip') }}</a>{% if demo_on %}
-  <div class="demo-banner" role="note"><strong>{{ t('demo.banner') }}</strong> <span>{{ t('demo.content_language') }}</span></div>{% endif %}
+  <div class="demo-banner" role="note"><strong>{{ t('demo.banner') }}</strong> <span>{{ t('demo.content_language') }}</span> <button type="button" class="btn-link demo-tour-resume" data-demo-action="resume" hidden>{{ t('demo.tour.resume') }}</button></div>{% endif %}
   {% set current_path = request.url.path if request is defined else '' %}
   <header>
     <nav aria-label="{{ t('common.navigation') }}">
@@ -88,7 +89,27 @@
         </div>
       </div>
     </nav>
-  </header>
+  </header>{% if demo_on and demo_tour|default(true) %}
+  <section id="demo-tour" class="demo-tour" aria-labelledby="demo-tour-title"
+           data-label-complete="{{ t('demo.tour.complete') }}" data-label-current="{{ t('demo.tour.current') }}"
+           data-label-pending="{{ t('demo.tour.pending') }}" data-label-reset-done="{{ t('demo.reset_done') }}">
+    <h2 id="demo-tour-title" tabindex="-1">{{ t('demo.tour.title') }}</h2>
+    <ol class="demo-tour-steps">
+      {%- for step in ['start', 'scenario', 'dialogue', 'analysis', 'admin_csv', 'reset'] %}
+      <li data-demo-step="{{ step }}" data-state="pending"><span class="demo-step-name">{{ t('demo.tour.' ~ step) }}</span> <span class="demo-step-status">{{ t('demo.tour.pending') }}</span></li>
+      {%- endfor %}
+    </ol>
+    <p id="demo-tour-status" class="demo-tour-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div class="demo-tour-actions">
+      <button type="button" class="btn-secondary" data-demo-action="role" data-demo-role="teacher">{{ t('demo.role_teacher') }}</button>
+      <button type="button" class="btn-secondary" data-demo-action="role" data-demo-role="admin">{{ t('demo.role_admin') }}</button>
+      <button type="button" class="btn-secondary" id="demo-tour-csv" hidden>{{ t('teacher.download_csv') }}</button>
+      <button type="button" class="btn-secondary" data-demo-action="reset" data-confirm="{{ t('demo.reset_question') }}">{{ t('demo.reset_confirm') }}</button>
+      <button type="button" class="btn-link" data-demo-action="restart">{{ t('demo.tour.restart') }}</button>
+      <button type="button" class="btn-link" data-demo-action="skip">{{ t('demo.tour.skip') }}</button>
+      <button type="button" class="btn-link" data-demo-action="close">{{ t('demo.tour.close') }}</button>
+    </div>
+  </section>{% endif %}
 
   <main id="main-content">
     {% block content %}

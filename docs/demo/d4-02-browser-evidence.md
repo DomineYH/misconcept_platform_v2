@@ -25,18 +25,53 @@
 - 격리: A의 역할 전환·reset 뒤 A의 이전 namespace는 409 STALE_GENERATION, B의 scope/generation/auth_epoch/role과 `/metrics` database 총계 불변.
 - `POST /login` 403 `DEMO_ACTION_FORBIDDEN`. normal mode(같은 helper `--normal`)에서 `GET /demo`, `/demo/state`, 유효 normal CSRF를 가진 `POST /demo/start|role|reset`이 모두 404, demo cookie 없음.
 
+## 실행 2 — Phase 1 재개 (2026-10-20, 작성 중 확인)
+
+- 기준: origin/main `068bcf9`(#197 seed·fixture, #200 PR2 guard, #199 PR1, #201 PR1–2 포함)을 `feat/204-browser`에 병합(`56d65b0`). 이 문서와 같은 commit의 test 파일로 실행.
+- 환경: WSL2 Linux(8 core), Python 3.12.3(uv venv), Node 24, Playwright Chromium headless, load average 약 10.
+- 명령: 모듈마다 따로 `flock /tmp/mp2-heavy.lock -c 'npm run test:browser -- <module>'`(worker 1개).
+
+| 모듈 | 결과 | 범위 |
+| --- | --- | --- |
+| `browser_demo_isolation.mjs` | passed (67.4 s) | 실행 1 항목 + 아래 추가 항목 |
+| `browser_demo_journey.mjs` | not run: 모든 case pending(needs G4 / #202). 러너의 PASS는 pending 출력뿐 | A 여섯 단계·CSV |
+| `browser_demo_recovery.mjs` | not run: 모든 case pending(needs G4 / #202). 러너의 PASS는 pending 출력뿐 | I 복구·언어·접근성 |
+
+seed receipt(#197 `build()`, helper가 매 기동 시 새로 빌드, `RECEIPT` 행):
+
+| 필드 | 값 |
+| --- | --- |
+| `source_commit` | `56d65b0e9fbcf68128ae4c06560132f7955f86d6` |
+| `db_schema_version` | `037_demo_provider.sql` |
+| `manifest_sha256` | `60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516` |
+| `seed_sha256` | `557c6b0809f153f1c0366dea7870b9e5e13df22b72f9f9982fb01bca3001c632` |
+| `logical_data_sha256` | `8d3fa9dde40a9d65273868a20271cdf767665e27c54384a54c74e575b3342980` |
+| `command` | `python -m src.demo.seed build --out <tmp>/seed` |
+
+`migration_set_sha256`은 receipt 필드가 아니며 #197 manifest가 검증한다(`build()`가 설치 migration과 다르면 실패).
+
+실행 2에서 추가로 확인한 것(#197 seed, seed_refs admin=1·teacher=2·completed_session=1):
+
+- B(§28·§3): B 관리자의 `/metrics` 총계, `/admin/ai/state`, `/admin/users`, `/admin/groups`(demo-config의 sliding `expires_at`만 정규화)와 seed 완료 세션 CSV가, A의 교사 이름 변경·사용자 생성·교사 삭제·A 측 CSV 다운로드 뒤에도 그대로다. A의 CSV는 A의 편집을 반영해 B와 다르다.
+- §23: seed 완료 세션의 관리자 CSV는 27열 + suffix 5열(`demo_response_source`…`demo_record_origin`) 순서, 행 값 `prepared_example,false,d0-02-v1,demo-fixture-v1,seed_prepared`.
+- B가 A에서 새로 만든 사용자 ID로 `POST /admin/users/<id>/update` → 404 `DEMO_RESOURCE_NOT_FOUND`, no-store, Set-Cookie 없음, 본문에 A 자료 없음. 그 뒤에도 B 불변.
+- F(§9·§22): A에서 삭제된 seed 교사로 role 전환 → 409 `DEMO_ROLE_DELETED`. 관리자 자기 삭제(`/admin/users/1/delete`) → 400(기존 제한), `/metrics` 총계와 role/auth_epoch 불변.
+
 ## 작성 중 대체(최종 evidence 전에 제거)
 
-1. seed: `src.main.demo_seed`가 아직 CONFIGURATION_INVALID이므로(`src/main.py:200`) helper가 `tests/test_demo_d1_04_app.py`의 `make_seed`/`install_seed`(합성 최소 seed)를 바인딩한다. #197 `load_seed`와 #194 S4 바인딩이 병합되면 제거하고 #197 CLI receipt(`seed_sha256`, `manifest_sha256`, `migration_set_sha256`)를 여기에 기록한다. 현재 receipt: 없음(#197 미병합).
+1. seed 바인딩: `src.main.demo_seed`가 main에서 아직 CONFIGURATION_INVALID다(`src/main.py:200`, #194 S4 = PR #242 검토 중). helper는 #197 `build()`로 실제 product seed를 새로 만들고 `src.main.demo_seed`를 `load_seed(seed_dir)`로 바인딩한다(brief의 대체 ①). 실행 1의 합성 seed(`make_seed`)는 제거했다. #194 S4가 병합되면 helper의 바인딩도 제거한다.
 2. 만료 재진입용 helper 시계(`VisitorRegistry.clock`): 아직 없음. recovery 모듈 작성 때 추가한다.
 
-## Pending(needs G4 / #202)
+## Pending
 
+needs G4 / #202:
 - A: 여섯 단계 DOM `data-demo-step`·TourFacts, reset 후 이전 URL/탭 409, CSV 파일 파싱(27+5열, 6행, 출처값, 삭제 후 비노출).
-- B: 시나리오 이름 변경·교사 삭제·대화·분석·CSV 뒤 B 불변, A의 run/세션 ID를 B에서 요청 시 404 `DEMO_RESOURCE_NOT_FOUND`.
-- F: 삭제 교사 role 전환 409 `DEMO_ROLE_DELETED`, 관리자 자기 삭제 거절.
+- B: A의 대화·분석 뒤 B 불변, A의 run ID를 B에서 요청 시 404 `DEMO_RESOURCE_NOT_FOUND`(demo 학생/멘토/분석 실행, #198).
 - I: 새로고침·뒤로/앞으로·BFCache, 중복 클릭, 투어 닫기/건너뛰기/재개, 두 탭 stale, 한/영 전환, 390×844·키보드·200% 확대, 만료 재진입.
+
+product defect -> #198:
+- B: B의 seed 세션 관리자 분석 상세가 A 편집 뒤 불변(아래 결함 때문에 확인 불가).
 
 ## 발견한 제품 결함
 
-없음.
+- #198(PR2의 context_budget demo 분기): demo에서 `GET /admin/sessions/{id}/analysis`가 503 `DEMO_CONFIGURATION_INVALID`다. `load_analysis_response` → `load_plan` → `build_plan` → `estimate_request` → `context_budget.provider_parameters`가 `PROVIDER_ADAPTERS["demo"]`를 찾다 `KeyError: 'demo'`(`src/services/context_budget.py:13`). 재현: `provider_parameters(TextRequest("demo","demo-classroom-v1","analysis","",[],{"max_output_tokens":4096},"r"))` → KeyError. 이 분기는 coordinator 결정으로 #198 PR2(w198) 담당이다.

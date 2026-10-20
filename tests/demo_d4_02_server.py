@@ -2,14 +2,16 @@
 
 python tests/demo_d4_02_server.py [--normal]
 
-Prints `READY <port>` once uvicorn serves on 127.0.0.1 and exits when
-stdin closes. Demo mode runs the real FastAPI app with TESTING=false and
-the demo session/CSRF security; --normal runs the same app in normal mode
+Demo mode first prints `RECEIPT <json>` (the #197 seed build receipt), then
+`READY <port>` once uvicorn serves on 127.0.0.1; it exits when stdin
+closes. Demo mode runs the real FastAPI app with TESTING=false and the
+demo session/CSRF security; --normal runs the same app in normal mode
 (the demo paths must 404 there). Only loopback sockets are allowed and the
 external AI SDK constructors fail.
 """
 
 import asyncio
+import json
 import os
 import secrets
 import socket
@@ -92,12 +94,18 @@ async def serve(listener, normal):
     from src import main
 
     if not normal:
-        sys.path.insert(0, str(ROOT / "tests"))
-        from test_demo_d1_04_app import install_seed, make_seed
+        from src.demo.seed import build, load_seed
 
-        # ponytail: test-side seed until #197 load_seed is bound by #194 S4;
-        # final G4 evidence must run with the product demo_seed().
-        install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+        # The #197 product seed, built fresh; its receipt goes to the evidence.
+        seed_dir = Path(os.environ["DEMO_DATA_ROOT"]).parent / "seed"
+        # The command names the temp dir symbolically: logs carry no real path.
+        receipt = await build(
+            seed_dir, command="python -m src.demo.seed build --out <tmp>/seed"
+        )
+        print("RECEIPT", json.dumps(receipt, sort_keys=True), flush=True)
+        # ponytail: test-side binding until #194 S4 binds load_seed in
+        # src.main.demo_seed; final G4 evidence must run the product binding.
+        main.demo_seed = lambda: load_seed(seed_dir)
     server = uvicorn.Server(uvicorn.Config(main.app, log_level="warning"))
     task = asyncio.create_task(server.serve(sockets=[listener]))
     while not server.started:

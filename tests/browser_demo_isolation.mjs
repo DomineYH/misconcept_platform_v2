@@ -5,24 +5,31 @@ import {tmpdir} from 'node:os';
 import {chromium} from 'playwright';
 
 // D4-02 (#204) B/F on the real app (tests/demo_d4_02_server.py); the runner's fixture page is unused.
-// These need the G4 integrated SHA: product seed, DOM hooks and visitor data routes.
+// These need the G4 integrated SHA: demo student/mentor/analysis runs (#198) on the product binding.
 const PENDING = [
-  'B: A renames/deletes teacher/runs dialogue+analysis/downloads CSV, B lists/totals/detail/settings unchanged',
-  "B: A's run/session ID requested from B -> 404 DEMO_RESOURCE_NOT_FOUND without body",
-  'F: deleted teacher role switch -> 409 DEMO_ROLE_DELETED',
-  'F: administrator self-delete refused'
+  'B: A runs a dialogue and its analysis; B lists/totals/detail unchanged',
+  "B: A's run ID requested from B -> 404 DEMO_RESOURCE_NOT_FOUND without body"
 ];
+// Product gap, not G4: GET /admin/sessions/{id}/analysis is 503 DEMO_CONFIGURATION_INVALID in demo because
+// load_plan reaches context_budget.provider_parameters, which has no "demo" adapter (KeyError, src/services/context_budget.py:13).
+const PENDING_198 = ["B: B's admin analysis detail of the seed session unchanged by A's edits"];
+// #197 manifest seed_refs (src/demo/fixtures/manifest.json).
+const SEED = {admin: 1, teacher: 2, session: 1};
+const SUFFIX = ['demo_response_source', 'demo_external_ai_called', 'demo_content_version', 'demo_fixture_version', 'demo_record_origin'];
 
 async function server(args = []) {
   const child = spawn('uv', ['run', '--frozen', 'python', 'tests/demo_d4_02_server.py', ...args], {
     stdio: ['pipe', 'pipe', 'pipe'], env: process.env
   });
   let log = '';
+  let receipt = null;
   const closed = new Promise(resolve => child.once('close', resolve));
   const port = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`helper not READY in 180s: ${log}`)), 180000);
     const read = chunk => {
       log += chunk;
+      const seed = /^RECEIPT (.+)$/m.exec(log);
+      if (seed) receipt = JSON.parse(seed[1]);
       const match = /^READY (\d+)$/m.exec(log);
       if (match) { clearTimeout(timer); resolve(Number(match[1])); }
     };
@@ -33,6 +40,7 @@ async function server(args = []) {
   });
   return {
     base: `http://127.0.0.1:${port}`,
+    receipt,
     async stop() {
       child.stdin.end();
       const code = await Promise.race([closed, new Promise(resolve => setTimeout(resolve, 20000, 'timeout'))]);
@@ -212,6 +220,60 @@ async function demoChecks(browser, {base}, pageErrors) {
   );
   assert.deepEqual((await (await metrics({})).json()).database, totalsBefore);
 
+  // §28/§3 on the #197 seed: A's admin edits and new IDs stay in A; B's lists, totals, detail, settings and CSV do not move.
+  const bGet = path => contexts.B.request.get(`${base}${path}${path.includes('?') ? '&' : '?'}${namespace(started.B)}`);
+  const view = async () => {
+    const csv = await bGet(`/admin/sessions/${SEED.session}/download`);
+    assert.equal(csv.status(), 200, await csv.text());
+    const seen = {};
+    for (const path of ['/metrics', '/admin/ai/state', '/admin/users', '/admin/groups']) {
+      const response = await bGet(path);
+      assert.equal(response.status(), 200, `${path}: ${await response.text()}`);
+      // demo-config's sliding idle expiry moves with every request (§8); /metrics also has uptime.
+      seen[path] = path === '/metrics' ? (await response.json()).database : (await response.text()).replace(/"expires_at": "[^"]*"/g, '');
+    }
+    return {seen, csv: await csv.text()};
+  };
+  const bBefore = await view();
+  // §23: the seed's completed session exports 27 admin + 5 suffix columns, marked as prepared.
+  const header = bBefore.csv.replace(/^\uFEFF/, '').split(/\r?\n/)[0].split(',');
+  assert.equal(header.length, 32, header.join(','));
+  assert.deepEqual(header.slice(27), SUFFIX);
+  assert(bBefore.csv.includes(',prepared_example,false,d0-02-v1,demo-fixture-v1,seed_prepared'), 'seed row provenance');
+  const aPost = async (path, data) => contexts.A.request.post(`${base}${path}?${namespace(fresh)}`, {
+    headers: {origin, 'x-csrf-token': await cookie(contexts.A, 'demo_csrftoken')}, data: data ?? {}
+  });
+  let response = await aPost(`/admin/users/${SEED.teacher}/update`, {nickname: 'A-renamed'});
+  assert.equal(response.status(), 200, await response.text());
+  response = await aPost('/admin/users', {username: 'a_only', password: 'password123', nickname: 'A-only'});
+  assert.equal(response.status(), 201, await response.text());
+  const created = (await response.json()).id;
+  response = await aPost(`/admin/users/${SEED.teacher}/delete`);
+  assert.equal(response.status(), 200, await response.text());
+  const aCsv = await contexts.A.request.get(`${base}/admin/sessions/${SEED.session}/download?${namespace(fresh)}`);
+  assert.equal(aCsv.status(), 200, await aCsv.text());
+  assert.notEqual(await aCsv.text(), bBefore.csv, "A's CSV reflects A's edits");
+  assert.deepEqual(await view(), bBefore, "B unchanged by A's edits");
+  // A's new user ID does not exist for B: 404 envelope only, nothing of A's data.
+  const missing = await contexts.B.request.post(`${base}/admin/users/${created}/update?${namespace(started.B)}`, {
+    headers: {origin, 'x-csrf-token': await cookie(contexts.B, 'demo_csrftoken')}, data: {nickname: 'B-edit'}
+  });
+  const missingText = await missing.text();
+  await expectCode(missing, 404, 'DEMO_RESOURCE_NOT_FOUND');
+  assert(!/A-only|a_only|A-renamed/.test(missingText), missingText);
+  assert.deepEqual(await view(), bBefore, 'B unchanged after the refused request');
+
+  // §9/§22: switching to the deleted seed teacher is refused; the administrator cannot delete itself.
+  const aNow = await state(pages.A);
+  const deleted = await control(pages.A, '/demo/role', {request_id: randomUUID(), role: 'teacher', expected_generation: aNow.generation, expected_auth_epoch: aNow.auth_epoch});
+  assert.equal(deleted.status, 409, JSON.stringify(deleted.body));
+  assert.equal(deleted.body.detail.code, 'DEMO_ROLE_DELETED');
+  const usersBefore = (await (await contexts.A.request.get(`${base}/metrics?${namespace(aNow)}`)).json()).database;
+  response = await aPost(`/admin/users/${SEED.admin}/delete`);
+  assert.equal(response.status(), 400, await response.text());
+  assert.deepEqual((await (await contexts.A.request.get(`${base}/metrics?${namespace(aNow)}`)).json()).database, usersBefore);
+  assert.deepEqual([(await state(pages.A)).role, (await state(pages.A)).auth_epoch], ['admin', aNow.auth_epoch]);
+
   // §9/§10: the normal login policy is no demo entry point; no normal cookies appear.
   await expectCode(await contexts.A.request.post(`${base}/login`, {form: {username: 'fictional-admin', password: 'x'.repeat(12)}, maxRedirects: 0}), 403, 'DEMO_ACTION_FORBIDDEN');
   for (const context of [...Object.values(contexts), stale, forged, anonymous]) {
@@ -240,10 +302,14 @@ async function normalChecks(browser, {base}) {
 
 export default async function check() {
   for (const name of PENDING) console.log(`PENDING ${name}: needs G4 / #202`);
+  for (const name of PENDING_198) console.log(`PENDING ${name}: product defect -> #198 (context_budget demo branch)`);
   const pageErrors = [];
   const [demo, normal] = await Promise.all([server(), server(['--normal'])]);
   const browser = await chromium.launch({headless: true});
   let values = [];
+  // The seed build receipt for the evidence (§17); the helper prints it before READY.
+  assert(demo.receipt?.seed_sha256 && demo.receipt.manifest_sha256, 'seed receipt');
+  console.log(`RECEIPT ${JSON.stringify(demo.receipt)}`);
   try {
     values = await demoChecks(browser, demo, pageErrors);
     await normalChecks(browser, normal);

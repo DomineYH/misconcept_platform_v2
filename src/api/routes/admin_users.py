@@ -27,6 +27,7 @@ from src.api.schemas import (
     UserUpdate,
 )
 from src.config import config
+from src.demo.database import DemoError
 from src.demo.lifecycle import NORMAL_SCOPE, lifecycle
 from src.i18n import display_language, translate
 from src.models.generation_run import GenerationRun
@@ -34,10 +35,12 @@ from src.models.model_probe import ModelProbe
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
+from src.services.admin_user_bulk import demo_quota
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Admin Users"])
+UPLOAD_CHUNK = 64 * 1024
 
 
 @router.get("/admin/users/bulk/template")
@@ -73,7 +76,15 @@ async def preview_bulk_upload(
         validate_bulk_users,
     )
 
-    content = await file.read()
+    content = b""
+    while chunk := await file.read(UPLOAD_CHUNK):
+        content += chunk
+        if (
+            config.APP_MODE == "demo"
+            and len(content) > config.DEMO_MAX_UPLOAD_BYTES
+        ):
+            # §8: stop reading at the visitor upload limit.
+            raise DemoError("UPLOAD_TOO_LARGE")
 
     try:
         rows = parse_csv(content, display_language(request))
@@ -151,6 +162,7 @@ async def create_user(
     request: Request = None,
 ):
     """POST /admin/users - Create new user."""
+    await demo_quota(db, User, config.DEMO_MAX_USERS)
 
     # Validate username format
     if not data.username.replace("_", "").isalnum():

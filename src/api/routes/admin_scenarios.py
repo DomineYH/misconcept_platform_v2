@@ -14,7 +14,12 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_admin_user, get_db_session, templates
+from src.api.dependencies import (
+    get_admin_user,
+    get_db_session,
+    get_demo_session,
+    templates,
+)
 from src.api.routes.scenario_input import ScenarioRoute
 from src.api.schemas.scenario_config import (
     DraftCreate,
@@ -31,6 +36,7 @@ from src.models.scenario_group import ScenarioGroup
 from src.models.session import Session
 from src.models.user import User
 from src.models.user_group import UserGroup
+from src.services.admin_user_bulk import demo_quota
 from src.services.comparison_state import owned_comparison
 from src.services.lesson_snapshots import PUBLIC_LESSON_FIELDS
 from src.services.scenario_drafts import (
@@ -123,6 +129,23 @@ async def create_scenario(
 ):
     """POST /admin/scenarios - Create new scenario (T078)."""
 
+    if config.APP_MODE == "demo":
+        ctx = request.state.demo_context
+        # save_scenario restarts its transaction, so the quota count holds the
+        # visitor writer on its own session until the insert commits.
+        async with (
+            get_demo_session(request).visitors.write_guard(ctx),
+            ctx.factory() as own,
+        ):
+            await demo_quota(
+                own,
+                Scenario,
+                config.DEMO_MAX_SCENARIOS,
+                Scenario.deleted_at.is_(None),
+            )
+            saved = await save_scenario(own, scenario_data, user.id)
+            await own.commit()
+        return scenario_view(saved, request)
     return scenario_view(
         await save_scenario(db, scenario_data, user.id), request
     )

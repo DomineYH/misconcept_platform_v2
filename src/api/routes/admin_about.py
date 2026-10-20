@@ -14,9 +14,11 @@ from src.api.schemas.contributor import (
     ContributorResponse,
     ContributorUpdate,
 )
+from src.config import config
 from src.i18n import display_language, translate
 from src.models.contributor import Contributor
 from src.models.user import User
+from src.services.admin_user_bulk import demo_quota
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ async def create_contributor(
     db: AsyncSession = Depends(get_db_session),
 ):
     """POST /admin/about - Create a new contributor entry."""
+    await demo_quota(db, Contributor, config.DEMO_MAX_CONTRIBUTORS)
     contributor = Contributor(
         name=data.name,
         affiliation=data.affiliation,

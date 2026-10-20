@@ -18,10 +18,12 @@ from src.api.schemas import (
     GroupCreate,
     GroupUpdate,
 )
+from src.config import config
 from src.i18n import display_language, translate
 from src.models.scenario_group import ScenarioGroup
 from src.models.user import User
 from src.models.user_group import UserGroup
+from src.services.admin_user_bulk import demo_quota
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,7 @@ async def create_group(
     request: Request = None,
 ):
     """POST /admin/groups - Create new group."""
+    await demo_quota(db, UserGroup, config.DEMO_MAX_GROUPS)
 
     # Check unique name
     existing = await db.execute(

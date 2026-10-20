@@ -38,7 +38,7 @@ PROVENANCE = {
 }
 
 
-def run_case(case, tmp_path):
+def run_case(case, tmp_path, **settings):
     env = {
         key: value
         for key, value in os.environ.items()
@@ -68,6 +68,7 @@ def run_case(case, tmp_path):
         DEMO_CSRF_SECRET=SECRETS[1],
         SESSION_SECRET=SECRETS[2],
         PYTHONPATH=str(ROOT),
+        **settings,
     )
     result = subprocess.run(
         [sys.executable, __file__, case, str(tmp_path)],
@@ -91,6 +92,18 @@ def test_demo_risky_endpoint_guards(case, tmp_path):
     run_case(case, tmp_path)
 
 
+@pytest.mark.parametrize(
+    "case, settings",
+    [
+        ("quota", {}),
+        ("scenario_full", {"DEMO_MAX_SCENARIOS": "4"}),
+        ("scenario_race", {"DEMO_MAX_SCENARIOS": "2"}),
+    ],
+)
+def test_demo_allowed_crud_quotas(case, settings, tmp_path):
+    run_case(case, tmp_path, **settings)
+
+
 async def test_demo_reauthenticate_fails_closed_before_limiter_and_password(
     monkeypatch,
 ):
@@ -112,6 +125,58 @@ async def test_demo_reauthenticate_fails_closed_before_limiter_and_password(
         await module.reauthenticate(request, User(), SecretStr("x" * 12))
     assert caught.value.code == "DEMO_ACTION_FORBIDDEN"
     assert caught.value.status_code == 403
+
+
+@pytest.mark.parametrize("mode", ["demo", "normal"])
+async def test_bulk_preview_reads_the_upload_in_bounded_chunks(
+    mode, monkeypatch
+):
+    """§8: demo stops reading past the limit; normal gets the same bytes."""
+    from src.api.routes import admin_users
+    from src.services import admin_user_bulk
+
+    limit = 3 * admin_users.UPLOAD_CHUNK
+    monkeypatch.setattr(
+        admin_users,
+        "config",
+        SimpleNamespace(APP_MODE=mode, DEMO_MAX_UPLOAD_BYTES=limit),
+    )
+    header = b"username,nickname\n"
+    chunks = [header] + [b"x" * admin_users.UPLOAD_CHUNK] * 5
+    reads = []
+
+    class Upload:
+        async def read(self, size):
+            assert size == admin_users.UPLOAD_CHUNK
+            reads.append(size)
+            return chunks.pop(0) if chunks else b""
+
+    parsed = []
+    monkeypatch.setattr(
+        admin_user_bulk, "parse_csv", lambda content, _: parsed.append(content)
+    )
+
+    async def validated(rows, db, language):
+        return "validated"
+
+    monkeypatch.setattr(admin_user_bulk, "validate_bulk_users", validated)
+    request = SimpleNamespace(state=SimpleNamespace(), cookies={}, headers={})
+    monkeypatch.setattr(admin_users, "display_language", lambda request: "ko")
+    if mode == "demo":
+        with pytest.raises(DemoError) as caught:
+            await admin_users.preview_bulk_upload(
+                Upload(), object(), None, request
+            )
+        assert caught.value.code == "DEMO_UPLOAD_TOO_LARGE"
+        assert len(reads) == 4 and len(chunks) == 2 and parsed == []
+    else:
+        assert (
+            await admin_users.preview_bulk_upload(
+                Upload(), object(), None, request
+            )
+            == "validated"
+        )
+        assert parsed == [header + b"x" * 5 * admin_users.UPLOAD_CHUNK]
 
 
 async def test_demo_read_only_guard_passes_the_admin_in_normal_mode():
@@ -750,6 +815,265 @@ async def case_analysis(tmp):
         assert response.status_code == 202, response.text
         assert reserved[1:] == [(scope_a, registry, True)]
         assert registry is not singleton
+        spies.clean()
+
+
+async def quota_seed(root):
+    """Four live scenarios and one soft-deleted: the deleted row frees its slot."""
+    from contextlib import closing
+
+    from test_demo_d1_04_app import make_seed
+
+    spec = await make_seed(root)
+    with closing(sqlite3.connect(spec.path)) as db, db:
+        for identifier in range(1, 6):
+            db.execute(
+                "INSERT INTO scenario(id,title,is_active,created_by,created_at,"
+                "status,config_json,deleted_at) "
+                "VALUES(?,'Fictional',1,1,?,'draft','{}',?)",
+                (identifier, AT, AT if identifier == 5 else None),
+            )
+    return spec
+
+
+def draft():
+    from src.api.schemas.scenario_config import ScenarioConfig
+
+    return {
+        "title": "Fictional draft",
+        "config_schema_version": 1,
+        "config": ScenarioConfig(
+            problem={}, student={}, mentor={}, analysis={}, runtime={}
+        ).model_dump(mode="json"),
+        "action": "save_draft",
+    }
+
+
+def bulk_csv(count, start=0):
+    lines = ["username,nickname,role,group"]
+    lines += [f"visitor_{start + i},Visitor {i},teacher," for i in range(count)]
+    return ("\n".join(lines) + "\n").encode()
+
+
+async def upload(client, state, content):
+    from test_demo_d1_04_app import headers, namespace
+
+    return await client.post(
+        "/admin/users/bulk/preview",
+        params=namespace(state),
+        headers=headers(client),
+        files={"file": ("users.csv", content, "text/csv")},
+    )
+
+
+async def case_quota(tmp):
+    """§8/§21: allowed CRUD hits per-visitor hard quotas from config only."""
+    from src.config import config
+
+    app, client_for, start = await boot(quota_seed)
+    spies = Spies()
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    async with app.router.lifespan_context(app):
+        client = client_for(app)
+        state = await start(client, "admin")
+
+        # Groups: seed has none; two racers for the last slot get one 201.
+        limit = config.DEMO_MAX_GROUPS
+        for index in range(limit - 1):
+            response = await call(
+                client, state, "POST", "/admin/groups", {"name": f"g{index}"}
+            )
+            assert response.status_code == 201, response.text
+        racers = await asyncio.gather(
+            *(
+                call(client, state, "POST", "/admin/groups", {"name": name})
+                for name in ("last-a", "last-b")
+            )
+        )
+        assert sorted(r.status_code for r in racers) == [201, 429], [
+            r.text for r in racers
+        ]
+        loser = next(r for r in racers if r.status_code == 429)
+        check_error(loser, 429, "DEMO_LIMIT_REACHED")
+        assert visitor_rows(root, "SELECT COUNT(*) FROM user_group") == [
+            (limit,)
+        ]
+        group_id = next(r for r in racers if r.status_code == 201).json()["id"]
+        response = await call(
+            client, state, "POST", f"/admin/groups/{group_id}/delete", None
+        )
+        assert response.status_code == 200, response.text
+        response = await call(
+            client, state, "POST", "/admin/groups", {"name": "again"}
+        )
+        assert response.status_code == 201, response.text
+
+        # Contributors.
+        body = {"name": "Fictional", "affiliation": "Demo", "bio": "Example"}
+        for _ in range(config.DEMO_MAX_CONTRIBUTORS):
+            response = await call(client, state, "POST", "/admin/about", body)
+            assert response.status_code == 201, response.text
+        response = await call(client, state, "POST", "/admin/about", body)
+        check_error(response, 429, "DEMO_LIMIT_REACHED")
+
+        # Scenarios: 4 live of 5 passes the quota to the existing validators.
+        response = await call(
+            client, state, "POST", "/admin/scenarios", draft()
+        )
+        assert response.status_code == 422, response.text
+        assert "common_model_required" in response.text
+
+        # Users: one single create, then bulk bytes 413 and rows above
+        # min(upload rows, users left) 429; a full space refuses both paths.
+        person = {"username": "visitor_one", "nickname": "One"}
+        response = await call(
+            client,
+            state,
+            "POST",
+            "/admin/users",
+            {**person, "password": "fictional-pass"},
+        )
+        assert response.status_code == 201, response.text
+        seeded = 3
+        users_left = config.DEMO_MAX_USERS - seeded
+        rows = min(config.DEMO_MAX_UPLOAD_ROWS, users_left)
+        oversized = bulk_csv(1) + b"#" * config.DEMO_MAX_UPLOAD_BYTES
+        check_error(
+            await upload(client, state, oversized), 413, "DEMO_UPLOAD_TOO_LARGE"
+        )
+        # Above the normal 100-row parser ceiling the visitor limit still wins.
+        check_error(
+            await upload(client, state, bulk_csv(101)),
+            429,
+            "DEMO_LIMIT_REACHED",
+        )
+        check_error(
+            await upload(client, state, bulk_csv(rows + 1)),
+            429,
+            "DEMO_LIMIT_REACHED",
+        )
+        response = await upload(client, state, bulk_csv(rows))
+        assert response.status_code == 200, response.text
+        assert response.json()["summary"]["valid"] == rows
+        entries = [
+            {"username": f"visitor_{i}", "nickname": f"Visitor {i}"}
+            for i in range(rows + 1)
+        ]
+        response = await call(
+            client,
+            state,
+            "POST",
+            "/admin/users/bulk/register",
+            {"users": entries},
+        )
+        check_error(response, 429, "DEMO_LIMIT_REACHED")
+        response = await call(
+            client,
+            state,
+            "POST",
+            "/admin/users/bulk/register",
+            {"users": entries[:rows]},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["success_count"] == rows
+        assert visitor_rows(root, "SELECT COUNT(*) FROM user") == [
+            (seeded + rows,)
+        ]
+        if seeded + rows == config.DEMO_MAX_USERS:
+            check_error(
+                await upload(client, state, bulk_csv(1, start=100)),
+                429,
+                "DEMO_LIMIT_REACHED",
+            )
+            response = await call(
+                client,
+                state,
+                "POST",
+                "/admin/users",
+                {**person, "username": "visitor_two", "password": "x" * 8},
+            )
+            check_error(response, 429, "DEMO_LIMIT_REACHED")
+        spies.clean()
+
+
+async def case_scenario_full(tmp):
+    """With DEMO_MAX_SCENARIOS=4 the four live rows fill the quota."""
+    app, client_for, start = await boot(quota_seed)
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    async with app.router.lifespan_context(app):
+        client = client_for(app)
+        state = await start(client, "admin")
+        response = await call(
+            client, state, "POST", "/admin/scenarios", draft()
+        )
+        check_error(response, 429, "DEMO_LIMIT_REACHED")
+        assert visitor_rows(root, "SELECT COUNT(*) FROM scenario") == [(5,)]
+
+
+async def case_scenario_race(tmp):
+    """§21: on the product seed (one live scenario, eligible demo model),
+    two valid creates race for the last slot; exactly one commits."""
+    import json
+    from contextlib import closing
+
+    from test_demo_d1_04_app import client_for, start
+
+    from src import main
+    from src.demo import seed
+
+    out = tmp / "product-seed"
+    await seed.build(out)
+    pair = seed.load_seed(out)
+    main.demo_seed = lambda: pair
+    with closing(
+        sqlite3.connect(f"file:{pair[0].path}?mode=ro", uri=True)
+    ) as db:
+        (row,) = db.execute(
+            "SELECT config_schema_version, config_json FROM scenario "
+            "WHERE deleted_at IS NULL"
+        ).fetchall()
+    body = {
+        "title": "Fictional copy",
+        "config_schema_version": row[0],
+        "config": json.loads(row[1]),
+        "action": "save_draft",
+    }
+    app = main.app
+    spies = Spies()
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    live = "SELECT COUNT(*) FROM scenario WHERE deleted_at IS NULL"
+    async with app.router.lifespan_context(app):
+        client = client_for(app)
+        state = await start(client, "admin")
+        assert visitor_rows(root, live) == [(1,)]
+        racers = await asyncio.gather(
+            *(
+                call(
+                    client,
+                    state,
+                    "POST",
+                    "/admin/scenarios",
+                    {**body, "title": title},
+                )
+                for title in ("Race A", "Race B")
+            )
+        )
+        assert sorted(r.status_code for r in racers) == [201, 429], [
+            r.text for r in racers
+        ]
+        check_error(
+            next(r for r in racers if r.status_code == 429),
+            429,
+            "DEMO_LIMIT_REACHED",
+        )
+        saved = next(r for r in racers if r.status_code == 201).json()
+        assert saved["version"] == 1 and saved["status"] == "draft"
+        assert visitor_rows(root, live) == [(2,)]
+        assert visitor_rows(
+            root,
+            "SELECT title FROM scenario WHERE id=? AND deleted_at IS NULL",
+            (saved["id"],),
+        ) in ([("Race A",)], [("Race B",)])
         spies.clean()
 
 

@@ -253,6 +253,14 @@ def csv_rows(response, name, seed_id):
     return rows
 
 
+def leaves(value):
+    if isinstance(value, dict):
+        value = list(value.values())
+    if isinstance(value, list):
+        return [text for item in value for text in leaves(item)]
+    return [value] if isinstance(value, str) else []
+
+
 def sessions(rows):
     return {int(row["session_id"]) for row in rows}
 
@@ -432,6 +440,66 @@ async def case_exports(tmp):
         response = await get(b, state_b, "/admin/sessions/export")
         rows = csv_rows(response, "all", seed_id)
         assert {row["teacher_id"] for row in rows} == {str(teacher)}
+
+        # §22: soft delete of B's analyzed seed session hides its analysis.
+        (run_id,) = one(
+            db_b,
+            "SELECT id FROM generation_run WHERE session_id=? "
+            "AND operation='analysis'",
+            (seed_id,),
+        )[0]
+        # The stored analysis exists. The API read is not asserted here:
+        # it is 503 on the demo provider (context_budget KeyError, #198).
+        (payload,) = one(
+            db_b,
+            "SELECT payload_json FROM session_feedback_report "
+            "WHERE session_id=?",
+            (seed_id,),
+        )[0]
+        report = [
+            text
+            for text in leaves(json.loads(payload))
+            if len(text) >= 20 and '"' not in text
+        ]
+        hidden = report + [
+            row[0] for row in one(db_b, "SELECT content FROM message")
+        ]
+        # Non-vacuous: before the delete the export carries the analysis.
+        response = await get(b, state_b, "/admin/sessions/export")
+        assert any(text in response.text for text in report), report
+        response = await call(
+            b, state_b, "POST", f"/admin/sessions/{seed_id}/delete"
+        )
+        assert response.status_code == 200, response.text
+        for path in (
+            f"/admin/sessions/{seed_id}/analysis_modal",
+            f"/admin/sessions/{seed_id}/analysis",
+            f"/admin/sessions/{seed_id}/analysis/runs/{run_id}",
+            f"/admin/sessions/{seed_id}/download",
+        ):
+            check_error(
+                await get(b, state_b, path), 404, "DEMO_RESOURCE_NOT_FOUND"
+            )
+        for path in (
+            f"/admin/sessions/{seed_id}/detail",
+            "/admin/sessions/export",
+            f"/admin/user-conversations/{teacher}/export",
+        ):
+            response = await get(b, state_b, path)
+            assert response.status_code == 200, (path, response.text)
+            assert not any(text in response.text for text in hidden), path
+        response = await b.post(
+            "/admin/sessions/export-selected",
+            data={"session_ids": [seed_id]},
+            params=namespace(state_b),
+            headers=headers(b),
+        )
+        assert not any(text in response.text for text in hidden)
+        assert not response.content.startswith(b"\xef\xbb\xbf")
+        # The row is tombstoned in B's DB only.
+        query = "SELECT deleted_at IS NOT NULL FROM session WHERE id=?"
+        assert one(db_b, query, (seed_id,)) == [(1,)]
+        assert one(db_a, query, (seed_id,)) == [(0,)]
         spies.clean()
 
 

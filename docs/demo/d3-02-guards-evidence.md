@@ -9,11 +9,20 @@ belongs to #202.
 
 ## 1. Tested revision and stack
 
-- Tested SHA: `56b14d42cfe63267ac150f69e89c5640ed22630b`. This is main
-  `1a40dc2` plus `tests/test_demo_d3_02_real.py`, the repair r1 case, and the
-  D3 fix in `src/api/routes/admin_scenarios.py` (§7). The tree was clean
-  during the run, and the docs commits change no code or tests.
+- Tested SHA: `881d56311084f139e5d0f05d394b39a5ba683204` for all code and
+  every suite, plus `e4f349f0280b38f87d14942b6c1e865cffa32da7` for the
+  guards file. `e4f349f` changes only that file: a stub in the stand-in
+  seed analysis case (§8).
+  - Base: main `fbbcad7`, which includes #198 PR4 (#251) and #250 (D2 seed
+    provenance).
+  - On top of that base: `tests/test_demo_d3_02_real.py`, the D3 fix (§7)
+    and the D4 fix (§8).
+  - The tree was clean during the runs, and the docs commits change no code
+    or tests.
+  - Real-server runs used an ext4 copy of the same commit (`git clone
+    --shared`).
 - Earlier runs:
+  - `56b14d4`, after the D3 fix.
   - `aa6f172`, the first PR4 run.
   - `f571d9d`, after repair r1 added the seed-session deletion block to the
     `[exports]` case.
@@ -34,15 +43,15 @@ belongs to #202.
   the config maximum. Each case sends more than the default 60 requests a
   minute, and with the default the per-visitor limiter answered 429.
 
-### Seed receipt (build at `aa6f172`; later commits change no seed input)
+### Seed receipt (build at `e4f349f`)
 
 | field | value |
 | --- | --- |
-| `source_commit` | `aa6f172b306906bc64a63704497a9d3896b9be14` |
+| `source_commit` | `e4f349f0280b38f87d14942b6c1e865cffa32da7` |
 | `manifest_sha256` | `60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516` |
 | `db_schema_version` | `037_demo_provider.sql` |
-| `logical_data_sha256` | `8d3fa9dde40a9d65273868a20271cdf767665e27c54384a54c74e575b3342980` |
-| `seed_sha256` | `01f484a81e3f1b82eddbfdf1e618a0de8cb6e8c1fedbae58d81acc86f745abe1` (changes on every build because password hashes are volatile; a build at `1a40dc2` gave a different file hash and the same logical hash) |
+| `logical_data_sha256` | `93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141` (#250 changed the seed provenance; it was `8d3fa9dd…` before #250) |
+| `seed_sha256` | `4111bdf108301047c8c8d501c6b12a5f78aeb6d44d9a8b232d8b2108b1c33842` (changes on every build because password hashes are volatile) |
 | `seed_refs` | admin 1, teacher 2, group 1, scenario 1, completed_session 1, model 1, connection 4 |
 | versions | content `d0-02-v1`, fixture `demo-fixture-v1`, seed `demo-seed-v1` |
 
@@ -56,25 +65,32 @@ Command per file: `<venv>/bin/python -m pytest -q -p no:cacheprovider tests/<fil
 
 | file | revision | fresh/reused | collected | passed | failed/skipped | pytest time |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| `tests/test_demo_d3_02_real.py` | `56b14d4` | fresh | 2 | 2 | 0 | 66 s |
-| `tests/test_demo_d3_02_guards.py` | `56b14d4` | fresh | 15 | 15 | 0 | 104 s |
-| `tests/test_scenario_api.py` | `56b14d4` | fresh | 30 | 30 | 0 | 16 s |
-| `tests/test_scenario_drafts.py` | `56b14d4` | fresh | 72 | 72 | 0 | 55 s |
-| `tests/test_scenario_publication.py` | `56b14d4` | fresh | 48 | 48 | 0 | 84 s |
-| `tests/test_scenario_screens.py` | `56b14d4` | fresh | 25 | 25 | 0 | 3 s |
-| `tests/test_scenario_retirement.py` | `56b14d4` | fresh | 23 | 23 | 0 | 32 s |
-| `tests/test_demo_d3_02_exports.py` | `aa6f172` | reused: file unchanged; the D3 fix touches only scenario routes | 39 | 39 | 0 | 151 s |
-| `tests/test_demo_d1_04_app.py` | `aa6f172` | reused: file unchanged; the D3 fix touches only scenario routes | 23 | 23 | 0 | 349 s |
+| `tests/test_demo_d3_02_real.py` | `881d563` | fresh, ext4 | 3 | 3 | 0 | 26 s |
+| `tests/test_demo_d3_02_guards.py` | `e4f349f` | fresh, ext4 | 15 | 15 | 0 | 67 s |
+| `tests/test_demo_d3_02_exports.py` | `881d563` | fresh, ext4 | 39 | 39 | 0 | 32 s |
+| `tests/test_analysis_runs.py` | `881d563` | fresh, ext4 | 17 | 17 | 0 | 37 s |
+| `tests/test_analysis_concurrency.py` | `881d563` | fresh, ext4 | 10 | 10 | 0 | 25 s |
+| `tests/test_analysis_retry.py` | `881d563` | fresh, ext4 | 4 | 4 | 0 | 8 s |
+| `tests/test_regressions.py` | `881d563` | fresh, ext4 | 5 | 5 | 0 | 8 s |
+| `tests/test_admin_logic.py` | `881d563` | fresh, ext4 | 1 | 1 | 0 | 4 s |
+| `tests/test_deleted_session_access.py` | `881d563` | fresh, ext4 | 24 | 24 | 0 | 25 s |
+| `tests/test_legacy_session_history.py` | `881d563` | fresh, ext4 | 22 | 22 | 0 | 53 s |
+| scenario suites (`test_scenario_api/drafts/publication/screens/retirement`) | `56b14d4` | reused: the scenario route is unchanged since | 198 | 198 | 0 | see D3 run |
+| `tests/test_demo_d1_04_app.py` | `aa6f172` | reused: the file is unchanged; the admin analysis routes are not exercised there | 23 | 23 | 0 | 349 s |
 
-On `56b14d4`, `ruff check .` passed and `black --check .` reported 390 files
-unchanged. The CSV samples written by the `56b14d4` run are byte-identical
-to the ones committed here.
+- On `881d563`, the guards file failed 1 case, `[analysis]`: the stand-in
+  seed module has no `INPUTS`, and the admin routes now build the demo
+  adapter. `e4f349f` fixes the test (§8), and guards then passed 15/15.
+- On `e4f349f`, `ruff check .` passed and `black --check .` reported 392
+  files unchanged.
+- The CSV samples written by the `881d563` run are byte-identical to the
+  ones committed here.
 
 ## 3. Acceptance → test → result
 
 Key: `R:guards` = `test_demo_d3_02_real.py::test_demo_d3_02_on_real_seed_and_middleware[guards]`,
-`R:exports` = the `[exports]` case. Only rows whose test id is `R:guards`
-or `R:exports` were proven on the CLI-built product seed with real
+`R:exports` = the `[exports]` case, `R:admin_analysis` = the `[admin_analysis]` case. Only rows whose test id is `R:guards`,
+`R:exports` or `R:admin_analysis` were proven on the CLI-built product seed with real
 middleware. The last three rows give their own scope: synthetic seed,
 in-process unit, or patched config.
 
@@ -91,7 +107,9 @@ in-process unit, or patched config.
 | §23 selected/all/user CSV | selected `[seed, visitor]` → `..._selected.csv` with both sessions, origins `seed_prepared`/`visitor_generated`, echo and row count. `..._all.csv` and `..._user-2.csv` → both sessions, no `x-demo-*` headers | R:exports | pass |
 | §23/§25 other visitor | visitor B's all export holds only the seed session and none of A's visitor text. B's download of A's session ID → 404 `DEMO_RESOURCE_NOT_FOUND` | R:exports | pass |
 | §22 session soft delete | A deletes its visitor session → 200; a second delete → 400 (existing rule). Download and analysis API → 404 `DEMO_RESOURCE_NOT_FOUND`. The detail modal returns 200 as a tombstone without the body. All, user, and selected exports exclude the session; selected with only the deleted ID returns no CSV. The row is kept with `deleted_at` set | R:exports | pass |
-| §22 analyzed session soft delete | visitor B deletes seed session 1. The session has a stored `session_feedback_report` and a completed `operation='analysis'` run, and before the delete B's all export carries report text. After the delete: analysis modal, analysis JSON, analysis-run status and download each → 404 `DEMO_RESOURCE_NOT_FOUND`. The detail tombstone, the all export, the user-2 export and the selected export contain no report text and no message text, and selected returns no CSV. The row is tombstoned in B's DB only; A's copy stays live. The readable-before-delete API check is not run: see §6 | R:exports | pass (pre-delete API read blocked, §6) |
+| §22 analyzed session soft delete | visitor B deletes seed session 1. The session has a stored `session_feedback_report` and a completed `operation='analysis'` run, and before the delete B's all export carries report text. After the delete: analysis modal, analysis JSON, analysis-run status and download each → 404 `DEMO_RESOURCE_NOT_FOUND`. The detail tombstone, the all export, the user-2 export and the selected export contain no report text and no message text, and selected returns no CSV. The row is tombstoned in B's DB only; A's copy stays live. Before the delete: analysis JSON and analysis-run status → 200 with §19 provenance `seed_prepared`, the run is `ok`/adopted, and the analysis modal → 200 with `data-record-origin="seed_prepared"` | R:exports | pass |
+| §14/§16/§19 admin regenerate (D4) | `POST /admin/sessions/1/analyze_regenerate` on the analyzed seed session → 202. The run finishes `ok`/adopted on the local adapter; `outcome.provenance` has `mode=demo` and `external_ai_called=false`, and analysis JSON shows the same provenance. Exactly one attempt-1 `api_usage_log` row is added, with provider `demo`, status `completed` and every usage field null. A replay returns the same `run_id` and adds no rows. A `request_id` already used by an admin-owned non-analysis run → 409 `DEMO_REQUEST_CONFLICT` with no rows | R:admin_analysis | pass (Red before the fix: run `failed`/`configuration_unavailable`) |
+| §14/§19 admin end (D4) | a teacher starts a visitor session and runs one local student turn. The admin then calls `POST /admin/sessions/{id}/end` with a request ID → 202. The run is `ok`/adopted, with provenance `visitor_generated` and one null-usage ledger row | R:admin_analysis | pass (Red before the fix: `configuration_unavailable`) |
 | §22 teacher delete | delete of seed teacher 2 → `{"status":"deleted"}`. Sessions are kept with `teacher_id` NULL, and the seed session keeps its 5 messages. User export of ID 2 → 404 `DEMO_RESOURCE_NOT_FOUND`. All export still has 6 rows with an empty `teacher_id` | R:exports | pass |
 | §24.1 delete facts | `/demo/state?include_tour=true` for A: `teacher_deleted` true, `session_deleted` true, `journey_session_id` = the deleted visitor session. For B: both false, and B's seed session still has teacher 2 | R:exports | pass |
 | §21/§8 quotas | groups/contributors/users/bulk/scenario quotas and the last-slot race, on the real app and middleware. `scenario_race` uses the real product seed; the other cases use the synthetic `make_seed` behind the real `demo_seed()` | `test_demo_d3_02_guards.py::test_demo_allowed_crud_quotas[*]` | pass (13/13 in file) |
@@ -119,17 +137,22 @@ dialogue would go through #198's admission path, which is out of #200 scope.
 ## 5. Not run, with reasons
 
 - Full pytest, full browser suite, and `tests/check_student_live.py`: full
-  regression is CI on the PR head. PR4 changes no templates or JS; the only product change is the demo branch in `admin_scenarios.py` (§7).
+  regression is CI on the PR head. PR4 changes no templates or JS. The product changes are the demo branches in `admin_scenarios.py` (§7) and `admin_session_actions.py` (§8).
 - Teacher CSV export (`session_analysis.py`, 20 + 5 columns): the route is owned by #198.
 - `test_s4_csv.py`, `test_export_deleted_teacher.py` and the other admin
-  suites: not re-run locally, because the only product change is in the scenario routes, whose suites are listed in §2. They are covered by CI.
+  suites: not re-run locally. The product changes are in the scenario and
+  admin analysis routes, and their suites are listed in §2. They are covered by CI.
 - Visitor quota cases other than `scenario_race` still use the synthetic
   seed. This was not repeated on the product seed, because the quota code
   does not read seed content beyond row counts.
 - Two-process or real-socket server (uvicorn): the cases use ASGI in-process
   transport inside a clean subprocess, with the same app object and middleware stack.
 
-## 6. Product defect found (not #200-owned; NEEDS_DECISION)
+## 6. Product defect D1 (#198), resolved by #198 PR4 (#251)
+
+The text below records the state before #251. After #251 merged, the
+pre-delete reads return 200, and `R:exports` asserts them (§3).
+
 
 On the real demo stack, every admin analysis read of the analyzed seed
 session returns 503 `DEMO_CONFIGURATION_INVALID`. The demo error boundary
@@ -176,4 +199,33 @@ The file was restored.
 - **Red:** before the fix, the new `[guards]` block failed on the first
   request, because `detail` was the field-error list (log `d3-red.log`).
 
-The only product file changed in this PR is `src/api/routes/admin_scenarios.py` (D3).
+## 8. Product fix D4 (`admin_session_actions.py`, #200-owned)
+
+- **Defect** (found by #203 and by this PR): in demo, admin
+  `POST /admin/sessions/{id}/end` and `/analyze_regenerate` reserved
+  analysis without the session's local adapter, so the run ended
+  `failed`/`configuration_unavailable`. Cause: `analysis_context(request)`
+  returned only ctx/registry.
+- **Fix:**
+  - `analysis_context(request, session=None)` returns #198's
+    `demo_analysis(request, session)` (ctx, registry and `demo_adapter`)
+    when the request has a demo context and a session is given.
+  - Both reservations call `reserve_analysis`, a late-import wrapper of
+    #198's `reserve_analysis_run`, so §16 conflicts get the
+    `DEMO_REQUEST_CONFLICT` envelope.
+  - In demo, regenerate loads the session first; missing or deleted →
+    `DEMO_RESOURCE_NOT_FOUND`.
+  - Normal mode passes the same ctx/registry as before, and
+    `reserve_analysis_run` re-raises unchanged when there is no demo context.
+  - The late imports avoid an import cycle: `session_analysis` →
+    `admin_session_export` → this module.
+- **Red:** `d3-red`-style logs `a2/red.log` (regenerate) and
+  `a2/d4-red.log` (admin end). Both runs ended `configuration_unavailable`.
+- **Test-only change** `e4f349f`: the guards `[analysis]` case runs on the
+  stand-in seed module, which has no fixture `INPUTS`. Its existing stubs of
+  `reserve_analysis`/`run_response` now include a stub of
+  `session_analysis.demo_binding`. The real adapter path is proven by
+  `R:admin_analysis` on the product seed.
+
+Product files changed in this PR: `src/api/routes/admin_scenarios.py` (D3)
+and `src/api/routes/admin_session_actions.py` (D4).

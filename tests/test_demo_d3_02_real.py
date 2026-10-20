@@ -55,7 +55,7 @@ def run_real(case, tmp_path):
     assert str(tmp_path) not in output, output
 
 
-@pytest.mark.parametrize("case", ["guards", "exports"])
+@pytest.mark.parametrize("case", ["guards", "exports", "regenerate"])
 def test_demo_d3_02_on_real_seed_and_middleware(case, tmp_path):
     run_real(case, tmp_path)
 
@@ -351,7 +351,7 @@ async def case_exports(tmp):
         start,
         visitor_files,
     )
-    from test_demo_d3_02_guards import Spies, call, check_error
+    from test_demo_d3_02_guards import PROVENANCE, Spies, call, check_error
 
     app, seed, manifest = real_app()
     spies = Spies()
@@ -519,8 +519,22 @@ async def case_exports(tmp):
             "AND operation='analysis'",
             (seed_id,),
         )[0]
-        # The stored analysis exists. The API read is not asserted here:
-        # it is 503 on the demo provider (context_budget KeyError, #198).
+        # Readable before the delete, with the seed's §19 provenance.
+        response = await get(b, state_b, f"/admin/sessions/{seed_id}/analysis")
+        assert response.status_code == 200, response.text
+        assert response.json()["provenance"] == PROVENANCE, response.text
+        response = await get(
+            b, state_b, f"/admin/sessions/{seed_id}/analysis/runs/{run_id}"
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["provenance"] == PROVENANCE, response.text
+        latest = response.json()["latest_run"]
+        assert latest["status"] == "ok" and latest["adopted"], latest
+        response = await get(
+            b, state_b, f"/admin/sessions/{seed_id}/analysis_modal"
+        )
+        assert response.status_code == 200, response.text
+        assert 'data-record-origin="seed_prepared"' in response.text
         (payload,) = one(
             db_b,
             "SELECT payload_json FROM session_feedback_report "
@@ -571,6 +585,103 @@ async def case_exports(tmp):
         query = "SELECT deleted_at IS NOT NULL FROM session WHERE id=?"
         assert one(db_b, query, (seed_id,)) == [(1,)]
         assert one(db_a, query, (seed_id,)) == [(0,)]
+        spies.clean()
+
+
+async def admin_run(client, state, session_id, run_id):
+    from test_demo_d3_02_guards import call
+
+    for _ in range(400):
+        response = await call(
+            client,
+            state,
+            "GET",
+            f"/admin/sessions/{session_id}/analysis/runs/{run_id}",
+        )
+        assert response.status_code == 200, response.text
+        latest = response.json()["latest_run"]
+        if latest["status"] not in ("queued", "running"):
+            return latest
+        await asyncio.sleep(0.05)
+    raise AssertionError(latest)
+
+
+async def case_regenerate(tmp):
+    """§16/§19: admin regenerate of the analyzed seed session runs the
+    session's local adapter; replay and conflict follow §16."""
+    from test_demo_d1_04_app import client_for, start, visitor_files
+    from test_demo_d2_04_g3 import assert_ledger, rows
+    from test_demo_d3_02_guards import Spies, call
+
+    app, seed, manifest = real_app()
+    spies = Spies()
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    async with app.router.lifespan_context(app):
+        await check_real_seed(app, seed, manifest)
+        seed_id = app.state.demo_request_db.seed_refs["completed_session"]
+        client = client_for(app)
+        state = await start(client, "admin")
+        (name,) = visitor_files(root)
+        db = root / name
+        path = f"/admin/sessions/{seed_id}/analyze_regenerate"
+        body = {"request_id": str(uuid4())}
+        response = await call(client, state, "POST", path, body)
+        assert response.status_code == 202, response.text
+        run_id = response.json()["run_id"]
+        latest = await admin_run(client, state, seed_id, run_id)
+        assert latest["status"] == "ok" and latest["adopted"], latest
+        provenance = latest["outcome"]["provenance"]
+        assert provenance["mode"] == "demo", provenance
+        assert provenance["external_ai_called"] is False, provenance
+        response = await call(
+            client, state, "GET", f"/admin/sessions/{seed_id}/analysis"
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["provenance"] == provenance, response.text
+        assert_ledger(db, run_id)
+
+        def totals():
+            return rows(
+                db,
+                "SELECT COUNT(*) AS n FROM generation_run UNION ALL "
+                "SELECT COUNT(*) FROM api_usage_log",
+            )
+
+        before = totals()
+        # §16: a replay returns the same run; another body conflicts.
+        response = await call(client, state, "POST", path, body)
+        assert response.status_code in (200, 202), response.text
+        assert response.json()["run_id"] == run_id, response.text
+        assert totals() == before
+        # The same request_id already named another (non-analysis) body of
+        # this admin: a seed student run copied under the admin's id.
+        other = str(uuid4())
+        admin = app.state.demo_request_db.seed_refs["admin"]
+        fresh = dict(id=other, turn_id=other, owner_id=admin, request_id=other)
+        with closing(sqlite3.connect(db)) as raw, raw:
+            columns = [
+                row[1]
+                for row in raw.execute("PRAGMA table_info(generation_run)")
+            ]
+            raw.execute(
+                f"INSERT INTO generation_run({','.join(columns)}) SELECT "
+                + ",".join("?" if c in fresh else c for c in columns)
+                + " FROM generation_run WHERE operation='student' LIMIT 1",
+                [fresh[c] for c in columns if c in fresh],
+            )
+        before = totals()
+        response = await call(
+            client, state, "POST", path, {"request_id": other}
+        )
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"] == dict(
+            code="DEMO_REQUEST_CONFLICT",
+            retryable=False,
+            recovery="demo.refresh_state",
+            generation=state["generation"],
+            auth_epoch=state["auth_epoch"],
+        ), response.text
+        assert totals() == before
         spies.clean()
 
 

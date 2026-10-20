@@ -370,7 +370,29 @@ async def regenerate_analysis(
 ):
     """Reserve a new analysis while preserving the accepted report."""
     async with analysis_db(request, db) as work:
-        return await request_analysis(
+        if config.APP_MODE != "demo":
+            return await request_analysis(
+                work,
+                session_id,
+                user.id,
+                body.request_id,
+                regenerate=True,
+                plan_hash=body.plan_hash,
+                language=display_language(request),
+                **analysis_context(request),
+            )
+        session = await work.get(Session, session_id)
+        if session is None or session.deleted_at is not None:
+            raise session_missing(request)
+        # #198's teacher helpers: the session's local adapter and §16
+        # envelope. Imported here: session_analysis imports this module.
+        from src.api.routes.session_analysis import (
+            demo_analysis,
+            reserve_analysis_run,
+        )
+
+        return await reserve_analysis_run(
+            request,
             work,
             session_id,
             user.id,
@@ -378,7 +400,7 @@ async def regenerate_analysis(
             regenerate=True,
             plan_hash=body.plan_hash,
             language=display_language(request),
-            **analysis_context(request),
+            **demo_analysis(request, session),
         )
 
 

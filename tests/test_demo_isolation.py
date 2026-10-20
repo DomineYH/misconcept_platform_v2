@@ -29,7 +29,6 @@ from test_demo_d1_04_app import (
     client_for,
     code,
     headers,
-    main_spec,
     namespace,
     start,
     visitor_files,
@@ -55,15 +54,27 @@ QUERIES = {
 }
 
 
-def file_rows(path):
+# The product seed has no synthetic_record table; its third table is the run
+# ledger (a visitor's own reset must bring it back to the seed too).
+PRODUCT_QUERIES = {
+    **{k: v for k, v in QUERIES.items() if k != "records"},
+    "runs": "SELECT id, operation, status FROM generation_run ORDER BY id",
+}
+
+
+def file_rows(path, queries=QUERIES):
     """Committed rows of one visitor file, read outside the app's engine."""
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
         return {
-            name: db.execute(sql).fetchall() for name, sql in QUERIES.items()
+            name: db.execute(sql).fetchall() for name, sql in queries.items()
         }
     finally:
         db.close()
+
+
+def product_rows(path):
+    return file_rows(path, PRODUCT_QUERIES)
 
 
 LEDGER_TABLES = (
@@ -285,53 +296,6 @@ def test_teacher_csv_has_prefix_20_and_demo_suffix_5(tmp_path):
 # Subprocess cases.
 
 
-async def rich_seed(tmp):
-    """make_root's seed keeps the real migrated tables; add two ended sessions."""
-    from test_demo_d1_01_database import make_root
-
-    from src import main
-
-    root = await make_root(tmp)
-    db = sqlite3.connect(root.path / "seed.db")
-    with db:
-        db.execute(
-            "INSERT INTO scenario(id,title,is_active,created_at,config_json)"
-            " VALUES (1,'Fictional fractions',1,'2026-10-18 00:00:00','{}')"
-        )
-        for sid, tag in ((1, "FIRST"), (2, "SECOND")):
-            db.execute(
-                "INSERT INTO session(id,scenario_id,teacher_id,started_at,"
-                "ended_at,tutor_intervention_count,tutor_question_count)"
-                " VALUES (?,1,2,'2026-10-18 00:00:00','2026-10-18 01:00:00',0,0)",
-                (sid,),
-            )
-            for i, role in enumerate(("teacher", "student", "tutor")):
-                db.execute(
-                    "INSERT INTO message(session_id,role,content,created_at)"
-                    " VALUES (?,?,?,?)",
-                    (sid, role, f"{tag}-{role}", f"2026-10-18 00:0{i}:00"),
-                )
-            db.execute(
-                "INSERT INTO session_summary(session_id,distribution_json,"
-                "feedback) VALUES (?,'{}',?)",
-                (sid, f"{tag}-feedback"),
-            )
-    db.close()
-    root.close()
-    spec = main_spec(Path(root.path))
-    # Test-only stand-in for #197: seed refs incl. the completed seed session.
-    main.demo_seed = lambda: (
-        spec,
-        SimpleNamespace(
-            # Startup requires exactly the manifest's refs.
-            seed_refs=json.loads(spec.manifest_path.read_text())["seed_refs"],
-            first_inputs=frozenset(),
-            common_input="",
-            supported_snapshot=lambda row: False,
-        ),
-    )
-
-
 async def post(client, path, ns, **kwargs):
     return await client.post(path, params=ns, headers=headers(client), **kwargs)
 
@@ -348,7 +312,7 @@ def refused(response, *, status, expected):
     assert response.status_code == status, response.text
     assert response.headers["cache-control"] == "no-store"
     assert code(response) == expected
-    for leak in ("A-renamed", "A-only", "Fictional"):
+    for leak in ("A-renamed", "A-only", "데모 교사", "데모 관리자"):
         assert leak not in response.text, response.text
 
 
@@ -356,7 +320,7 @@ async def case_isolation(tmp):
     from src import main
 
     app = main.app
-    await rich_seed(tmp)
+    await real_seed(tmp)
     async with app.router.lifespan_context(app):
         visitors = app.state.demo_request_db.visitors
         a, b = client_for(app, "10.0.0.1"), client_for(app, "10.0.0.2")
@@ -385,7 +349,7 @@ async def case_isolation(tmp):
             return (
                 {k: state[k] for k in sa if k != "expires_at"},
                 html,
-                file_rows(path),
+                product_rows(path),
             )
 
         seed_b = await observe_http(b, ns_b, path_b)
@@ -393,9 +357,10 @@ async def case_isolation(tmp):
         # Same seed: the same integer IDs on both sides, teacher id 2.
         assert seed_a[2] == seed_b[2]
         assert seed_a[2]["users"] == [
-            (1, "Fictional admin"),
-            (2, "Fictional teacher"),
+            (1, "데모 관리자"),
+            (2, "데모 교사"),
         ]
+        assert seed_a[2]["groups"] == [(1, "예시 그룹")]
 
         # A mutates: rename, create user and group, delete the teacher.
         r = await post(
@@ -417,7 +382,7 @@ async def case_isolation(tmp):
         assert r.status_code == 201, r.text
         r = await post(a, "/admin/users/2/delete", ns_a)
         assert r.status_code == 200, r.text
-        mutated = file_rows(path_a)
+        mutated = product_rows(path_a)
         assert [u[0] for u in mutated["users"]] == [1, 3]
         assert "A-only" in (await a.get("/admin/users", params=ns_a)).text
 
@@ -499,10 +464,10 @@ async def case_isolation(tmp):
         refused(await a.get("/admin/users", params=ns_a), **stale)
         page = await a.get("/admin/users", params=namespace(new_a))
         assert page.status_code == 200
-        assert "Fictional teacher" in page.text
+        assert "데모 교사" in page.text
         assert "A-renamed" not in page.text and "A-only" not in page.text
         path_new, scope_new = await lookup(app, a)
-        assert file_rows(path_new) == seed_a[2]
+        assert product_rows(path_new) == seed_a[2]
         assert scope_new == (scope_a[0], sa["generation"] + 1)
         await assert_b_untouched("after A reset")
         assert path_b.exists() and path_b.name in visitor_files(tmp / "demo")
@@ -513,25 +478,44 @@ async def case_delete_export(tmp):
 
     app = main.app
     expected_header = json.loads(os.environ["EXPECTED_HEADER"])
-    await rich_seed(tmp)
+    await real_seed(tmp)
     async with app.router.lifespan_context(app):
         a, b = client_for(app, "10.0.0.1"), client_for(app, "10.0.0.2")
-        sa, sb = await start(a, "admin"), await start(b, "admin")
+        # A makes its second ended session through the real teacher flow.
+        sa, sb = await start(a, "teacher"), await start(b, "admin")
+        seed_sid = app.state.demo_request_db.seed_refs["completed_session"]
+        new_sid, _ = await teacher_run(app, a, sa)
+        assert new_sid != seed_sid
+        r = await post(
+            a,
+            "/demo/role",
+            {},
+            json={
+                "request_id": str(uuid4()),
+                "role": "admin",
+                "expected_generation": sa["generation"],
+                "expected_auth_epoch": sa["auth_epoch"],
+            },
+        )
+        assert r.status_code == 200, r.text
+        sa = (await a.get("/demo/state")).json()
         ns_a, ns_b = namespace(sa), namespace(sb)
         path_a, _ = await lookup(app, a)
         path_b, _ = await lookup(app, b)
+        sids = [seed_sid, new_sid]
+        ids = {str(seed_sid), str(new_sid)}
 
-        async def exports(client, ns):
+        async def exports(client, ns, sids):
             return {
                 "all": await client.get("/admin/sessions/export", params=ns),
                 "selected": await post(
                     client,
                     "/admin/sessions/export-selected",
                     ns,
-                    data={"session_ids": [1, 2]},
+                    data={"session_ids": sids},
                 ),
                 "session-1": await client.get(
-                    "/admin/sessions/1/download", params=ns
+                    f"/admin/sessions/{seed_sid}/download", params=ns
                 ),
             }
 
@@ -550,35 +534,52 @@ async def case_delete_export(tmp):
             )
             return rows
 
-        b_before = {k: v.content for k, v in (await exports(b, ns_b)).items()}
-        b_rows = file_rows(path_b)
+        b_before = {
+            k: v.content
+            for k, v in (await exports(b, ns_b, [seed_sid])).items()
+        }
+        b_rows = product_rows(path_b)
+        # B is the untouched seed: only the completed seed session.
+        assert [s[0] for s in b_rows["sessions"]] == [seed_sid]
+        seed_messages = b_rows["messages"]
+        assert len(seed_messages) == 5
+        a_rows = product_rows(path_a)
+        assert [s[0] for s in a_rows["sessions"]] == sids
+        assert a_rows["messages"][: len(seed_messages)] == seed_messages
+        assert len(a_rows["messages"]) == len(seed_messages) + 5
+        # Text that only the new session carries (the seed session is distinct).
+        seed_texts = set(contents(path_a, seed_sid))
+        new_texts = [
+            t for t in contents(path_a, new_sid) if t not in seed_texts
+        ]
+        assert new_texts
 
         r = await post(
             a, "/admin/users/2/update", ns_a, json={"nickname": "A-renamed"}
         )
         assert r.status_code == 200, r.text
-        rows = parse((await exports(a, ns_a))["all"], "all")
-        assert {r["session_id"] for r in rows} == {"1", "2"}
+        rows = parse((await exports(a, ns_a, sids))["all"], "all")
+        assert {r["session_id"] for r in rows} == ids
         assert {r["teacher_nickname"] for r in rows} == {"A-renamed"}
 
         # §22: ended sessions lose the teacher link but keep their content.
         r = await post(a, "/admin/users/2/delete", ns_a)
         assert r.status_code == 200, r.text
-        after = file_rows(path_a)
-        assert [s[:2] for s in after["sessions"]] == [(1, None), (2, None)]
-        assert (
-            after["messages"] == b_rows["messages"]
-            and len(after["messages"]) == 6
-        )
-        got = await exports(a, ns_a)
+        after = product_rows(path_a)
+        assert [s[:2] for s in after["sessions"]] == [
+            (seed_sid, None),
+            (new_sid, None),
+        ]
+        assert after["messages"] == a_rows["messages"]
+        got = await exports(a, ns_a, sids)
         for target, name in (
             ("all", "all"),
             ("selected", "selected"),
             ("session-1", "session-1"),
         ):
             rows = parse(got[target], name)
-            ids = {r["session_id"] for r in rows}
-            assert ids == ({"1"} if target == "session-1" else {"1", "2"})
+            seen = {r["session_id"] for r in rows}
+            assert seen == ({str(seed_sid)} if target == "session-1" else ids)
             for row in rows:
                 assert row["teacher_id"] == row["teacher_username"] == ""
                 assert row["teacher_nickname"] == ""
@@ -588,37 +589,37 @@ async def case_delete_export(tmp):
                 assert row["demo_fixture_version"] == "demo-fixture-v1"
                 assert row["demo_record_origin"] == (
                     "seed_prepared"
-                    if row["session_id"] == "1"
+                    if row["session_id"] == str(seed_sid)
                     else "visitor_generated"
                 )
         # The deleted user is gone: its per-user export cannot reveal content.
         r = await a.get("/admin/user-conversations/2/export", params=ns_a)
         assert r.status_code == 404 and code(r) == "DEMO_RESOURCE_NOT_FOUND"
-        assert "FIRST-student" not in r.text and "SECOND-student" not in r.text
+        assert not any(t in r.text for t in new_texts + list(seed_texts))
 
         # Soft delete hides the session from every export variant.
-        r = await post(a, "/admin/sessions/2/delete", ns_a)
+        r = await post(a, f"/admin/sessions/{new_sid}/delete", ns_a)
         assert r.status_code == 200, r.text
-        assert file_rows(path_a)["sessions"][1][2] is not None
-        got = await exports(a, ns_a)
+        assert product_rows(path_a)["sessions"][1][2] is not None
+        got = await exports(a, ns_a, sids)
         for target, name in (
             ("all", "all"),
             ("selected", "selected"),
             ("session-1", "session-1"),
         ):
             rows = parse(got[target], name)
-            assert {r["session_id"] for r in rows} == {"1"}
-            assert "SECOND" not in got[target].text
-        r = await a.get("/admin/sessions/2/download", params=ns_a)
+            assert {r["session_id"] for r in rows} == {str(seed_sid)}
+            assert not any(t in got[target].text for t in new_texts)
+        r = await a.get(f"/admin/sessions/{new_sid}/download", params=ns_a)
         assert r.status_code == 404 and code(r) == "DEMO_RESOURCE_NOT_FOUND"
 
         # B is byte-identical to its pre-change export and never sees A's edits.
-        after_b = await exports(b, ns_b)
+        after_b = await exports(b, ns_b, [seed_sid])
         assert {k: v.content for k, v in after_b.items()} == b_before
-        assert file_rows(path_b) == b_rows
+        assert product_rows(path_b) == b_rows
         rows = parse(after_b["all"], "all")
-        assert {r["session_id"] for r in rows} == {"1", "2"}
-        assert {r["teacher_nickname"] for r in rows} == {"Fictional teacher"}
+        assert {r["session_id"] for r in rows} == {str(seed_sid)}
+        assert {r["teacher_nickname"] for r in rows} == {"데모 교사"}
 
 
 async def real_seed(tmp):

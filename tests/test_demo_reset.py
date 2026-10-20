@@ -498,8 +498,7 @@ async def case_two_tabs(tmp):
     from src import main
 
     app = main.app
-    root_path = Path(os.environ["DEMO_DATA_ROOT"])
-    app_tests.install_seed(await app_tests.make_seed(root_path))
+    build_product_seed()
     async with app.router.lifespan_context(app):
         visitors = app.state.demo_request_db.visitors
         tab_a = app_tests.client_for(app)
@@ -557,10 +556,16 @@ async def case_two_tabs(tmp):
         assert unknown.status_code == 404  # rejected id leaves no receipt
 
 
-async def seed_app(app_tests, main):
-    app_tests.install_seed(
-        await app_tests.make_seed(Path(os.environ["DEMO_DATA_ROOT"]))
+def build_product_seed():
+    """The #197 product seed from its own CLI; main.demo_seed loads it."""
+    built = subprocess.run(
+        [sys.executable, "-m", "src.demo.seed", "build", "--out"]
+        + [os.environ["DEMO_SEED_DIR"]],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
     )
+    assert built.returncode == 0, built.stderr
 
 
 def count_clones(visitors):
@@ -595,7 +600,7 @@ async def case_close_failure(tmp):
     from src import main
 
     app = main.app
-    await seed_app(app_tests, main)
+    build_product_seed()
     async with app.router.lifespan_context(app):
         visitors = app.state.demo_request_db.visitors
         client = app_tests.client_for(app)
@@ -635,7 +640,7 @@ async def case_disconnect(tmp):
     from src import main
 
     app = main.app
-    await seed_app(app_tests, main)
+    build_product_seed()
     async with app.router.lifespan_context(app):
         runtime = app.state.demo_request_db
         visitors, lifecycle = runtime.visitors, runtime.lifecycle
@@ -693,7 +698,7 @@ async def case_live_lease(tmp):
     from src import main
 
     app = main.app
-    await seed_app(app_tests, main)
+    build_product_seed()
     async with app.router.lifespan_context(app):
         visitors = app.state.demo_request_db.visitors
         client = app_tests.client_for(app)
@@ -920,15 +925,7 @@ async def case_reset_race(tmp):
     stage, order = os.environ["RACE_STAGE"], os.environ["RACE_ORDER"]
     table, operation, adds_first, adds_after = RACE_ADDS[stage]
     expected_adds = adds_first if order == "reset_first" else adds_after
-    # The product seed from the #197 CLI; main.demo_seed loads DEMO_SEED_DIR.
-    built = subprocess.run(
-        [sys.executable, "-m", "src.demo.seed", "build", "--out"]
-        + [os.environ["DEMO_SEED_DIR"]],
-        cwd=Path(__file__).resolve().parents[1],
-        capture_output=True,
-        text=True,
-    )
-    assert built.returncode == 0, built.stderr
+    build_product_seed()
     app = main.app
     stretch_deadlines()
     root = Path(os.environ["DEMO_DATA_ROOT"])

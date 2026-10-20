@@ -1,7 +1,8 @@
 """#203 D4-01 security: config refusal, mode switching, CSRF/cookies, egress.
 
-Demo subprocess cases reuse the seed/client helpers of test_demo_d1_04_app and
-run THIS file as the script (one process per group to keep boot costs low).
+Demo subprocess cases boot the real app on the product seed (built by the
+#197 CLI), reuse the client helpers of test_demo_d1_04_app and run THIS file
+as the script (one process per group to keep boot costs low).
 """
 
 import json
@@ -11,7 +12,6 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -21,8 +21,6 @@ from test_demo_d1_04_app import (
     client_for,
     code,
     headers,
-    install_seed,
-    make_seed,
     namespace,
     start,
     visitor_files,
@@ -487,7 +485,7 @@ async def case_csrf(tmp):
 
     app = main.app
     root = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(await make_seed(root))
+    build_product_seed()
     async with app.router.lifespan_context(app):
         a, b = client_for(app, "10.0.0.1"), client_for(app, "10.0.0.2")
         # §10 cookie attributes on the bootstrap response.
@@ -659,46 +657,6 @@ async def case_csrf(tmp):
         assert snapshot((await a.get("/demo/state")).json()) == after_y
 
 
-async def keep_real_tables(spec, tmp):
-    """Swap make_seed's synthetic session tables for the migrated ones.
-
-    The shared stand-in omits columns the real delete routes query (teacher_id
-    ...); #197's product seed keeps them. Removal when #197 lands.
-    """
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    from src.db.migrations.migrate import run_all_migrations
-
-    tables = (
-        "session_summary",
-        "session_feedback_report",
-        "generation_run",
-        "message",
-        "session",
-    )
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp / 'real.db'}")
-    await run_all_migrations(db_engine=engine)
-    await engine.dispose()
-    marks = ",".join("?" * len(tables))
-    with (
-        sqlite3.connect(tmp / "real.db") as real,
-        sqlite3.connect(spec.path) as db,
-    ):
-        ddl = [
-            row[0]
-            for row in real.execute(
-                f"SELECT sql FROM sqlite_master WHERE tbl_name IN ({marks}) "
-                "AND sql IS NOT NULL ORDER BY type DESC, rowid",
-                tables,
-            )
-        ]
-        for table in tables:
-            db.execute(f'DROP TABLE "{table}"')
-        for statement in ddl:
-            db.execute(statement)
-    real.close(), db.close()
-
-
 async def case_auth(tmp):
     import base64
 
@@ -707,15 +665,7 @@ async def case_auth(tmp):
     from src import main
 
     app = main.app
-    spec = await make_seed(Path(os.environ["DEMO_DATA_ROOT"]))
-    await keep_real_tables(spec, tmp)
-    # The delete route's tour-fact capture needs the full seed_refs set, and
-    # startup requires exactly the manifest's (#197 supplies the product one).
-    refs = json.loads(spec.manifest_path.read_text())["seed_refs"]
-    main.demo_seed = lambda: (
-        spec,
-        SimpleNamespace(seed_refs=refs, supported_snapshot=lambda row: False),
-    )
+    build_product_seed()
     nonce = "p" * 40
     # A normal-service login cookie for user 1 (the admin) under SESSION_SECRET.
     payload = base64.b64encode(json.dumps({"user_id": 1}).encode())
@@ -892,7 +842,7 @@ async def case_dangerous(tmp):
 
     app = main.app
     root = Path(os.environ["DEMO_DATA_ROOT"])
-    install_seed(await make_seed(root))
+    build_product_seed()
     async with app.router.lifespan_context(app):
         admin = client_for(app)
         state = await start(admin, "admin")
@@ -918,7 +868,7 @@ async def case_egress(tmp):
     from src import main
 
     app = main.app
-    install_seed(await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    build_product_seed()
     async with app.router.lifespan_context(app):
         runtime = app.state.demo_request_db
         client = client_for(app)

@@ -1115,7 +1115,7 @@ async def case_template(tmp):
         assert value["csrf_header_name"] == "x-csrf-token"
         assert value["start_url"] == "/demo/start"
         assert value["state_url"] == "/demo/state"
-        assert value["public_url"] is None and value["tour_facts"] is None
+        assert value["public_url"] is None
         text = json.dumps(value)
         assert not any(secret in text for secret in (*SECRETS, str(tmp)))
 
@@ -1124,6 +1124,7 @@ async def case_template(tmp):
 
         assert_safe(value)
         assert all(value[key] is None for key in namespace_keys), value
+        assert value["tour_facts"] is None
         # TTLs are server policy, known before any visit.
         assert value["idle_ttl_seconds"] == config.DEMO_IDLE_TTL_SECONDS
         assert value["absolute_ttl_seconds"] == config.DEMO_ABSOLUTE_TTL_SECONDS
@@ -1142,11 +1143,15 @@ async def case_template(tmp):
         value = response.json()
         assert_safe(value)
         # The same snapshot the state endpoint publishes for this namespace.
-        assert {key: value[key] for key in state} == state
+        # Plain /demo/state omits TourFacts; include_tour=true carries them.
+        assert {key: value[key] for key in state} == state | {
+            "tour_facts": value["tour_facts"]
+        }
         assert value["state"] == "ready" and value["role"] == "teacher"
         assert value["provenance"]["response_source"] == "prepared_example"
         assert value["next_url"].startswith("/scenarios?ds=")
         assert value["ui_language"] == "en"
+        assert value["tour_facts"]["generation"] == state["generation"]
 
         # Error pages: only a context passing the currentness check names a namespace.
         captured.clear()

@@ -229,11 +229,17 @@ class StudentStreamingResponse(StreamingResponse):
         # Quiesce active work first so joining it cannot wait forever.
         for task in self.demo_run.tasks:
             task.cancel()
-        with anyio.move_on_after(CLEANUP_SECONDS):
-            # A body still being read cannot be closed here; its own
-            # finally claims and records the run instead.
-            with suppress(Exception):
+        # Join the body: it is finished only once its finally, including
+        # its completion or interruption save, has run to the end.
+        while getattr(self.body_iterator, "ag_frame", None) is not None:
+            try:
                 await self.body_iterator.aclose()
+            except RuntimeError:
+                # Still running in its reader task; never count that as done.
+                await asyncio.sleep(0.01)
+            except Exception:
+                logger.error("Demo body cleanup failed")
+        with anyio.move_on_after(CLEANUP_SECONDS):
             if self.claim():
                 # Response headers can fail before the generator starts.
                 try:

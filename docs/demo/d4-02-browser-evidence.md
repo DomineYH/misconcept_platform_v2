@@ -1,6 +1,6 @@
 # D4-02 독립 브라우저 여정 검증 evidence (#204)
 
-계약: `d0-03-v1-r3` 의미(문서 `d0-03-v2`). 이 문서의 실행 결과는 **작성 중 확인**이며 완료 증거가 아니다. 최종 acceptance는 #202(G4)가 고정한 통합 SHA와 `docs/demo/d3-04-integration-manifest.json`에서의 실행분만 인정한다.
+계약: `d0-03-v1-r3` 의미(문서 `d0-03-v2`). 최종 acceptance는 아래 [G4 최종 실행](#g4-최종-실행--후보-de3054a-2026-10-20)만 인정한다. 실행 1–6은 작성 중 확인 기록이며 완료 증거가 아니다.
 
 ## 실행 1 — Phase 1 (2026-10-20, 작성 중 확인)
 
@@ -62,7 +62,7 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 - skip case 확인: 같은 모듈의 임시 사본에서 skip만 끈 실행은 `503 !== 200`으로 실패했다(`logs-w195/204/browser-isolation-r1-unskipped.log`, 사본은 삭제). 즉 검사는 보존되어 있고 #198 수정 전에는 여전히 빨갛다.
 - 시작 protocol 진단(브라우저 없음): 가짜 helper로 분할 수신 receipt는 정상 해석, 깨진 JSON과 receipt 부재는 promise 거절, uncaught 예외 0(`logs-w195/204/receipt-diag.log`).
 
-## 실행 4 — Phase 2 (2026-10-20, 작성 중 확인, pending G4 candidate)
+## 실행 4 — Phase 2 (2026-10-20, 작성 중 확인)
 
 - 기준: main `1a40dc2`(#198 PR2 context_budget demo 분기, #194 S4 `demo_seed` → `load_seed(DEMO_SEED_DIR)` 병합 포함) 위 `feat/204-final` `2f9c6ba`. 이 문서는 실행 뒤 같은 branch의 다음 commit에서 수정했고 test 파일은 바뀌지 않았다.
 - 환경: WSL2 Linux(8 core, load average 약 20), Python 3.12.3(uv venv), Node 24, Playwright Chromium headless. 실행 tree는 `git archive 2f9c6ba`를 ext4 임시 디렉터리에 푼 것이다. 저장소가 있는 `/mnt/d`(drvfs)에서는 demo provider가 호출마다 fixture 84개를 다시 읽느라(`src/demo/provider.py` `_fixture`) 약 10 s가 걸려 seed의 학생 첫 출력 제한 5 s(`src/demo/seed.py` `DEMO_TIMEOUTS`)를 넘고 `first_output_timeout`으로 실패한다. 이는 실행 위치 문제이며 ext4(CI 포함)에서는 재현되지 않았다.
@@ -89,7 +89,7 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 
 스크린샷·내려받은 CSV는 실행 tree의 `test-results/d4-02/`(gitignore)에 남고 commit하지 않았다. 최종 G4 실행분만 `docs/demo/d4-02-evidence/`에 둔다.
 
-## 실행 5 — Phase 3, #198 수정 뒤 (2026-10-20, 작성 중 확인, pending G4 candidate)
+## 실행 5 — Phase 3, #198 수정 뒤 (2026-10-20, 작성 중 확인)
 
 - 기준: `feat/204-final` `e5a9887`. origin/main `fbbcad7`(#251 = #198 PR4 `ae8c76d`: context_budget demo 분기, `/end`·`/analyze` demo adapter, close_session demo scope, 분석 REQUEST_CONFLICT envelope; #250 seed provenance)을 병합했다. 이 문서는 실행 뒤 다음 commit에서 수정했고 test 파일은 바뀌지 않았다.
 - 환경: WSL2 Linux(load average 약 2–3), Python 3.12.3(uv venv), Node 24, Playwright Chromium headless. 실행 tree는 `git archive e5a9887`를 ext4 임시 디렉터리에 푼 것이다(실행 4와 같은 drvfs 이유).
@@ -113,7 +113,7 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 
 실패(모두 같은 결함, 단계를 멈추지 않도록 모아서 끝에 실패시킴): map `step 4`·`step 5 after the role switch`(`C C C X P P` ≠ `C C C C X P`), 관찰 `admin_record_viewed` 없음, `#demo-tour-csv` 숨김, map `step 5`·`step 6 before reset`(`C C C X P P` ≠ `C C C C C X`), reset 직후 일회 완료 표시(`X P P P P P` ≠ `C C C C C C`; 완주하지 않은 여정은 완료로 표시하지 않는 §24.1 규칙의 결과).
 
-## 실행 6 — Phase 4, D5 수정 확인 (2026-10-20, 작성 중 확인, pending G4 candidate)
+## 실행 6 — Phase 4, D5 수정 확인 (2026-10-20, 작성 중 확인)
 
 - 기준: `feat/204-final` `eda6f0c`. 확인용으로 **scratch clone에서만** `origin/fix/d5-tour-facts` `419c66d`(D5: `DemoRequestDB.display()`가 `demo_config.tour_facts`를 채움, `src/api/dependencies.py`)를 병합했다(scratch commit `54be319`, branch에는 commit하지 않음; main에는 D5 자체 PR로 들어온다). 이 문서는 실행 뒤 다음 commit에서 수정했다.
 - harness 변경(`eda6f0c`): helper `DEMO_REQUESTS_PER_MINUTE=600`(설정 최대; 100 ms `/demo/state` poll이 기본 60/분을 넘어 `/admin/sessions-page`가 429였다), journey `facts()`가 navigation(교사 삭제 alert 뒤 users 화면 reload)에도 재시도, 투어 map·`admin_record_viewed` 관찰·투어 CSV 버튼을 다시 hard assertion으로 되돌리고 행 링크 대체 경로를 제거했다.
@@ -129,17 +129,42 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 
 D5 없이 이 branch만으로는 실행 5와 같이 투어 map·관찰·투어 CSV 검사가 실패한다(이제 hard assertion이므로 해당 단계에서 멈춘다). 세 모듈 모두 통과하려면 D5가 main에 있어야 한다.
 
-## 작성 중 대체(최종 evidence 전에 제거)
+## G4 최종 실행 — 후보 de3054a (2026-10-20)
 
-1. seed 바인딩: 제거됨(실행 4). #194 S4로 `src.main.demo_seed`가 `load_seed(DEMO_SEED_DIR)`를 읽고, helper는 seed CLI를 `DEMO_SEED_DIR`로 빌드만 한다.
-2. 만료 재진입용 helper 시계: `tests/demo_d4_02_server.py`의 `TestClock`이 `src.demo.visitors.SystemClock`을 대신하고, stdin `ADVANCE <seconds>`일 때만 앞당긴다. I7만 사용하며 최종 evidence에도 테스트 시계 사용으로 명시한다.
+- 후보(`candidate_commit`): main `de3054a00282e1bbfc97784918059f653ac08811`. D3 제품 PR(#194–#201 최종 PR, #248(#200), #251(#198), #250(D2), #252(D5), #249(flake))을 모두 포함한다. 후보에는 `docs/demo/d3-04-integration-manifest.json`이 없어 SHA는 coordinator 지시(G4 order)로 고정했다.
+- 실행 commit(`tested_commit`): `feat/204-final` `ca1e5f2b00adc767617eec0aae2725a08cf2e848` = 후보 + 이 branch의 test·doc commit(병합 `ca1e5f2`, 충돌 없음). 후보 대비 제품 diff 0(`tests/`·`docs/`만 다름). 이 문서와 `d4-02-evidence/`는 실행 뒤 다음 commit에서 추가했다.
+- 계약: `d0-03-v1-r3`.
+- 환경: 로컬 WSL2 Linux(시작 load average 4.6), Python 3.12.3(uv venv, `--frozen`), Node v24.21.0, Playwright Chromium 153.0.8010.12 headless, worker 1개. 실행 tree는 committed tree의 ext4 `git clone --shared`(clean, untracked `node_modules` symlink만). 앱 origin interception 없음, 외부 AI 호출 없음.
+- 명령: `flock /tmp/mp2-heavy.lock -c 'npm run test:browser -- browser_demo_isolation browser_demo_journey browser_demo_recovery'`, exit 0.
+- receipt(모듈마다 helper가 seed CLI `python -m src.demo.seed build --out <tmp>/seed`를 실제 실행): `source_commit` `ca1e5f2b00adc767617eec0aae2725a08cf2e848`, `db_schema_version` `037_demo_provider.sql`, `logical_data_sha256` `93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141`, `manifest_sha256` `60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516`, `seed_sha256`(물리 bytes, 기동마다 다름) `7f8072b1…b79a`(isolation)·`fa59041f…7e5b`(journey)·`b2b4612d…da59`(recovery). 전체 값은 log의 `RECEIPT` 행.
 
-## Pending
+| 모듈 | 후보 | 실행 commit | 결과 | 범위 | log |
+| --- | --- | --- | --- | --- | --- |
+| `browser_demo_isolation.mjs` | `de3054a` | `ca1e5f2` | passed (23.5 s) | 실행 1–3 항목(§9·§9.1·§10 쿠키·CSRF·namespace, B/F 격리, normal mode 404) + seed 세션 관리자 분석 상세 | [`browser-de3054a.log`](d4-02-evidence/browser-de3054a.log) |
+| `browser_demo_journey.mjs` | `de3054a` | `ca1e5f2` | passed (28.5 s) | A 여섯 단계: 단계별 root `data-demo-*`·TourFacts·map `C X P P P P` → … → `C C C C C X`, reset 성공 일회 `C C C C C C`; `admin_record_viewed` 관찰은 직접, `history_viewed`·`csv_received`는 그것이 있어야 넘어가는 map 단계(4·5단계 완료)로 확인; 투어 CSV 버튼 파일 파싱(§23 27+5열, 6행, 출처값); 삭제 §22; reset 뒤 이전 탭·URL 409; B 격리 세 번(§28) | 같음 |
+| `browser_demo_recovery.mjs` | `de3054a` | `ca1e5f2` | passed (35.5 s): I1–I7 | I 복구·이중 클릭·투어 닫기·두 탭·ko/en·390 px/200%/키보드·만료 재진입(테스트 시계) | 같음 |
+| 전체 pytest·전체 browser suite·live(H1) | `de3054a` | — | not run (로컬): PR head의 CI가 실행한다 | 회귀 전체 | CI |
 
-pending G4 candidate(#202 통합 SHA·manifest):
-- 위 세 모듈의 최종 실행과 `docs/demo/d4-02-evidence/`(CSV·스크린샷·log). D5(`fix/d5-tour-facts`)가 그 SHA에 포함되어야 한다.
+`d4-02-evidence/`의 파일(모두 이 실행에서 생성, 내용은 demo fixture·seed 자료뿐이며 비밀·cookie·host 경로 없음):
+
+| 파일 | 내용 |
+| --- | --- |
+| [`browser-de3054a.log`](d4-02-evidence/browser-de3054a.log) | 머리말(후보·실행 commit·계약·환경·명령·exit) + 러너 출력 전체 |
+| [`journey-admin.csv`](d4-02-evidence/journey-admin.csv) | 5단계 투어 CSV 버튼으로 받은 `demo_d0-02-v1_admin_session-2.csv`(관리자 27열 + suffix 5열, 6행) |
+| [`journey-1-teacher.png`](d4-02-evidence/journey-1-teacher.png), [`journey-4-history.png`](d4-02-evidence/journey-4-history.png), [`journey-5-admin.png`](d4-02-evidence/journey-5-admin.png), [`journey-7-reset.png`](d4-02-evidence/journey-7-reset.png) | A 1·4·5·7단계 화면(5단계: map `C C C C C X`, 투어 CSV 버튼 표시; 7단계: reset·새로고침 뒤 새 세대 초기 map) |
+| [`recovery-stale-role.png`](d4-02-evidence/recovery-stale-role.png), [`recovery-stale-generation.png`](d4-02-evidence/recovery-stale-generation.png) | I4 첫 탭의 `demo.stale_role`·`demo.stale_generation` 안내 |
+| [`recovery-layout-390.png`](d4-02-evidence/recovery-layout-390.png), [`recovery-layout-640.png`](d4-02-evidence/recovery-layout-640.png) | I6 390×844, 200% 확대(640×422) 배치 |
+
+확인 한계: `pageshow.persisted`는 Chromium headless에서 항상 false라 BFCache 복원 자체는 확인하지 못했다(I1은 기록만). I7은 아래 테스트 시계를 쓴다.
+
+## 테스트 대체
+
+- 만료 재진입용 helper 시계: `tests/demo_d4_02_server.py`의 `TestClock`이 `src.demo.visitors.SystemClock`을 대신하고, stdin `ADVANCE <seconds>`일 때만 앞당긴다. I7만 사용한다.
+- 요청 한도: helper가 `DEMO_REQUESTS_PER_MINUTE=600`(설정 최대)을 둔다. 검사가 `/demo/state`를 100 ms마다 poll하기 때문이다.
+- seed 바인딩 대체는 실행 4에서 제거했다. 제품 `src.main.demo_seed`가 helper가 빌드한 `DEMO_SEED_DIR`를 읽는다.
 
 ## 발견한 제품 결함
 
 - 해결됨(실행 5): #198 demo 분석 계획 503(`src/services/analysis_plan.py:67` → `context_budget.provider_parameters` KeyError 'demo'). #251로 해결.
-- 수정 대기(실행 6에서 확인): `demo_config.tour_facts`가 모든 demo 페이지에서 null이었다(`DemoRequestDB.display()`, `src/api/dependencies.py:334-344`, §26 #194). 그래서 `uiLanguage.observe`(`static/js/display-language.js:117-120`)가 관찰을 보내지 않고 map이 `analysis`에서 멈췄다. D5 branch `fix/d5-tour-facts`(`419c66d`)가 고치며, 그 branch를 scratch에서만 병합한 실행 6에서 journey가 통과했다.
+- 해결됨(G4): `demo_config.tour_facts`가 모든 demo 페이지에서 null이었다(`DemoRequestDB.display()`, `src/api/dependencies.py`, §26 #194). 그래서 관찰이 보내지지 않고 map이 `analysis`에서 멈췄다. D5(#252)로 해결되어 G4 실행의 journey가 통과했다.
+- 열린 제품 결함 없음(이 세 모듈 범위).

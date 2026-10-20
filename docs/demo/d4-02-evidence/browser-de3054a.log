@@ -1,0 +1,32 @@
+# D4-02 G4 browser run (#204)
+candidate_commit: de3054a00282e1bbfc97784918059f653ac08811 (main, G4 candidate)
+tested_commit: ca1e5f2b00adc767617eec0aae2725a08cf2e848 (candidate + feat/204-final test/doc commits; product diff vs candidate = 0)
+contract: d0-03-v1-r3
+worktree: git clone --shared of the committed tree on ext4, clean (only the untracked node_modules symlink)
+environment: local WSL2 Linux 6.18 (load average 4.6 at start), Python 3.12.3 (uv venv, --frozen), Node v24.21.0, Playwright Chromium 153.0.8010.12 headless, one worker
+command: flock /tmp/mp2-heavy.lock -c 'npm run test:browser -- browser_demo_isolation browser_demo_journey browser_demo_recovery'
+exit code: 0
+---
+npm notice run test:browser
+npm notice run node tests/run_browser_checks.mjs browser_demo_isolation browser_demo_journey browser_demo_recovery
+START browser_demo_isolation.mjs
+RECEIPT {"command":"python -m src.demo.seed build --out <tmp>/seed","db_schema_version":"037_demo_provider.sql","logical_data_sha256":"93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141","manifest_sha256":"60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516","seed_sha256":"7f8072b1d19aba32668bf69bc79ccdc64c75ff60c00fde58b3323e2d9b3db79a","source_commit":"ca1e5f2b00adc767617eec0aae2725a08cf2e848"}
+PASS browser_demo_isolation.mjs
+END browser_demo_isolation.mjs status=PASS elapsed_ms=23470.8
+START browser_demo_journey.mjs
+RECEIPT {"command":"python -m src.demo.seed build --out <tmp>/seed","db_schema_version":"037_demo_provider.sql","logical_data_sha256":"93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141","manifest_sha256":"60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516","seed_sha256":"fa59041f7f1f687c8452bc4909a07185f4fd9d3abf71803d76ff10cdcdc47e5b","source_commit":"ca1e5f2b00adc767617eec0aae2725a08cf2e848"}
+PASS browser_demo_journey.mjs
+END browser_demo_journey.mjs status=PASS elapsed_ms=28471.4
+START browser_demo_recovery.mjs
+RECEIPT {"command":"python -m src.demo.seed build --out <tmp>/seed","db_schema_version":"037_demo_provider.sql","logical_data_sha256":"93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141","manifest_sha256":"60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516","seed_sha256":"b2b4612d0a9f27f07bc1a9abd088682b6d059fa323c9d4d03ef618d48c7ada59","source_commit":"ca1e5f2b00adc767617eec0aae2725a08cf2e848"}
+BFCACHE pageshow persisted=[false,false,false,false,false,false]
+PASS I1 refresh/back/forward/BFCache
+PASS I2 double clicks
+PASS I3 tour close/skip/resume
+PASS I4 two tabs
+PASS I5 ko/en toggle
+PASS I6 390/zoom/keyboard layout
+PASS I7 expiry re-entry
+PASS browser_demo_recovery.mjs
+END browser_demo_recovery.mjs status=PASS elapsed_ms=35453.3
+exit 0

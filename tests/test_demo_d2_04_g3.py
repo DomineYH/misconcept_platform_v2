@@ -89,6 +89,10 @@ def test_g3_reset_during_stream(seed_dir, tmp_path):
     run_case("reset", seed_dir, tmp_path)
 
 
+def test_g3_close_during_stream_cancels_it(seed_dir, tmp_path):
+    run_case("close", seed_dir, tmp_path)
+
+
 class Egress:
     """Counts every attempt to leave the process; each one also fails."""
 
@@ -400,6 +404,75 @@ async def case_flow(tmp):
     assert EGRESS.attempts == [], EGRESS.attempts  # shutdown
 
 
+def hold_first_delta():
+    """Holds the real demo stream after its first delta until released."""
+    import asyncio
+
+    from src.demo.provider import DemoProvider
+
+    streaming, release = asyncio.Event(), asyncio.Event()
+    stream_text = DemoProvider.stream_text
+
+    async def held(self, *args, **kwargs):
+        async for event in stream_text(self, *args, **kwargs):
+            yield event
+            if event.type == "text_delta" and not streaming.is_set():
+                streaming.set()
+                await release.wait()
+
+    DemoProvider.stream_text = held
+    return streaming, release
+
+
+async def case_close(tmp):
+    import asyncio
+
+    from test_demo_d3_02_guards import call
+
+    from src import main
+    from src.demo import seed
+
+    app = main.app
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    refs = json.loads(seed.MANIFEST.read_text())["seed_refs"]
+    streaming, release = hold_first_delta()
+    async with app.router.lifespan_context(app):
+        client = client_for(app, "10.0.0.1")
+        state = await as_teacher(client, await start(client, "admin"))
+        (db,) = visitor_db(root)
+        session_id = await new_session(client, state, refs["scenario"])
+        turn = asyncio.create_task(
+            student_turn(client, state, session_id, seed.INPUTS["A"])
+        )
+        await asyncio.wait_for(streaming.wait(), 30)
+        response = await call(
+            client, state, "POST", f"/sessions/{session_id}/close"
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["already_ended"] is False, response.text
+        try:
+            # §6: only the visitor-scope cancel can end the held stream.
+            frames = await asyncio.wait_for(asyncio.shield(turn), 10)
+        finally:
+            release.set()
+        assert frames[-1][0] != "output.completed", frames
+        assert frames[-1][0].startswith("run."), frames
+        (run,) = rows(
+            db,
+            "SELECT id, status, error_code FROM generation_run "
+            "WHERE session_id = ?",
+            (session_id,),
+        )
+        assert run["status"] == "cancelled", run
+        assert rows(
+            db,
+            "SELECT COUNT(*) AS n FROM message WHERE generation_run_id = ?",
+            (run["id"],),
+        ) == [{"n": 0}]
+        assert EGRESS.attempts == [], EGRESS.attempts
+    assert EGRESS.attempts == [], EGRESS.attempts
+
+
 async def case_reset(tmp):
     import asyncio
     from uuid import uuid4
@@ -408,23 +481,11 @@ async def case_reset(tmp):
 
     from src import main
     from src.demo import seed
-    from src.demo.provider import DemoProvider
 
     app = main.app
     root = Path(os.environ["DEMO_DATA_ROOT"])
     refs = json.loads(seed.MANIFEST.read_text())["seed_refs"]
-    streaming, release = asyncio.Event(), asyncio.Event()
-    stream_text = DemoProvider.stream_text
-
-    async def held(self, *args, **kwargs):
-        # Holds the real stream after its first delta until reset is marked.
-        async for event in stream_text(self, *args, **kwargs):
-            yield event
-            if event.type == "text_delta" and not streaming.is_set():
-                streaming.set()
-                await release.wait()
-
-    DemoProvider.stream_text = held
+    streaming, release = hold_first_delta()
     async with app.router.lifespan_context(app):
         client = client_for(app, "10.0.0.1")
         state = await as_teacher(client, await start(client, "admin"))

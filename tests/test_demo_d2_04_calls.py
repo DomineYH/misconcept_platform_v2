@@ -1906,6 +1906,91 @@ async def test_cancelling_an_abort_never_skips_its_cleanup(lifecycle):
         permit.release()
 
 
+def blocked_finisher(statuses, entered, release, saved):
+    """A real guarded save that pauses on the given statuses."""
+    record = recorder(saved)
+
+    async def finish(*args, status, **kwargs):
+        if status in statuses:
+            entered.set()
+            await release.wait()
+        return await record(*args, status=status, **kwargs)
+
+    return finish
+
+
+async def test_abort_joins_the_body_completion_save(lifecycle, monkeypatch):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    entered, release, saved = asyncio.Event(), asyncio.Event(), []
+
+    async def execute_call(permit, request, **kwargs):
+        yield CallEvent("completed", text="fictional")
+
+    finish = blocked_finisher({"completed"}, entered, release, saved)
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", finish)
+    response = s2r1b_student(run, run_id, saved)
+    response.finisher = finish
+    await anext(response.body_iterator)
+    reading = asyncio.create_task(anext(response.body_iterator))
+    await entered.wait()
+    aborting = asyncio.create_task(response.demo_abort())
+    try:
+        await asyncio.sleep(0.1)
+        # The body's guarded completion save is still pending.
+        assert not aborting.done()
+        assert not run.token.task_control.done.is_set()
+        assert lifecycle.visitors.lease_count(scope) > 0
+    finally:
+        release.set()
+    await reading
+    await asyncio.wait_for(aborting, 10)
+    assert [status for status, _ in saved] == ["completed"]
+    assert run.token.task_control.done.is_set()
+    assert lifecycle.lookup(scope, "run", run_id) is None
+    assert lifecycle.visitors.lease_count(scope) == 0
+
+
+async def test_abort_joins_the_body_interruption_save(lifecycle, monkeypatch):
+    run, run_id = await demo_run(lifecycle)
+    scope = run.binding.ctx.scope
+    producing, entered = asyncio.Event(), asyncio.Event()
+    release, saved = asyncio.Event(), []
+
+    async def execute_call(permit, request, **kwargs):
+        producing.set()
+        await asyncio.Event().wait()
+        yield CallEvent("completed", text="never")
+
+    finish = blocked_finisher({"interrupted"}, entered, release, saved)
+    monkeypatch.setattr(student_stream, "execute_call", execute_call)
+    monkeypatch.setattr(student_stream, "finish_student", finish)
+    response = s2r1b_student(run, run_id, saved)
+    response.finisher = finish
+    await anext(response.body_iterator)
+    reading = asyncio.create_task(anext(response.body_iterator))
+    await producing.wait()
+    # A client disconnect cancels the body's reader mid-stream.
+    reading.cancel()
+    await entered.wait()
+    aborting = asyncio.create_task(response.demo_abort())
+    try:
+        await asyncio.sleep(0.1)
+        assert not aborting.done()
+        assert not run.token.task_control.done.is_set()
+        assert lifecycle.visitors.lease_count(scope) > 0
+    finally:
+        release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await reading
+    await asyncio.wait_for(aborting, 10)
+    # The body's own save ran under a live lease; abort did not save again.
+    assert [status for status, _ in saved] == ["interrupted"]
+    assert lifecycle.lookup(scope, "run", run_id) is None
+    assert lifecycle.visitors.lease_count(scope) == 0
+
+
 async def test_abort_quiesces_an_active_producer_before_joining(
     lifecycle, monkeypatch
 ):

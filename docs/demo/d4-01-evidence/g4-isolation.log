@@ -1,8 +1,23 @@
-.......                                                                  [100%]
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.6.0 -- <venv>/bin/python3
+rootdir: <host-path>
+configfile: pyproject.toml
+plugins: asyncio-1.2.0, cov-7.0.0, anyio-4.11.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+tests/test_demo_isolation.py::test_same_seed_gives_separate_files_and_writes_stay_private PASSED [ 14%]
+tests/test_demo_isolation.py::test_reset_and_expiry_of_one_visitor_leave_the_other_untouched PASSED [ 28%]
+tests/test_demo_isolation.py::test_a_context_is_refused_against_the_other_visitor_without_writes PASSED [ 42%]
+tests/test_demo_isolation.py::test_http_visitors_are_isolated_through_mutation_forgery_and_reset PASSED [ 57%]
+tests/test_demo_isolation.py::test_http_delete_and_csv_export_stay_private_and_skip_deleted_rows PASSED [ 71%]
+tests/test_demo_isolation.py::test_conversation_analysis_and_run_ledger_stay_private_per_visitor PASSED [ 85%]
+tests/test_demo_isolation.py::test_teacher_csv_has_prefix_20_and_demo_suffix_5 PASSED [100%]
+
 =============================== warnings summary ===============================
 tests/test_demo_isolation.py::test_http_delete_and_csv_export_stay_private_and_skip_deleted_rows
   <venv>/lib/python3.12/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
     warnings.warn(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-7 passed, 1 warning in 72.66s (0:01:12)
+=================== 7 passed, 1 warning in 66.51s (0:01:06) ====================

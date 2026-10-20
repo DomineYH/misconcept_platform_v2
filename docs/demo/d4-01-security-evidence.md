@@ -2,23 +2,60 @@
 
 계약: `d0-03-v1-r3` 의미(문서 `d0-03-v2`). 최종 acceptance는 #202(G4)가 고정한 통합 SHA에서의 실행분만 인정한다(계약 §27/§28). 아래 첫 절이 그 실행이고, 실행 P2–P4는 작성 중 확인 기록이다.
 
-## G4 candidate de3054a00282e1bbfc97784918059f653ac08811 (2026-10-20, 최종)
+## G4 candidate de3054a00282e1bbfc97784918059f653ac08811 (2026-10-20, 최종, repair r1)
 
-- 후보 SHA: main `de3054a00282e1bbfc97784918059f653ac08811`(#194–#201 최종 PR, #248, #251, #250, #252, #249 포함). 이 시점부터 제품 코드는 고정이다.
-- 검사 commit: `2a5c53e` = 후보 + #203의 test/doc commit(origin/main 병합, 충돌 없음). 후보 대비 diff는 `tests/test_demo_isolation.py`, `tests/test_demo_reset.py`, `tests/test_demo_security.py`, 이 문서뿐이며 **제품 diff 0**. 검사한 tree = commit한 tree(이 절을 추가한 docs commit만 뒤따른다).
+- 후보 SHA: main `de3054a00282e1bbfc97784918059f653ac08811`(#194–#201 최종 PR, #248, #251, #250, #252, #249 포함). 제품 코드 고정.
+- 검사 commit: `b4ac931` = 후보 + #203의 test/doc commit. 후보 대비 diff는 세 test 파일과 `docs/demo/d4-01-*`뿐이며 **제품 diff 0**(`git diff de3054a -- src static` 비어 있음). 검사한 tree = commit한 tree(이 문서·evidence를 고친 docs commit만 뒤따른다).
 - 계약: `d0-03-v1-r3`.
-- 환경: WSL2 Linux, Python 3.12.3, pytest 8.4.2(uv venv, `uv sync --frozen --extra dev`). checkout은 검사 commit의 ext4 `git clone --shared`(drvfs에서는 fixture 재검증이 느려 first-output 한도를 넘는다, P2 참고). heavy lock(`flock`) 아래 worker 1개, 파일마다 별도 pytest 프로세스로 직렬 실행. 각 사례는 실제 FastAPI app(`APP_MODE=demo`, `TESTING=false`, `ENV=production`, 외부 키 환경 제거) 하위 프로세스와 #197 seed CLI로 만든 제품 seed를 쓴다.
-- 명령: `uv run --frozen --no-sync python -m pytest -q -p no:cacheprovider --basetemp=<tmp>/g4-<stem> tests/test_demo_<stem>.py -rs`
+- 환경: WSL2 Linux, Python 3.12.3, pytest 8.4.2(uv venv, `uv sync --frozen --extra dev`). checkout은 검사 commit의 ext4 `git clone --shared`(drvfs에서는 fixture 재검증이 first-output 한도를 넘는다, P2 참고). heavy lock(`flock`) 아래 worker 1개, 파일마다 별도 pytest 프로세스로 직렬 실행.
+- 명령: `uv run --frozen --no-sync python -m pytest -v -p no:cacheprovider --basetemp=<tmp>/g4r1-<stem> tests/test_demo_<stem>.py -rs`
+- repair r1(독립 리뷰 P1): 이전 G4 기록은 모든 사례가 제품 seed라고 했으나 일부 하위 프로세스 사례가 대체 seed(`install_seed(make_seed(...))`, `main.demo_seed` 교체, `keep_real_tables`)를 썼다. 그 사례를 모두 #197 seed CLI(`python -m src.demo.seed build --out <tmp>/seed`) → `DEMO_SEED_DIR` → 실제 `demo_seed()` 경로로 옮겼고 단언은 줄이지 않았다(제품 seed의 실제 ID·이름·행 수로 같은 강도로 바꿈). 세 파일에 seed 대체 코드는 남아 있지 않다. 아래 표는 사례를 두 묶음으로 나눈다.
 
 | 후보 SHA | 검사 commit | 계약 | 파일 | 결과 | 시간 | log |
 | --- | --- | --- | --- | --- | --- | --- |
-| `de3054a` | `2a5c53e` | d0-03-v1-r3 | `tests/test_demo_isolation.py` | 7 passed, 0 failed, 0 skipped | 72.7 s | `d4-01-evidence/g4-isolation.log` |
-| `de3054a` | `2a5c53e` | d0-03-v1-r3 | `tests/test_demo_reset.py` | 25 passed, 0 failed, 0 skipped | 122.5 s | `d4-01-evidence/g4-reset.log` |
-| `de3054a` | `2a5c53e` | d0-03-v1-r3 | `tests/test_demo_security.py` | 17 passed, 0 failed, 0 skipped | 54.0 s | `d4-01-evidence/g4-security.log` |
+| `de3054a` | `b4ac931` | d0-03-v1-r3 | `tests/test_demo_isolation.py` | 7 passed, 0 failed, 0 skipped | 66.5 s | `d4-01-evidence/g4-isolation.log` |
+| `de3054a` | `b4ac931` | d0-03-v1-r3 | `tests/test_demo_reset.py` | 25 passed, 0 failed, 0 skipped | 154.5 s | `d4-01-evidence/g4-reset.log` |
+| `de3054a` | `b4ac931` | d0-03-v1-r3 | `tests/test_demo_security.py` | 17 passed, 0 failed, 0 skipped | 75.7 s | `d4-01-evidence/g4-security.log` |
 
-- 합계 49 collected / 49 passed. 수집된 test ID는 `d4-01-evidence/g4-collected.txt`(같은 tree의 `--collect-only -q`). log의 경고는 제3자 deprecation(starlette TemplateResponse, pythonjsonlogger)뿐이다. log의 host 경로는 `<venv>`/`<host-path>`로 가렸고 secret은 없다(각 하위 프로세스가 출력에 secret이 없음을 단언한다).
-- 반환했던 제품 결함 D1·D1b(#198), D3·D4(#200)는 후보에서 모두 해소되어 해당 사례가 통과한다.
-- not run(이 문서 범위 밖, 이유): 전체 `pytest -q`, `npm run test:browser`, `tests/check_student_live.py` — 공통 규칙에 따라 PR head의 CI가 실행한다. `ruff check .`·`black --check .`은 같은 tree에서 통과(393 files unchanged). 브라우저 여정은 #204(D4-02), 통합 smoke는 #202 소관이다.
+합계 49/49 passed. 각 log는 `-v` 출력이라 test ID별 결과를 담는다.
+
+### G4 acceptance (product seed, real app) — 24 passed
+
+각 사례는 새 하위 프로세스에서 실제 FastAPI app(`APP_MODE=demo`, `TESTING=false`, `ENV=production`, 외부 키 환경 제거, 실제 cookie/CSRF middleware)을 띄우고, #197 CLI로 만든 제품 seed를 startup의 실제 `demo_seed()`가 읽는다.
+
+| 파일 | 사례 | 계약 |
+| --- | --- | --- |
+| isolation | `test_http_visitors_are_isolated_through_mutation_forgery_and_reset` | §3/§5.1/§6/§10/§21 |
+| isolation | `test_http_delete_and_csv_export_stay_private_and_skip_deleted_rows` | §22/§23 |
+| isolation | `test_conversation_analysis_and_run_ledger_stay_private_per_visitor` | §28/§5.1/§6 |
+| isolation | `test_teacher_csv_has_prefix_20_and_demo_suffix_5` | §23 |
+| reset | `test_reset_during_student_mentor_analysis_and_shield_ledger_writes[*]`(5 지점 × 2 순서 = 10) | §5.1/§7/§7.2/§11/§28 |
+| reset | `test_reset_close_failure_is_db_locked_and_keeps_lease_and_file` | §7.2 |
+| reset | `test_caller_disconnect_after_mark_still_completes_reset` | §7.2 |
+| reset | `test_reset_alone_drains_and_separate_live_lease_times_out` | §7.2 |
+| reset | `test_two_tabs_send_different_reset_ids_concurrently` | §7/§9.1 |
+| security | `test_demo_csrf_origin_cookie_matrix` | §9.1/§10 |
+| security | `test_demo_cross_auth_and_role_deleted` | §9/§10/§22 |
+| security | `test_demo_lifecycle_makes_no_external_calls` | §14 |
+| security | `test_demo_admin_dangerous_endpoints_are_forbidden` | §20 |
+| security | `test_demo_runs_make_no_external_calls` | §13/§14/§16/§19 |
+| security | `test_demo_rejects_injected_external_model` | §11/§13/§20 |
+
+### unit/synthetic 또는 rejected boot/normal mode — 25 passed, G4 acceptance 아님
+
+| 파일 | 사례 | 종류와 이유 | 같은 계약 행의 실제 stack 검사 |
+| --- | --- | --- | --- |
+| isolation | `test_same_seed_gives_separate_files_and_writes_stay_private`, `test_reset_and_expiry_of_one_visitor_leave_the_other_untouched`, `test_a_context_is_refused_against_the_other_visitor_without_writes` | unit/synthetic: 부모 pytest 프로세스(conftest `TESTING=true`)에서 registry만 직접 호출, synthetic seed(`synthetic_record`). 위조 context·만료 같은 내부 경계를 직접 겨눈다 | 위 isolation acceptance 두 HTTP 사례, #204 `tests/browser_demo_isolation.mjs` |
+| reset | `test_commit_inside_write_guard_precedes_reset`, `test_reset_first_rejects_late_write_and_never_recreates_old_db` | unit/synthetic: 부모 프로세스 harness, synthetic seed. barrier를 registry 수준에서 고정 | reset race 10건(acceptance), #198 `tests/test_demo_d2_04_g3.py::test_g3_reset_during_stream` |
+| reset | `test_duplicate_reset_increments_generation_once` | unit/synthetic(같은 harness) | `test_two_tabs_send_different_reset_ids_concurrently`(acceptance) |
+| reset | `test_ttl_during_reset_preparation_beats_publish`, `test_restart_removes_old_generation_and_rejects_unknown_files[*]`(2), `test_locked_seed_fails_reset_safely_and_new_id_retries`, `test_locked_start_is_not_published_and_new_id_retries`, `test_locked_retired_file_is_kept_until_unlocked`, `test_storage_limit_rejects_reset_and_start_without_state_change`, `test_257th_distinct_request_id_is_limit_reached_without_eviction` | unit/synthetic: 주입 clock(TTL), 재시작 중 남은 파일, SQLite 잠금, 저장 상한, receipt 상한 같은 고장·경계 상태는 공개 API와 제품 seed만으로 만들 수 없다 | 이 파일 안에는 없음. §7.2 잠금 실패의 실제 stack 사례는 `test_reset_close_failure_is_db_locked_and_keeps_lease_and_file`(acceptance) |
+| security | `test_demo_import_refuses_invalid_app_mode[*]`(3), `test_demo_config_refuses_every_forbidden_input`, `test_demo_import_refuses_forbidden_input[*]`(3), `test_demo_import_refuses_bootstrap_admin`, `test_dotenv_is_ignored_in_demo_and_read_in_normal` | rejected boot / normal mode: 새 하위 프로세스지만 의도적으로 부팅이 거절되거나 설정만 읽으므로 seed·demo startup이 없다(§2/§14) | 해당 없음(부팅 거절 자체가 검사 대상) |
+| security | `test_normal_mode_ignores_client_mode_switches`, `test_normal_admin_api_rejects_the_demo_provider[baseline]` | unit: 부모 프로세스(`TESTING=true`)의 normal mode app. demo startup 없음(§2/§9/§13/§20) | #204 `tests/browser_demo_isolation.mjs`의 normal mode 검사(실제 서버 `--normal`, demo 경로 404) |
+
+- 반환했던 제품 결함 D1·D1b(#198), D3·D4(#200)는 후보에서 모두 해소되어 해당 사례가 통과한다. 이번 이관에서 새 제품 결함은 없었다.
+- log의 host 경로는 `<venv>`/`<host-path>`로 가렸다(상대 경로 형태 포함, 전체 evidence 파일을 다시 검사). secret은 없다(각 하위 프로세스가 출력에 secret이 없음을 단언한다). 경고는 제3자 deprecation(starlette TemplateResponse, pythonjsonlogger)뿐이다.
+- not run(이 문서 범위 밖, 이유): 전체 `pytest -q`, `npm run test:browser`, `tests/check_student_live.py` — 공통 규칙에 따라 PR head의 CI가 실행한다. `ruff check .`·`black --check .`은 같은 tree에서 통과.
+- 이전 기록(`2a5c53e`, 49 passed)은 위 seed 대체 문제로 대체되었다.
 
 ## 실행 P4 — #248(D3/D4) 병합 뒤 재실행 (2026-10-20, 작성 중 확인)
 

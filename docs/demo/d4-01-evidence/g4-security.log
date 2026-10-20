@@ -1,6 +1,31 @@
-.................                                                        [100%]
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.6.0 -- <venv>/bin/python3
+rootdir: <host-path>
+configfile: pyproject.toml
+plugins: asyncio-1.2.0, cov-7.0.0, anyio-4.11.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 17 items
+
+tests/test_demo_security.py::test_demo_import_refuses_invalid_app_mode[Demo] PASSED [  5%]
+tests/test_demo_security.py::test_demo_import_refuses_invalid_app_mode[] PASSED [ 11%]
+tests/test_demo_security.py::test_demo_import_refuses_invalid_app_mode[production] PASSED [ 17%]
+tests/test_demo_security.py::test_demo_config_refuses_every_forbidden_input PASSED [ 23%]
+tests/test_demo_security.py::test_demo_import_refuses_forbidden_input[OPENAI_API_KEY] PASSED [ 29%]
+tests/test_demo_security.py::test_demo_import_refuses_forbidden_input[PROVIDER_SECRET_ENCRYPTION_KEY] PASSED [ 35%]
+tests/test_demo_security.py::test_demo_import_refuses_forbidden_input[ANTHROPIC_BASE_URL] PASSED [ 41%]
+tests/test_demo_security.py::test_demo_import_refuses_bootstrap_admin PASSED [ 47%]
+tests/test_demo_security.py::test_dotenv_is_ignored_in_demo_and_read_in_normal PASSED [ 52%]
+tests/test_demo_security.py::test_normal_mode_ignores_client_mode_switches PASSED [ 58%]
+tests/test_demo_security.py::test_normal_admin_api_rejects_the_demo_provider[baseline] PASSED [ 64%]
+tests/test_demo_security.py::test_demo_csrf_origin_cookie_matrix PASSED  [ 70%]
+tests/test_demo_security.py::test_demo_cross_auth_and_role_deleted PASSED [ 76%]
+tests/test_demo_security.py::test_demo_lifecycle_makes_no_external_calls PASSED [ 82%]
+tests/test_demo_security.py::test_demo_admin_dangerous_endpoints_are_forbidden PASSED [ 88%]
+tests/test_demo_security.py::test_demo_runs_make_no_external_calls PASSED [ 94%]
+tests/test_demo_security.py::test_demo_rejects_injected_external_model PASSED [100%]
+
 =============================== warnings summary ===============================
-../../../mp2-venvs/w203/lib/python3.12/site-packages/pythonjsonlogger/jsonlogger.py:11
+<venv>/lib/python3.12/site-packages/pythonjsonlogger/jsonlogger.py:11
   <venv>/lib/python3.12/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
     warnings.warn(
 
@@ -10,4 +35,4 @@ tests/test_demo_security.py::test_normal_admin_api_rejects_the_demo_provider[bas
     warnings.warn(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-17 passed, 2 warnings in 54.04s
+================== 17 passed, 2 warnings in 75.72s (0:01:15) ===================

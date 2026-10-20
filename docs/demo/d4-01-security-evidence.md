@@ -6,6 +6,33 @@
 
 아직 실행하지 않았다. #202가 후보 SHA를 고정하면 별도 order로 세 파일과 README 전체 명령을 그 SHA에서 실행해 여기에 기록한다.
 
+## 실행 P3 — #198 수정 뒤 재실행 (2026-10-20, 작성 중 확인)
+
+- 기준: `feat/203-final`에 origin/main `0cc3fab`(#250 seed provenance)와 origin/feat/198-g3 `ae8c76d`(#198 PR4: D1·D1b 수정)를 병합(`b28ccc1`), 그 위 test 수정 commit `7013229`에서 검사. 검사한 tree = commit한 tree. `ae8c76d`는 이 시점 origin/main에 아직 없다.
+- 환경·명령: P2와 같다(ext4 `git clone --shared`, Python 3.12.3, pytest 8.4.2, worker 1개, 파일마다 별도 프로세스, 직렬).
+- `b28ccc1` 첫 실행: isolation 7 passed, reset 24 passed·1 failed, security 15 passed·2 failed. 새 실패 두 건은 검사 결함이었다(아래). 수정 뒤 `7013229`에서 다시 실행한 결과:
+
+| 파일 | 결과 | 시간 |
+| --- | --- | --- |
+| `tests/test_demo_isolation.py` | 7 passed | 69.2 s |
+| `tests/test_demo_reset.py` | 25 passed | 183.7 s |
+| `tests/test_demo_security.py` | 15 passed, 2 failed | 89.5 s |
+
+skip 0, xfail 0.
+
+- D1/D1b 해소: 교사 종료·분석이 202·`ok`로 끝나고 격리 run 원장·교사 CSV 두 사례가 통과한다.
+- 분석 commit 경합: `[analysis_commit-reset_first]`·`[analysis_commit-write_first]` 둘 다 통과. `parked_or_done`은 barrier 도착(`gate.arrived`)을 기다린 뒤에만 진행하므로 두 지점(파이프라인 결과 직후·`execute_analysis` 완료 직후)에 실제로 도달했다.
+- 검사 결함 수정(`7013229`): ① 경합 표의 분석 쓰기 먼저 상태를 `completed`→`ok`(분석 run 종료 상태는 `ok`/`degraded`, `analysis_pipeline.py:158`). ② egress 사례의 명시 retry를 별도 세션으로 옮김. 같은 세션에 테스트가 직접 넣은 실패 턴(세 번째 교사 메시지, `datetime('now')` 시각)이 §18 시각 순서·준비된 두 턴 바인딩과 맞지 않아 분석이 `invalid_reference`로 끝났다. 단언은 줄이지 않았다(중간 원장 증가 확인만 retry 앞 시점 값 student 2·mentor 2로 옮김, 최종 student 4·mentor 2·analysis 2 유지).
+- 남은 실패 2건(제품 결함):
+  - `test_demo_runs_make_no_external_calls`: 관리자 `POST /admin/sessions/{id}/analyze_regenerate`의 run이 `failed`·`configuration_unavailable`(결함 D4). 그 전 단계(학생·멘토·replay·legacy·교사 분석)는 통과, 외부 시도 0.
+  - `test_demo_rejects_injected_external_model`: 결함 D3, 그대로.
+- D3 scratch 확인: `7013229` + origin/feat/200-evidence `1f6c605`(PR #248) scratch 병합(커밋 안 함)에서 이 사례 1 passed(25.1 s).
+- D4 scratch 확인: ext4 사본에서만 `regenerate_analysis`에 `demo_adapter`를 넘기는 임시 patch(커밋 안 함)로 egress 사례 1 passed(17.6 s). 나머지 단계에 숨은 실패가 없음을 확인했다.
+
+| ID | 위치 | 기대(계약) | 실제 | 소유 |
+| --- | --- | --- | --- | --- |
+| D4 | `src/api/routes/admin_session_actions.py:79` `analysis_context`가 `ctx`·`registry`만 넘기고 `demo_adapter`가 없음. `regenerate_analysis`(l.381)와 관리자 `/end`(l.152)가 사용. 교사 route는 `session_analysis.py:56` `demo_analysis`로 넘김 | §14/§16/§18, d3-02 endpoint policy l.148: demo 관리자 재분석은 로컬 adapter로 실행 | run `failed`·`configuration_unavailable` | #200(파일 소유, §26 l.652), adapter 연결 방식은 #198 PR4와 같음 |
+
 ## 실행 P2 — phase 2 (2026-10-20, 작성 중 확인)
 
 - 기준: main `1a40dc2`(#198 PR1–PR3, #194 S4 병합 포함) 위 branch `feat/203-final`, 검사 commit `f4e7bd0`. 검사한 tree = commit한 tree(검사 중 수정 없음).

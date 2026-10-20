@@ -49,12 +49,15 @@
 | `0342ca8` (PR③ + r2 병합, clean) | 위와 같은 대상 pytest 9개 파일 + `tests/test_demo_d3_03_i18n.py` | 대상 10개 파일 | 315 passed, 1 failed: `test_i18n_catalog.py`. 원인은 #199가 쓰는 `demo.*` key 20개가 아직 catalog에 없는 것(#201에 요청함) |
 | `0342ca8` | `npm run test:browser -- demo_d3_01 html_errors uiux` (heavy lock) | 39개 모듈 | 39 PASS, 0 FAIL, 1288 s(lock 대기 포함) |
 
+| `8f10472` (catalog key 추가) | `pytest -q` 위 대상 + `tests/test_demo_d3_02_guards.py` | 대상 11개 파일 | 324 passed. `test_i18n_catalog.py` 포함 |
+| `8f10472` | `npm run test:browser -- demo_d3` (heavy lock) | 2개 모듈 | 2 PASS |
+
 브라우저 실행이 다시 만든 `tests/uiux/evidence/**` 추적 파일은 커밋하지 않고 되돌렸다.
 
 ## 화면
 
 `d3-01-evidence/layout-390x844.png`, `layout-1440x900.png`, `layout-720x450.png` (관리자, 분석까지 완료한 상태).
-캡처 시점에는 #201 PR1(catalog `demo` 영역)이 아직 병합되지 않아 `demo.*` 문구가 번역 fallback("표시할 수 없는 안내입니다.")으로 보인다. 배치·조작 검사는 문구와 무관하다. #201 PR1 병합 뒤 PR③에서 다시 캡처한다.
+PR③에서 #199용 `demo.*` key 20개를 catalog에 더한 뒤(`8f10472`, #190 결정) 다시 캡처했다. 이제 실제 한국어 문구가 보인다.
 
 ## 아직 아닌 것
 

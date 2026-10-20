@@ -54,6 +54,9 @@ def demo_template_context(request: Request) -> dict:
             "fixture_version": FIXTURE_VERSION,
             "csrf_cookie_name": "demo_csrftoken",
             "csrf_header_name": "x-csrf-token",
+            # Server policy, not visit data: known before any visit.
+            "idle_ttl_seconds": config.DEMO_IDLE_TTL_SECONDS,
+            "absolute_ttl_seconds": config.DEMO_ABSOLUTE_TTL_SECONDS,
         }
     else:
         fields = display.model_dump(mode="json")

@@ -234,7 +234,12 @@ def boundary(monkeypatch, runtime, verify):
     async def namespace(request):
         request.state.demo_invalid_selector = False
 
-    demo = SimpleNamespace(APP_MODE="demo", DEMO_PUBLIC_URL="")
+    demo = SimpleNamespace(
+        APP_MODE="demo",
+        DEMO_PUBLIC_URL="",
+        DEMO_IDLE_TTL_SECONDS=1800,
+        DEMO_ABSOLUTE_TTL_SECONDS=7200,
+    )
     monkeypatch.setattr(deps, "config", demo)
     monkeypatch.setattr(deps, "_demo_runtime", lambda _: runtime)
     monkeypatch.setattr(
@@ -1115,8 +1120,14 @@ async def case_template(tmp):
         assert not any(secret in text for secret in (*SECRETS, str(tmp)))
 
     def assert_unbound(value):
+        from src.config import config
+
         assert_safe(value)
         assert all(value[key] is None for key in namespace_keys), value
+        # TTLs are server policy, known before any visit.
+        assert value["idle_ttl_seconds"] == config.DEMO_IDLE_TTL_SECONDS
+        assert value["absolute_ttl_seconds"] == config.DEMO_ABSOLUTE_TTL_SECONDS
+        assert value["idle_ttl_seconds"] and value["absolute_ttl_seconds"]
 
     html = {"accept": "text/html"}
     async with app.router.lifespan_context(app):
@@ -1167,9 +1178,9 @@ async def case_template(tmp):
         assert_unbound(captured[0])
         assert captured[0]["ui_language"] == "ko"
 
-        # A request without a current visit carries no namespace.
+        # An unvisited request (as GET /demo renders) carries no namespace.
         request = Request(
-            {"type": "http", "path": "/", "headers": [], "app": app}
+            {"type": "http", "path": "/demo", "headers": [], "app": app}
         )
         value = render(
             request, "error.html", {"user": None, "status_code": 404}

@@ -310,8 +310,14 @@ async function journey(browser, demo, step, pageErrors) {
     // Reopening the completed history shows the adopted report and starts no analysis (§22).
     const posts = [];
     page.on('request', request => { if (request.method() === 'POST') posts.push(request.url()); });
-    await page.goto(`${base}/sessions/${sessionId}?${ns(started)}`);
+    assert.equal((await page.goto(`${base}/sessions/${sessionId}?${ns(started)}`)).status(), 200);
     await page.waitForLoadState('networkidle');
+    const report = page.locator(`[data-analysis-result][data-session-id="${sessionId}"] .analysis-accepted-report`);
+    await report.waitFor();
+    assert.equal(await report.getAttribute('data-status'), analysis.accepted_report.status);
+    assert(analysis.accepted_report.brief_feedback.length > 0, JSON.stringify(analysis.accepted_report));
+    const shown = await report.textContent();
+    for (const text of analysis.accepted_report.brief_feedback) assert(shown.includes(text), `report misses: ${text}`);
     assert.deepEqual(posts, []);
     assert.deepEqual(await json200(await http.get(`/sessions/${sessionId}/analysis`)), analysis);
     ended = analysis;
@@ -360,9 +366,17 @@ async function journey(browser, demo, step, pageErrors) {
     // Ended records stay with the teacher identity cleared; nothing recreates the teacher (§22).
     response = await http.get(`/admin/sessions/${sessionId}/download`);
     assert.equal(response.status(), 200, await response.text());
-    for (const row of parseCsv((await response.text()).replace(/^﻿/, '')).rows) {
+    const stored = parseCsv((await response.text()).replace(/^﻿/, '')).rows;
+    for (const row of stored) {
       assert.deepEqual([row.teacher_id, row.teacher_username, row.teacher_nickname], ['', '', '']);
     }
+    // Teacher inputs plus the stored student replies, coaching and summary must all vanish with the session.
+    const body = [INPUT.B, INPUT.common,
+      ...stored.filter(row => ['student', 'tutor'].includes(row.role)).map(row => row.content),
+      ...stored.filter(row => row.role === 'summary').map(row => row.feedback)];
+    assert.equal(body.length, 6, JSON.stringify(stored.map(row => row.role)));
+    assert(body.every(Boolean), 'stored body text captured');
+    const notice = JSON.parse(await readFile(join(ROOT, 'src/i18n/catalog.json'), 'utf8')).teacher.deleted_session_notice.ko;
     const role = await http.control('/demo/role', {role: 'teacher', expected_generation: admin.generation, expected_auth_epoch: admin.auth_epoch});
     assert.equal(role.status, 409, JSON.stringify(role.body));
     assert.equal(role.body.detail.code, 'DEMO_ROLE_DELETED');
@@ -375,7 +389,11 @@ async function journey(browser, demo, step, pageErrors) {
       response = await http.get(path);
       assert(statuses.includes(response.status()), `${path}: ${response.status()}`);
       const text = await response.text();
-      assert(!text.includes(INPUT.B) && !text.includes(INPUT.common), `${path} leaks the deleted body`);
+      for (const item of body) assert(!text.includes(item), `${path} leaks the deleted body: ${item}`);
+      if (response.status() === 200) {
+        assert(text.includes(notice), `${path} tombstone notice`);
+        assert(!/data-message-id|data-analysis-result/.test(text), `${path} renders messages or analysis`);
+      }
     }
     assert.equal((await state(page)).tour_facts.session_deleted, true);
     const before = await state(page);

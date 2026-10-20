@@ -274,3 +274,240 @@ def test_data_links_carry_namespace_only_in_demo(name, context, hrefs):
             else:
                 assert f'href="{href}"' in html
                 assert "ds=" not in html
+
+
+STEPS = ["start", "scenario", "dialogue", "analysis", "admin_csv", "reset"]
+ACTIONS = ["resume", "role", "role", "reset", "restart", "skip", "close"]
+
+
+@pytest.mark.parametrize("shape", ["undefined", "normal"])
+def test_tour_panel_and_script_absent_outside_demo(shape):
+    html = page("scenarios.html", shape)
+    for absent in ("demo-tour", "data-demo-step", "data-demo-action"):
+        assert absent not in html
+
+
+def test_demo_tour_panel_markup_contract():
+    html = page("scenarios.html", "demo")
+    assert (
+        html.count('<script src="/static/js/demo-tour.js" defer></script>') == 1
+    )
+    assert re.findall(r'data-demo-step="([a-z_]+)"', html) == STEPS
+    assert re.findall(r'data-demo-action="([a-z]+)"', html) == ACTIONS
+    assert re.findall(r'data-demo-role="([a-z]+)"', html) == [
+        "teacher",
+        "admin",
+    ]
+    panel = re.search(
+        r'<section id="demo-tour".*?</section>', html, re.S
+    ).group(0)
+    assert 'aria-labelledby="demo-tour-title"' in panel
+    assert '<h2 id="demo-tour-title" tabindex="-1">' in panel
+    assert 'role="status" aria-live="polite"' in panel
+    assert (
+        '<button type="button" class="btn-secondary" id="demo-tour-csv" hidden>'
+        in (panel)
+    )
+    for label in ("complete", "current", "pending", "reset-done"):
+        assert f'data-label-{label}="' in panel
+    assert 'data-confirm="' in panel
+    # The panel sits in normal flow before <main>, never inside it.
+    assert html.index('id="demo-tour"') < html.index('<main id="main-content">')
+    assert "csrf-v1" not in html and "token-value" not in html
+
+
+# --- PR③: entry page, demo_error recovery, partial provenance ---------------
+
+NO_VISIT = {
+    **DEMO,
+    "state": None,
+    "browser_scope_id": None,
+    "generation": None,
+    "auth_epoch": None,
+    "role": None,
+}
+
+
+def test_entry_page_offers_start_roles_without_the_tour_panel(monkeypatch):
+    from src.i18n import CATALOG
+
+    # Until #201 ships the key, prove the TTL values reach the placeholders.
+    monkeypatch.setitem(
+        CATALOG["demo"],
+        "entry_retention",
+        {"ko": "{idle_minutes}|{absolute_hours}"},
+    )
+    html = render("demo.html", "undefined", demo_config=NO_VISIT)
+    assert '<html lang="ko" data-demo-mode="demo">' in html
+    assert 'class="demo-banner"' in html
+    assert (
+        html.count('<script src="/static/js/demo-tour.js" defer></script>') == 1
+    )
+    # The tour starts after a role is chosen; the entry page has only a status line.
+    assert 'id="demo-tour"' not in html and "data-demo-step" not in html
+    assert re.findall(r'data-demo-action="([a-z]+)"', html) == [
+        "resume",
+        "start",
+        "start",
+    ]
+    for role in ("teacher", "admin"):
+        assert re.search(
+            rf'<button type="button" class="btn-primary" data-demo-action="start"'
+            rf' data-demo-role="{role}" value="{role}">',
+            html,
+        )
+    assert '<p id="demo-tour-status" role="status" aria-live="polite"' in html
+    main = html[html.index('<main id="main-content">') :]
+    assert main.index("<h2") < main.index('data-demo-action="start"')
+    assert "<p>30|8</p>" in main  # idle 1800 s → 30 min, absolute 28800 s → 8 h
+
+
+def error_page(status, **context):
+    return render(
+        "error.html", "undefined", status_code=status, user=TEACHER, **context
+    )
+
+
+@pytest.mark.parametrize("status", [403, 404])
+def test_error_page_none_demo_error_is_normal_markup(status):
+    assert error_page(status, demo_error=None) == error_page(status)
+
+
+@pytest.mark.parametrize(
+    "status,recovery",
+    [
+        (410, "demo.expired"),
+        (401, "demo.start_required"),
+        (409, "demo.stale_role"),
+    ],
+)
+def test_error_page_demo_error_titles_and_links_by_recovery_key(
+    status, recovery
+):
+    detail = {
+        "code": "X",
+        "retryable": False,
+        "recovery": recovery,
+        "generation": None,
+        "auth_epoch": None,
+    }
+    html = error_page(status, demo_error=detail, demo_config=NO_VISIT)
+    from src.i18n import translate
+
+    section = html[html.index('<section class="empty-state"') :]
+    section = section[: section.index("</section>")]
+    assert f"<p>{status}</p>" in section
+    assert (
+        f'<h2 class="empty-state-title" id="error-title">{translate(recovery)}</h2>'
+        in section
+    )
+    for absent in (
+        "error_forbidden",
+        translate("common.error_forbidden_title"),
+    ):
+        assert absent not in section
+    assert '<a href="/demo" class="btn-secondary">' in section
+    assert f"<title>\n    {status} · {translate(recovery)}" in html
+
+
+def test_error_page_404_demo_error_uses_its_recovery_text():
+    detail = {"code": "DEMO_RESOURCE_NOT_FOUND", "retryable": False}
+    detail["recovery"] = "demo.not_found"
+    html = error_page(404, demo_error=detail)
+    from src.i18n import translate
+
+    assert translate("common.error_not_found_title") in html
+    assert f"<p>{translate('demo.not_found')}</p>" in html
+    assert '<a href="/scenarios" class="btn-primary">' in html
+    assert '<a href="/demo" class="btn-secondary">' in html
+
+
+SESSION = SimpleNamespace(
+    id=5,
+    teacher=None,
+    started_at=__import__("datetime").datetime(2026, 10, 20, 9, 0),
+    ended_at=__import__("datetime").datetime(2026, 10, 20, 9, 5),
+    deleted_at=None,
+    messages=[],
+)
+PARTIALS = {
+    "partials/session_detail.html": dict(
+        session=SESSION, scenario_title="t", student_name="s"
+    ),
+    "partials/analysis_result.html": dict(
+        session_id=5, analysis_result_url="/sessions/5/analysis_result"
+    ),
+    "partials/analysis_modal.html": dict(
+        session_id=5,
+        feedback_status="no_dialogue",
+        feedback_sections=None,
+        distribution={},
+        analyses=[],
+        user=TEACHER,
+    ),
+}
+
+
+def provenance(origin):
+    return {
+        "mode": "demo",
+        "response_source": "prepared_example",
+        "external_ai_called": False,
+        "contract_version": "d0-03-v1-r3",
+        "content_version": "d0-02-v1",
+        "fixture_version": "demo-fixture-v1",
+        "record_origin": origin,
+    }
+
+
+@pytest.mark.parametrize("name", PARTIALS)
+def test_partials_show_record_origin_only_with_a_provenance_object(name):
+    base = render(name, "undefined", **PARTIALS[name])
+    assert "demo-record-origin" not in base
+    assert render(name, "undefined", provenance=None, **PARTIALS[name]) == base
+    # Demo without a provenance object shows only the layout banner, no origin.
+    assert "demo-record-origin" not in render(name, "demo", **PARTIALS[name])
+    weird = render(
+        name, "undefined", provenance=provenance("other"), **PARTIALS[name]
+    )
+    assert weird == base
+    for origin in ("seed_prepared", "visitor_generated"):
+        html = render(
+            name, "demo", provenance=provenance(origin), **PARTIALS[name]
+        )
+        assert (
+            html.count(
+                f'<p class="demo-record-origin" data-record-origin="{origin}">'
+            )
+            == 1
+        )
+        if name == "partials/analysis_result.html":
+            # analysis-result.js replaces the section's children; keep the label out.
+            assert html.index("demo-record-origin") < html.index("<section")
+
+
+def test_session_detail_keeps_deleted_display_with_provenance():
+    deleted = SimpleNamespace(
+        **{**vars(SESSION), "deleted_at": SESSION.ended_at}
+    )
+    context = dict(PARTIALS["partials/session_detail.html"], session=deleted)
+    html = render(
+        "partials/session_detail.html",
+        "demo",
+        provenance=provenance("visitor_generated"),
+        **context,
+    )
+    from src.i18n import translate
+
+    assert translate("teacher.deleted") in html
+    assert f"<p>{translate('teacher.deleted_session_notice')}</p>" in html
+    assert 'data-record-origin="visitor_generated"' in html
+
+
+def test_analysis_modal_links_carry_namespace_only_in_demo():
+    context = PARTIALS["partials/analysis_modal.html"]
+    normal = render("partials/analysis_modal.html", "undefined", **context)
+    assert 'href="/sessions/5/analysis_page"' in normal and "ds=" not in normal
+    html = render("partials/analysis_modal.html", "demo", **context)
+    for href in ("/sessions/5/analysis_page", "/sessions/5/export.csv"):
+        assert f'href="{href}?{NS}"' in html

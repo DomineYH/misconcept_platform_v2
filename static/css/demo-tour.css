@@ -1,4 +1,4 @@
-/* D3-01 demo banner; loaded only in demo mode. */
+/* D3-01 demo banner and tour panel; loaded only in demo mode. */
 .demo-banner {
   padding: 0.5rem 1rem;
   background: var(--color-bg-secondary);
@@ -6,4 +6,67 @@
   color: var(--color-text-primary);
   font-size: 0.875rem;
   text-align: center;
+}
+
+/* In normal flow (never an overlay) so inputs and confirm/stop controls stay visible. */
+.demo-tour {
+  max-width: 72rem;
+  margin: 0.75rem auto 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border-medium);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+/* Button classes in styles.css set display, which would override the hidden attribute. */
+.demo-tour[hidden],
+.demo-tour [hidden],
+.demo-banner [hidden] {
+  display: none;
+}
+
+.demo-tour h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.demo-tour-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.demo-tour-steps li {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--color-border-medium);
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.demo-tour-steps li[data-state="current"] {
+  border: 2px solid var(--color-primary);
+  font-weight: 600;
+}
+
+.demo-tour-steps li[data-state="complete"] .demo-step-status::before {
+  content: "✓ ";
+}
+
+.demo-step-status {
+  color: var(--color-text-secondary);
+}
+
+.demo-tour-status:empty {
+  display: none;
+}
+
+.demo-tour-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }

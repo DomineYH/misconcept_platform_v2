@@ -748,7 +748,7 @@ RACE_ADDS = {
         "generation_run",
         "analysis",
         ["running"],
-        ["completed"],
+        ["ok"],  # analysis runs end ok/degraded, not completed
     ),
     "ledger_start": ("api_usage_log", "student", [], ["running"]),
     "ledger_finish": ("api_usage_log", "student", ["running"], ["completed"]),

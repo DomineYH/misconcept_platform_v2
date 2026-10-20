@@ -1182,34 +1182,8 @@ async def case_runs(tmp):
         assert legacy.json()["code"] == "reload_required"
         assert assert_local_ledger(root) == before
 
-        # explicit retry (§16): a failed turn gets a new run on the same turn.
-        # The public API cannot pick a failure fixture (§15), so the failed
-        # first attempt is stored; the retry itself is a real run.
-        said = "오늘은 여기까지 할게요."
-        lost = add_failed_turn(root, sid, said, turn_index=3)
-        retry = completed(await turn(sid, said, turn_id=lost["turn_id"]))
-        assert retry["turn_id"] == lost["turn_id"]
-        assert retry["run_id"] != lost["run_id"]
-        again = await turn(sid, said, turn_id=retry["turn_id"])
-        assert (
-            again.status_code == 200 and again.json()["status"] == "completed"
-        )
-        assert again.json()["run_id"] == retry["run_id"]
-        db = visitor_db(root)
-        try:
-            assert db.execute(
-                "SELECT status FROM generation_run WHERE turn_id=? "
-                "AND operation='student' ORDER BY rowid",
-                (lost["turn_id"],),
-            ).fetchall() == [("failed",), ("completed",)]
-            assert db.execute(
-                "SELECT COUNT(*) FROM message WHERE turn_id=? AND role='teacher'",
-                (lost["turn_id"],),
-            ).fetchone() == (1,)
-        finally:
-            db.close()
         grown = Counter(assert_local_ledger(root)) - seeded
-        assert grown == {"student": 4, "mentor": 2}, grown  # incl. the failure
+        assert grown == {"student": 2, "mentor": 2}, grown
 
         # analysis: teacher end (one run), a repeated analyze reuses it, then the
         # admin rerun is a new run (§16).
@@ -1231,6 +1205,38 @@ async def case_runs(tmp):
         await settled(
             f"/admin/sessions/{sid}/analysis/runs/{response.json()['run_id']}"
         )
+
+        # explicit retry (§16): a failed turn gets a new run on the same turn.
+        # The public API cannot pick a failure fixture (§15), so the failed
+        # first attempt is stored; the retry itself is a real run. It gets its
+        # own session: §18 binds analysis refs to the two prepared turns only.
+        state = await switch_role(client, "teacher")
+        response = await post("/sessions", {"scenario_id": scenario})
+        assert response.status_code == 201, response.text
+        sid = response.json()["id"]
+        said = "오늘은 여기까지 할게요."
+        lost = add_failed_turn(root, sid, said, turn_index=1)
+        retry = completed(await turn(sid, said, turn_id=lost["turn_id"]))
+        assert retry["turn_id"] == lost["turn_id"]
+        assert retry["run_id"] != lost["run_id"]
+        again = await turn(sid, said, turn_id=retry["turn_id"])
+        assert (
+            again.status_code == 200 and again.json()["status"] == "completed"
+        )
+        assert again.json()["run_id"] == retry["run_id"]
+        db = visitor_db(root)
+        try:
+            assert db.execute(
+                "SELECT status FROM generation_run WHERE turn_id=? "
+                "AND operation='student' ORDER BY rowid",
+                (lost["turn_id"],),
+            ).fetchall() == [("failed",), ("completed",)]
+            assert db.execute(
+                "SELECT COUNT(*) FROM message WHERE turn_id=? AND role='teacher'",
+                (lost["turn_id"],),
+            ).fetchone() == (1,)
+        finally:
+            db.close()
 
         grown = Counter(assert_local_ledger(root)) - seeded
         assert grown == {"student": 4, "mentor": 2, "analysis": 2}, grown

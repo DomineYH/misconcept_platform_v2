@@ -355,6 +355,59 @@ async def test_demo_boundary_aborts_discarded_owned_response_once(
         assert events.index("abort_finished") < events.index("release"), events
 
 
+async def test_demo_boundary_defers_task_cancel_until_abort_and_release(
+    monkeypatch,
+):
+    """The first Task.cancel() lands inside abort; cleanup still completes."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from starlette.responses import PlainTextResponse
+
+    from src.demo.database import DemoError
+
+    events = []
+    entered, hold = asyncio.Event(), asyncio.Event()
+    response = PlainTextResponse("owned")
+
+    async def abort():
+        events.append("abort_started")
+        entered.set()
+        await hold.wait()
+        events.append("abort_finished")
+
+    response.demo_abort = abort
+
+    async def finish(ctx):
+        raise DemoError("STALE_GENERATION")
+
+    async def release(ctx):
+        events.append("release")
+
+    async def verify(request, **kwargs):
+        return object()
+
+    async def handler(request):
+        request.state.demo_context = object()
+        return response
+
+    runtime = SimpleNamespace(
+        visitors=SimpleNamespace(visitor_for_bootstrap=lambda _: None),
+        finish=finish,
+        release_request_db=release,
+    )
+    deps = boundary(monkeypatch, runtime, verify)
+    guarded = deps.demo_request_handler(handler)
+    task = asyncio.create_task(guarded(boundary_request("GET", "/demo")))
+    await entered.wait()
+    task.cancel()  # The first cancellation, while abort is suspended.
+    await asyncio.sleep(0)
+    hold.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert events == ["abort_started", "abort_finished", "release"], events
+
+
 async def test_demo_boundary_html_error_page_is_get_only(monkeypatch):
     from types import SimpleNamespace
 

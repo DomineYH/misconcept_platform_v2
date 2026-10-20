@@ -722,21 +722,36 @@ def get_demo_session(request: Request):
     return session
 
 
+async def _abort(abort):
+    try:
+        await abort()
+    except Exception as error:
+        logging.getLogger(__name__).error(
+            "Demo abort failed", extra={"code": type(error).__name__}
+        )
+
+
 async def _discard(owned, sent):
-    """#198: abort, exactly once, a handler response the boundary will not send."""
+    """#198: abort, exactly once, a handler response the boundary will not send.
+
+    Returns a cancellation that arrived meanwhile; the caller re-raises it
+    after its own cleanup.
+    """
     if not owned or owned[0] is sent:
-        return
+        return None
     abort = getattr(owned.pop(), "demo_abort", None)
     if abort is None:
-        return
-    # Shielded: a cancelled request still finishes releasing the reserved work.
+        return None
+    # A cancelled request still finishes releasing the reserved work: the
+    # AnyIO shield covers scope cancellation, the owned task Task.cancel().
+    task, pending = asyncio.ensure_future(_abort(abort)), None
     with anyio.CancelScope(shield=True):
-        try:
-            await abort()
-        except Exception as error:
-            logging.getLogger(__name__).error(
-                "Demo abort failed", extra={"code": type(error).__name__}
-            )
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError as error:
+                pending = error
+    return pending
 
 
 def demo_request_handler(handler):
@@ -810,7 +825,7 @@ def demo_request_handler(handler):
             raise
         finally:
             # Before release, while the request's lease is still held.
-            await _discard(owned, response)
+            cancelled = await _discard(owned, response)
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and runtime is not None:
                 try:
@@ -821,6 +836,8 @@ def demo_request_handler(handler):
                         response = error_response(
                             DemoError("CONFIGURATION_INVALID")
                         )
+            if cancelled is not None:
+                raise cancelled
         if (
             request.method == "GET"
             and response.status_code >= 400
@@ -867,7 +884,9 @@ def demo_request_handler(handler):
             return response
         finally:
             # Also covers cancellation during release and later replacements.
-            await _discard(owned, response)
+            cancelled = await _discard(owned, response)
+            if cancelled is not None:
+                raise cancelled
 
     return guarded
 

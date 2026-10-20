@@ -113,6 +113,22 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 
 실패(모두 같은 결함, 단계를 멈추지 않도록 모아서 끝에 실패시킴): map `step 4`·`step 5 after the role switch`(`C C C X P P` ≠ `C C C C X P`), 관찰 `admin_record_viewed` 없음, `#demo-tour-csv` 숨김, map `step 5`·`step 6 before reset`(`C C C X P P` ≠ `C C C C C X`), reset 직후 일회 완료 표시(`X P P P P P` ≠ `C C C C C C`; 완주하지 않은 여정은 완료로 표시하지 않는 §24.1 규칙의 결과).
 
+## 실행 6 — Phase 4, D5 수정 확인 (2026-10-20, 작성 중 확인, pending G4 candidate)
+
+- 기준: `feat/204-final` `eda6f0c`. 확인용으로 **scratch clone에서만** `origin/fix/d5-tour-facts` `419c66d`(D5: `DemoRequestDB.display()`가 `demo_config.tour_facts`를 채움, `src/api/dependencies.py`)를 병합했다(scratch commit `54be319`, branch에는 commit하지 않음; main에는 D5 자체 PR로 들어온다). 이 문서는 실행 뒤 다음 commit에서 수정했다.
+- harness 변경(`eda6f0c`): helper `DEMO_REQUESTS_PER_MINUTE=600`(설정 최대; 100 ms `/demo/state` poll이 기본 60/분을 넘어 `/admin/sessions-page`가 429였다), journey `facts()`가 navigation(교사 삭제 alert 뒤 users 화면 reload)에도 재시도, 투어 map·`admin_record_viewed` 관찰·투어 CSV 버튼을 다시 hard assertion으로 되돌리고 행 링크 대체 경로를 제거했다.
+- 환경: ext4 scratch clone(`git clone --shared`), WSL2 Linux(load average 약 2.5), Python 3.12.3(uv venv), Node 24, Playwright Chromium headless.
+- 명령: `flock /tmp/mp2-heavy.lock -c 'npm run test:browser -- browser_demo_isolation browser_demo_journey browser_demo_recovery'`(worker 1개). log: `logs-w204/p4/final.log`, scratch 병합 범위 `logs-w204/p4/scratch-merge.txt`.
+- receipt: `source_commit` `54be319`(scratch 병합 commit), `logical_data_sha256` `93808c61…6141`, `manifest_sha256` `60cc355c…0516`, `seed_sha256` `eeddc3af…8f67`(isolation)·`f4358c58…0914`(journey)·`e3f68d21…5aff`(recovery).
+
+| 모듈 | 결과 |
+| --- | --- |
+| `browser_demo_isolation.mjs` | passed (20.0 s) |
+| `browser_demo_journey.mjs` | passed (25.2 s): A 여섯 단계 전부 — 단계별 map `C X P P P P` → … → `C C C C C X`, reset 성공 일회 `C C C C C C`, `history_viewed`·`admin_record_viewed` 관찰, 투어 CSV 버튼으로 받은 파일 파싱(27+5열, 6행, 출처값), 삭제 §22, reset·이전 탭 409, B 격리 |
+| `browser_demo_recovery.mjs` | passed (42.4 s): I1–I7 |
+
+D5 없이 이 branch만으로는 실행 5와 같이 투어 map·관찰·투어 CSV 검사가 실패한다(이제 hard assertion이므로 해당 단계에서 멈춘다). 세 모듈 모두 통과하려면 D5가 main에 있어야 한다.
+
 ## 작성 중 대체(최종 evidence 전에 제거)
 
 1. seed 바인딩: 제거됨(실행 4). #194 S4로 `src.main.demo_seed`가 `load_seed(DEMO_SEED_DIR)`를 읽고, helper는 seed CLI를 `DEMO_SEED_DIR`로 빌드만 한다.
@@ -121,11 +137,9 @@ helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 byt
 ## Pending
 
 pending G4 candidate(#202 통합 SHA·manifest):
-- 위 세 모듈의 최종 실행과 `docs/demo/d4-02-evidence/`(CSV·스크린샷·log).
-
-product defect(아래)가 고쳐지기 전에는 journey의 투어 map(4단계 이후)·`history_viewed`/`admin_record_viewed`/`csv_received` 관찰·투어 CSV 버튼 검사가 실패한다.
+- 위 세 모듈의 최종 실행과 `docs/demo/d4-02-evidence/`(CSV·스크린샷·log). D5(`fix/d5-tour-facts`)가 그 SHA에 포함되어야 한다.
 
 ## 발견한 제품 결함
 
-- 해결됨(실행 5): #198 demo 분석 계획 503(`src/services/analysis_plan.py:67` → `context_budget.provider_parameters` KeyError 'demo'). #251로 `/end`, 관리자 분석 상세, 종료 세션 이력이 200이 되었다.
-- 열림 → #194(§26 `src/api/dependencies.py` 소유), 소비자 #201/#199: 모든 demo 페이지의 `#demo-config`가 `"tour_facts": null`이다. `DemoRequestDB.display()`(`src/api/dependencies.py:334-344`)가 `public_state(snapshot)`만 돌려 TourFacts를 넣지 않는다(§24는 `demo_config.tour_facts`를 요구). 그래서 `uiLanguage.observe`(`static/js/display-language.js:117-120`)가 `journey_session_id`를 찾지 못해 `demo:tour-observed`를 보내지 않고, `history_viewed`·`admin_record_viewed`가 생기지 않는다. 같은 시점 `GET /demo/state?include_tour=true`는 `journey_session_id: 2`, `analysis_ready: true`를 돌려준다. 결과로 map이 `C C C X P P`에서 멈추고 투어 CSV 버튼(`static/js/demo-tour.js:312-313`, `map.analysis === 'complete'` 조건)도 숨겨진다. 진단: `logs-w204/p3/diag-1.log`(이력 화면의 `#demo-config`, 관찰 이벤트 0, `demoTour.snapshot()`).
+- 해결됨(실행 5): #198 demo 분석 계획 503(`src/services/analysis_plan.py:67` → `context_budget.provider_parameters` KeyError 'demo'). #251로 해결.
+- 수정 대기(실행 6에서 확인): `demo_config.tour_facts`가 모든 demo 페이지에서 null이었다(`DemoRequestDB.display()`, `src/api/dependencies.py:334-344`, §26 #194). 그래서 `uiLanguage.observe`(`static/js/display-language.js:117-120`)가 관찰을 보내지 않고 map이 `analysis`에서 멈췄다. D5 branch `fix/d5-tour-facts`(`419c66d`)가 고치며, 그 branch를 scratch에서만 병합한 실행 6에서 journey가 통과했다.

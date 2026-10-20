@@ -119,10 +119,10 @@ dialogue would go through #198's admission path, which is out of #200 scope.
 ## 5. Not run, with reasons
 
 - Full pytest, full browser suite, and `tests/check_student_live.py`: full
-  regression is CI on the PR head. PR4 changes no product code, templates or JS.
+  regression is CI on the PR head. PR4 changes no templates or JS; the only product change is the demo branch in `admin_scenarios.py` (§7).
 - Teacher CSV export (`session_analysis.py`, 20 + 5 columns): the route is owned by #198.
 - `test_s4_csv.py`, `test_export_deleted_teacher.py` and the other admin
-  suites: not re-run locally because no product file changed. They are covered by CI.
+  suites: not re-run locally, because the only product change is in the scenario routes, whose suites are listed in §2. They are covered by CI.
 - Visitor quota cases other than `scenario_race` still use the synthetic
   seed. This was not repeated on the product seed, because the quota code
   does not read seed content beyond row counts.

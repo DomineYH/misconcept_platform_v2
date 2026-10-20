@@ -481,6 +481,9 @@ def test_partials_show_record_origin_only_with_a_provenance_object(name):
             )
             == 1
         )
+        if name == "partials/analysis_result.html":
+            # analysis-result.js replaces the section's children; keep the label out.
+            assert html.index("demo-record-origin") < html.index("<section")
 
 
 def test_session_detail_keeps_deleted_display_with_provenance():

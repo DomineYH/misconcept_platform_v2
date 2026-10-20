@@ -59,7 +59,7 @@ def demo_fixture(path, query, request):
     if page == "normal":
         demo = dict(mode="normal", public_url=None)
         role = "teacher"
-    elif page in {"page", "error", "entry"}:
+    elif page in {"page", "error", "entry", "analysis"}:
         scope = first("scope", "scope-a")
         if page == "entry" or first("novisit", "") == "1":
             scope = generation = epoch = role = None
@@ -85,6 +85,23 @@ def demo_fixture(path, query, request):
             )
     elif page == "entry":
         name, extra = "demo.html", {}
+    elif page == "analysis":
+        # The real result renderer fetches the shared s4 projection fixture.
+        name, extra = "analysis.html", dict(
+            session_id=1,
+            distribution={},
+            grade_counts={},
+            analysis_result_url="/fixtures/s4/result?state=ok",
+            provenance=dict(
+                mode="demo",
+                response_source="prepared_example",
+                external_ai_called=False,
+                contract_version=CONTRACT_VERSION,
+                content_version=CONTENT_VERSION,
+                fixture_version=FIXTURE_VERSION,
+                record_origin=first("origin", "visitor_generated"),
+            ),
+        )
     else:
         name, extra = "scenarios.html", dict(scenarios=[])
     body = (

@@ -844,6 +844,23 @@ async function entryPage(page, base) {
   });
 }
 
+// ---- 18: §19 record origin survives the client-side result render ------------
+async function analysisProvenance(page, base) {
+  await scenario(page, base, async env => {
+    for (const origin of ['visitor_generated', 'seed_prepared']) {
+      const p = await env.open(`/fixtures/demo/analysis?origin=${origin}`);
+      // analysis-result.js replaces the section's children once the projection arrives.
+      await p.locator('[data-analysis-result] .analysis-result-notice').waitFor({state: 'attached'});
+      const label = p.locator(`.demo-record-origin[data-record-origin="${origin}"]`);
+      await label.waitFor({state: 'visible'});
+      assert.equal(await p.locator('.demo-record-origin').count(), 1, `${origin}: one origin label`);
+      assert.equal(await label.evaluate(el => !!el.closest('[data-analysis-result]')), false, `${origin}: outside the renderer-owned section`);
+      assert.notEqual((await label.innerText()).trim(), '', `${origin}: label text`);
+      await p.close();
+    }
+  });
+}
+
 // ---- 17 --------------------------------------------------------------------
 async function demoErrorPage(page, base) {
   const catalog = JSON.parse(await readFile(new URL('../src/i18n/catalog.json', import.meta.url), 'utf8')).demo;
@@ -877,7 +894,7 @@ export default async function check(page) {
   // Spec items 1–17 in order; a failure names its scenario.
   for (const fn of [normalMode, firstStateGet, expectedMapTable, observationsAndStorage, roleSwitch, lostResponse,
     csrfInvalid, resetFlow, resetFailure, lowerGenerationIgnored, stateCheckEvent, tabNotification, tourCsv, guideActions,
-    expiredEnvelope, layout, entryPage, demoErrorPage]) {
+    expiredEnvelope, layout, entryPage, demoErrorPage, analysisProvenance]) {
     try {
       await fn(page, base);
     } catch (error) {

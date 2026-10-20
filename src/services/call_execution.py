@@ -20,6 +20,7 @@ from src.services import (
     openai_generation,
 )
 from src.services.call_admission import (
+    demo_forbidden,
     readmit_call,
     recheck_call,
     registered_calls,
@@ -81,7 +82,14 @@ def ledger_status(event):
     )
 
 
-async def finalize(permit, entry_id, terminal, usage, first_output_at):
+def ledger_guard(permit, ctx):
+    """Demo ledger rows are written under the run's own write guard."""
+    return {} if ctx is None else {"ctx": ctx, "registry": permit.registry}
+
+
+async def finalize(
+    permit, entry_id, terminal, usage, first_output_at, ctx=None
+):
     task = asyncio.create_task(
         finish_attempt(
             permit.factory,
@@ -90,6 +98,7 @@ async def finalize(permit, entry_id, terminal, usage, first_output_at):
             error_code=terminal.error_code,
             usage=usage,
             first_output_at=first_output_at,
+            **ledger_guard(permit, ctx),
         )
     )
     try:
@@ -123,7 +132,7 @@ async def execute_call(
     wait_ms = None
     try:
         adapters = PROVIDER_ADAPTERS
-        # Either the server or the caller saying demo keeps external SDKs shut.
+        # The server or the caller saying demo keeps SDKs shut.
         if "demo" in (config.APP_MODE, app_mode):
             context = getattr(request, "demo_context", None)
             if (
@@ -131,8 +140,7 @@ async def execute_call(
                 or demo_adapter.mode != "demo"
                 or permit.provider != "demo"
                 or permit.secret is not None
-                or permit.operation in ("model_list", "probe", "comparison")
-                or permit.operation.startswith("comparison_")
+                or demo_forbidden(permit.operation)
                 or probe_step is not None
                 or usage_scope == "comparison"
                 or not isinstance(context, DemoContext)
@@ -142,11 +150,15 @@ async def execute_call(
             ):
                 raise InvocationError("configuration_unavailable")
             adapters = {"demo": (None, demo_adapter)}
-        elif demo_adapter is not None or (
-            request is not None
-            and (
-                request.demo_context is not None
-                or request.demo_selection is not None
+        elif (
+            demo_adapter is not None
+            or permit.ctx is not None
+            or (
+                request is not None
+                and (
+                    request.demo_context is not None
+                    or request.demo_selection is not None
+                )
             )
         ):
             raise InvocationError("configuration_unavailable")
@@ -194,6 +206,9 @@ async def execute_call(
                     usage_scope=usage_scope,
                     context_budget_json=(
                         request.context_budget_json if request else None
+                    ),
+                    **ledger_guard(
+                        permit, getattr(request, "demo_context", None)
                     ),
                 )
             )
@@ -271,7 +286,14 @@ async def execute_call(
             terminal = terminal or CallEvent(
                 "error", error_code="invalid_output"
             )
-            await finalize(permit, entry_id, terminal, usage, first_output_at)
+            await finalize(
+                permit,
+                entry_id,
+                terminal,
+                usage,
+                first_output_at,
+                getattr(request, "demo_context", None),
+            )
             entry_id = None
             wait = (
                 1.0
@@ -328,7 +350,12 @@ async def execute_call(
                 )
                 try:
                     await finalize(
-                        permit, entry_id, terminal, usage, first_output_at
+                        permit,
+                        entry_id,
+                        terminal,
+                        usage,
+                        first_output_at,
+                        getattr(request, "demo_context", None),
                     )
                 except InvocationError as error:
                     terminal = CallEvent(

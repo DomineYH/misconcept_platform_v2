@@ -1,5 +1,6 @@
 """Reserve mentor-only execution rights and commit coaching with its counter."""
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -33,19 +34,32 @@ from src.services.tutor_bot import build_mentor_request
 
 
 async def reserve_mentor(
-    factory, session_id, turn_id, user, request_id, trigger, *, language="ko"
+    factory,
+    session_id,
+    turn_id,
+    user,
+    request_id,
+    trigger,
+    *,
+    language="ko",
+    demo=None,
+    run_id=None,
 ):
     async with execution_lock():
         try:
-            return await _reserve_mentor(
-                factory,
-                session_id,
-                turn_id,
-                user,
-                request_id,
-                trigger,
-                language=language,
-            )
+            # Lock order: admission, then the visitor transition, then the DB.
+            async with demo.guard() if demo else nullcontext():
+                return await _reserve_mentor(
+                    factory,
+                    session_id,
+                    turn_id,
+                    user,
+                    request_id,
+                    trigger,
+                    language=language,
+                    demo=demo,
+                    run_id=run_id,
+                )
         except InvocationError as error:
             raise HTTPException(
                 (
@@ -72,7 +86,16 @@ async def reserve_mentor(
 
 
 async def _reserve_mentor(
-    factory, session_id, turn_id, user, request_id, trigger, *, language="ko"
+    factory,
+    session_id,
+    turn_id,
+    user,
+    request_id,
+    trigger,
+    *,
+    language="ko",
+    demo=None,
+    run_id=None,
 ):
     input_hash = digest(
         {
@@ -108,8 +131,10 @@ async def _reserve_mentor(
         )
         if existing:
             if existing.input_hash != input_hash:
+                if demo:
+                    raise demo.error("REQUEST_CONFLICT")
                 conflict("request_conflict")
-            return await snapshot(db, existing), None
+            return await snapshot(db, existing, demo=demo), None
         teacher = await db.scalar(
             select(Message).where(
                 Message.session_id == session_id,
@@ -131,7 +156,7 @@ async def _reserve_mentor(
             )
         )
         if completed:
-            return await snapshot(db, completed), None
+            return await snapshot(db, completed, demo=demo), None
         if session.ended_at:
             raise HTTPException(400, detail={"code": "session_ended"})
         await validate_scenario_access(scenario.id, user, db, language=language)
@@ -195,7 +220,7 @@ async def _reserve_mentor(
                 None,
             )
             if prior is not None:
-                return await snapshot(db, prior), None
+                return await snapshot(db, prior, demo=demo), None
             policy = lesson.config.mentor.intervention_policy
             position = positions[turn_id]
             if position < policy.start_turn:
@@ -235,6 +260,7 @@ async def _reserve_mentor(
         )
         if busy:
             conflict("mentor_busy", run_id=busy.id)
+        manifest_sha256 = demo.supported(session) if demo else None
         previous = await db.scalar(
             select(GenerationRun.id)
             .where(
@@ -253,13 +279,25 @@ async def _reserve_mentor(
             db,
             lesson.config.mentor.resolved_model_config,
             "mentor",
-            app_mode=config.APP_MODE,
+            app_mode="demo" if demo else config.APP_MODE,
         )
         request = build_mentor_request(
             lesson, history, trigger, options, request_id
         )
+        if demo:
+            request = demo.bind(
+                request,
+                demo.selection(
+                    manifest_sha256,
+                    history[:-2],
+                    history[-2]["content"],
+                    role="mentor",
+                    trigger=trigger,
+                    target_turn_id=turn_id,
+                ),
+            )
         run = GenerationRun(
-            id=str(uuid4()),
+            id=run_id or str(uuid4()),
             owner_id=user.id,
             session_id=session_id,
             turn_id=turn_id,
@@ -274,7 +312,7 @@ async def _reserve_mentor(
         )
         db.add(run)
         await db.flush()
-        accepted = await snapshot(db, run)
+        accepted = await snapshot(db, run, demo=demo)
         setting = await db.get(AppSetting, 1)
         if setting is None:
             raise InvocationError("configuration_unavailable")
@@ -286,6 +324,8 @@ async def _reserve_mentor(
             operation="mentor",
             role="mentor",
             admin=False,
+            ctx=demo and demo.ctx,
+            registry=demo and demo.registry,
         )
         permit.model_config_id = model.id
         permit.config_version = model.config_version
@@ -300,6 +340,8 @@ async def _reserve_mentor(
             "permit": permit,
             "deadline": permit.admitted_at + permit.timeouts["mentor_total"],
         }
+        if demo:
+            execution["demo_adapter"] = demo.adapter(session)
         try:
             await db.commit()
         except BaseException:
@@ -317,12 +359,14 @@ async def finish_mentor(
     content=None,
     reason_summary=None,
     error_code=None,
+    demo=None,
 ):
-    async with factory() as db:
+    # Late saves stay on the run's own factory and fail its guard when stale.
+    async with demo.guard() if demo else nullcontext(), factory() as db:
         await db.execute(text("BEGIN IMMEDIATE"))
         run = await db.get(GenerationRun, run_id)
         if run.status != "running":
-            return await snapshot(db, run)
+            return await snapshot(db, run, demo=demo)
         session = await db.get(Session, run.session_id)
         if session.ended_at or session.deleted_at:
             status, error_code = "cancelled", "session_ended"
@@ -353,7 +397,7 @@ async def finish_mentor(
                 session.tutor_intervention_count += 1
                 run.first_output_at = run.finished_at
         await db.flush()
-        result = await snapshot(db, run)
+        result = await snapshot(db, run, demo=demo)
         try:
             await db.commit()
         except BaseException:

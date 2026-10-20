@@ -4,10 +4,11 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 
 import anyio
 
+from src.demo.database import DemoError
 from src.i18n import translate
 from src.models import GenerationRun
 from src.services.generation_lifecycle import active_runs
@@ -19,19 +20,24 @@ from src.services.student_stream import (
     HEARTBEAT_SECONDS,
     StudentStreamError,
     StudentStreamingResponse,
+    bind_child,
+    demo_kwargs,
+    provenance_of,
+    revoked_frame,
 )
 from src.services.tutor_bot import TutorBot
 
 logger = logging.getLogger(__name__)
 
 
-def mentor_response(factory, accepted, execution):
+def mentor_response(factory, accepted, execution, *, demo_run=None):
     return StudentStreamingResponse(
         factory,
         accepted,
         execution,
         stream_generator=stream_mentor,
         finisher=finish_mentor,
+        demo_run=demo_run,
     )
 
 
@@ -42,6 +48,10 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
     bot = task = None
     terminal = False
     cancellation = asyncio.create_task(cancelled.wait())
+    demo_run = execution.get("demo_run")
+    claim = execution.get("claim") or (
+        lambda: active_runs.pop(accepted["run_id"], None)
+    )
 
     def frame(kind, **data):
         nonlocal seq, last_sent
@@ -52,9 +62,22 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
             "seq": seq,
             **data,
         }
+        if demo_run is not None:
+            payload.update(demo_run.fields(kind, data))
         seq += 1
         encoded = json.dumps(payload, ensure_ascii=False)
         return f"event: {kind}\ndata: {encoded}\n\n"
+
+    async def current():
+        # §11: a revoked context gets only a terminal without body text.
+        if demo_run is not None and (error := await demo_run.revoked()):
+            raise error
+
+    async def feedback():
+        # The bot can outlive bounded cleanup; it holds its own lease.
+        async with demo_run.child() if demo_run else nullcontext() as child:
+            bot.request = bind_child(bot.permit, bot.request, child)
+            return await bot.generate_feedback()
 
     def terminal_frame(result):
         if result["status"] == "completed":
@@ -64,6 +87,7 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                 result_kind=result["result_kind"],
                 message=result["message"],
                 turn_index=result["turn_index"],
+                **provenance_of(result),
             )
         return frame(
             f"run.{result['status']}",
@@ -75,9 +99,11 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                 if result["status"] == "cancelled"
                 else translate("teacher.mentor_failed", language)
             ),
+            **provenance_of(result),
         )
 
     try:
+        await current()
         yield frame(
             "run.accepted",
             request_id=accepted["request_id"],
@@ -88,8 +114,13 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
         )
         async with factory() as db:
             run = await db.get(GenerationRun, accepted["run_id"])
-            state = await snapshot(db, run) if run.status != "running" else None
+            state = (
+                await snapshot(db, run, **demo_kwargs(demo_run))
+                if run.status != "running"
+                else None
+            )
         if state is not None:
+            await current()
             terminal = True
             yield terminal_frame(state)
             return
@@ -100,8 +131,11 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
             session_id=accepted["session_id"],
             run_id=accepted["run_id"],
             permit=execution["permit"],
+            demo_adapter=execution.get("demo_adapter"),
         )
-        task = asyncio.create_task(bot.generate_feedback())
+        task = asyncio.create_task(feedback())
+        if demo_run is not None:
+            demo_run.track(task)
         while True:
             remaining = (
                 execution["deadline"] - time.monotonic()
@@ -132,15 +166,25 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                     status="completed",
                     content=content,
                     reason_summary=reason,
+                    **demo_kwargs(demo_run),
                 )
+            except DemoError:
+                raise
             except Exception:
                 logger.error("Mentor final commit failed")
                 raise StudentStreamError("storage_error") from None
+            await current()
             terminal = True
             yield terminal_frame(result)
             return
     except asyncio.CancelledError:
         raise
+    except DemoError as error:
+        # The run's DB is retired: nothing is saved there and no body is sent.
+        terminal = True
+        yield revoked_frame(
+            frame, error, translate("teacher.mentor_failed", language)
+        )
     except Exception as error:
         code = (
             error.code
@@ -157,9 +201,16 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                     else "interrupted" if code == "interrupted" else "failed"
                 ),
                 error_code=code,
+                **demo_kwargs(demo_run),
             )
+            await current()
             terminal = True
             yield terminal_frame(result)
+        except DemoError as error:
+            terminal = True
+            yield revoked_frame(
+                frame, error, translate("teacher.mentor_failed", language)
+            )
         except Exception:
             logger.error("Unable to persist mentor failure")
             yield frame(
@@ -170,7 +221,7 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                 retryable=False,
             )
     finally:
-        active_runs.pop(accepted["run_id"], None)
+        claim()
 
         async def close_upstream():
             cancellation.cancel()
@@ -192,6 +243,7 @@ async def stream_mentor(factory, accepted, execution, started, cancelled):
                     accepted["run_id"],
                     status="interrupted",
                     error_code="disconnected",
+                    **demo_kwargs(demo_run),
                 )
             except Exception:
                 logger.error("Unable to record interrupted mentor")

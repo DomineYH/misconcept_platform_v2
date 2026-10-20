@@ -94,7 +94,9 @@ async function demoServer(tmp) {
     APP_MODE: 'demo', DEMO_DATA_ROOT: join(tmp, 'demo'), DEMO_SEED_DIR: join(tmp, 'seed'),
     // Different hosts: loopback HTTP is accepted in development only (§2).
     DEMO_ORIGIN: `http://127.0.0.1:${port}`, NORMAL_ORIGIN: `http://localhost:${other}`,
-    DEMO_SESSION_SECRET: secret(), DEMO_CSRF_SECRET: secret()
+    DEMO_SESSION_SECRET: secret(), DEMO_CSRF_SECRET: secret(),
+    // The journey runs in seconds, not the 5 minutes D0-02 §7 plans; the §8 maximum keeps 429 out of it.
+    DEMO_REQUESTS_PER_MINUTE: '600'
   });
   const out = await run(['-m', 'src.demo.seed', 'build', '--out', env.DEMO_SEED_DIR], env);
   const receipt = JSON.parse(out.trim().split('\n').at(-1));
@@ -131,6 +133,12 @@ function parseCsv(text) {
   const [header, ...cells] = rows;
   assert(cells.every(row => row.length === header.length), 'ragged CSV row');
   return {header, rows: cells.map(row => Object.fromEntries(header.map((name, i) => [name, row[i]])))};
+}
+
+// Status first: an error envelope must not read as a missing field.
+async function json200(response) {
+  assert.equal(response.status(), 200, await response.text());
+  return response.json();
 }
 
 const state = page => page.evaluate(async () => (await fetch('/demo/state?include_tour=true')).json());
@@ -293,7 +301,7 @@ async function journey(browser, demo, step, pageErrors) {
     let analysis;
     for (let attempt = 0; attempt < 120 && !(analysis?.feedback_status === 'ok'); attempt++) {
       if (attempt) await delay(250);
-      analysis = await (await http.get(`/sessions/${sessionId}/analysis`)).json();
+      analysis = await json200(await http.get(`/sessions/${sessionId}/analysis`));
     }
     assert.equal(analysis.feedback_status, 'ok', JSON.stringify(analysis));
     assert.deepEqual(analysis.distribution, {r1: 0, r2: 1, r3: 1});
@@ -305,7 +313,7 @@ async function journey(browser, demo, step, pageErrors) {
     await page.goto(`${base}/sessions/${sessionId}?${ns(started)}`);
     await page.waitForLoadState('networkidle');
     assert.deepEqual(posts, []);
-    assert.deepEqual(await (await http.get(`/sessions/${sessionId}/analysis`)).json(), analysis);
+    assert.deepEqual(await json200(await http.get(`/sessions/${sessionId}/analysis`)), analysis);
     ended = analysis;
     await page.screenshot({path: join(OUT, 'step4-history.png'), fullPage: true});
   }, ['3']);
@@ -321,10 +329,10 @@ async function journey(browser, demo, step, pageErrors) {
     admin = await state(page);
     assert.equal(admin.role, 'admin');
     assert.equal(admin.auth_epoch, started.auth_epoch + 1);
-    const listed = await (await http.get('/admin/sessions')).json();
+    const listed = await json200(await http.get('/admin/sessions'));
     assert.deepEqual(listed.sessions.map(item => item.id).sort(), [SEED.session, sessionId].sort());
     for (const [id, origin] of [[SEED.session, 'seed_prepared'], [sessionId, 'visitor_generated']]) {
-      const detail = await (await http.get(`/admin/sessions/${id}/analysis`)).json();
+      const detail = await json200(await http.get(`/admin/sessions/${id}/analysis`));
       assert.equal(detail.provenance?.record_origin, origin, `session ${id} origin`);
     }
     await page.getByRole('link', {name: '대화목록'}).first().click();
@@ -381,7 +389,7 @@ async function journey(browser, demo, step, pageErrors) {
     response = await http.get(`/admin/sessions/${SEED.session}/detail`, before);
     assert.equal(response.status(), 409);
     assert.equal((await response.json()).detail.code, 'DEMO_STALE_GENERATION');
-    assert.deepEqual((await (await http.get('/admin/sessions', fresh)).json()).sessions.map(item => item.id), [SEED.session]);
+    assert.deepEqual((await json200(await http.get('/admin/sessions', fresh))).sessions.map(item => item.id), [SEED.session]);
     assert.equal((await http.get(`/admin/sessions/${sessionId}/detail`, fresh)).status(), 404);
     const back = await http.control('/demo/role', {role: 'teacher', expected_generation: fresh.generation, expected_auth_epoch: fresh.auth_epoch});
     assert.equal(back.status, 200, 'seed teacher restored');
@@ -400,7 +408,7 @@ async function extras(browser, demo, step, pageErrors) {
   await step('E1', '완료 이력 열기', async () => {
     assert.equal((await startAs(page, base, 'teacher')).status(), 201);
     teacher = await state(page);
-    const before = await (await http.get(`/sessions/${SEED.session}/analysis`)).json();
+    const before = await json200(await http.get(`/sessions/${SEED.session}/analysis`));
     assert.equal(before.feedback_status, 'ok');
     const posts = [];
     page.on('request', request => { if (request.method() === 'POST') posts.push(request.url()); });
@@ -408,7 +416,7 @@ async function extras(browser, demo, step, pageErrors) {
     await page.waitForLoadState('networkidle');
     await page.locator('[data-analysis-result]').first().waitFor();
     assert.deepEqual(posts, [], 'reopening history starts nothing');
-    assert.deepEqual(await (await http.get(`/sessions/${SEED.session}/analysis`)).json(), before);
+    assert.deepEqual(await json200(await http.get(`/sessions/${SEED.session}/analysis`)), before);
   });
 
   await step('E2', 'ready 상태 역할 전환', async () => {
@@ -461,7 +469,7 @@ async function extras(browser, demo, step, pageErrors) {
     for (const row of parseCsv((await response.text()).replace(/^﻿/, '')).rows) {
       assert.deepEqual(COLUMNS.slice(27).map(name => row[name]), [...SUFFIX, 'seed_prepared']);
     }
-    const analysis = await (await http.get(`/admin/sessions/${SEED.session}/analysis`)).json();
+    const analysis = await json200(await http.get(`/admin/sessions/${SEED.session}/analysis`));
     assert.equal(analysis.provenance?.record_origin, 'seed_prepared', 'seed analysis provenance');
   }, ['E2']);
   await page.context().close();

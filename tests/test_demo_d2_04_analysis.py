@@ -1,8 +1,9 @@
 """D2-04 PR3: demo analysis ctx, child lease, write guard, retry and provenance.
 
-Demo admission/recheck/readmission (PR2) and the context_budget demo branch
-(PR2) are stubbed at their module boundary; everything else is the real
-#191 visitor DB, #192 lifecycle and #196 DemoProvider with fictional content.
+Admission runs PR2's real §14 validator in demo server mode; recheck and
+the context_budget demo branch are stubbed at their module boundary unless a
+test restores them. Everything else is the real #191 visitor DB, #192
+lifecycle, guarded ledger and #196 DemoProvider with fictional content.
 """
 
 import asyncio
@@ -39,6 +40,7 @@ from src.services import (
     analysis_pipeline,
     analysis_plan,
     anthropic_generation,
+    call_admission,
     call_execution,
     google_generation,
     invocation_ledger,
@@ -147,7 +149,17 @@ async def demo(prepared, visitors, monkeypatch):
         for name in ("generate_text", "stream_text", "generate_structured"):
             monkeypatch.setattr(module, name, forbidden)
 
-    async def admit_call(factory, **values):
+    # Server mode is fixed at boot; tests swap only the config these read.
+    server = SimpleNamespace(
+        APP_MODE="demo", DEMO_MAX_ACTIVE_GLOBAL=8, DEMO_MAX_ACTIVE_VISITOR=2
+    )
+    for module in (call_admission, call_execution, analysis_invocations):
+        monkeypatch.setattr(module, "config", server)
+
+    async def admit_call(factory, *, ctx=None, registry=None, **values):
+        # PR2's real validator: this call's DemoContext, registry and factory.
+        call_admission.require_mode(factory, values["operation"], ctx, registry)
+        await registry.assert_current(ctx)
         permit = CallPermit(
             factory,
             values["connection_id"],
@@ -163,6 +175,8 @@ async def demo(prepared, visitors, monkeypatch):
             asyncio.current_task(),
             1,
             model_id="demo-classroom-v1",
+            ctx=ctx,
+            registry=registry,
         )
         active_calls.add(permit)
         registered_calls.add(permit)
@@ -188,13 +202,6 @@ async def demo(prepared, visitors, monkeypatch):
     async def load_analysis_lesson(db, session_id, actor_id, **kwargs):
         return SNAPSHOT
 
-    def guarded(function):
-        # Stand-in for the requested call_execution wiring (report: NEEDS_DECISION).
-        async def call(*args, **kwargs):
-            return await function(*args, ctx=ctx, registry=registry, **kwargs)
-
-        return call
-
     monkeypatch.setattr(analysis_invocations, "admit_call", admit_call)
     monkeypatch.setattr(call_execution, "readmit_call", readmit_call)
     monkeypatch.setattr(call_execution, "recheck_call", recheck_call)
@@ -209,16 +216,6 @@ async def demo(prepared, visitors, monkeypatch):
         analysis_plan,
         "provider_parameters",
         lambda request: dict(messages=request.messages),
-    )
-    monkeypatch.setattr(
-        call_execution,
-        "start_attempt",
-        guarded(invocation_ledger.start_attempt),
-    )
-    monkeypatch.setattr(
-        call_execution,
-        "finish_attempt",
-        guarded(invocation_ledger.finish_attempt),
     )
     async with ctx.factory() as db:
         messages = list(
@@ -593,10 +590,8 @@ def route_request(ctx):
     )
 
 
-@pytest.mark.parametrize("ctx", [None, object()], ids=["normal", "demo"])
-async def test_teacher_routes_pass_the_request_ctx_and_bound_registry(
-    monkeypatch, ctx
-):
+async def test_normal_teacher_routes_keep_the_helper_defaults(monkeypatch):
+    ctx = None
     calls = []
 
     async def capture(*args, **kwargs):
@@ -625,10 +620,8 @@ async def test_teacher_routes_pass_the_request_ctx_and_bound_registry(
     await session_analysis.cancel_analysis_run(
         route_request(ctx), 1, "run", user, None
     )
-    # Normal keeps #192's defaults; demo pairs ctx with the runtime registry
-    # (the module-level lifecycle is unbound to any visitor registry).
-    expected = {} if ctx is None else dict(ctx=ctx, registry=RUNTIME_LIFECYCLE)
-    assert calls == [expected] * 3
+    # Normal keeps #192's defaults: no ctx or registry keyword at all.
+    assert calls == [{}] * 3
 
 
 @pytest.mark.parametrize("mode", ["single", "chunked"])
@@ -791,3 +784,299 @@ async def test_ledger_default_is_normal_context(monkeypatch):
     )
     assert isinstance(entered[0], NormalContext)
     assert entered[0].factory is Database
+
+
+async def request_session(d):
+    """The #194 demo request session, with its own DML guard listeners."""
+    from src.api.dependencies import _RequestDBState, _RequestSession
+
+    state = _RequestDBState(
+        SimpleNamespace(visitors=d.visitors), d.ctx.lease, d.ctx.factory()
+    )
+    state.ctx = d.ctx
+    await state.watch_transactions()
+    return state, _RequestSession(state)
+
+
+def demo_route_request(d):
+    app = SimpleNamespace(
+        state=SimpleNamespace(
+            demo_request_db=SimpleNamespace(lifecycle=d.registry)
+        )
+    )
+    return Request(
+        dict(
+            type="http",
+            method="POST",
+            path="/",
+            headers=[],
+            query_string=b"",
+            app=app,
+            state=dict(demo_context=d.ctx),
+        )
+    )
+
+
+def fictional_snapshot(monkeypatch):
+    """Snapshot publication is not under test; the fictional one stands in."""
+    from src.services import (
+        analysis_results,
+        analysis_runs,
+        lesson_snapshots,
+        session_history,
+    )
+
+    for module in (
+        analysis_results,
+        analysis_runs,
+        lesson_snapshots,
+        session_history,
+    ):
+        monkeypatch.setattr(
+            module, "read_lesson_snapshot", lambda *a, **k: SNAPSHOT
+        )
+
+
+async def open_native_session(d, session_id=2):
+    from sqlalchemy import text
+
+    from src.services.lesson_snapshots import canonical_hash
+
+    envelope = SNAPSHOT.model_dump()
+    async with d.ctx.factory() as db, d.visitors.write_guard(d.ctx):
+        await db.execute(
+            text(
+                "UPDATE session SET ended_at=NULL, snapshot_origin='native', "
+                "config_snapshot_json=:j, config_hash=:h WHERE id=:id"
+            ),
+            dict(
+                j=json.dumps(envelope),
+                h=canonical_hash(envelope),
+                id=session_id,
+            ),
+        )
+        await db.commit()
+
+
+async def test_demo_end_and_cancel_run_the_real_guarded_helpers(
+    demo, monkeypatch
+):
+    from sqlalchemy import text
+
+    from src.api.routes.session_helpers import mark_session_ended
+    from src.models import Session
+    from src.services import analysis_runs
+
+    d = demo
+    await open_native_session(d)
+    state, db = await request_session(d)
+    reserved = []
+
+    async def load_session(session_id, user, db_, **kwargs):
+        return await db_.get(Session, session_id)
+
+    async def reserve_analysis(factory, session_id, *args, ctx, registry, **kw):
+        reserved.append((factory, ctx, registry))
+        return {"latest_run": None}, None
+
+    monkeypatch.setattr(session_analysis, "load_session", load_session)
+    monkeypatch.setattr(analysis_runs, "reserve_analysis", reserve_analysis)
+    fictional_snapshot(monkeypatch)
+    user = SimpleNamespace(id=2)
+    body = SimpleNamespace(request_id="fictional-end", plan_hash=None)
+    try:
+        # The request session guards its own DML; a helper holding the same
+        # guard over it would re-enter the visitor transition lock.
+        session = await db.get(Session, 2)
+        with pytest.raises(DemoError, match="DEMO_INVALID_REQUEST"):
+            await mark_session_ended(
+                session, db, force=True, ctx=d.ctx, registry=d.registry
+            )
+        await db.rollback()
+        await session_analysis.end_session(
+            demo_route_request(d), 2, body, user, db
+        )
+        async with d.ctx.factory() as check:
+            ended = await check.scalar(
+                text("SELECT ended_at FROM session WHERE id=2")
+            )
+        assert ended is not None
+        [(factory, ctx, registry)] = reserved
+        assert factory is d.ctx.factory and registry is d.registry
+        assert ctx.scope == d.ctx.scope and ctx.lease is not d.ctx.lease
+        async with d.ctx.factory() as raw, d.visitors.write_guard(d.ctx):
+            await raw.execute(
+                text(
+                    "INSERT INTO generation_run(id,owner_id,session_id,turn_id,"
+                    "operation,request_id,input_hash,config_hash,provider,"
+                    "model,status,started_at) VALUES('analysis-run',2,2,"
+                    "'analysis-run','analysis','fictional-cancel','hash',"
+                    "'hash','demo','demo-classroom-v1','running','2026-10-19')"
+                )
+            )
+            await raw.commit()
+        await session_analysis.cancel_analysis_run(
+            demo_route_request(d), 2, "analysis-run", user, db
+        )
+        async with d.ctx.factory() as check:
+            status = await check.scalar(
+                text(
+                    "SELECT status FROM generation_run WHERE id='analysis-run'"
+                )
+            )
+        assert status == "cancelled"
+    finally:
+        await state.session.close()
+    assert d.visitors.lease_count(d.ctx.scope) == 1
+
+
+async def test_demo_analysis_end_to_end_through_admission_and_ledger(
+    demo, monkeypatch
+):
+    """reserve → real admission → execute_call → DemoProvider → guarded
+    ledger → guarded save with provenance; zero external SDK calls."""
+    from src.models import AppSetting, ModelConfig, ProviderConnection
+    from src.services import analysis_runs
+    from src.services.model_verification import (
+        DEMO_SEED_TIME,
+        ROLE_CONTRACT_VERSIONS,
+    )
+
+    d = demo
+    async with d.ctx.factory() as db, d.visitors.write_guard(d.ctx):
+        # Migrations may install keyless placeholders; find or add the demo pair.
+        connection = await db.scalar(
+            select(ProviderConnection).where(
+                ProviderConnection.provider == "demo"
+            )
+        )
+        if connection is None:
+            connection = ProviderConnection(
+                provider="demo",
+                enabled=True,
+                credential_revision=0,
+                connection_version=1,
+            )
+            db.add(connection)
+            await db.flush()
+        model = await db.scalar(
+            select(ModelConfig).where(
+                ModelConfig.provider_connection_id == connection.id,
+                ModelConfig.model_id == "demo-classroom-v1",
+            )
+        )
+        if model is None:
+            model = ModelConfig(
+                provider_connection_id=connection.id,
+                model_id="demo-classroom-v1",
+                display_name="Demo",
+                enabled=True,
+                capability_definition_version="demo-cap-v1",
+                default_options_json={"max_output_tokens": 4096},
+                verification_state={
+                    role: dict(
+                        status="succeeded",
+                        verified_at=DEMO_SEED_TIME.isoformat(),
+                        credential_revision=0,
+                        connection_version=1,
+                        capability_definition_version="demo-cap-v1",
+                        role_contract_version=version,
+                    )
+                    for role, version in ROLE_CONTRACT_VERSIONS.items()
+                },
+            )
+            db.add(model)
+            await db.flush()
+        frozen = SNAPSHOT.model_dump()
+        frozen["config"]["analysis"]["resolved_model_config"].update(
+            model_config_id=model.id, provider_connection_id=connection.id
+        )
+        snapshot = LessonSnapshot.model_validate(frozen)
+        setting = await db.get(AppSetting, 1)
+        if setting is None:
+            db.add(
+                AppSetting(
+                    id=1,
+                    limits_json=dict(
+                        total=2,
+                        openai=2,
+                        anthropic=2,
+                        google=2,
+                        admin=1,
+                        demo=2,
+                    ),
+                    timeouts_json=dict(
+                        connect=2,
+                        student_first_output=5,
+                        student_total=15,
+                        mentor_first_output=5,
+                        mentor_total=15,
+                        analysis_total=30,
+                        model_list_total=5,
+                    ),
+                )
+            )
+        await db.commit()
+    from src.services.lesson_connections import resolve_frozen_model
+
+    async def lesson(*args, **kwargs):
+        return snapshot
+
+    fictional_snapshot(monkeypatch)
+    from src.services import analysis_results
+
+    for module in (analysis_runs, analysis_results):
+        monkeypatch.setattr(module, "load_analysis_lesson", lesson)
+    monkeypatch.setattr(analysis_runs, "config", analysis_invocations.config)
+    # Real frozen-model resolution, admission, recheck and readmission.
+    monkeypatch.setattr(
+        analysis_invocations, "resolve_frozen_model", resolve_frozen_model
+    )
+    monkeypatch.setattr(
+        analysis_invocations, "admit_call", call_admission.admit_call
+    )
+    monkeypatch.setattr(
+        call_execution, "recheck_call", call_admission.recheck_call
+    )
+    monkeypatch.setattr(
+        call_execution, "readmit_call", call_admission.readmit_call
+    )
+    adapter = d.configure()
+    await open_native_session(d, session_id=1)
+    async with d.ctx.factory() as db, d.visitors.write_guard(d.ctx):
+        from sqlalchemy import text
+
+        await db.execute(
+            text("UPDATE session SET ended_at='2026-10-19' WHERE id=1")
+        )
+        await db.commit()
+    accepted, execution = await analysis_runs.reserve_analysis(
+        d.ctx.factory,
+        1,
+        2,
+        "fictional-e2e",
+        ctx=d.ctx,
+        registry=d.registry,
+    )
+    assert execution is not None
+    execution["demo_adapter"] = adapter
+    await analysis_runs.execute_analysis(
+        d.ctx.factory, execution, ctx=d.ctx, registry=d.registry
+    )
+    async with d.ctx.factory() as db:
+        run = await db.get(GenerationRun, execution["run_id"])
+        assert run.status == "ok", run.outcome_json
+        assert json.loads(run.outcome_json)["provenance"] == PROVENANCE
+        response = await load_analysis_response(1, db)
+    assert response["provenance"] == PROVENANCE
+    [(request, secret, leases)] = d.seen.calls
+    assert secret is None and d.seen.sdk == [] and leases == 2
+    [entry] = await ledger(d.ctx)
+    assert (entry.provider, entry.status, entry.run_id) == (
+        "demo",
+        "completed",
+        execution["run_id"],
+    )
+    assert entry.usage_complete is False and entry.input_tokens is None
+    assert not any(p.ctx is not None for p in active_calls)
+    assert d.visitors.lease_count(d.ctx.scope) == 1

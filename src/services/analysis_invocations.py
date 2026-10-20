@@ -166,6 +166,12 @@ class AnalysisCaller:
             model_config_id=model.id,
             expected_model_version=model.config_version,
             model_options=options,
+            # Demo admission validates this call's own child context.
+            **(
+                dict(ctx=ctx, registry=self.registry)
+                if self.demo_adapter is not None
+                else {}
+            ),
         )
         if run is not None:
             from src.services.analysis_runs import RUN_SECONDS

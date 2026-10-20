@@ -794,9 +794,16 @@ async def request_session(d):
 
 
 def demo_route_request(d):
+    provider = d.p.provider
     app = SimpleNamespace(
         state=SimpleNamespace(
-            demo_request_db=SimpleNamespace(lifecycle=d.registry)
+            demo_request_db=SimpleNamespace(lifecycle=d.registry),
+            # The route builds the session's adapter from this seed spec.
+            demo_seed=SimpleNamespace(
+                manifest_path=provider.manifest_path,
+                db_schema_version=provider.db_schema_version,
+                migration_set_sha256=provider.migration_set_sha256,
+            ),
         )
     )
     return Request(

@@ -16,6 +16,7 @@ from src.api.routes.session_helpers import (
     load_session,
     mark_session_ended,
 )
+from src.api.routes.student_generation import demo_binding
 from src.api.schemas import AnalysisRequest
 from src.config import config
 from src.i18n import display_language, translate
@@ -46,6 +47,15 @@ def demo_scope(request):
         return {}
     # The module-level lifecycle has no visitors; demo uses the runtime's one.
     return dict(ctx=ctx, registry=request.app.state.demo_request_db.lifecycle)
+
+
+def demo_analysis(request, session):
+    """demo_scope plus the session's local adapter, built from app state."""
+    scope = demo_scope(request)
+    if scope:
+        binding = demo_binding(request, scope["ctx"])
+        scope["demo_adapter"] = binding.adapter(session)
+    return scope
 
 
 @asynccontextmanager
@@ -103,7 +113,7 @@ async def end_session(
             request_id,
             plan_hash=body.plan_hash if body else None,
             language=display_language(request),
-            **demo_scope(request),
+            **demo_analysis(request, session),
         )
 
 
@@ -117,7 +127,9 @@ async def analyze_session_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Reserve an analysis independently of the response connection."""
-    await load_session(session_id, user, db, language=display_language(request))
+    session = await load_session(
+        session_id, user, db, language=display_language(request)
+    )
     async with guarded_db(request, db) as write_db:
         return await request_analysis(
             write_db,
@@ -126,7 +138,7 @@ async def analyze_session_endpoint(
             body.request_id,
             plan_hash=body.plan_hash,
             language=display_language(request),
-            **demo_scope(request),
+            **demo_analysis(request, session),
         )
 
 

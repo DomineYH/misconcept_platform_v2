@@ -34,7 +34,10 @@ from src.demo.session import (
     CONTRACT_VERSION,
     FIXTURE_VERSION,
     DemoState,
+    capture_tour_facts,
+    operation_error,
     public_state,
+    retain_tour_facts,
 )
 from src.demo.visitors import ControlContext
 from src.i18n import display_language, t, translate, ui_strings
@@ -172,7 +175,9 @@ async def get_current_user(
         if ctx is None or ctx.db is not db:
             raise DemoError("CONFIGURATION_INVALID")
         request.state.demo_display = None
-        request.state.demo_display = await ctx._request_db.display()
+        request.state.demo_display = await ctx._request_db.display(
+            get_demo_session(request).tour_content
+        )
         return ctx.user
 
     # Get user_id from session
@@ -331,17 +336,29 @@ class _RequestDBState:
         if write:
             self.wrote = True
 
-    async def display(self):
+    async def display(self, content):
         """Public state for templates, read under the same currentness check."""
         self.ensure_open()
         if self.handle is not None:
             await self.check()
-            return public_state(self.handle.snapshot())
+            return await self._display(self.handle, content)
         async with self.runtime.visitors.transition(
             self.ctx.verified_visitor
         ) as handle:
             handle.check(self.ctx)
-            return public_state(handle.snapshot())
+            return await self._display(handle, content)
+
+    async def _display(self, handle, content):
+        # §24.1: capture→retain under the handle already held; never re-enter.
+        try:
+            facts = retain_tour_facts(
+                handle, await capture_tour_facts(self.ctx, handle, content)
+            )
+        except Exception as exc:
+            raise operation_error(exc, "CONFIGURATION_INVALID") from None
+        return public_state(handle.snapshot()).model_copy(
+            update={"tour_facts": facts}
+        )
 
     async def end_guard(self):
         if self.guard is not None:

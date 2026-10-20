@@ -30,12 +30,29 @@ async function open(page, base, config, oldDraft, path = '/chat?stream') {
 }
 
 // Earlier sections leave saved runs in the same namespace; these cases start without them.
-async function fresh(page, base, config) {
+async function fresh(page, base, config, path) {
   // Leave the chat first: its pagehide handler saves the pending run again.
   await page.goto(`${base}/login`);
   await page.evaluate(() => sessionStorage.clear());
-  return open(page, base, config);
+  return open(page, base, config, null, path);
 }
+
+// Holds a response until release(); an aborted request makes fulfill reject, which is expected.
+async function hold(page, pattern, response) {
+  let release;
+  const released = new Promise(resolve => { release = resolve; });
+  await page.route(pattern, async route => {
+    await released;
+    await route.fulfill(response).catch(() => {});
+  });
+  return () => release();
+}
+
+const synthetic = (page, type, detail) => page.evaluate(([type, detail]) => {
+  const event = new CustomEvent(type, {detail});
+  event.synthetic = true;
+  document.dispatchEvent(event);
+}, [type, detail]);
 
 function snapshot(page) {
   return page.evaluate(() => ({
@@ -59,7 +76,8 @@ const CSV_HEAD = ['session_id', 'scenario_id', 'scenario_title', 'teacher_id', '
   'demo_content_version', 'demo_fixture_version', 'demo_record_origin'];
 function csvRow(session, role, content) {
   const row = Object.fromEntries(CSV_HEAD.map(name => [name, '']));
-  Object.assign(row, {session_id:String(session), role, content, demo_external_ai_called:'false', demo_record_origin:'visitor_generated'});
+  Object.assign(row, {session_id:String(session), role, content, demo_response_source:'prepared_example',
+    demo_external_ai_called:'false', demo_content_version:'c1', demo_fixture_version:'f1', demo_record_origin:'visitor_generated'});
   return CSV_HEAD.map(name => /[",\n]/.test(row[name]) ? `"${row[name].replace(/"/g, '""')}"` : row[name]).join(',');
 }
 
@@ -251,7 +269,7 @@ export default async function check(page) {
   }
 
   // §24.1: the admin record of the journey target reports admin_record_viewed.
-  const ADMIN = {...DEMO, role:'admin', tour_facts:{journey_session_id:1}};
+  const ADMIN = {...DEMO, role:'admin', content_version:'c1', fixture_version:'f1', tour_facts:{journey_session_id:1}};
   await open(page, base, ADMIN, null, '/fixtures/s4/history');
   await page.route('**/admin/sessions/1/analysis_modal', route => route.fulfill({contentType:'text/html',
     body:'<div class="modal-header"><button type="button" class="close-modal-btn">x</button></div>'}));
@@ -263,6 +281,10 @@ export default async function check(page) {
   for (const [name, echo, rows, body, expected] of [
     ['valid', true, '2', csv, 1], ['echo mismatch', false, '2', csv, 0], ['row count', true, '3', csv, 0],
     ['other session', true, '2', csv.replace(/\r\n1,/g, '\r\n2,'), 0], ['broken quote', true, '2', csv.replace('"인용"', '"인용'), 0],
+    ['prefix header', true, '2', csv.replace('scenario_title', 'scenario_name'), 0],
+    ['external source', true, '2', csv.replaceAll('prepared_example', 'external_provider'), 0],
+    ['content version', true, '2', csv.replaceAll(',c1,f1,', ',c0,f1,'), 0],
+    ['fixture version', true, '2', csv.replaceAll(',c1,f1,', ',c1,f0,'), 0],
   ]) {
     await open(page, base, ADMIN, null, '/fixtures/s4/history');
     let exportId;
@@ -290,5 +312,110 @@ export default async function check(page) {
   await page.waitForTimeout(300);
   assert.equal(count('GET /admin/ai/state'), 1);
   assert.deepEqual(await events(), []);
+
+  // Repair P1-1: an invalidated analysis view stays dead; its actions are disabled and never POST.
+  await open(page, base, DEMO, null, '/fixtures/s4/analysis?state=failed');
+  const retryAnalysis = page.locator('[data-analysis-result] button').filter({hasText:await text('teacher.retry_analysis')});
+  await retryAnalysis.waitFor({timeout:3000});
+  requests.length = 0;
+  await synthetic(page, 'demo:role-changed', {browser_scope_id:'scope-a', generation:3, auth_epoch:3});
+  assert.equal(await page.locator('[data-analysis-result] button:not([disabled])').count(), 0);
+  await retryAnalysis.evaluate(button => { button.disabled = false; button.click(); });
+  await page.waitForTimeout(300);
+  assert.equal(count('POST /sessions/1/analyze'), 0);
+  assert.equal(await page.locator('.analysis-result-notice').textContent(), await text('demo.stale_role'));
+
+  // Repair P1-1: reset-started keeps the namespace but voids the pending first GET: no render, no observation.
+  await open(page, base, {...DEMO, tour_facts:{journey_session_id:1}}, null, '/fixtures/s4/analysis');
+  let release = await hold(page, '**/fixtures/s4/result*', {contentType:'application/json', body:'{}'});
+  await Promise.all([page.waitForRequest('**/fixtures/s4/result*'), page.reload()]);
+  await synthetic(page, 'demo:reset-started', {browser_scope_id:'scope-a', generation:3, auth_epoch:2});
+  release();
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('[data-analysis-result] h2').count(), 0);
+  assert.equal(await page.locator('[data-analysis-result] p').count(), 0);
+  assert.deepEqual(await observed(), []);
+
+  // Repair P2-4: the analysis_busy follow-up refusal asks #199 once, drops the resend and ends the view.
+  await open(page, base, DEMO, null, '/fixtures/s4/analysis?state=failed');
+  await page.route('**/sessions/1/analyze', route => route.fulfill({status:409, contentType:'application/json',
+    body:JSON.stringify({detail:{code:'analysis_busy', run_id:'r1'}})}));
+  await page.route('**/sessions/1/analysis/runs/r1', route => route.fulfill({status:410, contentType:'application/json',
+    body:envelope('DEMO_EXPIRED', 'demo.expired')}));
+  await retryAnalysis.waitFor({timeout:3000});
+  requests.length = 0;
+  await retryAnalysis.click();
+  await page.locator('.analysis-result-notice').getByText(expired, {exact:true}).waitFor({timeout:3000});
+  assert.deepEqual(await events(), [['demo:state-check', {reason:'DEMO_EXPIRED'}]]);
+  assert.equal(count('POST /sessions/1/analyze'), 1);
+  assert.equal(count('GET /sessions/1/analysis/runs/r1'), 1);
+  assert.equal(await page.locator('[data-analysis-result] button').filter({hasText:await text('teacher.resend_request')}).count(), 0);
+  assert.equal(await page.locator('[data-analysis-result] button:not([disabled])').count(), 0);
+
+  // Repair P1-2: an end/analyze POST pending across a role change never opens the modal or fetches more.
+  await fresh(page, base, DEMO);
+  release = await hold(page, '**/sessions/1/end', {contentType:'application/json', body:JSON.stringify({status:'ended'})});
+  page.once('dialog', dialog => dialog.accept());
+  requests.length = 0;
+  await Promise.all([page.waitForRequest('**/sessions/1/end'), page.locator('#end-session-btn').click()]);
+  await synthetic(page, 'demo:role-changed', {browser_scope_id:'scope-a', generation:3, auth_epoch:3});
+  release();
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('#session-status-text').textContent(), await text('demo.stale_role'));
+  assert.equal(await page.locator('#analysis-modal-overlay').isHidden(), true);
+  assert.equal(count('GET /sessions/1/analysis_modal'), 0);
+
+  // Repair P1-2: a selected export pending across a role change starts no download.
+  await open(page, base, ADMIN, null, '/fixtures/s4/history');
+  release = await hold(page, '**/admin/sessions/export-selected', {contentType:'text/csv; charset=utf-8', body:csv});
+  await page.locator('.session-checkbox').first().check();
+  let downloads = 0;
+  page.on('download', () => { downloads++; });
+  await Promise.all([page.waitForRequest('**/admin/sessions/export-selected'), page.locator('#btn-download-selected').click()]);
+  await synthetic(page, 'demo:role-changed', {browser_scope_id:'scope-a', generation:3, auth_epoch:3});
+  release();
+  await page.getByText(await text('demo.stale_generation')).first().waitFor({timeout:3000});
+  assert.equal(downloads, 0);
+  assert.deepEqual(await observed(), []);
+
+  // Repair P1-2: an AI-settings GET pending across a role change does not render.
+  await open(page, base, ADMIN, null, '/admin/ai');
+  release = await hold(page, '**/admin/ai/state', {status:403, contentType:'application/json', body:'{}'});
+  await Promise.all([page.waitForRequest('**/admin/ai/state'), page.reload()]);
+  await synthetic(page, 'demo:role-changed', {browser_scope_id:'scope-a', generation:3, auth_epoch:3});
+  release();
+  await page.getByText(await text('demo.stale_generation')).first().waitFor({timeout:3000});
+
+  // Repair P1-3: JSON run receipts need the sent request ID, the current namespace and no historical flag.
+  const completed = {...run, operation:'student', status:'completed', result_kind:'message', teacher_message_id:10,
+    message:{id:11, role:'student', content:'오래된 응답'}};
+  for (const [name, receipt, stale] of [
+    ['other request', () => ({request_id:crypto.randomUUID()}), false],
+    ['other namespace', id => ({request_id:id, browser_scope_id:'scope-a', generation:2, auth_epoch:2}), true],
+    ['historical', id => ({request_id:id, historical:true}), true],
+  ]) {
+    await fresh(page, base, DEMO);
+    await page.route('**/turns/stream', route => route.fulfill({contentType:'application/json',
+      body:JSON.stringify({...completed, ...receipt(route.request().postDataJSON().request_id)})}));
+    await page.locator('#teacher-input').fill('질문');
+    await page.locator('#teacher-input').press('Enter');
+    const notice = stale ? await text('demo.stale_generation') : await text('demo.refresh_state');
+    await page.locator('#language-notice').getByText(notice, {exact:true}).waitFor({timeout:3000});
+    await page.waitForTimeout(200);
+    assert.equal(await page.getByText('오래된 응답').count(), 0, name);
+    assert.deepEqual(await events(), stale ? [['demo:state-check', {reason:'DEMO_STALE_GENERATION'}]] : [], name);
+  }
+  await fresh(page, base, DEMO, '/chat?stream&mentor=1');
+  await page.route('**/turns/stream', route => route.fulfill({contentType:'text/event-stream', body:sse([
+    ['run.accepted', {...run, seq:0, request_id:route.request().postDataJSON().request_id, teacher_message_id:10, status:'running'}],
+    ['output.completed', {...run, seq:1, status:'completed', message:{id:11, role:'student', content:'학생 응답'}}],
+  ])}));
+  await page.route('**/mentor/stream', route => route.fulfill({contentType:'application/json', body:JSON.stringify({
+    run_id:'mentor-1', turn_id:'turn-1', turn_index:1, request_id:crypto.randomUUID(), operation:'mentor',
+    teacher_message_id:10, status:'completed', result_kind:'no_intervention', message:null})}));
+  await page.locator('#teacher-input').fill('질문');
+  await page.locator('#teacher-input').press('Enter');
+  await page.locator('.mentor-slot .mentor-run-status').getByText(await text('demo.refresh_state'), {exact:true}).waitFor({timeout:3000});
+  assert.equal(await page.locator('.mentor-slot').getByText(await text('teacher.mentor_no_intervention'), {exact:true}).count(), 0);
   return {pageErrors:[]};
 }

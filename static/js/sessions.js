@@ -16,14 +16,14 @@ function submitFilters() {
     window.location.pathname + (qs ? '?' + qs : '');
 }
 
-function fetchWithRetry(url, retries) {
+function fetchWithRetry(url, retries, signal) {
   if (retries === undefined) retries = 1;
-  return fetch(url, { credentials: 'same-origin', headers:uiLanguage.headers(url) })
+  return fetch(url, { credentials: 'same-origin', headers:uiLanguage.headers(url), signal: signal })
     .then(function (response) {
       if (response.redirected ||
           response.url.includes('/login')) {
         if (retries > 0) {
-          return fetchWithRetry(url, retries - 1);
+          return fetchWithRetry(url, retries - 1, signal);
         }
         throw new Error('Session expired');
       }
@@ -67,7 +67,7 @@ var analysisModalRequest = 0;
 
 function showAnalysisModal(sessionId) {
   var requestId = ++analysisModalRequest;
-  var captured = uiLanguage.storageKey('');
+  var token = uiLanguage.capture();
   analysisModalBody.replaceChildren(document.getElementById('admin-session-loading').content.cloneNode(true));
   analysisModal.classList.remove('hidden');
   analysisModal.classList.add('flex');
@@ -75,16 +75,16 @@ function showAnalysisModal(sessionId) {
 
   sessionPendingRequests++;
   fetchWithRetry(
-    '/admin/sessions/' + sessionId + '/analysis_modal'
+    '/admin/sessions/' + sessionId + '/analysis_modal', 1, token.signal
   )
     .then(function (html) {
       if (requestId !== analysisModalRequest) return;
-      if (uiLanguage.storageKey('') !== captured) return;
+      if (!uiLanguage.current(token)) return; // late success of a stale namespace
       analysisModalBody.innerHTML = sanitizeHTML(html);
       mountAnalysisResults(analysisModalBody);
       var close = analysisModalBody.querySelector('.close-modal-btn');
       if (close && !analysisModal.contains(document.activeElement)) close.focus();
-      uiLanguage.observe('admin_record_viewed', sessionId, captured);
+      uiLanguage.observe('admin_record_viewed', sessionId, token);
     })
     .catch(function (error) {
       if (requestId !== analysisModalRequest) return;
@@ -219,8 +219,15 @@ function parseCsv(text) {
 }
 
 /* §24.1 csv_received: the exact one-record journey export, nothing else. */
-var DEMO_CSV_TAIL = ['demo_response_source', 'demo_external_ai_called',
-  'demo_content_version', 'demo_fixture_version', 'demo_record_origin'];
+var DEMO_CSV_HEAD = ['session_id', 'scenario_id', 'scenario_title', 'teacher_id',
+  'teacher_username', 'teacher_nickname', 'session_started_at', 'session_ended_at',
+  'message_id', 'message_created_at', 'role', 'content', 'label', 'confidence',
+  'meta_json', 'feedback', 'classification_status', 'student_name', 'snapshot_origin',
+  'snapshot_created_at', 'source_scenario_version', 'config_hash_kind',
+  'analysis_schema_version', 'analysis_status', 'analysis_coverage_json',
+  'misconception_findings_json', 'message_analysis_disposition', 'demo_response_source',
+  'demo_external_ai_called', 'demo_content_version', 'demo_fixture_version',
+  'demo_record_origin'];
 
 function journeyCsv(buffer, response, ids, exportId) {
   if (ids.length !== 1 || response.status !== 200 ||
@@ -231,15 +238,20 @@ function journeyCsv(buffer, response, ids, exportId) {
   var rows = parseCsv(new TextDecoder('utf-8', {fatal: true}).decode(buffer));
   if (!rows || rows.length !== Number(count) + 1) return false;
   var head = rows[0];
-  if (head.length !== 32 || head[0] !== 'session_id' ||
-      DEMO_CSV_TAIL.some(function (name, i) { return head[27 + i] !== name; })) return false;
-  var role = head.indexOf('role');
+  if (head.length !== DEMO_CSV_HEAD.length ||
+      DEMO_CSV_HEAD.some(function (name, i) { return head[i] !== name; })) return false;
+  // Indices below are safe: the whole ordered header was just matched.
+  var v = uiLanguage.versions;
+  if (!v || typeof v.content !== 'string' || v.content === '' ||
+      typeof v.fixture !== 'string' || v.fixture === '') return false;
   var summary = false;
   for (var r = 1; r < rows.length; r++) {
     var row = rows[r];
     if (row.length !== 32 || row[0] !== String(ids[0]) ||
-        row[28] !== 'false' || row[31] !== 'visitor_generated') return false;
-    if (role >= 0 && row[role] === 'summary') summary = true;
+        row[27] !== 'prepared_example' || row[28] !== 'false' ||
+        row[29] !== v.content || row[30] !== v.fixture ||
+        row[31] !== 'visitor_generated') return false;
+    if (row[10] === 'summary') summary = true;
   }
   return summary;
 }
@@ -255,13 +267,13 @@ btnDownloadSelected.addEventListener('click', function () {
   var body = new URLSearchParams();
   ids.forEach(function (id) { body.append('session_ids', id); });
 
-  var captured = uiLanguage.storageKey('');
-  var exportId = captured !== '' ? crypto.randomUUID() : '';
+  var token = uiLanguage.capture();
+  var exportId = token.prefix !== '' ? crypto.randomUUID() : '';
   var initial = {
     'Content-Type': 'application/x-www-form-urlencoded',
     [uiLanguage.csrfHeader]: getCsrfToken(),
   };
-  if (captured !== '') initial['X-Demo-Export-Request-ID'] = exportId;
+  if (token.prefix !== '') initial['X-Demo-Export-Request-ID'] = exportId;
 
   sessionPendingRequests++;
   fetch('/admin/sessions/export-selected', {
@@ -269,6 +281,7 @@ btnDownloadSelected.addEventListener('click', function () {
     headers: uiLanguage.headers('/admin/sessions/export-selected', initial),
     credentials: 'same-origin',
     body: body,
+    signal: token.signal,
   })
     .then(function (response) {
       if (!response.ok) {
@@ -281,8 +294,10 @@ btnDownloadSelected.addEventListener('click', function () {
         });
       }
       // Demo reads bytes so the CSV can be verified; normal keeps blob().
-      return (captured !== '' ? response.arrayBuffer() : response.blob()).then(function (data) {
-        var blob = captured !== '' ?
+      return (token.prefix !== '' ? response.arrayBuffer() : response.blob()).then(function (data) {
+        // Late success of a stale namespace never starts a download.
+        if (!uiLanguage.current(token)) throw new Error(uiLanguage.t('demo.stale_generation'));
+        var blob = token.prefix !== '' ?
           new Blob([data], {type: response.headers.get('Content-Type') || ''}) : data;
         var disposition =
           response.headers.get('Content-Disposition') || '';
@@ -298,15 +313,17 @@ btnDownloadSelected.addEventListener('click', function () {
         URL.revokeObjectURL(url);
         // A failed check must never reach the download-failed handler.
         try {
-          if (captured !== '' && journeyCsv(data, response, ids, exportId)) {
-            uiLanguage.observe('csv_received', ids[0], captured, exportId);
+          if (token.prefix !== '' && journeyCsv(data, response, ids, exportId)) {
+            uiLanguage.observe('csv_received', ids[0], token, exportId);
           }
         } catch (e) {}
       });
     })
     .catch(function (error) {
       modalLifecycle.error(document.querySelector('.table-container'),
-        (error && error.hint) || uiLanguage.t('admin.selected_download_failed'));
+        (error && error.hint) || (uiLanguage.current(token)
+          ? uiLanguage.t('admin.selected_download_failed')
+          : uiLanguage.t('demo.stale_generation'))); // invalidation aborts the fetch
     })
     .finally(function () {
       sessionPendingRequests--;

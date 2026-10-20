@@ -30,15 +30,24 @@ async function request(path, body) {
     headers['Content-Type'] = 'application/json';
     headers[uiLanguage.csrfHeader] = uiLanguage.csrfToken() || '';
   }
-  const response = await fetch(`/admin/ai/${path}`, {method:body === undefined ? 'GET' : 'POST',
-    credentials:'same-origin', headers:uiLanguage.headers(`/admin/ai/${path}`, headers), ...(body === undefined ? {} : {body:JSON.stringify(body)})});
+  const token = uiLanguage.capture();
+  const stale = uiLanguage.t('demo.stale_generation');
+  let response;
+  try {
+    response = await fetch(`/admin/ai/${path}`, {method:body === undefined ? 'GET' : 'POST', signal:token.signal,
+      credentials:'same-origin', headers:uiLanguage.headers(`/admin/ai/${path}`, headers), ...(body === undefined ? {} : {body:JSON.stringify(body)})});
+  } catch (code) {
+    throw uiLanguage.current(token) ? code : stale; // An aborted stale request shows the generic stale notice.
+  }
   // Never display raw server detail, validation input, or exception text.
   if (!response.ok) {
     const hint = await uiLanguage.responseRecovery(response);
     if (hint) throw hint;
     throw response.status;
   }
-  return response.status === 204 ? null : response.json();
+  const result = response.status === 204 ? null : await response.json();
+  if (!uiLanguage.current(token)) throw stale; // A late success must not touch the page.
+  return result;
 }
 
 async function load() {

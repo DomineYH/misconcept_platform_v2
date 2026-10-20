@@ -173,23 +173,23 @@ async function save(action) {
   document.getElementById('editor-conflict').hidden = true;
   showErrors([]);
   const submittedEdits = edits;
+  const token = uiLanguage.capture();
   try {
     const response = await fetch(data.id == null ? '/admin/scenarios' : `/admin/scenarios/${data.id}/update`, {
-      method:'POST', credentials:'same-origin', headers:uiLanguage.headers('/admin/scenarios', {'Content-Type':'application/json', [uiLanguage.csrfHeader]:uiLanguage.csrfToken() || ''}), body:JSON.stringify(payload(action))
+      method:'POST', credentials:'same-origin', signal:token.signal, headers:uiLanguage.headers('/admin/scenarios', {'Content-Type':'application/json', [uiLanguage.csrfHeader]:uiLanguage.csrfToken() || ''}), body:JSON.stringify(payload(action))
     });
     const hint = await uiLanguage.responseRecovery(response);
+    const result = !hint && (response.ok || [409, 422].includes(response.status)) ? await response.json() : null;
     if (hint) status.textContent = hint; // Demo refusal: show the hint, keep the input, never retry.
+    else if (!uiLanguage.current(token)) status.textContent = uiLanguage.t('demo.stale_generation'); // Late answer: keep the input.
     else if (response.status === 422) {
-      const result = await response.json();
       showErrors(result.detail);
     } else if (response.status === 409) {
-      const result = await response.json();
       const conflict = document.getElementById('editor-conflict');
       document.getElementById('editor-conflict-message').textContent = `${uiLanguage.t('admin.another_administrator_made_changes_your_input_is_preserved_latest_version')} ${result.detail.current_version}`;
       conflict.hidden = false;
       conflict.focus();
     } else if (response.ok) {
-      const result = await response.json();
       data.id = result.id ?? data.id;
       data.config_version = result.version;
       data.status = result.status;
@@ -212,8 +212,11 @@ async function save(action) {
     }
     if (!response.ok) dirty = wasDirty || edits !== submittedEdits;
   } catch {
-    status.dataset.state = 'uncertain';
-    status.textContent = uiLanguage.t('admin.could_not_confirm_the_save_result_your_input_is_preserved');
+    if (!uiLanguage.current(token)) status.textContent = uiLanguage.t('demo.stale_generation');
+    else {
+      status.dataset.state = 'uncertain';
+      status.textContent = uiLanguage.t('admin.could_not_confirm_the_save_result_your_input_is_preserved');
+    }
   } finally {
     busy = false;
     reviewState();

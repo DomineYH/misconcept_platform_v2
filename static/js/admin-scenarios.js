@@ -19,20 +19,22 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     if (!window.confirm(uiLanguage.t('admin.scenario_delete_confirm', {title:btn.dataset.title, count:btn.dataset.sessionCount}))) return;
     btn.disabled = true;
+    const token = uiLanguage.capture();
     try {
       const response = await fetch(`/admin/scenarios/${btn.dataset.id}/delete`, {
-        method: 'POST',
+        method: 'POST', signal: token.signal,
         headers: uiLanguage.headers(`/admin/scenarios/${btn.dataset.id}/delete`, {'Content-Type': 'application/json', [uiLanguage.csrfHeader]: uiLanguage.csrfToken() ?? ''}),
         body: JSON.stringify({expected_version: Number(btn.dataset.version)})
       });
-      if (response.ok) {
+      if (!uiLanguage.current(token)) window.alert(uiLanguage.t('demo.stale_generation')); // Late answer: no navigation.
+      else if (response.ok) {
         const previous = document.querySelector('#scenarios-pagination [rel="prev"]');
         if (previous && document.querySelectorAll('.scenario-card').length === 1) {
           window.location.assign(previous.href);
         } else window.location.reload();
       } else window.alert(await uiLanguage.responseRecovery(response) || (response.status === 409 ? uiLanguage.t('admin.another_administrator_made_changes_reload_and_check_again') : uiLanguage.t('admin.deletion_failed')));
     } catch {
-      window.alert(uiLanguage.t('admin.deletion_failed'));
+      window.alert(uiLanguage.t(uiLanguage.current(token) ? 'admin.deletion_failed' : 'demo.stale_generation'));
     } finally {
       btn.disabled = false;
     }

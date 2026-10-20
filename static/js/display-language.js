@@ -32,7 +32,20 @@ window.uiLanguage = (() => {
     staleHandlers.add(handler);
     return () => staleHandlers.delete(handler);
   }
+  // A capture token pins the namespace and an abort signal; any invalidation voids both.
+  // ponytail: controllers are only released by invalidation; add a release call if a page captures per poll.
+  let serial = 0;
+  const controllers = new Set();
+  function capture() {
+    if (!demo) return {prefix:'', serial:0, signal:undefined};
+    const controller = new AbortController();
+    controllers.add(controller);
+    return {prefix:storageKey(''), serial, signal:controller.signal};
+  }
   function invalidate(key) {
+    serial++;
+    for (const controller of controllers) controller.abort();
+    controllers.clear();
     notify(t(key));
     for (const handler of [...staleHandlers]) handler(t(key));
   }
@@ -79,20 +92,32 @@ window.uiLanguage = (() => {
     if (!demo || response.ok) return null;
     try { return recovery((await response.clone().json()).detail); } catch { return null; }
   }
-  // §25: work keeps storageKey('') from its start; a newer namespace or another one's frame is discarded.
-  function current(captured, frame) {
+  // §25: work keeps its capture token; any invalidation since, or a frame of another namespace, voids it.
+  function current(token, frame) {
     if (!demo) return true;
-    if (storageKey('') !== captured) return false;
+    if (token.serial !== serial || storageKey('') !== token.prefix) return false;
     if (typeof frame?.browser_scope_id !== 'string' ||
-      `demo:${frame.browser_scope_id}:${frame.generation}:${frame.auth_epoch}:` === captured) return true;
+      `demo:${frame.browser_scope_id}:${frame.generation}:${frame.auth_epoch}:` === token.prefix) return true;
     recovery({code:'DEMO_STALE_GENERATION', recovery:'demo.stale_generation'});
     return false;
   }
+  // §25: a JSON run receipt must be current, not historical, and answer the request that was sent.
+  function receipt(token, data, requestId) {
+    if (!demo) return true;
+    if (data?.historical === true) {
+      recovery({code:'DEMO_STALE_GENERATION', recovery:'demo.stale_generation'});
+      return false;
+    }
+    if (!current(token, data)) return false;
+    if (data?.request_id === requestId) return true;
+    notify(t('demo.refresh_state'));
+    return false;
+  }
   // §24.1: only the journey target, still in the namespace the caller captured.
-  function observe(kind, sessionId, captured, requestId = crypto.randomUUID()) {
+  function observe(kind, sessionId, token, requestId = crypto.randomUUID()) {
     const journey = demo?.tour_facts?.journey_session_id;
     if (!Number.isInteger(journey) || String(sessionId) !== String(journey) || namespace.scope == null ||
-      storageKey('') !== captured) return;
+      !current(token)) return;
     document.dispatchEvent(new CustomEvent('demo:tour-observed', {detail:{schema_version:1,
       browser_scope_id:namespace.scope, generation:namespace.generation, auth_epoch:namespace.epoch,
       journey_session_id:journey, kind, request_id:requestId}}));
@@ -175,5 +200,6 @@ window.uiLanguage = (() => {
     }).observe(notices);
   });
   return {t, headers, registerGuard, csrfHeader, csrfToken, storageKey, registerStale, recovery, responseRecovery,
-    current, observe, afterState, notify};
+    capture, current, receipt, observe, afterState, notify,
+    versions:demo && {content:demo.content_version, fixture:demo.fixture_version}};
 })();

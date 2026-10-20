@@ -444,12 +444,26 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
     }
   }
 
+  // A stale demo stop surfaces as AUTH_EXPIRED so callers take their existing silent path.
+  function staleError() {
+    const error = new Error('DEMO_STOPPED');
+    error.code = 'AUTH_EXPIRED';
+    return error;
+  }
+
   async function fetchWithAuthGuard(url, options) {
-    const response = await fetch(url, {
-      credentials: 'same-origin',
-      ...options,
-      headers: uiLanguage.headers(url, options?.headers)
-    });
+    const token = uiLanguage.capture();
+    let response;
+    try {
+      response = await fetch(url, {
+        credentials: 'same-origin',
+        ...options,
+        signal: options?.signal ?? token.signal,
+        headers: uiLanguage.headers(url, options?.headers)
+      });
+    } catch (error) {
+      throw demoStopped ? staleError() : error;
+    }
 
     if (isAuthExpiredResponse(response)) {
       const redirectUrl = extractRedirectUrl(response.headers.get('HX-Trigger'));
@@ -458,12 +472,9 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       authError.code = 'AUTH_EXPIRED';
       throw authError;
     }
-    // A stale demo envelope already locked the chat; callers stop on their AUTH_EXPIRED path.
-    if (await uiLanguage.responseRecovery(response) && demoStopped) {
-      const staleError = new Error('DEMO_STOPPED');
-      staleError.code = 'AUTH_EXPIRED';
-      throw staleError;
-    }
+    // A stale demo envelope or a late success already locked the chat; callers stop on their AUTH_EXPIRED path.
+    await uiLanguage.responseRecovery(response);
+    if (demoStopped) throw staleError();
 
     return response;
   }
@@ -497,6 +508,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
 
       if (response.ok) {
         const data = await safeReadJson(response);
+        if (demoStopped) return;
         console.log('Session closed:', data);
         clearDraftMessage();
         document.dispatchEvent(new Event('chat:ended'));
@@ -507,6 +519,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         }, 500);
       } else {
         const error = await safeReadJson(response);
+        if (demoStopped) return;
         console.error('Failed to close session:', error);
         alert(uiLanguage.t('teacher.close_failed_navigation'));
         window.location.href = url;
@@ -642,6 +655,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
       });
 
       const analysisResult = await safeReadJson(analyzeResponse);
+      if (demoStopped) return;
       analysisUnresolved = analyzeResponse.status >= 500 || analyzeResponse.status === 202 ||
         analysisResult.latest_run?.status === 'running' || analysisResult.detail?.code === 'analysis_busy';
       if (analyzeResponse.ok) document.dispatchEvent(new Event('chat:ended'));

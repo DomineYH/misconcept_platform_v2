@@ -10,7 +10,7 @@ export function mountStudentStream(ui) {
   const container = document.getElementById('messages-container');
   const storageKey = uiLanguage.storageKey(`chat-run-${ui.sessionId}`);
   const draftKey = uiLanguage.storageKey(`chat-draft-${ui.sessionId}`);
-  const captured = uiLanguage.storageKey('');
+  const token = uiLanguage.capture();
   let pending, teacher, student, status, actions, retry;
   let lookupBusy = false;
   let sessionEnded = false;
@@ -186,6 +186,13 @@ export function mountStudentStream(ui) {
     sync();
   }
 
+  // A JSON receipt that fails the demo check must not be applied; stop the work and tell the user.
+  function rejectReceipt() {
+    clearTimeout(recoveryTimer);
+    status.textContent = uiLanguage.t('demo.refresh_state');
+    retry.disabled = true;
+  }
+
   async function recover(reset = true) {
     if (!pending || ui.isLocked() || lookupBusy || leftPage || forbidden) return;
     if (reset) {
@@ -215,7 +222,10 @@ export function mountStudentStream(ui) {
         persist();
       }
       else if (response.ok) {
-        applySnapshot(await response.json());
+        const data = await response.json();
+        if (pending !== attempt || leftPage) return;
+        if (!uiLanguage.receipt(token, data, attempt.request_id)) { rejectReceipt(); return; }
+        applySnapshot(data);
         if (pending?.status === 'running') {
           status.textContent = uiLanguage.t('teacher.student_checking_saved');
           const elapsed = [1000, 3000, 7000, 15000, 30000][recoveryStep++];
@@ -338,11 +348,14 @@ export function mountStudentStream(ui) {
         }
       }
       if (response.ok && response.headers.get('Content-Type')?.includes('application/json')) {
-        applySnapshot(await response.json());
+        const data = await response.json();
+        if (pending !== attempt || leftPage) return;
+        if (!uiLanguage.receipt(token, data, attempt.request_id)) { rejectReceipt(); return; }
+        applySnapshot(data);
         if (pending?.status === 'running') await recover();
       } else {
         await readSSE(response.body, (type, data) => {
-          if (pending !== attempt || leftPage || !uiLanguage.current(captured, data)) return false;
+          if (pending !== attempt || leftPage || !uiLanguage.current(token, data)) return false;
           event(type, data);
           return !leftPage && pending === attempt && ['sending', 'running'].includes(pending.status);
         });

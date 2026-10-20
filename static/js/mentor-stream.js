@@ -22,7 +22,7 @@ export function mountMentorStream(ui) {
   const help = document.getElementById('request-mentor');
   const helpStatus = document.getElementById('mentor-help-status');
   const storageKey = uiLanguage.storageKey(`chat-mentor-${ui.sessionId}`);
-  const captured = uiLanguage.storageKey('');
+  const token = uiLanguage.capture();
   let saved = {};
   try { saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}'); } catch {}
   let leftPage = false;
@@ -153,7 +153,14 @@ export function mountMentorStream(ui) {
         finish(turn, 'unknown', uiLanguage.t('teacher.mentor_unknown_request'), true);
         turn.check.hidden = false;
       } else if (response.ok) {
-        apply(turn, await response.json());
+        const data = await response.json();
+        if (turn.requestId !== requestId || leftPage || ui.isLocked()) return;
+        // A receipt for another request or namespace must not be applied.
+        if (!uiLanguage.receipt(token, data, requestId)) {
+          finish(turn, 'unknown', uiLanguage.t('demo.refresh_state'));
+          return;
+        }
+        apply(turn, data);
         if (turn.running) {
           const elapsed = [1000, 3000, 7000, 15000, 30000][turn.recoveryStep++];
           if (elapsed !== undefined && Date.now() < turn.recoveryStarted + 30000) {
@@ -233,10 +240,16 @@ export function mountMentorStream(ui) {
         return;
       }
       if (response.headers.get('Content-Type')?.includes('application/json')) {
-        apply(turn, await response.json());
+        const data = await response.json();
+        if (turn.requestId !== requestId || leftPage || !turn.running || ui.isLocked()) return;
+        if (!uiLanguage.receipt(token, data, requestId)) {
+          finish(turn, 'unknown', uiLanguage.t('demo.refresh_state'));
+          return;
+        }
+        apply(turn, data);
       } else await readSSE(response.body, (type, data) => {
         if (turn.requestId !== requestId || !turn.running || ui.isLocked()) return false;
-        if (!uiLanguage.current(captured, data)) return false;
+        if (!uiLanguage.current(token, data)) return false;
         if (data.turn_id !== turnId) return true;
         if (type === 'run.accepted' && data.request_id === requestId && data.operation === 'mentor') {
           turn.runId = data.run_id;

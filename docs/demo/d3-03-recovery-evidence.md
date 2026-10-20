@@ -90,6 +90,44 @@ server, Chromium (Playwright cache), local, serial, one worker.
 9. `/admin/ai` 403 `DEMO_ACTION_FORBIDDEN`: hint shown, one request, no
    retry, no `demo:*` event.
 
+## Review repair r1 (PR #243 review, 3× P1, 2× P2)
+
+- Shared: `uiLanguage.capture()` returns a token `{prefix, serial, signal}`.
+  Any invalidation bumps the serial and aborts every captured signal, so
+  `current(token)` also fails after `demo:reset-started`/`demo:expired`,
+  which keep the namespace. `receipt(token, data, requestId)` checks JSON
+  run receipts: not historical, current namespace, and the request ID that
+  was sent.
+- P1-1 `analysis-result.js`: an invalidated view is dead. Its buttons are
+  disabled, its requests aborted, nothing is sent, rendered, polled or
+  observed afterwards, and the notice stays.
+- P1-2: `chat.js` (`fetchWithAuthGuard` and its end/close callers),
+  `ai-connections.js`, `scenario-editor.js`, `admin-scenarios.js` and
+  `sessions.js` (modal, selected export) abort on invalidation and reject
+  late successes before any DOM change, navigation, follow-up fetch or
+  download.
+- P1-3 `student-stream.js`, `mentor-stream.js`: JSON replays and lookups pass
+  `receipt()` before every snapshot is applied.
+- P2-4: the `analysis_busy` follow-up GET goes through `responseRecovery`
+  (one state-check), clears the resend state and ends the view.
+- P2-5 `sessions.js`: `csv_received` needs the full ordered 32-column header,
+  and every row needs `prepared_example`, the current `demo_config` content
+  and fixture versions, `external_ai_called=false` and `visitor_generated`.
+
+Regression cases added: dead analysis view (no POST after role change),
+first GET voided by reset-started, nested `analysis_busy` → 410, end POST
+held across a role change, selected export held across a role change, AI
+state GET held across a role change, student JSON receipts (other request,
+other namespace, historical), mentor JSON receipt for another request, and
+CSV negatives for prefix header, source, content and fixture version. The
+positive CSV now carries `prepared_example` and the configured versions.
+
+| Check (repair r1) | Command | Result |
+| --- | --- | --- |
+| New test, Red | same test against the pre-repair JS | failed as expected (`prefix header` CSV accepted) |
+| New test, Green | `npm run test:browser -- browser_demo_d3_03_recovery` | 1/1 passed |
+| Filtered suites | `npm run test:browser -- demo_d3_03 student_recovery mentor_recovery chat sessions student_stream mentor_stream s4_ ai_ s2_ s5_ scenario_editor admin_scenarios language i18n s6_delete` | 85/85 passed, 953 s |
+
 ## Not covered here
 
 - Real demo server, CSRF middleware, `demo-tour.js` answering
@@ -99,5 +137,3 @@ server, Chromium (Playwright cache), local, serial, one worker.
 - Stale-draft "previous draft" display with explicit copy (§25): old-namespace
   drafts are simply not restored (keys are namespaced since PR2); no copy UI
   was added.
-- Content and fixture version comparison in the CSV check: #199 validates
-  `tour-observed` against its own state.

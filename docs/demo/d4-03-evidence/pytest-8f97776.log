@@ -4,10 +4,10 @@
 # 환경: GitHub Actions ubuntu-24.04 runner, CPython 3.12.3 (uv sync --frozen --extra dev --python 3.12), Node 24
 # CI run: https://github.com/DomineYH/misconcept_platform_v2/actions/runs/39397378254 attempt 1, job `test` (id 118543362770), step `uv run --frozen python -m pytest -q --durations=30`
 # exit: 0 (step success, job conclusion success)
-# 가림: runner 작업 경로 <workspace>/<runner_temp>/<toolcache>, ANSI 색 코드 제거. 그 밖의 줄은 CI 로그 그대로.
+# 가림: runner 작업 경로 <workspace>/<runner_temp>/<toolcache>, 시스템 경로 <shell>(셸 실행 파일)·<python_stdlib>/(Python 3.12 표준 라이브러리), ANSI 색 코드 제거. 그 밖의 줄은 CI 로그 그대로.
 2026-10-20T08:59:44.4943008Z ##[group]Run uv run --frozen python -m pytest -q --durations=30
 2026-10-20T08:59:44.4943417Z uv run --frozen python -m pytest -q --durations=30
-2026-10-20T08:59:44.4974017Z shell: /usr/bin/bash -e {0}
+2026-10-20T08:59:44.4974017Z shell: <shell> -e {0}
 2026-10-20T08:59:44.4974241Z env:
 2026-10-20T08:59:44.4974449Z   UV_CACHE_DIR: <runner_temp>/setup-uv-cache
 2026-10-20T08:59:44.4974677Z ##[endgroup]
@@ -159,22 +159,22 @@
 2026-10-20T09:17:57.8771262Z   Traceback (most recent call last):
 2026-10-20T09:17:57.8771848Z     File "<workspace>/.venv/lib/python3.12/site-packages/aiosqlite/core.py", line 107, in run
 2026-10-20T09:17:57.8772460Z       future.get_loop().call_soon_threadsafe(set_result, future, result)
-2026-10-20T09:17:57.8772952Z     File "/usr/lib/python3.12/asyncio/base_events.py", line 840, in call_soon_threadsafe
+2026-10-20T09:17:57.8772952Z     File "<python_stdlib>/asyncio/base_events.py", line 840, in call_soon_threadsafe
 2026-10-20T09:17:57.8773325Z       self._check_closed()
-2026-10-20T09:17:57.8773678Z     File "/usr/lib/python3.12/asyncio/base_events.py", line 541, in _check_closed
+2026-10-20T09:17:57.8773678Z     File "<python_stdlib>/asyncio/base_events.py", line 541, in _check_closed
 2026-10-20T09:17:57.8793307Z ##[error]      raise RuntimeError('Event loop is closed')
 2026-10-20T09:17:57.8798932Z   RuntimeError: Event loop is closed
 2026-10-20T09:17:57.8799435Z   
 2026-10-20T09:17:57.8799775Z   During handling of the above exception, another exception occurred:
 2026-10-20T09:17:57.8800174Z   
 2026-10-20T09:17:57.8800408Z   Traceback (most recent call last):
-2026-10-20T09:17:57.8800807Z     File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+2026-10-20T09:17:57.8800807Z     File "<python_stdlib>/threading.py", line 1073, in _bootstrap_inner
 2026-10-20T09:17:57.8801206Z       self.run()
 2026-10-20T09:17:57.8801722Z     File "<workspace>/.venv/lib/python3.12/site-packages/aiosqlite/core.py", line 110, in run
 2026-10-20T09:17:57.8802333Z       future.get_loop().call_soon_threadsafe(set_exception, future, e)
-2026-10-20T09:17:57.8802785Z     File "/usr/lib/python3.12/asyncio/base_events.py", line 840, in call_soon_threadsafe
+2026-10-20T09:17:57.8802785Z     File "<python_stdlib>/asyncio/base_events.py", line 840, in call_soon_threadsafe
 2026-10-20T09:17:57.8803202Z       self._check_closed()
-2026-10-20T09:17:57.8803575Z     File "/usr/lib/python3.12/asyncio/base_events.py", line 541, in _check_closed
+2026-10-20T09:17:57.8803575Z     File "<python_stdlib>/asyncio/base_events.py", line 541, in _check_closed
 2026-10-20T09:17:57.8804322Z ##[error]      raise RuntimeError('Event loop is closed')
 2026-10-20T09:17:57.8805062Z   RuntimeError: Event loop is closed
 2026-10-20T09:17:57.8805381Z   

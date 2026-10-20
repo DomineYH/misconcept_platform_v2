@@ -22,4 +22,6 @@
 
 넣지 않는 것: 비밀 값과 비밀 hash, `.env` 내용, 실제 host·절대 경로·사용자 home 경로, cookie·CSRF 토큰 값, 대화 원문. 필요한 곳은 `<redacted>`로 바꾼다.
 
+CI 로그 발췌(`pytest`·`ruff`·`black`·`live-<sha7>.log`)의 치환: runner 작업 공간 → `<workspace>`, runner 임시 디렉터리 → `<runner_temp>`, runner tool cache → `<toolcache>`, 시스템 Python 실행 파일 → `<system-python3.12>`, step 셸 실행 파일 → `<shell>`, Python 3.12 표준 라이브러리 디렉터리 → `<python_stdlib>/`. ANSI 색 코드는 지웠다. timestamp, 저장소 상대 파일명·행 번호, 예외 문구, 결과 줄은 그대로 둔다. browser shard JSON은 CI artifact 원본이며 절대 경로가 없다.
+
 기존 `tests/browser_server.py` 화면 fixture 통과만으로 실제 demo backend 통과를 주장하지 않는다. 실제 backend 증거는 #204의 `tests/demo_d4_02_server.py` 기반 검사와 `docs/demo/d4-02-evidence/`에서 연결한다.

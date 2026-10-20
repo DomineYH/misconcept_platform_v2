@@ -4,10 +4,10 @@
 # 환경: GitHub Actions ubuntu-24.04 runner, CPython 3.12.3 (uv sync --frozen --extra dev --python 3.12), Node 24
 # CI run: https://github.com/DomineYH/misconcept_platform_v2/actions/runs/39392009613 attempt 1, job `test` (id 118525536944), step `uv run --frozen black --check .`
 # exit: 0 (step success, job conclusion success)
-# 가림: runner 작업 경로 <workspace>/<runner_temp>/<toolcache>, ANSI 색 코드 제거. 그 밖의 줄은 CI 로그 그대로.
+# 가림: runner 작업 경로 <workspace>/<runner_temp>/<toolcache>, 시스템 경로 <shell>(셸 실행 파일)·<python_stdlib>/(Python 3.12 표준 라이브러리), ANSI 색 코드 제거. 그 밖의 줄은 CI 로그 그대로.
 2026-10-20T08:14:59.1765072Z ##[group]Run uv run --frozen black --check .
 2026-10-20T08:14:59.1765460Z uv run --frozen black --check .
-2026-10-20T08:14:59.1819327Z shell: /usr/bin/bash -e {0}
+2026-10-20T08:14:59.1819327Z shell: <shell> -e {0}
 2026-10-20T08:14:59.1819596Z env:
 2026-10-20T08:14:59.1819856Z   UV_CACHE_DIR: <runner_temp>/setup-uv-cache
 2026-10-20T08:14:59.1820177Z ##[endgroup]

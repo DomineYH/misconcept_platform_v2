@@ -565,6 +565,7 @@ async def request_analysis(
     language="ko",
     ctx=None,
     registry=lifecycle,
+    demo_adapter=None,
 ):
     factory = (
         ctx.factory
@@ -596,6 +597,9 @@ async def request_analysis(
             registry=registry,
         )
         if execution is not None:
+            # Demo only: the route's local adapter reaches the pipeline.
+            if demo_adapter is not None:
+                execution["demo_adapter"] = demo_adapter
             if ctx is None or scope_for(ctx) == NORMAL_SCOPE:
                 start_analysis(factory, execution)
             else:

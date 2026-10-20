@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import dataclasses
 import json
+import math
 import time
 from contextlib import aclosing, asynccontextmanager, suppress
 from copy import deepcopy
@@ -41,6 +42,7 @@ from src.models import (
 )
 from src.models import Session as LessonSession
 from src.services import (
+    analysis_plan,
     anthropic_catalog,
     anthropic_generation,
     call_admission,
@@ -54,6 +56,7 @@ from src.services import (
     student_stream,
     tutor_bot,
 )
+from src.services.analysis_output_contract import UnifiedAnalysisOutput
 from src.services.call_admission import (
     CallPermit,
     active_calls,
@@ -77,6 +80,7 @@ from src.services.invocation_types import (
 )
 from src.services.lesson_snapshots import canonical_hash
 from src.services.mentor_generation import reserve_mentor
+from src.services.model_configuration import supported_config_sha256
 from src.services.model_verification import (
     DEMO_SEED_TIME,
     ROLE_CONTRACT_VERSIONS,
@@ -1105,6 +1109,23 @@ def test_s2_demo_structured_budget_without_provider_parameters(
     assert fitted.context_budget_json["reserved_output_tokens"] == 8192
 
 
+def test_s2_demo_analysis_plan_estimate_needs_no_sdk_adapter():
+    # G3 found load_plan's estimate looking up a "demo" SDK adapter.
+    request = s2_demo_request(
+        StructuredRequest, output_schema=UnifiedAnalysisOutput
+    )
+    request = replace(request, role="analysis")
+    serialized = json.dumps(
+        dict(system_instruction="sys", messages=request.messages),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    assert analysis_plan.estimate_request(request) == math.ceil(
+        len(serialized.encode()) * 1.2
+    )
+
+
 def test_s2_openai_budget_still_uses_provider_parameters(monkeypatch):
     calls = []
 
@@ -1120,7 +1141,6 @@ def test_s2_openai_budget_still_uses_provider_parameters(monkeypatch):
     assert fitted.context_budget_json["reserved_output_tokens"] == 1024
 
 
-S2R_HEX = "ab" * 32
 S2R_OTHER_HEX = "cd" * 32
 
 
@@ -1148,15 +1168,14 @@ class S2rRegistry:
 
 
 class S2rHash:
-    """Stub for #195's helper: returns the manifest hex unless overridden."""
+    """Spy on #195's real helper; it never fakes the result."""
 
     def __init__(self):
-        self.value = S2R_HEX
         self.calls = []
 
     def __call__(self, schema_version, config):
         self.calls.append((schema_version, config))
-        return self.value
+        return supported_config_sha256(schema_version, config)
 
 
 @pytest.fixture
@@ -1226,7 +1245,9 @@ async def s2r_demo(data, tmp_path, monkeypatch, demo_server):
     manifest.write_text(
         json.dumps(
             {
-                "supported_config_sha256": S2R_HEX,
+                "supported_config_sha256": supported_config_sha256(
+                    envelope["schema_version"], envelope["config"]
+                ),
                 # Provenance compares the run's session with this one.
                 "seed_refs": {"completed_session": 987654},
             }
@@ -1260,8 +1281,8 @@ async def s2r_demo(data, tmp_path, monkeypatch, demo_server):
         verified_visitor=object(),
     )
     registry = S2rRegistry()
-    stub = S2rHash()
-    binding = DemoBinding(ctx, registry, seed, inputs, stub)
+    helper = S2rHash()
+    binding = DemoBinding(ctx, registry, seed, inputs, helper)
     decrypted = []
     monkeypatch.setattr(
         call_admission, "decrypt_key", lambda c: decrypted.append(c)
@@ -1271,7 +1292,7 @@ async def s2r_demo(data, tmp_path, monkeypatch, demo_server):
         data=data,
         ctx=ctx,
         registry=registry,
-        stub=stub,
+        helper=helper,
         binding=binding,
         inputs=inputs,
         seed=seed,
@@ -1279,6 +1300,14 @@ async def s2r_demo(data, tmp_path, monkeypatch, demo_server):
     )
     active_calls.intersection_update(before[0])
     registered_calls.intersection_update(before[1])
+
+
+def s2r_unsupported(demo):
+    """The real helper runs; the manifest names another configuration."""
+    path = demo.seed.manifest_path
+    manifest = json.loads(path.read_text())
+    manifest["supported_config_sha256"] = S2R_OTHER_HEX
+    path.write_text(json.dumps(manifest))
 
 
 def s2r_request(content, request_id=None):
@@ -1381,7 +1410,7 @@ async def test_s2r_replay_returns_snapshot_and_conflict_is_demo_error(s2r_demo):
 
 async def test_s2r_unsupported_configuration_leaves_no_rows(s2r_demo):
     demo = s2r_demo
-    demo.stub.value = S2R_OTHER_HEX
+    s2r_unsupported(demo)
     with pytest.raises(DemoError) as caught:
         await s2r_reserve(demo, demo.inputs["A"])
     assert caught.value.code == "DEMO_UNSUPPORTED_CONFIGURATION"
@@ -1389,7 +1418,7 @@ async def test_s2r_unsupported_configuration_leaves_no_rows(s2r_demo):
     assert (caught.value.generation, caught.value.auth_epoch) == (1, 1)
     assert await s2r_counts(demo) == (0, 0, 0)
     assert demo.decrypted == []
-    assert demo.stub.calls
+    assert demo.helper.calls
     assert (demo.registry.entered, demo.registry.exited) == (1, 1)
     assert not any(p.ctx is demo.ctx for p in active_calls)
 
@@ -1401,7 +1430,7 @@ async def test_s2r_guard_refusal_writes_nothing(s2r_demo):
         await s2r_reserve(demo, demo.inputs["A"])
     assert caught.value.code == "DEMO_STALE_GENERATION"
     assert await s2r_counts(demo) == (0, 0, 0)
-    assert demo.stub.calls == []
+    assert demo.helper.calls == []
     assert not any(p.ctx is demo.ctx for p in active_calls)
 
 
@@ -1515,7 +1544,7 @@ async def test_s2r_mentor_unsupported_configuration_changes_nothing(s2r_demo):
     demo = s2r_demo
     turn_id = await s2r_completed_turn(demo)
     before = await s2r_counts(demo)
-    demo.stub.value = S2R_OTHER_HEX
+    s2r_unsupported(demo)
     with pytest.raises(DemoError) as caught:
         await s2r_mentor(demo, turn_id)
     assert caught.value.code == "DEMO_UNSUPPORTED_CONFIGURATION"

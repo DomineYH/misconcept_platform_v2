@@ -75,9 +75,14 @@ async function database(context, base, current) {
 
 // Teacher cannot read /metrics: the same visitor reads the totals as admin, then returns to teacher.
 async function totals({context, page, base}) {
+  // §11 DEMO_BUSY is retryable (demo.wait_or_stop): a run such as the analysis is still active.
   const switchTo = async role => {
-    const current = await state(page);
-    const result = await control(page, '/demo/role', {request_id: randomUUID(), role, expected_generation: current.generation, expected_auth_epoch: current.auth_epoch});
+    let result;
+    await until(async () => {
+      const current = await state(page);
+      result = await control(page, '/demo/role', {request_id: randomUUID(), role, expected_generation: current.generation, expected_auth_epoch: current.auth_epoch});
+      return result.status !== 409 || result.body.detail?.code !== 'DEMO_BUSY';
+    }, `POST /demo/role ${role} still DEMO_BUSY`, 90000);
     assert.equal(result.status, 200, `POST /demo/role ${role}: ${JSON.stringify(result.body)}`);
   };
   await switchTo('admin');
@@ -149,15 +154,18 @@ async function doubleClicks(ctx) {
   const after = await totals(visitor);
   assert.equal(after.sessions.total, baseline.sessions.total + 1, '/metrics sessions.total: one session');
   assert(after.messages >= baseline.messages + 4, '/metrics messages: at least the two turns');
-  // The ended session's history page: exactly the two turns that were sent.
+  // The ended session's history page opens, and its analysis transcript holds exactly the two turns that were sent.
   const ns = namespace(await state(page));
-  const history = await page.evaluate(async url => {
+  const fetched = url => page.evaluate(async url => {
     const response = await fetch(url);
-    const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
-    return {status: response.status, counts: ['teacher', 'student'].map(role => doc.querySelectorAll(`.message-${role}[data-message-id]`).length)};
-  }, `/sessions/${id}?${ns}`);
-  assert.equal(history.status, 200, `GET /sessions/${id} (ended) status`);
-  assert.deepEqual(history.counts, [2, 2], `GET /sessions/${id}: teacher/student messages`);
+    return [response.status, await response.text()];
+  }, url);
+  const [pageStatus, pageBody] = await fetched(`/sessions/${id}?${ns}`);
+  assert.equal(pageStatus, 200, `GET /sessions/${id} (ended): ${pageBody.slice(0, 300)}`);
+  const [status, text] = await fetched(`/sessions/${id}/analysis?${ns}`);
+  const result = JSON.parse(text);
+  assert.equal(status, 200, `GET /sessions/${id}/analysis: ${JSON.stringify(result)}`);
+  assert.deepEqual(['teacher', 'student'].map(role => result.messages.filter(message => message.role === role).length), [2, 2], `GET /sessions/${id}/analysis: teacher/student messages`);
 }
 
 // §24: close/skip/resume change guidance only.

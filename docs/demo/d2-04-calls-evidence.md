@@ -2,7 +2,9 @@
 
 Gate: G3. Issue: #198 (D2-04), PR4. Tested code SHA:
 `f0a0c2175bd111612109e1f8fa48d078c8136a5a` on `feat/198-g3` (base main
-`1a40dc2`). The commit that adds this file changes no code.
+`1a40dc2`). A1 (`f969a3c9e849a4ea367eb6121d01a7b95299b4c4`) adds the
+close-session fix; its rerun is in the A1 section. Commits that change only
+this file change no code.
 
 Contract binding: `d0-03-v1-r3`. The d0-03-v2 §31 note only removes the
 `openai_helpers` / `session_feedback` guard requirement. It changes no wire
@@ -69,6 +71,20 @@ failed at the analysis step with `latest_run.status == "failed"` and
 `error_code == "configuration_unavailable"`. `test_g3_reset_during_stream`
 passed.
 
+A1 rerun at `f969a3c` (fresh; same setup):
+
+| Command | Collected | Passed | Elapsed |
+| --- | --- | --- | --- |
+| `pytest -q tests/test_demo_d2_04_g3.py` | 3 | 3 | 24 s |
+| `pytest -q tests/test_student_lifecycle.py tests/test_mentor_lifecycle.py` | 19 | 19 | 26 s |
+| `pytest -q tests/test_deleted_session_access.py tests/test_lesson_snapshots.py tests/test_mentor_security.py tests/test_scenario_api.py tests/test_student_failures.py tests/test_student_security.py tests/test_teacher_error_keys.py` (close_session) | 155 | 155 | 159 s |
+| `pytest -q tests/test_demo_d2_04_analysis.py tests/test_demo_d3_02_guards.py` | 34 | 34 | 88 s |
+| `ruff check .` / `black --check .` | n/a | pass | n/a |
+| `npm run test:browser -- student_stream mentor_stream` (heavy lock) | 2 | 2 | 16 s |
+
+Red at `d802bb7` + the new test: `test_g3_close_during_stream_cancels_it`
+timed out waiting for the held stream.
+
 ## Acceptance
 
 Test ids are in `tests/test_demo_d2_04_g3.py` unless noted.
@@ -81,6 +97,7 @@ Test ids are in `tests/test_demo_d2_04_g3.py` unless noted.
 | Provenance `prepared_example`, `external_ai_called=false` and `visitor_generated` on the SSE terminal, `/runs/{id}`, the analysis run and the analysis JSON | §19 | `test_g3_flow_on_real_seed` | PASS |
 | Reset during a held student stream: the stream ends with a body-free `run.*` terminal, the run row in the old DB is unchanged, it has no message or finished ledger row, the new generation has no such run, and cleanup removes the old DB without recreating it | §6, §7, C06 | `test_g3_reset_during_stream` | PASS |
 | Egress 0: SDK constructors (OpenAI/Anthropic/Gemini), the httpx and requests transports, `socket.connect`, `connect_ex` and `create_connection` all stay at 0 from before startup until after shutdown and cleanup. This covers every §20 forbidden POST (403 `DEMO_ACTION_FORBIDDEN`) plus the probe request for the seed model, and those leave 0 probe, comparison and external ledger rows. A canary proves each spy fires before the window opens | §14, §20, C14, C20 | both tests | PASS |
+| Closing a demo session during a held stream cancels that stream in the visitor scope: `/sessions/{id}/close` returns 200, the stream ends with a non-completed `run.*` terminal without being released, the run is `cancelled` with no message, and egress stays 0 | §6, C05 | `test_g3_close_during_stream_cancels_it` (A1) | PASS |
 | The real `supported_config_sha256` from `src/services/model_configuration.py` is used; mismatches come from the manifest, not a faked helper | §16.1 | `tests/test_demo_d2_04_calls.py::test_s2r_*` | PASS |
 | A demo analysis plan estimate needs no SDK adapter | §14/§16 | `tests/test_demo_d2_04_calls.py::test_s2_demo_analysis_plan_estimate_needs_no_sdk_adapter` | PASS |
 
@@ -93,16 +110,18 @@ Test ids are in `tests/test_demo_d2_04_g3.py` unless noted.
    `admit_call` without ctx and failed `configuration_unavailable`. Fixed in
    `f0a0c21`: the route builds the adapter and `request_analysis` passes it
    on. `analysis_runs.py` was edited under coordinator approval.
+3. `close_session` (`sessions.py`) ended the session without the demo ctx,
+   so a live demo stream was never signalled. Fixed in `f969a3c` (A1): it
+   now uses `demo_scope` and `guarded_db`, as `end_session` does.
 
 ## Not run / untested
 
 - Full pytest suite: CI on the PR head, per the testing policy.
 - `tests/check_student_live.py`: not run. No student stream file changed.
-- `/sessions/{id}/analyze` (manual re-analysis) and admin `analyze_regenerate`
-  in demo: not driven by G3. `/analyze` gets the same adapter wiring as `/end`.
-- `sessions.py:145` `close_session` passes no demo ctx to
-  `mark_session_ended`, so its run-cancel signal goes to the normal scope.
-  G3 does not cover it; the decision is reported to the coordinator.
+- `/sessions/{id}/analyze` (manual re-analysis) in demo: not driven by G3.
+  It gets the same adapter wiring as `/end`.
+- Admin `analyze_regenerate` in demo has no demo adapter. That is #200's
+  file and the coordinator has routed it there.
 
 ## Note on stubs
 

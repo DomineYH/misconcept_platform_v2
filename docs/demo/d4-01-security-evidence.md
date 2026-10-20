@@ -1,10 +1,24 @@
 # D4-01 격리·보안·경합 검사 evidence (#203)
 
-계약: `d0-03-v1-r3` 의미(문서 `d0-03-v2`). 이 문서의 실행 결과는 **작성 중 확인**이며 완료 증거가 아니다. 최종 acceptance는 #202(G4)가 고정한 통합 SHA(`docs/demo/d3-04-integration-manifest.json`의 `candidate_commit`)에서의 실행분만 인정한다(계약 §27/§28).
+계약: `d0-03-v1-r3` 의미(문서 `d0-03-v2`). 최종 acceptance는 #202(G4)가 고정한 통합 SHA에서의 실행분만 인정한다(계약 §27/§28). 아래 첫 절이 그 실행이고, 실행 P2–P4는 작성 중 확인 기록이다.
 
-## G4 최종 실행 — pending G4 candidate
+## G4 candidate de3054a00282e1bbfc97784918059f653ac08811 (2026-10-20, 최종)
 
-아직 실행하지 않았다. #202가 후보 SHA를 고정하면 별도 order로 세 파일과 README 전체 명령을 그 SHA에서 실행해 여기에 기록한다.
+- 후보 SHA: main `de3054a00282e1bbfc97784918059f653ac08811`(#194–#201 최종 PR, #248, #251, #250, #252, #249 포함). 이 시점부터 제품 코드는 고정이다.
+- 검사 commit: `2a5c53e` = 후보 + #203의 test/doc commit(origin/main 병합, 충돌 없음). 후보 대비 diff는 `tests/test_demo_isolation.py`, `tests/test_demo_reset.py`, `tests/test_demo_security.py`, 이 문서뿐이며 **제품 diff 0**. 검사한 tree = commit한 tree(이 절을 추가한 docs commit만 뒤따른다).
+- 계약: `d0-03-v1-r3`.
+- 환경: WSL2 Linux, Python 3.12.3, pytest 8.4.2(uv venv, `uv sync --frozen --extra dev`). checkout은 검사 commit의 ext4 `git clone --shared`(drvfs에서는 fixture 재검증이 느려 first-output 한도를 넘는다, P2 참고). heavy lock(`flock`) 아래 worker 1개, 파일마다 별도 pytest 프로세스로 직렬 실행. 각 사례는 실제 FastAPI app(`APP_MODE=demo`, `TESTING=false`, `ENV=production`, 외부 키 환경 제거) 하위 프로세스와 #197 seed CLI로 만든 제품 seed를 쓴다.
+- 명령: `uv run --frozen --no-sync python -m pytest -q -p no:cacheprovider --basetemp=<tmp>/g4-<stem> tests/test_demo_<stem>.py -rs`
+
+| 후보 SHA | 검사 commit | 계약 | 파일 | 결과 | 시간 | log |
+| --- | --- | --- | --- | --- | --- | --- |
+| `de3054a` | `2a5c53e` | d0-03-v1-r3 | `tests/test_demo_isolation.py` | 7 passed, 0 failed, 0 skipped | 72.7 s | `d4-01-evidence/g4-isolation.log` |
+| `de3054a` | `2a5c53e` | d0-03-v1-r3 | `tests/test_demo_reset.py` | 25 passed, 0 failed, 0 skipped | 122.5 s | `d4-01-evidence/g4-reset.log` |
+| `de3054a` | `2a5c53e` | d0-03-v1-r3 | `tests/test_demo_security.py` | 17 passed, 0 failed, 0 skipped | 54.0 s | `d4-01-evidence/g4-security.log` |
+
+- 합계 49 collected / 49 passed. 수집된 test ID는 `d4-01-evidence/g4-collected.txt`(같은 tree의 `--collect-only -q`). log의 경고는 제3자 deprecation(starlette TemplateResponse, pythonjsonlogger)뿐이다. log의 host 경로는 `<venv>`/`<host-path>`로 가렸고 secret은 없다(각 하위 프로세스가 출력에 secret이 없음을 단언한다).
+- 반환했던 제품 결함 D1·D1b(#198), D3·D4(#200)는 후보에서 모두 해소되어 해당 사례가 통과한다.
+- not run(이 문서 범위 밖, 이유): 전체 `pytest -q`, `npm run test:browser`, `tests/check_student_live.py` — 공통 규칙에 따라 PR head의 CI가 실행한다. `ruff check .`·`black --check .`은 같은 tree에서 통과(393 files unchanged). 브라우저 여정은 #204(D4-02), 통합 smoke는 #202 소관이다.
 
 ## 실행 P4 — #248(D3/D4) 병합 뒤 재실행 (2026-10-20, 작성 중 확인)
 

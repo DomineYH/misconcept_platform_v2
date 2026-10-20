@@ -82,7 +82,13 @@ async def check_real_seed(app, seed, manifest):
 
 
 async def case_guards(tmp):
-    from test_demo_d1_04_app import client_for, code, headers, start
+    from test_demo_d1_04_app import (
+        client_for,
+        code,
+        headers,
+        start,
+        visitor_files,
+    )
     from test_demo_d3_02_guards import (
         ACTION,
         API_KEY,
@@ -176,6 +182,38 @@ async def case_guards(tmp):
         assert response.status_code == 201, response.text
         assert visitor_rows(root, groups) == [(groups_before[0][0] + 1,)]
 
+        # §20: an external model injected through the scenario API is
+        # refused at selection with no new rows anywhere.
+        (name,) = visitor_files(root)
+        connections = dict(
+            one(root / name, "SELECT provider, id FROM provider_connection")
+        )
+        scenarios = "SELECT id, config_version, config_json FROM scenario"
+        stored, before = one(root / name, scenarios), counts(root)
+        for model in (
+            dict(
+                model_config_id=99, provider_connection_id=connections["openai"]
+            ),
+            dict(model_config_id=1, provider_connection_id=connections["demo"]),
+            dict(
+                model_config_id=1,
+                provider_connection_id=connections["openai"],
+                model_id="demo-classroom-v1",
+            ),
+        ):
+            for action in ("save_draft", "publish"):
+                body = external_scenario(action, **model)
+                for path, extra in (
+                    ("/admin/scenarios", {}),
+                    ("/admin/scenarios/1/update", {"expected_version": 1}),
+                ):
+                    response = await call(
+                        client, state, "POST", path, body | extra
+                    )
+                    check_error(response, 422, "DEMO_UNSUPPORTED_CONFIGURATION")
+        assert one(root / name, scenarios) == stored
+        assert counts(root) == before
+
         # A teacher keeps the existing admin refusal.
         response = await client.post(
             "/demo/role",
@@ -195,6 +233,39 @@ async def case_guards(tmp):
         response = await call(client, state, "GET", "/admin/ai/state")
         check_error(response, 403, "DEMO_ACTION_FORBIDDEN")
         spies.clean()
+
+
+def external_scenario(action, **model):
+    """The seed scenario with an external model on all three roles."""
+    source = json.loads(
+        (ROOT / "src/demo/fixtures/seed/scenario.json").read_text()
+    )
+    selection = (
+        dict(
+            model_config_id=1,
+            provider_connection_id=1,
+            provider="openai",
+            model_id="gpt-5.5",
+            options=dict(max_output_tokens=4096),
+        )
+        | model
+    )
+    return dict(
+        title=source["title"],
+        subject=source["subject"],
+        target_grade=source["target_grade"],
+        groups=[1],
+        config_schema_version=source["config_schema_version"],
+        config={
+            key: (
+                dict(value, resolved_model_config=selection)
+                if key in ("student", "mentor", "analysis")
+                else value
+            )
+            for key, value in source["config"].items()
+        },
+        action=action,
+    )
 
 
 def copy_visitor_session(path, seed_id):

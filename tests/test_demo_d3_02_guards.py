@@ -189,6 +189,26 @@ async def test_demo_read_only_guard_passes_the_admin_in_normal_mode():
     assert await admin_providers.demo_read_only(user) is user
 
 
+@pytest.mark.parametrize(
+    "code", ["model_identity_mismatch", "model_unavailable"]
+)
+async def test_normal_scenario_save_keeps_model_field_errors(monkeypatch, code):
+    from src.api.routes import admin_scenarios
+    from src.config import config
+    from src.services.scenario_drafts import field_error
+
+    assert config.APP_MODE == "normal"
+    error = field_error("config.student.resolved_model_config", code)
+
+    async def refuse(*args):
+        raise error
+
+    monkeypatch.setattr(admin_scenarios, "save_scenario", refuse)
+    with pytest.raises(type(error)) as raised:
+        await admin_scenarios.save_selected(None, None, 1, 1)
+    assert raised.value is error
+
+
 # --------------------------------------------------------------------------
 # Subprocess cases (APP_MODE=demo, TESTING=false, isolated environment).
 

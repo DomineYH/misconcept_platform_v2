@@ -4,6 +4,7 @@ Registry level runs in-process; the HTTP level runs the real demo app in a
 subprocess (APP_MODE=demo, TESTING=false) with the real cookie/CSRF middleware.
 """
 
+import asyncio
 import csv
 import io
 import json
@@ -12,6 +13,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -60,6 +62,38 @@ def file_rows(path):
         return {
             name: db.execute(sql).fetchall() for name, sql in QUERIES.items()
         }
+    finally:
+        db.close()
+
+
+LEDGER_TABLES = (
+    "session",
+    "message",
+    "generation_run",
+    "api_usage_log",
+    "question_analysis",
+    "session_summary",
+    "session_feedback_report",
+)
+
+
+def ledger_rows(path):
+    """Every run/ledger/analysis table of one visitor file, whole rows."""
+    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        return {
+            t: db.execute(f"SELECT * FROM {t} ORDER BY 1").fetchall()
+            for t in LEDGER_TABLES
+        }
+    finally:
+        db.close()
+
+
+def contents(path, session_id):
+    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        sql = "SELECT content FROM message WHERE session_id=?"
+        return [c for (c,) in db.execute(sql, (session_id,))]
     finally:
         db.close()
 
@@ -161,22 +195,6 @@ async def test_a_context_is_refused_against_the_other_visitor_without_writes(
 
 
 # --------------------------------------------------------------------------
-# Pending: depends on #198 (admission/execution/stream demo branch).
-
-
-@pytest.mark.skip(reason="needs G4 / #198: student/mentor/analysis run ledger")
-def test_conversation_analysis_and_run_ledger_stay_private_per_visitor():
-    """§28: A's turns, analysis and GenerationRun/CallEvent rows are absent in B."""
-    ...
-
-
-@pytest.mark.skip(reason="needs G4 / #198: teacher export route not demo-wired")
-def test_teacher_csv_has_prefix_20_and_demo_suffix_5():
-    """§23: /sessions/{id}/export.csv adds the 5 suffix columns after the 20."""
-    ...
-
-
-# --------------------------------------------------------------------------
 # HTTP level: real app, real middleware (subprocess).
 
 
@@ -242,6 +260,24 @@ def test_http_delete_and_csv_export_stay_private_and_skip_deleted_rows(
         "delete_export",
         tmp_path,
         EXPECTED_HEADER=json.dumps(ADMIN_COLUMNS + NEW_COLUMNS + SUFFIX),
+    )
+
+
+def test_conversation_analysis_and_run_ledger_stay_private_per_visitor(
+    tmp_path,
+):
+    """§28: A's turns, analysis and GenerationRun/CallEvent rows are absent in B."""
+    run_case("run_ledger", tmp_path)
+
+
+def test_teacher_csv_has_prefix_20_and_demo_suffix_5(tmp_path):
+    """§23: /sessions/{id}/export.csv adds the 5 suffix columns after the 20."""
+    from test_s4_csv import NEW_COLUMNS, TEACHER_COLUMNS
+
+    run_case(
+        "teacher_csv",
+        tmp_path,
+        EXPECTED_HEADER=json.dumps(TEACHER_COLUMNS + NEW_COLUMNS + SUFFIX),
     )
 
 
@@ -583,6 +619,176 @@ async def case_delete_export(tmp):
         rows = parse(after_b["all"], "all")
         assert {r["session_id"] for r in rows} == {"1", "2"}
         assert {r["teacher_nickname"] for r in rows} == {"Fictional teacher"}
+
+
+async def real_seed(tmp):
+    """The #197 product seed from its own CLI; main.demo_seed loads it."""
+    built = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.demo.seed",
+            "build",
+            "--out",
+            str(tmp / "seed"),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+    )
+    assert built.returncode == 0, built.stderr
+
+
+def sse(response):
+    """(event, data) frames; a run must end on exactly one terminal frame."""
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    out = []
+    for block in response.text.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.split("\n"))
+        out.append((lines["event"], json.loads(lines["data"])))
+    assert out[-1][0] == "output.completed", out[-1]
+    assert out[-1][1]["status"] == "completed", out[-1]
+    return out
+
+
+async def teacher_run(app, client, state):
+    """Two completed student turns, one manual mentor run, end + analysis.
+
+    Returns the session id and its run ids (student, student, mentor, analysis).
+    """
+    from src.demo.seed import INPUTS
+
+    ns = namespace(state)
+    scenario = app.state.demo_request_db.seed_refs["scenario"]
+    r = await post(client, "/sessions", ns, json={"scenario_id": scenario})
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+    runs = []
+    for line in (INPUTS["A"], INPUTS["common"]):
+        r = await post(
+            client,
+            f"/sessions/{sid}/turns/stream",
+            ns,
+            json={"request_id": str(uuid4()), "content": line},
+        )
+        first = sse(r)[0][1]
+        runs.append(first["run_id"])
+        turn = first["turn_id"]
+    r = await post(
+        client,
+        f"/sessions/{sid}/turns/{turn}/mentor/stream",
+        ns,
+        json={"request_id": str(uuid4()), "trigger": "manual"},
+    )
+    runs.append(sse(r)[0][1]["run_id"])
+    r = await post(
+        client, f"/sessions/{sid}/end", ns, json={"request_id": str(uuid4())}
+    )
+    assert r.status_code == 202, r.text
+    analysis = r.json()["run_id"]
+    # The analysis task signals its registry token when it has settled.
+    scope = (await lookup(app, client))[1]
+    token = app.state.demo_request_db.lifecycle.lookup(
+        scope, "analysis", analysis
+    )
+    # No token left means the analysis already settled.
+    if token is not None:
+        await asyncio.wait_for(token.task_control.done.wait(), 60)
+    r = await client.get(f"/sessions/{sid}/analysis", params=ns)
+    assert r.status_code == 200, r.text
+    return sid, runs + [analysis]
+
+
+async def case_run_ledger(tmp):
+    from src import main
+
+    app = main.app
+    await real_seed(tmp)
+    async with app.router.lifespan_context(app):
+        visitors = app.state.demo_request_db.visitors
+        a, b = client_for(app, "10.0.0.1"), client_for(app, "10.0.0.2")
+        sa, sb = await start(a, "teacher"), await start(b, "teacher")
+        ns_a, ns_b = namespace(sa), namespace(sb)
+        path_a, _ = await lookup(app, a)
+        path_b, scope_b = await lookup(app, b)
+        seed_b = ledger_rows(path_b)
+        assert ledger_rows(path_a) == seed_b
+
+        sid, runs = await teacher_run(app, a, sa)
+        mine = ledger_rows(path_a)
+        for table in LEDGER_TABLES:
+            assert len(mine[table]) > len(seed_b[table]), table
+        assert {r[0] for r in mine["generation_run"]} >= set(runs)
+        # A's own reads work, so B's refusals below are isolation, not typos.
+        for path in (f"/runs/{runs[0]}", f"/sessions/{sid}/export.csv"):
+            assert (await a.get(path, params=ns_a)).status_code == 200, path
+        texts = contents(path_a, sid)
+        assert len(texts) == 5, texts  # 2 teacher + 2 student + 1 tutor
+        assert ledger_rows(path_b) == seed_b
+
+        # §28: the same IDs and A's run UUIDs mean nothing to B; no body text.
+        for path in (
+            f"/sessions/{sid}/analysis",
+            f"/sessions/{sid}/export.csv",
+            f"/sessions/{sid}/analysis/runs/{runs[-1]}",
+            *(f"/runs/{run}" for run in runs),
+        ):
+            r = await b.get(path, params=ns_b)
+            refused(r, status=404, expected="DEMO_RESOURCE_NOT_FOUND")
+            assert not any(t in r.text for t in texts), path
+        assert ledger_rows(path_b) == seed_b
+        assert visitors.lease_count(scope_b) == 0
+
+
+async def case_teacher_csv(tmp):
+    from src import main
+
+    app = main.app
+    header = json.loads(os.environ["EXPECTED_HEADER"])
+    await real_seed(tmp)
+    async with app.router.lifespan_context(app):
+        a = client_for(app, "10.0.0.1")
+        state = await start(a, "teacher")
+        ns = namespace(state)
+
+        async def export(sid, origin):
+            r = await a.get(f"/sessions/{sid}/export.csv", params=ns)
+            assert r.status_code == 200, r.text
+            assert r.headers["content-disposition"] == (
+                f"attachment; filename=demo_d0-02-v1_teacher_session-{sid}.csv"
+            )
+            reader = csv.DictReader(io.StringIO(r.content.decode("utf-8-sig")))
+            rows = list(reader)
+            # 15 base + 5 analysis columns, then the 5 demo suffix columns.
+            assert reader.fieldnames == header and len(header) == 25
+            assert rows
+            for row in rows:
+                assert row["session_id"] == str(sid)
+                assert row["demo_response_source"] == "prepared_example"
+                assert row["demo_external_ai_called"] == "false"
+                assert row["demo_content_version"] == "d0-02-v1"
+                assert row["demo_fixture_version"] == "demo-fixture-v1"
+                assert row["demo_record_origin"] == origin
+            return rows
+
+        seed_sid = app.state.demo_request_db.seed_refs["completed_session"]
+        await export(seed_sid, "seed_prepared")
+
+        sid, _ = await teacher_run(app, a, state)
+        rows = await export(sid, "visitor_generated")
+        roles = Counter(row["role"] for row in rows)
+        assert roles == {
+            "teacher": 2,
+            "student": 2,
+            "tutor": 1,
+            "summary": 1,
+        }, roles
+        (summary,) = [row for row in rows if row["role"] == "summary"]
+        assert summary["analysis_schema_version"] == "2"
+        assert summary["analysis_status"] == "ok"
+        for column in ("analysis_coverage_json", "misconception_findings_json"):
+            json.loads(summary[column])
 
 
 if __name__ == "__main__":

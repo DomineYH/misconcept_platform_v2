@@ -9,6 +9,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -295,22 +296,16 @@ def test_demo_admin_dangerous_endpoints_are_forbidden(tmp_path):
     run_case("dangerous", tmp_path)
 
 
-@pytest.mark.skip(
-    reason="needs G4 / #198: egress 0 across student/mentor/analysis/retry/legacy runs"
-)
-def test_demo_runs_make_no_external_calls():
+def test_demo_runs_make_no_external_calls(tmp_path):
     """§14/§28: every run kind in demo leaves egress/provider-call counts at 0."""
-    ...
+    run_case("runs", tmp_path)
 
 
-@pytest.mark.skip(
-    reason="needs G4 / #198: demo model selection guard on scenario API/snapshot"
-)
-def test_demo_rejects_injected_external_model():
+def test_demo_rejects_injected_external_model(tmp_path):
     """§20: injecting an external model through scenario API/snapshot -> 422
     DEMO_UNSUPPORTED_CONFIGURATION in demo, with no catalog/probe/ledger rows.
     """
-    ...
+    run_case("injection", tmp_path)
 
 
 # --------------------------------------------------------------------------
@@ -963,6 +958,456 @@ async def case_egress(tmp):
         await runtime.visitors.cleanup_tick()
         assert (await client.get("/health")).status_code == 200
     # Shutdown ran inside the guard too; the module epilogue asserts zero.
+
+
+def build_product_seed():
+    """The #197 CLI, as the production deploy builds it (outside the guard)."""
+    built = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.demo.seed",
+            "build",
+            "--out",
+            os.environ["DEMO_SEED_DIR"],
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert built.returncode == 0, built.stderr[-500:]
+
+
+def sse(response):
+    """[(event, payload)] of one SSE body."""
+    found = []
+    for block in response.text.split("\n\n"):
+        fields = dict(
+            line.split(": ", 1) for line in block.splitlines() if ": " in line
+        )
+        if "event" in fields:
+            found.append((fields["event"], json.loads(fields["data"])))
+    return found
+
+
+CONFIG_TABLES = (
+    "provider_connection",
+    "provider_audit_log",
+    "model_config",
+    "app_setting",
+    "scenario",
+)
+# Rows a run (or an injected model) must never create in the visitor DB.
+NO_ROWS = ("model_probe", "comparison_run", "comparison_conversation")
+
+
+def visitor_db(root):
+    (name,) = visitor_files(root)
+    return sqlite3.connect(f"file:{root / name}?mode=ro", uri=True)
+
+
+def table_rows(root, tables):
+    db = visitor_db(root)
+    try:
+        return {
+            t: db.execute(f'SELECT * FROM "{t}" ORDER BY 1').fetchall()
+            for t in tables
+        }
+    finally:
+        db.close()
+
+
+def assert_local_ledger(root):
+    """§13/§14/§19: every run and attempt row names the local provider only."""
+    db = visitor_db(root)
+    try:
+        for table, column in (
+            ("generation_run", "model"),
+            ("api_usage_log", "model"),
+        ):
+            pairs = db.execute(
+                f"SELECT DISTINCT provider, {column} FROM {table}"
+            ).fetchall()
+            assert pairs == [("demo", "demo-classroom-v1")], (table, pairs)
+        for table in NO_ROWS:
+            assert db.execute(f"SELECT COUNT(*) FROM {table}").fetchone() == (
+                0,
+            )
+        return {
+            row[0]: row[1]
+            for row in db.execute(
+                "SELECT operation, COUNT(*) FROM generation_run "
+                "GROUP BY operation"
+            )
+        }
+    finally:
+        db.close()
+
+
+def add_failed_turn(root, session_id, content, *, turn_index):
+    """A teacher turn whose student run failed: the state a retry starts from."""
+    (name,) = visitor_files(root)
+    turn_id, run_id = str(uuid4()), str(uuid4())
+    with sqlite3.connect(root / name) as db:
+        (owner,) = db.execute(
+            "SELECT teacher_id FROM session WHERE id=?", (session_id,)
+        ).fetchone()
+        (config_hash,) = db.execute(
+            "SELECT config_hash FROM session WHERE id=?", (session_id,)
+        ).fetchone()
+        db.execute(
+            "INSERT INTO generation_run (id, owner_id, session_id, turn_id, "
+            "operation, request_id, input_hash, config_hash, provider, model, "
+            "status, error_code, started_at) VALUES (?,?,?,?,'student',?,?,?,"
+            "'demo','demo-classroom-v1','failed','timeout_first_output',"
+            "datetime('now'))",
+            (
+                run_id,
+                owner,
+                session_id,
+                turn_id,
+                str(uuid4()),
+                "0" * 64,
+                config_hash,
+            ),
+        )
+        db.execute(
+            "INSERT INTO message (session_id, role, content, turn_id, "
+            "turn_index, created_at) VALUES (?, 'teacher', ?, ?, ?, "
+            "datetime('now'))",
+            (session_id, content, turn_id, turn_index),
+        )
+    return dict(turn_id=turn_id, run_id=run_id)
+
+
+async def switch_role(client, role):
+    state = (await client.get("/demo/state")).json()
+    response = await client.post(
+        "/demo/role",
+        json={
+            "request_id": str(uuid4()),
+            "role": role,
+            "expected_generation": state["generation"],
+            "expected_auth_epoch": state["auth_epoch"],
+        },
+        headers=headers(client),
+    )
+    assert response.status_code == 200, response.text
+    return (await client.get("/demo/state")).json()
+
+
+async def case_runs(tmp):
+    import asyncio
+
+    from src import main
+    from src.demo.seed import INPUTS
+
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    build_product_seed()
+    async with main.app.router.lifespan_context(main.app):
+        client = client_for(main.app)
+        state = await start(client, "teacher")
+        scenario = json.loads(
+            (ROOT / "src/demo/fixtures/manifest.json").read_text()
+        )["seed_refs"]["scenario"]
+        seeded = Counter(assert_local_ledger(root))
+        configured = table_rows(root, CONFIG_TABLES)
+
+        async def post(path, body=None):
+            return await client.post(
+                path,
+                json=body,
+                params=namespace(state),
+                headers=headers(client),
+            )
+
+        async def turn(sid, content, **extra):
+            return await post(
+                f"/sessions/{sid}/turns/stream",
+                {"request_id": str(uuid4()), "content": content, **extra},
+            )
+
+        async def mentor(sid, turn_id, trigger):
+            return await post(
+                f"/sessions/{sid}/turns/{turn_id}/mentor/stream",
+                {"request_id": str(uuid4()), "trigger": trigger},
+            )
+
+        def completed(response):
+            events = sse(response)
+            assert response.status_code == 200, response.text
+            kinds = [kind for kind, _ in events]
+            assert (
+                kinds[0] == "run.accepted" and kinds[-1] == "output.completed"
+            ), kinds
+            assert events[-1][1]["provenance"]["external_ai_called"] is False
+            return events[0][1]
+
+        async def settled(path):
+            for _ in range(900):
+                run = (await client.get(path, params=namespace(state))).json()[
+                    "latest_run"
+                ]
+                if run["status"] != "running":
+                    assert run["status"] == "ok", (path, run)
+                    assert (
+                        run["outcome"]["provenance"]["external_ai_called"]
+                        is False
+                    )
+                    return run
+                await asyncio.sleep(0.2)
+            raise AssertionError(("analysis still running", path))
+
+        response = await post("/sessions", {"scenario_id": scenario})
+        assert response.status_code == 201, response.text
+        sid = response.json()["id"]
+
+        # student: A -> common; a same-request replay is the stored run (§16).
+        request_id = str(uuid4())
+        body = {"request_id": request_id, "content": INPUTS["A"]}
+        first = completed(await post(f"/sessions/{sid}/turns/stream", body))
+        replay = await post(f"/sessions/{sid}/turns/stream", body)
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["run_id"] == first["run_id"]
+        assert replay.json()["status"] == "completed"
+        # mentor, manual then auto (a run per trigger).
+        completed(await mentor(sid, first["turn_id"], "manual"))
+        second = completed(await turn(sid, INPUTS["common"]))
+        completed(await mentor(sid, second["turn_id"], "auto"))
+
+        # legacy message POST: no run, no teacher row (old tabs reload).
+        before = assert_local_ledger(root)
+        legacy = await post(f"/sessions/{sid}/messages", {"content": "hi"})
+        assert legacy.status_code == 410, legacy.text
+        assert legacy.json()["code"] == "reload_required"
+        assert assert_local_ledger(root) == before
+
+        # explicit retry (§16): a failed turn gets a new run on the same turn.
+        # The public API cannot pick a failure fixture (§15), so the failed
+        # first attempt is stored; the retry itself is a real run.
+        said = "오늘은 여기까지 할게요."
+        lost = add_failed_turn(root, sid, said, turn_index=3)
+        retry = completed(await turn(sid, said, turn_id=lost["turn_id"]))
+        assert retry["turn_id"] == lost["turn_id"]
+        assert retry["run_id"] != lost["run_id"]
+        again = await turn(sid, said, turn_id=retry["turn_id"])
+        assert (
+            again.status_code == 200 and again.json()["status"] == "completed"
+        )
+        assert again.json()["run_id"] == retry["run_id"]
+        db = visitor_db(root)
+        try:
+            assert db.execute(
+                "SELECT status FROM generation_run WHERE turn_id=? "
+                "AND operation='student' ORDER BY rowid",
+                (lost["turn_id"],),
+            ).fetchall() == [("failed",), ("completed",)]
+            assert db.execute(
+                "SELECT COUNT(*) FROM message WHERE turn_id=? AND role='teacher'",
+                (lost["turn_id"],),
+            ).fetchone() == (1,)
+        finally:
+            db.close()
+        grown = Counter(assert_local_ledger(root)) - seeded
+        assert grown == {"student": 4, "mentor": 2}, grown  # incl. the failure
+
+        # analysis: teacher end (one run), a repeated analyze reuses it, then the
+        # admin rerun is a new run (§16).
+        response = await post(f"/sessions/{sid}/end")
+        assert response.status_code == 202, response.text
+        run = response.json()
+        path = f"/sessions/{sid}/analysis/runs/{run['run_id']}"
+        await settled(path)
+        response = await post(
+            f"/sessions/{sid}/analyze", {"request_id": str(uuid4())}
+        )
+        assert response.status_code == 200, response.text
+        state = await switch_role(client, "admin")
+        response = await post(
+            f"/admin/sessions/{sid}/analyze_regenerate",
+            {"request_id": str(uuid4())},
+        )
+        assert response.status_code == 202, response.text
+        await settled(
+            f"/admin/sessions/{sid}/analysis/runs/{response.json()['run_id']}"
+        )
+
+        grown = Counter(assert_local_ledger(root)) - seeded
+        assert grown == {"student": 4, "mentor": 2, "analysis": 2}, grown
+        assert table_rows(root, CONFIG_TABLES) == configured
+        assert ATTEMPTS == [], ATTEMPTS
+
+
+INJECTION_TABLES = (
+    "provider_connection",
+    "provider_audit_log",
+    "model_config",
+    "model_probe",
+    "app_setting",
+    "scenario",
+    "scenario_group",
+    "session",
+    "message",
+    "generation_run",
+    "api_usage_log",
+    "comparison_run",
+    "comparison_conversation",
+)
+
+
+def external_scenario(action, **model):
+    """The seed scenario with an external model on all three roles."""
+    source = json.loads(
+        (ROOT / "src/demo/fixtures/seed/scenario.json").read_text()
+    )
+    selection = dict(
+        model_config_id=1,
+        provider_connection_id=1,
+        provider="openai",
+        model_id="gpt-5.5",
+        options=dict(max_output_tokens=4096),
+    )
+    selection.update(model)
+    return dict(
+        title=source["title"],
+        subject=source["subject"],
+        target_grade=source["target_grade"],
+        groups=[1],
+        config_schema_version=source["config_schema_version"],
+        config={
+            key: (
+                dict(value, resolved_model_config=selection)
+                if key in ("student", "mentor", "analysis")
+                else value
+            )
+            for key, value in source["config"].items()
+        },
+        action=action,
+    )
+
+
+def inject_snapshot(root, session_id):
+    """Stored data (not reachable by a client): an external model in a snapshot."""
+    from src.services.lesson_snapshots import canonical_hash
+
+    (name,) = visitor_files(root)
+    with sqlite3.connect(root / name) as db:
+        (raw,) = db.execute(
+            "SELECT config_snapshot_json FROM session WHERE id=?", (session_id,)
+        ).fetchone()
+        envelope = json.loads(raw)
+        for role in ("student", "mentor", "analysis"):
+            envelope["config"][role]["resolved_model_config"].update(
+                provider="openai", model_id="gpt-5.5", provider_connection_id=1
+            )
+        db.execute(
+            "UPDATE session SET config_snapshot_json=?, config_hash=? "
+            "WHERE id=?",
+            (json.dumps(envelope), canonical_hash(envelope), session_id),
+        )
+
+
+async def case_injection(tmp):
+    from src import main
+    from src.demo.seed import INPUTS
+
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    build_product_seed()
+    async with main.app.router.lifespan_context(main.app):
+        client = client_for(main.app)
+        state = await start(client, "admin")
+        connections = dict(
+            visitor_db(root).execute(
+                "SELECT provider, id FROM provider_connection"
+            )
+        )
+        demo = dict(
+            model_config_id=1, provider_connection_id=connections["demo"]
+        )
+        before = table_rows(root, INJECTION_TABLES)
+
+        async def post(path, body):
+            return await client.post(
+                path,
+                json=body,
+                params=namespace(state),
+                headers=headers(client),
+            )
+
+        # §13/§20: every shape of "external model" is refused before any row.
+        variants = {
+            "unregistered model": dict(
+                model_config_id=99, provider_connection_id=connections["openai"]
+            ),
+            "demo row relabelled": demo,
+            "demo model on an external connection": dict(
+                model_config_id=1,
+                provider_connection_id=connections["openai"],
+                model_id="demo-classroom-v1",
+            ),
+        }
+        wrong = []
+        for name, model in variants.items():
+            for action in ("save_draft", "publish"):
+                body = external_scenario(action, **model)
+                for path, extra in (
+                    ("/admin/scenarios", {}),
+                    ("/admin/scenarios/1/update", {"expected_version": 1}),
+                ):
+                    response = await post(path, body | extra)
+                    detail = response.json()["detail"]
+                    got = (
+                        detail.get("code")
+                        if isinstance(detail, dict)
+                        else detail
+                    )
+                    if (response.status_code, got) != (
+                        422,
+                        "DEMO_UNSUPPORTED_CONFIGURATION",
+                    ):
+                        wrong.append(
+                            (name, action, path, response.status_code, got)
+                        )
+        assert table_rows(root, INJECTION_TABLES) == before
+
+        # A run request cannot name a model or a fixture case: extras are inert.
+        state = await switch_role(client, "teacher")
+        response = await post("/sessions", {"scenario_id": 1})
+        assert response.status_code == 201, response.text
+        sid = response.json()["id"]
+        response = await post(
+            f"/sessions/{sid}/turns/stream",
+            {
+                "request_id": str(uuid4()),
+                "content": INPUTS["A"],
+                "provider": "openai",
+                "model_id": "gpt-5.5",
+                "model_config_id": 99,
+                "resolved_model_config": {"provider": "openai"},
+                "demo_selection": {"fixture_case": "timeout_total"},
+                "fixture_case": "timeout_total",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert [k for k, _ in sse(response)][-1] == "output.completed"
+        assert_local_ledger(root)
+
+        # A stored snapshot that names an external model never reaches a call.
+        response = await post("/sessions", {"scenario_id": 1})
+        sid = response.json()["id"]
+        inject_snapshot(root, sid)
+        before = table_rows(root, INJECTION_TABLES)
+        response = await post(
+            f"/sessions/{sid}/turns/stream",
+            {"request_id": str(uuid4()), "content": INPUTS["A"]},
+        )
+        assert response.status_code == 422, response.text
+        assert code(response) == "DEMO_UNSUPPORTED_CONFIGURATION"
+        assert table_rows(root, INJECTION_TABLES) == before
+        assert_local_ledger(root)
+        assert ATTEMPTS == [], ATTEMPTS
+        # Last, so the "no rows" checks above run even when the code differs.
+        assert not wrong, wrong
 
 
 if __name__ == "__main__":

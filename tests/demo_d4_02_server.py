@@ -4,7 +4,8 @@ python tests/demo_d4_02_server.py [--normal]
 
 Demo mode first prints `RECEIPT <json>` (the #197 seed build receipt), then
 `READY <port>` once uvicorn serves on 127.0.0.1; it exits when stdin
-closes. Demo mode runs the real FastAPI app with TESTING=false and the
+closes. A stdin line `ADVANCE <seconds>` moves the demo registry clock
+forward (the idle TTL is at least 300 s) and answers `ADVANCED <seconds>`. Demo mode runs the real FastAPI app with TESTING=false and the
 demo session/CSRF security; --normal runs the same app in normal mode
 (the demo paths must 404 there). Only loopback sockets are allowed and the
 external AI SDK constructors fail.
@@ -18,6 +19,8 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +61,8 @@ def configure(normal, tmp, port, other_port):
         NORMAL_ORIGIN=f"http://localhost:{other_port}",
         DEMO_SESSION_SECRET=secrets.token_urlsafe(48),
         DEMO_CSRF_SECRET=secrets.token_urlsafe(48),
+        # Config maximum: the checks poll /demo/state every 100 ms (#200, #202 do the same).
+        DEMO_REQUESTS_PER_MINUTE="600",
     )
 
 
@@ -90,16 +95,29 @@ def guard():
         owner.__init__ = refused
 
 
+class TestClock:
+    """Brief substitution 2: a test clock for expiry; visible in evidence."""
+
+    offset = 0.0
+
+    def monotonic(self):
+        return time.monotonic() + TestClock.offset
+
+    def utcnow(self):
+        return datetime.now(timezone.utc) + timedelta(seconds=TestClock.offset)
+
+
 async def serve(listener, normal):
     import uvicorn
 
     from src import main
+    from src.demo import visitors
 
+    visitors.SystemClock = TestClock
     if not normal:
-        from src.demo.seed import load_seed
-
-        # The #197 product seed, built by its own CLI in this isolated env.
-        seed_dir = Path(os.environ["DEMO_DATA_ROOT"]).parent / "seed"
+        # The #197 product seed, built by its own CLI into DEMO_SEED_DIR,
+        # which src.main.demo_seed loads (#194 S4).
+        seed_dir = Path(os.environ["DEMO_SEED_DIR"])
         built = subprocess.run(
             [
                 sys.executable,
@@ -121,9 +139,6 @@ async def serve(listener, normal):
             str(seed_dir), "<tmp>/seed"
         )
         print("RECEIPT", json.dumps(receipt, sort_keys=True), flush=True)
-        # ponytail: test-side binding until #194 S4 binds load_seed in
-        # src.main.demo_seed; final G4 evidence must run the product binding.
-        main.demo_seed = lambda: load_seed(seed_dir)
     server = uvicorn.Server(uvicorn.Config(main.app, log_level="warning"))
     task = asyncio.create_task(server.serve(sockets=[listener]))
     while not server.started:
@@ -132,7 +147,12 @@ async def serve(listener, normal):
             raise SystemExit("server did not start")
         await asyncio.sleep(0.05)
     print("READY", listener.getsockname()[1], flush=True)
-    await asyncio.get_running_loop().run_in_executor(None, sys.stdin.read)
+    loop = asyncio.get_running_loop()
+    while line := await loop.run_in_executor(None, sys.stdin.readline):
+        command, _, seconds = line.partition(" ")
+        if command == "ADVANCE":
+            TestClock.offset += float(seconds)
+            print("ADVANCED", float(seconds), flush=True)
     server.should_exit = True
     await task
 

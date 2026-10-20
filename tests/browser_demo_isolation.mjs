@@ -5,16 +5,9 @@ import {tmpdir} from 'node:os';
 import {chromium} from 'playwright';
 
 // D4-02 (#204) B/F on the real app (tests/demo_d4_02_server.py); the runner's fixture page is unused.
-// These need the G4 integrated SHA: demo student/mentor/analysis runs (#198) on the product binding.
-const PENDING = [
-  'B: A runs a dialogue and its analysis; B lists/totals/detail unchanged',
-  "B: A's run ID requested from B -> 404 DEMO_RESOURCE_NOT_FOUND without body"
-];
-// Kept executable; set skip to null once #198 adds the context_budget demo branch.
+// A's dialogue and analysis seen from B are in browser_demo_journey.mjs.
 const ANALYSIS_DETAIL = {
   name: "B: B's admin analysis detail of the seed session unchanged by A's edits",
-  skip: 'product defect -> #198: GET /admin/sessions/{id}/analysis is 503 DEMO_CONFIGURATION_INVALID in demo; ' +
-    'load_plan reaches context_budget.provider_parameters, which has no "demo" adapter (KeyError, src/services/context_budget.py:13)',
   async read(get) {
     const response = await get(`/admin/sessions/${SEED.session}/analysis`);
     assert.equal(response.status(), 200, await response.text());
@@ -25,7 +18,7 @@ const ANALYSIS_DETAIL = {
 const SEED = {admin: 1, teacher: 2, session: 1};
 const SUFFIX = ['demo_response_source', 'demo_external_ai_called', 'demo_content_version', 'demo_fixture_version', 'demo_record_origin'];
 
-async function server(args = []) {
+export async function server(args = []) {
   const child = spawn('uv', ['run', '--frozen', 'python', 'tests/demo_d4_02_server.py', ...args], {
     stdio: ['pipe', 'pipe', 'pipe'], env: process.env
   });
@@ -40,6 +33,13 @@ async function server(args = []) {
     assert.equal(code, 0, `helper exit: ${log}`);
     assert(!/External (network|AI SDK) forbidden/.test(log), `egress attempted: ${log}`);
     return log;
+  }
+  // Helper test clock (brief substitution 2): only expiry checks use it.
+  async function advance(seconds) {
+    const done = () => (out.match(/^ADVANCED .*\n/gm) ?? []).length;
+    const before = done();
+    child.stdin.write(`ADVANCE ${seconds}\n`);
+    while (done() === before) await new Promise(resolve => setTimeout(resolve, 50));
   }
   try {
     const port = await new Promise((resolve, reject) => {
@@ -62,7 +62,7 @@ async function server(args = []) {
     });
     // The seed build receipt for the evidence (§17); demo prints it before READY.
     if (!args.includes('--normal')) assert(receipt?.seed_sha256 && receipt.manifest_sha256, `seed receipt: ${log}`);
-    return {base: `http://127.0.0.1:${port}`, receipt, stop};
+    return {base: `http://127.0.0.1:${port}`, receipt, stop, advance};
   } catch (error) {
     child.kill('SIGKILL');
     await closed;
@@ -70,7 +70,7 @@ async function server(args = []) {
   }
 }
 
-function setCookies(headers) {
+export function setCookies(headers) {
   return Object.fromEntries(headers.filter(header => header.name.toLowerCase() === 'set-cookie').map(header => {
     const [pair, ...attributes] = header.value.split(/;\s*/);
     return [pair.split('=')[0], Object.fromEntries(attributes.map(item => {
@@ -80,19 +80,19 @@ function setCookies(headers) {
   }));
 }
 
-async function expectCode(response, status, code) {
+export async function expectCode(response, status, code) {
   assert.equal(response.status(), status, await response.text());
   assert.equal((await response.json()).detail.code, code);
   assert.equal(response.headers()['cache-control'], 'no-store');
   assert.deepEqual(setCookies(await response.headersArray()), {}, 'no Set-Cookie on refusal');
 }
 
-async function cookie(context, name) {
+export async function cookie(context, name) {
   return (await context.cookies()).find(item => item.name === name)?.value;
 }
 
 // The browser itself sends Origin and reads the token from document.cookie, as the UI does.
-function control(page, path, body) {
+export function control(page, path, body) {
   return page.evaluate(async ({path, body}) => {
     const token = document.cookie.split('; ').find(item => item.startsWith('demo_csrftoken='))?.slice(15);
     const response = await fetch(path, {method: 'POST', headers: {'content-type': 'application/json', 'x-csrf-token': token}, body: JSON.stringify(body)});
@@ -100,11 +100,11 @@ function control(page, path, body) {
   }, {path, body});
 }
 
-function state(page) {
+export function state(page) {
   return page.evaluate(async () => (await fetch('/demo/state')).json());
 }
 
-async function ready(page, generation) {
+export async function ready(page, generation) {
   for (let attempt = 0; attempt < 200; attempt += 1) {
     const current = await state(page);
     if (current.state !== 'resetting') {
@@ -117,16 +117,16 @@ async function ready(page, generation) {
   throw new Error('reset did not finish');
 }
 
-const namespace = current => `ds=${current.browser_scope_id}&dg=${current.generation}&da=${current.auth_epoch}`;
+export const namespace = current => `ds=${current.browser_scope_id}&dg=${current.generation}&da=${current.auth_epoch}`;
 
 // Real server under shared-CI load: the first requests can exceed the 30 s default.
-async function open(browser) {
+export async function open(browser) {
   const context = await browser.newContext();
   context.setDefaultTimeout(90000);
   return context;
 }
 
-async function demoChecks(browser, {base}, pageErrors) {
+async function demoChecks(browser, {base}, pageErrors, defects) {
   const origin = base;
   const contexts = {A: await open(browser), B: await open(browser)};
   const pages = {};
@@ -253,7 +253,8 @@ async function demoChecks(browser, {base}, pageErrors) {
     return {seen, csv: await csv.text()};
   };
   const bBefore = await view();
-  const detailBefore = ANALYSIS_DETAIL.skip ? null : await ANALYSIS_DETAIL.read(bGet);
+  // A product-defect failure here is rethrown after every other check has run.
+  const detailBefore = await ANALYSIS_DETAIL.read(bGet).catch(error => { defects.push(`${ANALYSIS_DETAIL.name}: ${error.message}`); });
   // §23: the seed's completed session exports 27 admin + 5 suffix columns, marked as prepared.
   const header = bBefore.csv.replace(/^\uFEFF/, '').split(/\r?\n/)[0].split(',');
   assert.equal(header.length, 32, header.join(','));
@@ -281,8 +282,7 @@ async function demoChecks(browser, {base}, pageErrors) {
   await expectCode(missing, 404, 'DEMO_RESOURCE_NOT_FOUND');
   assert(!/A-only|a_only|A-renamed/.test(missingText), missingText);
   assert.deepEqual(await view(), bBefore, 'B unchanged after the refused request');
-  if (ANALYSIS_DETAIL.skip) console.log(`SKIP ${ANALYSIS_DETAIL.name}: ${ANALYSIS_DETAIL.skip}`);
-  else assert.deepEqual(await ANALYSIS_DETAIL.read(bGet), detailBefore, ANALYSIS_DETAIL.name);
+  if (detailBefore !== undefined) assert.deepEqual(await ANALYSIS_DETAIL.read(bGet), detailBefore, ANALYSIS_DETAIL.name);
 
   // §9/§22: switching to the deleted seed teacher is refused; the administrator cannot delete itself.
   const aNow = await state(pages.A);
@@ -322,8 +322,8 @@ async function normalChecks(browser, {base}) {
 }
 
 export default async function check() {
-  for (const name of PENDING) console.log(`PENDING ${name}: needs G4 / #202`);
   const pageErrors = [];
+  const defects = [];
   const servers = await Promise.allSettled([server(), server(['--normal'])]);
   const failed = servers.find(result => result.status === 'rejected');
   if (failed) {
@@ -336,7 +336,7 @@ export default async function check() {
   try {
     console.log(`RECEIPT ${JSON.stringify(demo.receipt)}`);
     browser = await chromium.launch({headless: true});
-    values = await demoChecks(browser, demo, pageErrors);
+    values = await demoChecks(browser, demo, pageErrors, defects);
     await normalChecks(browser, normal);
   } finally {
     await browser?.close();
@@ -346,5 +346,6 @@ export default async function check() {
     // §4: logs carry codes and counts only, never cookie values or the temporary root.
     for (const value of [...values, tmpdir()]) assert(!value || !logs.includes(value), 'secret or real path in server log');
   }
+  assert.deepEqual(defects, [], 'product defects');
   return {pageErrors};
 }

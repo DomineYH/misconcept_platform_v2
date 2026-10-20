@@ -2,7 +2,7 @@
 
 계약: `d0-03-v1-r3` 의미(§26–§28). `d0-03-v2`(§31)는 `src/utils/openai_helpers.py`·`src/utils/session_feedback.py`의 패치 필요성 판단에만 적용한다. 증거 파일 배치는 [`d4-03-evidence/README.md`](d4-03-evidence/README.md)를 따른다.
 
-상태: **G5 미승인 — maintainer 승인 대기.** 릴리스 후보 `8f97776`: 독립 재리뷰 ACCEPT, CI 전체 회귀 passed, 미해결 결함 0. 기준선 main `ba64b82ef74226094a5b51888b1bbcb1734bb062`은 독립 리뷰 r205가 REJECT했다(§2, 결함 D6). D6 수정 PR #256이 병합된 main `8f97776dcb3456b5df0fb198daf520168752117c`가 릴리스 후보이며, 그 SHA의 CI와 r205 재리뷰로 아래 "새 후보" 칸을 채운다. `ba64b82` 결과는 수정 전 기준선(pre-fix baseline)으로만 남기며 G5 근거가 아니다.
+상태: **G5 승인** — @DomineYH, 2026-10-20T09:24:28Z, 릴리스 후보 `8f97776dcb3456b5df0fb198daf520168752117c`([승인 댓글](https://github.com/DomineYH/misconcept_platform_v2/issues/205#issuecomment-6287786441), §7). 독립 재리뷰 ACCEPT, CI 전체 회귀 passed, 미해결 결함 0. 기준선 main `ba64b82ef74226094a5b51888b1bbcb1734bb062`은 독립 리뷰 r205가 REJECT했다(§2, 결함 D6). D6 수정 PR #256이 병합된 main `8f97776dcb3456b5df0fb198daf520168752117c`가 릴리스 후보이며, 그 SHA의 CI와 r205 재리뷰로 아래 "새 후보" 칸을 채운다. `ba64b82` 결과는 수정 전 기준선(pre-fix baseline)으로만 남기며 G5 근거가 아니다.
 
 | 구분 | SHA | 역할 |
 | --- | --- | --- |
@@ -166,13 +166,15 @@ G5 승인은 PR이 아니라 이슈 댓글로 남기며, 여기에는 그 링크
 - §3.1(새 후보) 필수 검사가 모두 passed다. failed 또는 not run인 행이 없다. §3.2 기준선 결과는 대신 쓸 수 없다.
 - §5에 미해결 결함이 없다.
 
-상태: **G5 미승인 — maintainer 승인 대기.** `8f97776`에서 §2 재리뷰 ACCEPT, §3.1 다섯 명령 passed, §5 미해결 결함 0이다. 남은 조건: §4의 not run(E4, I1b BFCache)을 G5에서도 수용하는지 maintainer가 승인 댓글에 명시하는 것과 승인 자체.
+상태: **G5 승인.** `8f97776`에서 §2 재리뷰 ACCEPT, §3.1 다섯 명령 passed, §5 미해결 결함 0이고, maintainer가 승인 댓글에서 §4의 not run 두 건을 수용했다. 네 조건이 모두 같은 `candidate_commit`에서 충족됐다.
 
 | 항목 | 값 |
 | --- | --- |
-| 승인자 | @DomineYH (미승인) |
-| 승인 댓글 | 미산출 |
-| 승인 시각 (UTC) | 미산출 |
-| 승인 대상 `candidate_commit` | `8f97776dcb3456b5df0fb198daf520168752117c` (승인 시 확인) |
-| 승인 시점 main SHA | 미산출 |
-| 리뷰 시점 main SHA와 같은가 | 미확인 (다르면 §6 기록 필요) |
+| 승인자 | @DomineYH (maintainer) |
+| 승인 댓글 | [#205 issuecomment-6287786441](https://github.com/DomineYH/misconcept_platform_v2/issues/205#issuecomment-6287786441) (댓글 게시 2026-10-20T09:24:33Z) |
+| 승인 시각 (UTC) | 2026-10-20T09:24:28Z (승인 댓글 본문의 시각) |
+| 승인 대상 `candidate_commit` | `8f97776dcb3456b5df0fb198daf520168752117c` |
+| 승인 시점 main SHA | `8f97776dcb3456b5df0fb198daf520168752117c` |
+| 리뷰 시점 main SHA와 같은가 | 같음 (재리뷰·CI·승인 모두 `8f97776dcb3456b5df0fb198daf520168752117c`, §6 추가 무효화 없음) |
+| 수용한 제한 (not run) | #202 E4 만료 후 재진입 — `DEMO_IDLE_TTL_SECONDS` 하한 300초; #204 I1b BFCache 복원 — 계약 §11 `no-store` 우선(PR #255 coordinator 결정). 둘 다 passed가 아니라 not run이며, maintainer가 G5 승인 댓글에서 수용했다 |
+| 승인 근거 (댓글 기재) | CI run 39397378254 green(pytest 3167 passed, ruff·black clean, live passed, browser 148 모듈 3 shard passed), 독립 릴리스 재리뷰 r205 ACCEPT(#256 lock 순서 수정 뒤), 결함 D1–D6 해소 |

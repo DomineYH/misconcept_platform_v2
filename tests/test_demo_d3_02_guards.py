@@ -94,7 +94,11 @@ def test_demo_risky_endpoint_guards(case, tmp_path):
 
 @pytest.mark.parametrize(
     "case, settings",
-    [("quota", {}), ("scenario_full", {"DEMO_MAX_SCENARIOS": "4"})],
+    [
+        ("quota", {}),
+        ("scenario_full", {"DEMO_MAX_SCENARIOS": "4"}),
+        ("scenario_race", {"DEMO_MAX_SCENARIOS": "2"}),
+    ],
 )
 def test_demo_allowed_crud_quotas(case, settings, tmp_path):
     run_case(case, tmp_path, **settings)
@@ -937,6 +941,12 @@ async def case_quota(tmp):
         check_error(
             await upload(client, state, oversized), 413, "DEMO_UPLOAD_TOO_LARGE"
         )
+        # Above the normal 100-row parser ceiling the visitor limit still wins.
+        check_error(
+            await upload(client, state, bulk_csv(101)),
+            429,
+            "DEMO_LIMIT_REACHED",
+        )
         check_error(
             await upload(client, state, bulk_csv(rows + 1)),
             429,
@@ -998,6 +1008,73 @@ async def case_scenario_full(tmp):
         )
         check_error(response, 429, "DEMO_LIMIT_REACHED")
         assert visitor_rows(root, "SELECT COUNT(*) FROM scenario") == [(5,)]
+
+
+async def case_scenario_race(tmp):
+    """§21: on the product seed (one live scenario, eligible demo model),
+    two valid creates race for the last slot; exactly one commits."""
+    import json
+    from contextlib import closing
+
+    from test_demo_d1_04_app import client_for, start
+
+    from src import main
+    from src.demo import seed
+
+    out = tmp / "product-seed"
+    await seed.build(out)
+    pair = seed.load_seed(out)
+    main.demo_seed = lambda: pair
+    with closing(
+        sqlite3.connect(f"file:{pair[0].path}?mode=ro", uri=True)
+    ) as db:
+        (row,) = db.execute(
+            "SELECT config_schema_version, config_json FROM scenario "
+            "WHERE deleted_at IS NULL"
+        ).fetchall()
+    body = {
+        "title": "Fictional copy",
+        "config_schema_version": row[0],
+        "config": json.loads(row[1]),
+        "action": "save_draft",
+    }
+    app = main.app
+    spies = Spies()
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    live = "SELECT COUNT(*) FROM scenario WHERE deleted_at IS NULL"
+    async with app.router.lifespan_context(app):
+        client = client_for(app)
+        state = await start(client, "admin")
+        assert visitor_rows(root, live) == [(1,)]
+        racers = await asyncio.gather(
+            *(
+                call(
+                    client,
+                    state,
+                    "POST",
+                    "/admin/scenarios",
+                    {**body, "title": title},
+                )
+                for title in ("Race A", "Race B")
+            )
+        )
+        assert sorted(r.status_code for r in racers) == [201, 429], [
+            r.text for r in racers
+        ]
+        check_error(
+            next(r for r in racers if r.status_code == 429),
+            429,
+            "DEMO_LIMIT_REACHED",
+        )
+        saved = next(r for r in racers if r.status_code == 201).json()
+        assert saved["version"] == 1 and saved["status"] == "draft"
+        assert visitor_rows(root, live) == [(2,)]
+        assert visitor_rows(
+            root,
+            "SELECT title FROM scenario WHERE id=? AND deleted_at IS NULL",
+            (saved["id"],),
+        ) in ([("Race A",)], [("Race B",)])
+        spies.clean()
 
 
 if __name__ == "__main__":

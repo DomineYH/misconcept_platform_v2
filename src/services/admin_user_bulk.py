@@ -139,6 +139,9 @@ def parse_csv(file_content: bytes, language="ko") -> list[dict]:
     if len(rows) == 0:
         raise ValueError(translate("admin.the_csv_file_is_empty", language))
 
+    if config.APP_MODE == "demo" and len(rows) > config.DEMO_MAX_UPLOAD_ROWS:
+        # §8/§11: the visitor row limit wins over the normal 400 ceiling.
+        raise DemoError("LIMIT_REACHED")
     if len(rows) > MAX_ROWS:
         raise ValueError(
             translate(

@@ -1,0 +1,447 @@
+{
+  "schemaVersion": 1,
+  "commit": "8f97776dcb3456b5df0fb198daf520168752117c",
+  "runId": "39397378254",
+  "runAttempt": "1",
+  "inventoryId": "2b17a569fd2c045ca236cb3b982a018fda1e62afd7c7b247780ff17fa9a67600",
+  "planId": "8a704e80f4169bcc40b5b22bf395e80987926e1ce5a448774b78813c34a043f6",
+  "shard": 2,
+  "shardCount": 3,
+  "status": "PASS",
+  "plannedModules": [
+    "browser_171_page_header.mjs",
+    "browser_173_user_failure.mjs",
+    "browser_174_hover_header.mjs",
+    "browser_admin_display_language.mjs",
+    "browser_admin_language_layout.mjs",
+    "browser_admin_language_options.mjs",
+    "browser_admin_language_tasks.mjs",
+    "browser_admin_language_uncertain.mjs",
+    "browser_ai_anthropic.mjs",
+    "browser_ai_boundaries.mjs",
+    "browser_ai_connections.mjs",
+    "browser_ai_google.mjs",
+    "browser_ai_models.mjs",
+    "browser_ai_probes.mjs",
+    "browser_ai_secrets.mjs",
+    "browser_ai_settings.mjs",
+    "browser_ai_student_probe.mjs",
+    "browser_chat.mjs",
+    "browser_demo_d3_01_ui.mjs",
+    "browser_demo_isolation.mjs",
+    "browser_display_language.mjs",
+    "browser_i18n_cross_tab.mjs",
+    "browser_mentor_recovery.mjs",
+    "browser_mentor_stream.mjs",
+    "browser_native_analysis.mjs",
+    "browser_phase_a_history.mjs",
+    "browser_s1_live.mjs",
+    "browser_s2_148b_zero_models.mjs",
+    "browser_s2_148c_spacing.mjs",
+    "browser_s2_full_context.mjs",
+    "browser_s2_models.mjs",
+    "browser_s2_saved_options.mjs",
+    "browser_s4_analysis.mjs",
+    "browser_s4_lifecycle.mjs",
+    "browser_s4_plan.mjs",
+    "browser_s5_analysis.mjs",
+    "browser_s5_apply_errors.mjs",
+    "browser_s5_deleted_source.mjs",
+    "browser_s5_draft.mjs",
+    "browser_s5_editor.mjs",
+    "browser_s5_lifecycle.mjs",
+    "browser_s5_mentor_history.mjs",
+    "browser_s5_recovery.mjs",
+    "browser_s5_results.mjs",
+    "browser_s5_retry_race.mjs",
+    "browser_s5_student_live.mjs",
+    "browser_s6_pagination.mjs",
+    "browser_s6_pagination_live.mjs",
+    "browser_scenario_cards.mjs",
+    "browser_scenario_cards_languages.mjs",
+    "browser_scenarios.mjs",
+    "browser_teacher_display_language.mjs",
+    "browser_teacher_language_layout.mjs",
+    "browser_teacher_language_session.mjs",
+    "browser_teacher_language_streams.mjs",
+    "browser_uiux_admin_about.mjs",
+    "browser_uiux_admin_bulk.mjs",
+    "browser_uiux_admin_crud.mjs",
+    "browser_uiux_admin_detail.mjs",
+    "browser_uiux_admin_tables.mjs",
+    "browser_uiux_ai_layout.mjs",
+    "browser_uiux_analysis.mjs",
+    "browser_uiux_chat.mjs",
+    "browser_uiux_comparison.mjs",
+    "browser_uiux_comparison_history.mjs",
+    "browser_uiux_comparison_keyboard.mjs",
+    "browser_uiux_comparison_recovery.mjs",
+    "browser_uiux_entry.mjs",
+    "browser_uiux_gnb.mjs",
+    "browser_uiux_practice.mjs",
+    "browser_uiux_scenario_errors.mjs",
+    "browser_uiux_tab_contrast.mjs"
+  ],
+  "executedModules": [
+    {
+      "module": "browser_171_page_header.mjs",
+      "status": "PASS",
+      "elapsedMs": 52182.201613000005
+    },
+    {
+      "module": "browser_173_user_failure.mjs",
+      "status": "PASS",
+      "elapsedMs": 4183.9800749999995
+    },
+    {
+      "module": "browser_174_hover_header.mjs",
+      "status": "PASS",
+      "elapsedMs": 223727.44091200002
+    },
+    {
+      "module": "browser_admin_display_language.mjs",
+      "status": "PASS",
+      "elapsedMs": 1239.261480999994
+    },
+    {
+      "module": "browser_admin_language_layout.mjs",
+      "status": "PASS",
+      "elapsedMs": 17722.31678200001
+    },
+    {
+      "module": "browser_admin_language_options.mjs",
+      "status": "PASS",
+      "elapsedMs": 918.205633000005
+    },
+    {
+      "module": "browser_admin_language_tasks.mjs",
+      "status": "PASS",
+      "elapsedMs": 1094.9729630000074
+    },
+    {
+      "module": "browser_admin_language_uncertain.mjs",
+      "status": "PASS",
+      "elapsedMs": 945.2662109999801
+    },
+    {
+      "module": "browser_ai_anthropic.mjs",
+      "status": "PASS",
+      "elapsedMs": 695.4830550000188
+    },
+    {
+      "module": "browser_ai_boundaries.mjs",
+      "status": "PASS",
+      "elapsedMs": 824.1988750000019
+    },
+    {
+      "module": "browser_ai_connections.mjs",
+      "status": "PASS",
+      "elapsedMs": 200.09453800000483
+    },
+    {
+      "module": "browser_ai_google.mjs",
+      "status": "PASS",
+      "elapsedMs": 746.540725000028
+    },
+    {
+      "module": "browser_ai_models.mjs",
+      "status": "PASS",
+      "elapsedMs": 978.9989059999934
+    },
+    {
+      "module": "browser_ai_probes.mjs",
+      "status": "PASS",
+      "elapsedMs": 1176.4361660000286
+    },
+    {
+      "module": "browser_ai_secrets.mjs",
+      "status": "PASS",
+      "elapsedMs": 659.0267480000039
+    },
+    {
+      "module": "browser_ai_settings.mjs",
+      "status": "PASS",
+      "elapsedMs": 1296.8679549999651
+    },
+    {
+      "module": "browser_ai_student_probe.mjs",
+      "status": "PASS",
+      "elapsedMs": 603.132825000037
+    },
+    {
+      "module": "browser_chat.mjs",
+      "status": "PASS",
+      "elapsedMs": 1717.8958050000365
+    },
+    {
+      "module": "browser_demo_d3_01_ui.mjs",
+      "status": "PASS",
+      "elapsedMs": 10971.475523000001
+    },
+    {
+      "module": "browser_demo_isolation.mjs",
+      "status": "PASS",
+      "elapsedMs": 10612.253902999975
+    },
+    {
+      "module": "browser_display_language.mjs",
+      "status": "PASS",
+      "elapsedMs": 6091.3815610000165
+    },
+    {
+      "module": "browser_i18n_cross_tab.mjs",
+      "status": "PASS",
+      "elapsedMs": 2143.5389489999507
+    },
+    {
+      "module": "browser_mentor_recovery.mjs",
+      "status": "PASS",
+      "elapsedMs": 2333.8807099999976
+    },
+    {
+      "module": "browser_mentor_stream.mjs",
+      "status": "PASS",
+      "elapsedMs": 1595.330597000022
+    },
+    {
+      "module": "browser_native_analysis.mjs",
+      "status": "PASS",
+      "elapsedMs": 615.8045630000415
+    },
+    {
+      "module": "browser_phase_a_history.mjs",
+      "status": "PASS",
+      "elapsedMs": 293.68018099997425
+    },
+    {
+      "module": "browser_s1_live.mjs",
+      "status": "PASS",
+      "elapsedMs": 9545.72330199997
+    },
+    {
+      "module": "browser_s2_148b_zero_models.mjs",
+      "status": "PASS",
+      "elapsedMs": 715.9704789999523
+    },
+    {
+      "module": "browser_s2_148c_spacing.mjs",
+      "status": "PASS",
+      "elapsedMs": 1602.1064979999792
+    },
+    {
+      "module": "browser_s2_full_context.mjs",
+      "status": "PASS",
+      "elapsedMs": 389.31673600000795
+    },
+    {
+      "module": "browser_s2_models.mjs",
+      "status": "PASS",
+      "elapsedMs": 413.01543700002367
+    },
+    {
+      "module": "browser_s2_saved_options.mjs",
+      "status": "PASS",
+      "elapsedMs": 520.1878699999652
+    },
+    {
+      "module": "browser_s4_analysis.mjs",
+      "status": "PASS",
+      "elapsedMs": 503.11644999997225
+    },
+    {
+      "module": "browser_s4_lifecycle.mjs",
+      "status": "PASS",
+      "elapsedMs": 6965.236818999983
+    },
+    {
+      "module": "browser_s4_plan.mjs",
+      "status": "PASS",
+      "elapsedMs": 6826.312227000017
+    },
+    {
+      "module": "browser_s5_analysis.mjs",
+      "status": "PASS",
+      "elapsedMs": 451.12498800002504
+    },
+    {
+      "module": "browser_s5_apply_errors.mjs",
+      "status": "PASS",
+      "elapsedMs": 828.9255129999947
+    },
+    {
+      "module": "browser_s5_deleted_source.mjs",
+      "status": "PASS",
+      "elapsedMs": 684.9575440000044
+    },
+    {
+      "module": "browser_s5_draft.mjs",
+      "status": "PASS",
+      "elapsedMs": 365.7037760000094
+    },
+    {
+      "module": "browser_s5_editor.mjs",
+      "status": "PASS",
+      "elapsedMs": 604.2891150000505
+    },
+    {
+      "module": "browser_s5_lifecycle.mjs",
+      "status": "PASS",
+      "elapsedMs": 652.6289929999621
+    },
+    {
+      "module": "browser_s5_mentor_history.mjs",
+      "status": "PASS",
+      "elapsedMs": 495.10717099998146
+    },
+    {
+      "module": "browser_s5_recovery.mjs",
+      "status": "PASS",
+      "elapsedMs": 12225.590657000022
+    },
+    {
+      "module": "browser_s5_results.mjs",
+      "status": "PASS",
+      "elapsedMs": 565.7032789999503
+    },
+    {
+      "module": "browser_s5_retry_race.mjs",
+      "status": "PASS",
+      "elapsedMs": 606.3620489999885
+    },
+    {
+      "module": "browser_s5_student_live.mjs",
+      "status": "PASS",
+      "elapsedMs": 21251.139441999956
+    },
+    {
+      "module": "browser_s6_pagination.mjs",
+      "status": "PASS",
+      "elapsedMs": 2104.424696000002
+    },
+    {
+      "module": "browser_s6_pagination_live.mjs",
+      "status": "PASS",
+      "elapsedMs": 7305.803294999991
+    },
+    {
+      "module": "browser_scenario_cards.mjs",
+      "status": "PASS",
+      "elapsedMs": 19928.39705999999
+    },
+    {
+      "module": "browser_scenario_cards_languages.mjs",
+      "status": "PASS",
+      "elapsedMs": 26634.994168000005
+    },
+    {
+      "module": "browser_scenarios.mjs",
+      "status": "PASS",
+      "elapsedMs": 1734.7471859999932
+    },
+    {
+      "module": "browser_teacher_display_language.mjs",
+      "status": "PASS",
+      "elapsedMs": 276.8569520000019
+    },
+    {
+      "module": "browser_teacher_language_layout.mjs",
+      "status": "PASS",
+      "elapsedMs": 35563.37253699999
+    },
+    {
+      "module": "browser_teacher_language_session.mjs",
+      "status": "PASS",
+      "elapsedMs": 459.7148750000051
+    },
+    {
+      "module": "browser_teacher_language_streams.mjs",
+      "status": "PASS",
+      "elapsedMs": 1265.8447240000241
+    },
+    {
+      "module": "browser_uiux_admin_about.mjs",
+      "status": "PASS",
+      "elapsedMs": 1586.3201370000024
+    },
+    {
+      "module": "browser_uiux_admin_bulk.mjs",
+      "status": "PASS",
+      "elapsedMs": 229.57725200004643
+    },
+    {
+      "module": "browser_uiux_admin_crud.mjs",
+      "status": "PASS",
+      "elapsedMs": 3422.24439800001
+    },
+    {
+      "module": "browser_uiux_admin_detail.mjs",
+      "status": "PASS",
+      "elapsedMs": 316.65417800005525
+    },
+    {
+      "module": "browser_uiux_admin_tables.mjs",
+      "status": "PASS",
+      "elapsedMs": 1384.547528999974
+    },
+    {
+      "module": "browser_uiux_ai_layout.mjs",
+      "status": "PASS",
+      "elapsedMs": 700.764347999997
+    },
+    {
+      "module": "browser_uiux_analysis.mjs",
+      "status": "PASS",
+      "elapsedMs": 3246.3436349999974
+    },
+    {
+      "module": "browser_uiux_chat.mjs",
+      "status": "PASS",
+      "elapsedMs": 1690.2212590000127
+    },
+    {
+      "module": "browser_uiux_comparison.mjs",
+      "status": "PASS",
+      "elapsedMs": 507.1681039999821
+    },
+    {
+      "module": "browser_uiux_comparison_history.mjs",
+      "status": "PASS",
+      "elapsedMs": 357.6441310000373
+    },
+    {
+      "module": "browser_uiux_comparison_keyboard.mjs",
+      "status": "PASS",
+      "elapsedMs": 424.4431840000325
+    },
+    {
+      "module": "browser_uiux_comparison_recovery.mjs",
+      "status": "PASS",
+      "elapsedMs": 957.9946110000019
+    },
+    {
+      "module": "browser_uiux_entry.mjs",
+      "status": "PASS",
+      "elapsedMs": 4093.899684999953
+    },
+    {
+      "module": "browser_uiux_gnb.mjs",
+      "status": "PASS",
+      "elapsedMs": 21449.494901000056
+    },
+    {
+      "module": "browser_uiux_practice.mjs",
+      "status": "PASS",
+      "elapsedMs": 12163.010916
+    },
+    {
+      "module": "browser_uiux_scenario_errors.mjs",
+      "status": "PASS",
+      "elapsedMs": 4604.0001289999345
+    },
+    {
+      "module": "browser_uiux_tab_contrast.mjs",
+      "status": "PASS",
+      "elapsedMs": 5617.597890000092
+    }
+  ]
+}

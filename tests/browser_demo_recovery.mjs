@@ -101,12 +101,9 @@ async function synced(page, label, first) {
   assert.equal(now.browser_scope_id, first.browser_scope_id, `${label}: no new scope`);
 }
 
-// §25: refresh, back/forward and BFCache re-sync from the state GET without any POST.
+// §25: refresh and back/forward re-sync from the state GET without any POST.
 async function refresh(ctx) {
-  const init = () => addEventListener('pageshow', event => {
-    try { sessionStorage.setItem('t:pageshow', JSON.stringify([...JSON.parse(sessionStorage.getItem('t:pageshow') ?? '[]'), event.persisted])); } catch {}
-  });
-  const {page, posts} = await visit(ctx, {init});
+  const {page, posts} = await visit(ctx);
   const first = await state(page);
   const draft = '아직 보내지 않은 초안';
   await page.fill('#teacher-input', draft);
@@ -126,8 +123,32 @@ async function refresh(ctx) {
   await chatReady(page);
   await check('forward');
   assert.equal(await page.inputValue('#teacher-input'), draft, 'forward keeps the unsent draft');
-  // Recorded only: Playwright's Chromium may not restore from BFCache.
-  console.log(`BFCACHE pageshow persisted=${await page.evaluate(() => sessionStorage.getItem('t:pageshow'))}`);
+}
+
+// §25 BFCache restoration. Playwright launches Chromium with --disable-back-forward-cache, so this case keeps BFCache on.
+// No restore is reported as not run with Chromium's notRestoredReasons, never as a pass.
+async function bfcache(ctx) {
+  let browser;
+  try {
+    browser = await chromium.launch({channel: 'chromium', headless: true, ignoreDefaultArgs: ['--disable-back-forward-cache']});
+  } catch (error) {
+    return {notRun: `Chromium with BFCache did not launch: ${error.message.split('\n')[0]}`};
+  }
+  try {
+    const init = () => addEventListener('pageshow', event => { window.__persisted = event.persisted; });
+    const {page, posts} = await visit({...ctx, browser}, {init, chat: false});
+    const first = await state(page);
+    await enter(page);
+    const before = posts.length;
+    await page.goBack({waitUntil: 'commit'}); // a restored page fires no load event
+    await page.waitForFunction(() => window.__persisted !== undefined);
+    const {persisted, reasons} = await page.evaluate(() => ({persisted: window.__persisted, reasons: performance.getEntriesByType('navigation')[0]?.notRestoredReasons?.reasons}));
+    if (!persisted) return {notRun: `headless Chromium did not restore from BFCache (notRestoredReasons ${JSON.stringify(reasons?.map(r => r.reason) ?? null)})`};
+    await synced(page, 'BFCache restore', first);
+    assert.deepEqual(posts.slice(before), [], 'BFCache restore issued POSTs');
+  } finally {
+    await browser.close();
+  }
 }
 
 // §25: one start, one session, one turn per action; the second click never reaches the server.
@@ -365,7 +386,7 @@ async function expiry(ctx) {
   assert.notEqual((await context.request.get(oldUrl)).status(), 200, 'old namespace URL after the new start');
 }
 
-const CASES = [['I1 refresh/back/forward/BFCache', refresh], ['I2 double clicks', doubleClicks], ['I3 tour close/skip/resume', tour],
+const CASES = [['I1 refresh/back/forward', refresh], ['I1b BFCache restoration', bfcache], ['I2 double clicks', doubleClicks], ['I3 tour close/skip/resume', tour],
   ['I4 two tabs', twoTabs], ['I5 ko/en toggle', language], ['I6 390/zoom/keyboard layout', layout], ['I7 expiry re-entry', expiry]];
 
 export default async function check() {
@@ -380,8 +401,8 @@ export default async function check() {
     for (const [name, run] of CASES) {
       const ctx = {browser, demo, errors, contexts: []};
       try {
-        await run(ctx);
-        console.log(`PASS ${name}`);
+        const result = await run(ctx);
+        console.log(result?.notRun ? `NOT RUN ${name}: ${result.notRun}` : `PASS ${name}`);
       } catch (error) {
         defects.push(`${name}: ${error.message}`);
       } finally {

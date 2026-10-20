@@ -14,6 +14,9 @@ const INPUT = {
 const ADMIN_COLUMNS = ['session_id', 'scenario_id', 'scenario_title', 'teacher_id', 'teacher_username', 'teacher_nickname', 'session_started_at', 'session_ended_at', 'message_id', 'message_created_at', 'role', 'content', 'label', 'confidence', 'meta_json', 'feedback', 'classification_status', 'student_name', 'snapshot_origin', 'snapshot_created_at', 'source_scenario_version', 'config_hash_kind', 'analysis_schema_version', 'analysis_status', 'analysis_coverage_json', 'misconception_findings_json', 'message_analysis_disposition'];
 const DEMO_COLUMNS = ['demo_response_source', 'demo_external_ai_called', 'demo_content_version', 'demo_fixture_version', 'demo_record_origin'];
 const IDENTITY = ['teacher_id', 'teacher_username', 'teacher_nickname'];
+// §22 teacher-side paths of one session: history, analysis status, page and modal, run status, CSV.
+const TEACHER_ROUTES = ids => [`/sessions/${ids.session}`, `/sessions/${ids.session}/analysis`, `/sessions/${ids.session}/analysis_page`,
+  `/sessions/${ids.session}/analysis_modal`, `/sessions/${ids.session}/analysis/runs/${ids.analysisRun}`, `/sessions/${ids.session}/export.csv`];
 const MAP_JS = `[...document.querySelectorAll('.demo-tour-steps li')].map(li => ({complete: 'C', current: 'X', pending: 'P'}[li.dataset.state] ?? '?')).join(' ')`;
 
 async function until(fn, message, timeout = 60000) {
@@ -206,6 +209,8 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     modal.catch(() => {}); // awaited below; never an unhandled rejection when the end POST fails first
     const [ended] = await Promise.all([page.waitForResponse(response => response.url().endsWith(`/sessions/${ids.session}/end`)), page.click('#end-session-btn')]);
     assert([200, 202].includes(ended.status()), `POST /sessions/${ids.session}/end ${ended.status()}: ${await ended.text()}`);
+    ids.analysisRun = (await ended.json()).run_id;
+    assert(ids.analysisRun, 'step 4: analysis run_id');
     assert.equal((await modal).status(), 200, `GET /sessions/${ids.session}/analysis_modal: ${await (await modal).text()}`);
     await page.locator('#analysis-modal-container [data-analysis-result]').waitFor({state: 'attached'});
     await factsWhere(page, 'analysis_ready', 'analysis_ready');
@@ -251,6 +256,14 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     await factsWhere(page, 'teacher_deleted', 'teacher_deleted');
     assert.deepEqual(logA.dialogs.slice(mark), ['confirm', 'alert'], 'step 6: confirm then deleted notice');
     expectCsv(await (await A.get(await aUrl(`/admin/sessions/${ids.session}/download`))).text(), ids.session, false, 'CSV after teacher delete');
+    // §22 / spec §8 step 2: the deleted teacher's per-user export does not hand back the preserved session.
+    await expectCode(await A.get(await aUrl(`/admin/user-conversations/${ids.teacher}/export`)), 404, 'DEMO_RESOURCE_NOT_FOUND');
+    // Spec §8 step 3: no teacher context remains, so the teacher routes below are probed as the visitor's admin.
+    const current = await state(page);
+    const role = await control(page, '/demo/role', {request_id: randomUUID(), role: 'teacher', expected_generation: current.generation, expected_auth_epoch: current.auth_epoch});
+    assert.deepEqual([role.status, role.body?.detail?.code], [409, 'DEMO_ROLE_DELETED'], 'step 6: deleted teacher role');
+    // Before the session delete the teacher routes refuse the admin as non-owner (403), so the 404s below come from the delete.
+    for (const path of TEACHER_ROUTES(ids)) assert.equal((await A.get(await aUrl(path))).status(), 403, `before session delete: ${path}`);
     await page.goto(`${base}/admin/sessions-page`);
     const row = page.locator('tr', {has: page.locator(`input.session-checkbox[value="${ids.session}"]`)});
     await row.locator('button.btn-danger').click(); // hx-confirm
@@ -267,8 +280,9 @@ async function runChecks(browser, {base}, pageErrors, defects) {
     await gone('single CSV', `/admin/sessions/${id}/download`);
     await gone('admin analysis API', `/admin/sessions/${id}/analysis`);
     await gone('admin analysis modal', `/admin/sessions/${id}/analysis_modal`, null);
-    await gone('session page', `/sessions/${id}`, null);
-    await gone('teacher analysis API', `/sessions/${id}/analysis`, null);
+    await gone('admin analysis run status', `/admin/sessions/${id}/analysis/runs/${ids.analysisRun}`, null);
+    for (const path of TEACHER_ROUTES(ids)) await gone(`teacher route ${path}`, path, null);
+    await gone('deleted teacher export', `/admin/user-conversations/${ids.teacher}/export`);
     await soft('deleted session: all export', async () => {
       const response = await A.get(await aUrl('/admin/sessions/export'));
       assert.equal(response.status(), 200);
@@ -278,10 +292,19 @@ async function runChecks(browser, {base}, pageErrors, defects) {
       const response = await A.post(await aUrl('/admin/sessions/export-selected'), {
         headers: {origin: base, 'x-csrf-token': await cookie(contexts.A, 'demo_csrftoken')}, form: {session_ids: String(id)}
       });
-      assert(!(await response.text()).includes('session_id,'), 'selected export must carry no CSV');
+      const body = await response.text();
+      // admin_session_export.py: no remaining selected session gives 200 plain text, not a CSV.
+      assert.equal(response.status(), 200, body);
+      assert.match(response.headers()['content-type'], /^text\/plain/, body);
+      assert(!body.includes('session_id,'), 'selected export must carry no CSV');
     });
     await soft('deleted session: list API and page', async () => {
-      assert(!new RegExp(`"id":\\s*${id}\\b`).test(await (await A.get(await aUrl('/admin/sessions'))).text()), 'GET /admin/sessions lists it');
+      const response = await A.get(await aUrl('/admin/sessions'));
+      assert.equal(response.status(), 200, await response.text());
+      const list = await response.json();
+      assert(Array.isArray(list.sessions) && Number.isInteger(list.total), `GET /admin/sessions shape: ${JSON.stringify(list)}`);
+      assert(list.sessions.length > 0, 'GET /admin/sessions keeps the seed session');
+      assert.deepEqual(list.sessions.filter(row => row.id === id), [], 'GET /admin/sessions lists it');
       await page.goto(`${base}/admin/sessions-page`);
       assert.equal(await page.locator(`input.session-checkbox[value="${id}"], .view-analysis-btn[data-session-id="${id}"]`).count(), 0, 'sessions page lists it');
     });

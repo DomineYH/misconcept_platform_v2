@@ -11,6 +11,7 @@ from functools import wraps
 from typing import AsyncGenerator
 from urllib.parse import urlencode, urlsplit
 
+import anyio
 import markdown as md_lib
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -721,33 +722,31 @@ def get_demo_session(request: Request):
     return session
 
 
+async def _discard(owned, sent):
+    """#198: abort, exactly once, a handler response the boundary will not send."""
+    if not owned or owned[0] is sent:
+        return
+    abort = getattr(owned.pop(), "demo_abort", None)
+    if abort is None:
+        return
+    # Shielded: a cancelled request still finishes releasing the reserved work.
+    with anyio.CancelScope(shield=True):
+        try:
+            await abort()
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                "Demo abort failed", extra={"code": type(error).__name__}
+            )
+
+
 def demo_request_handler(handler):
     """Stage 3 wraps all demo route handlers before body/dependency parsing."""
 
-    @wraps(handler)
-    async def guarded(request):
-        if config.APP_MODE != "demo":
-            return await handler(request)
+    async def serve(request, owned):
         from src.api.routes.demo import error_response
 
         runtime = None
-        response = owned = None
-
-        async def discard():
-            # #198: a handler response the boundary will not send aborts its work once.
-            nonlocal owned
-            if owned is None or response is owned:
-                return
-            abort, owned = getattr(owned, "demo_abort", None), None
-            if abort is not None:
-                try:
-                    await abort()
-                except Exception as error:
-                    logging.getLogger(__name__).error(
-                        "Demo abort failed",
-                        extra={"code": type(error).__name__},
-                    )
-
+        response = None
         request.state.demo_boundary = True
         try:
             runtime = _demo_runtime(request)
@@ -784,7 +783,8 @@ def demo_request_handler(handler):
                 "/demo/"
             ):
                 await runtime.validate_namespace(request, bootstrap)
-            response = owned = await handler(request)
+            response = await handler(request)
+            owned.append(response)
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and not request.url.path.startswith("/demo/"):
                 if response.status_code < 400:
@@ -810,7 +810,7 @@ def demo_request_handler(handler):
             raise
         finally:
             # Before release, while the request's lease is still held.
-            await discard()
+            await _discard(owned, response)
             ctx = getattr(request.state, "demo_context", None)
             if ctx is not None and runtime is not None:
                 try:
@@ -822,7 +822,8 @@ def demo_request_handler(handler):
                             DemoError("CONFIGURATION_INVALID")
                         )
         if (
-            response.status_code >= 400
+            request.method == "GET"
+            and response.status_code >= 400
             and response.headers.get("content-type") == "application/json"
             and html_navigation(request)
         ):
@@ -854,8 +855,19 @@ def demo_request_handler(handler):
         ):
             if "set-cookie" in response.headers:
                 del response.headers["set-cookie"]
-        await discard()
         return response
+
+    @wraps(handler)
+    async def guarded(request):
+        if config.APP_MODE != "demo":
+            return await handler(request)
+        owned, response = [], None
+        try:
+            response = await serve(request, owned)
+            return response
+        finally:
+            # Also covers cancellation during release and later replacements.
+            await _discard(owned, response)
 
     return guarded
 

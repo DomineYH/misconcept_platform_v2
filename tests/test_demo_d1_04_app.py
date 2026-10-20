@@ -225,6 +225,155 @@ async def test_demo_cleanup_tick_retries_demo_errors_and_stops_otherwise(
 # Subprocess cases (APP_MODE=demo, TESTING=false, isolated environment).
 
 
+def boundary(monkeypatch, runtime, verify):
+    """The real demo_request_handler with fake demo security and runtime."""
+    from types import SimpleNamespace
+
+    from src.api import dependencies as deps
+
+    async def namespace(request):
+        request.state.demo_invalid_selector = False
+
+    demo = SimpleNamespace(APP_MODE="demo", DEMO_PUBLIC_URL="")
+    monkeypatch.setattr(deps, "config", demo)
+    monkeypatch.setattr(deps, "_demo_runtime", lambda _: runtime)
+    monkeypatch.setattr(
+        deps,
+        "get_demo_security",
+        lambda _: SimpleNamespace(verified_bootstrap=verify),
+    )
+    monkeypatch.setattr(deps, "_namespace", namespace)
+    return deps
+
+
+def boundary_request(method, path, headers=()):
+    from starlette.requests import Request
+
+    return Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "query_string": b"",
+            "headers": list(headers),
+            "scheme": "https",
+            "server": ("demo.test", 443),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "send",
+        "no_hook",
+        "finish_error",
+        "release_error",
+        "cancel_finish_asyncio",
+        "cancel_release_asyncio",
+        "cancel_finish_anyio",
+    ],
+)
+async def test_demo_boundary_aborts_discarded_owned_response_once(
+    mode, monkeypatch
+):
+    """#198 hook: completes exactly once even when the request is cancelled."""
+    import asyncio
+    from types import SimpleNamespace
+
+    import anyio
+    from starlette.responses import PlainTextResponse
+
+    from src.demo.database import DemoError
+
+    events = []
+    entered, hold = asyncio.Event(), asyncio.Event()
+    response = PlainTextResponse("owned")
+
+    async def abort():
+        events.append("abort_started")
+        await anyio.lowlevel.checkpoint()
+        events.append("abort_finished")
+
+    if mode != "no_hook":
+        response.demo_abort = abort
+
+    async def finish(ctx):
+        if mode == "finish_error":
+            raise DemoError("STALE_GENERATION")
+        if mode == "cancel_finish_anyio":
+            scope.cancel()
+            await anyio.lowlevel.checkpoint()
+        if mode == "cancel_finish_asyncio":
+            entered.set()
+            await hold.wait()
+
+    async def release(ctx):
+        events.append("release")
+        if mode == "release_error":
+            raise RuntimeError("/real/demo/root")
+        if mode == "cancel_release_asyncio":
+            entered.set()
+            await hold.wait()
+
+    async def verify(request, **kwargs):
+        return object()
+
+    async def handler(request):
+        request.state.demo_context = object()
+        return response
+
+    runtime = SimpleNamespace(
+        visitors=SimpleNamespace(visitor_for_bootstrap=lambda _: None),
+        finish=finish,
+        release_request_db=release,
+    )
+    deps = boundary(monkeypatch, runtime, verify)
+    guarded = deps.demo_request_handler(handler)
+    # "/demo" skips validate_namespace but still finishes the request DB.
+    request = boundary_request("GET", "/demo")
+    if mode == "cancel_finish_anyio":
+        # Scenario B: cancelled inside finish() by an AnyIO cancel scope.
+        with anyio.CancelScope() as scope:
+            await guarded(request)
+    elif mode.startswith("cancel_"):
+        # Scenario A (release) and a plain task cancel during finish().
+        task = asyncio.create_task(guarded(request))
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        result = await guarded(request)
+        assert (result is response) == (mode in ("send", "no_hook"))
+    expected = 0 if mode in ("send", "no_hook") else 1
+    assert events.count("abort_started") == expected, events
+    assert events.count("abort_finished") == expected, events
+    assert events.count("release") == 1, events
+    if mode in ("finish_error", "cancel_finish_asyncio", "cancel_finish_anyio"):
+        # Aborted while the request DB lease is still held.
+        assert events.index("abort_finished") < events.index("release"), events
+
+
+async def test_demo_boundary_html_error_page_is_get_only(monkeypatch):
+    from types import SimpleNamespace
+
+    from src.demo.database import DemoError
+
+    async def verify(request, **kwargs):
+        raise DemoError("SESSION_REQUIRED")
+
+    deps = boundary(monkeypatch, SimpleNamespace(), verify)
+    guarded = deps.demo_request_handler(None)
+    html = [(b"accept", b"text/html")]
+    result = await guarded(boundary_request("HEAD", "/probe", html))
+    assert result.status_code == 401
+    assert result.headers["content-type"] == "application/json"
+    result = await guarded(boundary_request("GET", "/probe", html))
+    assert result.status_code == 401
+    assert result.headers["content-type"].startswith("text/html")
+
+
 async def make_seed(root_path):
     """A tiny synthetic seed, using the official explicit-engine installer."""
     import hashlib

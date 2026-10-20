@@ -1,6 +1,6 @@
 # normal/demo CI 적용 범위 평가 (#205)
 
-평가 기준: 수정 전 기준선 main `ba64b82ef74226094a5b51888b1bbcb1734bb062`, 같은 SHA의 `.github/workflows/tests.yml`. 1단계(main `2dc7840`) 평가를 대체한다. D6 수정 뒤 새 릴리스 후보에서는 `tests.yml`과 수집 수 변화를 다시 확인한다(D6는 `src/services/analysis_runs.py`와 회귀 검사만 바꾸므로 이 표의 job/step 대응은 바뀌지 않을 것으로 본다). 읽기 평가이며 이 문서 작성 중 전체 회귀는 실행하지 않았다(수집 수치는 `pytest --collect-only` 결과). 기준선 전체 회귀는 CI run 39392009613이며 로그는 [인수 기록](../d4-03-release-acceptance.md) §3.2에 있다.
+평가 기준: 수정 전 기준선 main `ba64b82ef74226094a5b51888b1bbcb1734bb062`, 같은 SHA의 `.github/workflows/tests.yml`. 1단계(main `2dc7840`) 평가를 대체한다. 릴리스 후보 `8f97776`(D6 수정)에서 재확인: `ba64b82` 대비 diff는 `src/services/analysis_runs.py`와 새 `tests/test_lock_order.py`뿐이고 `tests.yml`·browser 모듈은 같다. pytest 수집은 3167(normal 프로세스 test 1개 추가), browser 148 그대로이며 아래 job/step 대응은 바뀌지 않는다. 읽기 평가이며 이 문서 작성 중 전체 회귀는 실행하지 않았다(수집 수치는 `pytest --collect-only` 결과). 기준선 전체 회귀는 CI run 39392009613이며 로그는 [인수 기록](../d4-03-release-acceptance.md) §3.2에 있다.
 
 결론: **normal과 demo가 모두 기존 job에서 실행되므로 tests.yml은 변경하지 않는다.** 계약 §26의 #205 CI 쓰기 권한은 아래 "변경이 필요해지는 조건"이 생길 때만 쓴다. ba64b82에서는 그 조건이 하나도 생기지 않았다.
 
@@ -52,8 +52,8 @@ normal 부정 검사(같은 job): `tests/test_demo_d1_04_cli.py:92`와 `tests/te
 
 | mode | CI job / step (`tests.yml`) | 증명하는 테스트 파일 | CI run 결과 |
 | --- | --- | --- | --- |
-| normal | `test` / pytest (:21), `check_student_live.py` (:22); `browser-shard` / `npm run test:browser` (:39) | `tests/test_demo*.py` 밖의 기존 suite 전체(수집 3166 − 1153 = 2013개), normal 대조 검사(위 목록), `tests/check_student_live.py`, `tests/browser_*.mjs` 중 demo 외 142개, `browser_demo_d3_04_smoke.mjs`의 normal 서버(:110), `browser_demo_isolation.mjs`의 normal 대조 서버(helper :51) | 기준선 run 39392009613 passed(pytest 3166 passed, browser 148 모듈 PASS, live PASS). 새 후보 결과는 [인수 기록](../d4-03-release-acceptance.md) §3.1 |
-| demo | `test` / pytest (:21); `browser-shard` / `npm run test:browser` (:39) | `APP_MODE=demo` 하위 프로세스 14개 파일과 직접 호출 14개 파일(`tests/test_demo*.py` 28개), `browser_demo_isolation.mjs`, `browser_demo_journey.mjs`, `browser_demo_recovery.mjs`, `browser_demo_d3_04_smoke.mjs`(실제 backend), `browser_demo_d3_01_ui.mjs`, `browser_demo_d3_03_recovery.mjs`(stub) | 기준선 run 39392009613 passed(같은 pytest·browser step). 새 후보 결과는 [인수 기록](../d4-03-release-acceptance.md) §3.1 |
+| normal | `test` / pytest (:21), `check_student_live.py` (:22); `browser-shard` / `npm run test:browser` (:39) | `tests/test_demo*.py` 밖의 기존 suite 전체(수집 3166 − 1153 = 2013개), normal 대조 검사(위 목록), `tests/check_student_live.py`, `tests/browser_*.mjs` 중 demo 외 142개, `browser_demo_d3_04_smoke.mjs`의 normal 서버(:110), `browser_demo_isolation.mjs`의 normal 대조 서버(helper :51) | 기준선 run 39392009613 passed(pytest 3166 passed, browser 148 모듈 PASS, live PASS). 릴리스 후보 run 39397378254 passed — [인수 기록](../d4-03-release-acceptance.md) §3.1 |
+| demo | `test` / pytest (:21); `browser-shard` / `npm run test:browser` (:39) | `APP_MODE=demo` 하위 프로세스 14개 파일과 직접 호출 14개 파일(`tests/test_demo*.py` 28개), `browser_demo_isolation.mjs`, `browser_demo_journey.mjs`, `browser_demo_recovery.mjs`, `browser_demo_d3_04_smoke.mjs`(실제 backend), `browser_demo_d3_01_ui.mjs`, `browser_demo_d3_03_recovery.mjs`(stub) | 기준선 run 39392009613 passed(같은 pytest·browser step). 릴리스 후보 run 39397378254 passed — [인수 기록](../d4-03-release-acceptance.md) §3.1 |
 
 ## 변경이 필요해지는 조건 (ba64b82에서 해당 없음)
 

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "commit": "8f97776dcb3456b5df0fb198daf520168752117c",
+  "runId": "39397378254",
+  "runAttempt": "1",
+  "inventoryId": "2b17a569fd2c045ca236cb3b982a018fda1e62afd7c7b247780ff17fa9a67600",
+  "planId": "8a704e80f4169bcc40b5b22bf395e80987926e1ce5a448774b78813c34a043f6",
+  "shard": 1,
+  "shardCount": 3,
+  "status": "PASS",
+  "plannedModules": [
+    "browser_173_modal_close.mjs",
+    "browser_demo_d3_04_smoke.mjs",
+    "browser_demo_recovery.mjs"
+  ],
+  "executedModules": [
+    {
+      "module": "browser_173_modal_close.mjs",
+      "status": "PASS",
+      "elapsedMs": 793971.604156
+    },
+    {
+      "module": "browser_demo_d3_04_smoke.mjs",
+      "status": "PASS",
+      "elapsedMs": 9578.775097000063
+    },
+    {
+      "module": "browser_demo_recovery.mjs",
+      "status": "PASS",
+      "elapsedMs": 14264.662766000023
+    }
+  ]
+}

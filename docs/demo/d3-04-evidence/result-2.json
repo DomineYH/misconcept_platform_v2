@@ -1,0 +1,90 @@
+{
+  "receipt": {
+    "source_commit": "40ef3b6b0e59da37e43842ad9bb0f556f2559078",
+    "manifest_sha256": "60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516",
+    "db_schema_version": "037_demo_provider.sql",
+    "seed_sha256": "591614eb45d41c13a19f83dc0713dabb3ebbdab56442a43bb525c3320bbf7761",
+    "logical_data_sha256": "93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141",
+    "command": "python -m src.demo.seed build --out <tmp>/seed"
+  },
+  "results": [
+    {
+      "id": "1",
+      "name": "시작",
+      "status": "passed",
+      "elapsedMs": 1184
+    },
+    {
+      "id": "2",
+      "name": "시나리오",
+      "status": "passed",
+      "elapsedMs": 625
+    },
+    {
+      "id": "3",
+      "name": "대화/멘토",
+      "status": "passed",
+      "elapsedMs": 1676
+    },
+    {
+      "id": "4",
+      "name": "분석",
+      "status": "passed",
+      "elapsedMs": 2183
+    },
+    {
+      "id": "5",
+      "name": "관리자/CSV",
+      "status": "passed",
+      "elapsedMs": 966
+    },
+    {
+      "id": "6",
+      "name": "삭제/reset",
+      "status": "passed",
+      "elapsedMs": 1004
+    },
+    {
+      "id": "E1",
+      "name": "완료 이력 열기",
+      "status": "passed",
+      "elapsedMs": 1588
+    },
+    {
+      "id": "E2",
+      "name": "ready 상태 역할 전환",
+      "status": "passed",
+      "elapsedMs": 102
+    },
+    {
+      "id": "E3",
+      "name": "한영 UI 전환",
+      "status": "passed",
+      "elapsedMs": 940
+    },
+    {
+      "id": "E4",
+      "name": "만료 후 재진입",
+      "status": "not run",
+      "detail": "DEMO_IDLE_TTL_SECONDS minimum is 300 s (src/demo/visitors.py:49); a 5-minute idle wait does not fit a CI shard"
+    },
+    {
+      "id": "E5",
+      "name": "비교 직접 요청 거절",
+      "status": "passed",
+      "elapsedMs": 119
+    },
+    {
+      "id": "E6",
+      "name": "seed 완료 예시 출처 구분",
+      "status": "passed",
+      "elapsedMs": 239
+    },
+    {
+      "id": "N1",
+      "name": "normal",
+      "status": "passed",
+      "elapsedMs": 1363
+    }
+  ]
+}

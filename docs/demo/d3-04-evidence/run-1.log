@@ -1,0 +1,17 @@
+START browser_demo_d3_04_smoke.mjs
+RECEIPT {"source_commit":"4dcdf404f9c22f3ffb75ca3481d0e1939058b101","manifest_sha256":"60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516","db_schema_version":"037_demo_provider.sql","seed_sha256":"1a4ba42e7fe5aa44cf3cf15100bab3d055f248130dd494ebbafe8cdffa74c000","logical_data_sha256":"8d3fa9dde40a9d65273868a20271cdf767665e27c54384a54c74e575b3342980","command":"python -m src.demo.seed build --out <tmp>/seed"}
+STEP 1 passed
+STEP 2 passed
+STEP 3 passed
+STEP 4 failed: {"detail":{"code":"DEMO_CONFIGURATION_INVALID","retryable":false,"recovery":"demo.unavailable","generation":null,"auth_epoch":null}} 503 !== 202 
+STEP 5 not run: blocked by step 4
+STEP 6 not run: blocked by step 5
+STEP E1 passed
+STEP E2 passed
+STEP E3 passed
+STEP E4 not run: DEMO_IDLE_TTL_SECONDS minimum is 300 s (src/demo/visitors.py:49); a 5-minute idle wait does not fit a CI shard
+STEP E5 passed
+STEP E6 failed: seed analysis provenance + actual - expected + undefined - 'seed_prepared' 
+STEP N1 passed
+FAIL browser_demo_d3_04_smoke.mjs: D3-04 failed steps: 4 {"detail":{"code":"DEMO_CONFIGURATION_INVALID","retryable":false,"recovery":"demo.unavailable","generation":null,"auth_epoch":null}} 503 !== 202 | E6 seed analysis provenance + actual - expected + undefined - 'seed_prepared' 2 !== 0 
+END browser_demo_d3_04_smoke.mjs status=FAIL elapsed_ms=47353.1

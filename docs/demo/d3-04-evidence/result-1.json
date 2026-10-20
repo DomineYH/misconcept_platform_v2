@@ -1,0 +1,92 @@
+{
+  "receipt": {
+    "source_commit": "4dcdf404f9c22f3ffb75ca3481d0e1939058b101",
+    "manifest_sha256": "60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516",
+    "db_schema_version": "037_demo_provider.sql",
+    "seed_sha256": "1a4ba42e7fe5aa44cf3cf15100bab3d055f248130dd494ebbafe8cdffa74c000",
+    "logical_data_sha256": "8d3fa9dde40a9d65273868a20271cdf767665e27c54384a54c74e575b3342980",
+    "command": "python -m src.demo.seed build --out <tmp>/seed"
+  },
+  "results": [
+    {
+      "id": "1",
+      "name": "시작",
+      "status": "passed",
+      "elapsedMs": 2130
+    },
+    {
+      "id": "2",
+      "name": "시나리오",
+      "status": "passed",
+      "elapsedMs": 1711
+    },
+    {
+      "id": "3",
+      "name": "대화/멘토",
+      "status": "passed",
+      "elapsedMs": 3526
+    },
+    {
+      "id": "4",
+      "name": "분석",
+      "status": "failed",
+      "detail": "{\"detail\":{\"code\":\"DEMO_CONFIGURATION_INVALID\",\"retryable\":false,\"recovery\":\"demo.unavailable\",\"generation\":null,\"auth_epoch\":null}} 503 !== 202 ",
+      "elapsedMs": 471
+    },
+    {
+      "id": "5",
+      "name": "관리자/CSV",
+      "status": "not run",
+      "detail": "blocked by step 4"
+    },
+    {
+      "id": "6",
+      "name": "삭제/reset",
+      "status": "not run",
+      "detail": "blocked by step 5"
+    },
+    {
+      "id": "E1",
+      "name": "완료 이력 열기",
+      "status": "passed",
+      "elapsedMs": 3149
+    },
+    {
+      "id": "E2",
+      "name": "ready 상태 역할 전환",
+      "status": "passed",
+      "elapsedMs": 228
+    },
+    {
+      "id": "E3",
+      "name": "한영 UI 전환",
+      "status": "passed",
+      "elapsedMs": 2138
+    },
+    {
+      "id": "E4",
+      "name": "만료 후 재진입",
+      "status": "not run",
+      "detail": "DEMO_IDLE_TTL_SECONDS minimum is 300 s (src/demo/visitors.py:49); a 5-minute idle wait does not fit a CI shard"
+    },
+    {
+      "id": "E5",
+      "name": "비교 직접 요청 거절",
+      "status": "passed",
+      "elapsedMs": 164
+    },
+    {
+      "id": "E6",
+      "name": "seed 완료 예시 출처 구분",
+      "status": "failed",
+      "detail": "seed analysis provenance + actual - expected + undefined - 'seed_prepared' ",
+      "elapsedMs": 391
+    },
+    {
+      "id": "N1",
+      "name": "normal",
+      "status": "passed",
+      "elapsedMs": 1881
+    }
+  ]
+}

@@ -223,8 +223,11 @@ export function mountStudentStream(ui) {
       }
       else if (response.ok) {
         const data = await response.json();
-        if (pending !== attempt || leftPage) return;
-        if (!uiLanguage.receipt(token, data, attempt.request_id)) { rejectReceipt(); return; }
+        // Demo captures only (normal has no signal): late or foreign receipts are dropped.
+        if (token.signal) {
+          if (pending !== attempt || leftPage) return;
+          if (!uiLanguage.receipt(token, data, attempt.request_id)) { rejectReceipt(); return; }
+        }
         applySnapshot(data);
         if (pending?.status === 'running') {
           status.textContent = uiLanguage.t('teacher.student_checking_saved');
@@ -349,8 +352,11 @@ export function mountStudentStream(ui) {
       }
       if (response.ok && response.headers.get('Content-Type')?.includes('application/json')) {
         const data = await response.json();
-        if (pending !== attempt || leftPage) return;
-        if (!uiLanguage.receipt(token, data, attempt.request_id)) { rejectReceipt(); return; }
+        // Demo captures only (normal has no signal): late or foreign receipts are dropped.
+        if (token.signal) {
+          if (pending !== attempt || leftPage) return;
+          if (!uiLanguage.receipt(token, data, attempt.request_id)) { rejectReceipt(); return; }
+        }
         applySnapshot(data);
         if (pending?.status === 'running') await recover();
       } else {

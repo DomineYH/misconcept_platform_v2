@@ -417,5 +417,65 @@ export default async function check(page) {
   await page.locator('#teacher-input').press('Enter');
   await page.locator('.mentor-slot .mentor-run-status').getByText(await text('demo.refresh_state'), {exact:true}).waitFor({timeout:3000});
   assert.equal(await page.locator('.mentor-slot').getByText(await text('teacher.mentor_no_intervention'), {exact:true}).count(), 0);
+
+  // Repair r2 P1: a close whose body is aborted by invalidation neither alerts nor navigates.
+  const dialogs = [];
+  const onDialog = dialog => { dialogs.push(dialog.type()); void (dialog.type() === 'confirm' ? dialog.accept() : dialog.dismiss()); };
+  page.on('dialog', onDialog);
+  await fresh(page, base, DEMO);
+  await page.evaluate(() => {
+    const original = window.fetch;
+    // Headers arrive at once; the body only ends when the captured signal aborts it.
+    window.fetch = (url, options = {}) => String(url).endsWith('/close') ? Promise.resolve(new Response(new ReadableStream({
+      start(controller) {
+        options.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')));
+      },
+    }), {headers:{'Content-Type':'application/json'}})) : original(url, options);
+    window.closeFetched = new Promise(resolve => { window.closeStarted = resolve; });
+    const wrapped = window.fetch;
+    window.fetch = (url, options) => { if (String(url).endsWith('/close')) window.closeStarted(); return wrapped(url, options); };
+  });
+  await page.locator('#return-to-scenarios-btn').evaluate(button => { button.disabled = false; button.click(); });
+  await page.evaluate(() => closeFetched);
+  await synthetic(page, 'demo:role-changed', {browser_scope_id:'scope-a', generation:3, auth_epoch:3});
+  await page.waitForTimeout(900);
+  assert.deepEqual(dialogs, ['confirm']);
+  assert.equal(new URL(page.url()).pathname, '/chat');
+  assert.equal(await page.locator('#session-status-text').textContent(), await text('demo.stale_role'));
+
+  // Repair r2 P1: a close already waiting on its delayed navigation stays put after invalidation.
+  dialogs.length = 0;
+  await fresh(page, base, DEMO);
+  await page.route('**/sessions/1/close', route => route.fulfill({contentType:'application/json', body:'{"status":"closed"}'}));
+  await page.locator('#return-to-scenarios-btn').evaluate(button => { button.disabled = false; button.click(); });
+  await page.locator('#session-status-text').getByText(await text('teacher.chat_ended'), {exact:true}).waitFor({timeout:3000});
+  await synthetic(page, 'demo:role-changed', {browser_scope_id:'scope-a', generation:3, auth_epoch:3});
+  await page.waitForTimeout(900);
+  assert.deepEqual(dialogs, ['confirm']);
+  assert.equal(new URL(page.url()).pathname, '/chat');
+  page.off('dialog', onDialog);
+
+  // Repair r2 P2 control: normal mode still applies a mentor JSON result whose body settled as the chat locked.
+  await fresh(page, base, null, '/chat?stream&mentor=1');
+  await page.route('**/turns/stream', route => route.fulfill({contentType:'text/event-stream', body:sse([
+    ['run.accepted', {...run, seq:0, request_id:route.request().postDataJSON().request_id, teacher_message_id:10, status:'running'}],
+    ['output.completed', {...run, seq:1, status:'completed', message:{id:11, role:'student', content:'학생 응답'}}],
+  ])}));
+  await page.evaluate(() => {
+    const original = window.fetch;
+    window.fetch = async (url, options = {}) => {
+      if (!String(url).endsWith('/mentor/stream')) return original(url, options);
+      const response = new Response(JSON.stringify({run_id:'mentor-1', turn_id:'turn-1', turn_index:1,
+        request_id:JSON.parse(options.body).request_id, operation:'mentor', teacher_message_id:10,
+        status:'completed', result_kind:'no_intervention', message:null}), {headers:{'Content-Type':'application/json'}});
+      const json = response.json.bind(response);
+      response.json = async () => { const data = await json(); window.chatUI.end(); return data; };
+      return response;
+    };
+  });
+  await page.locator('#teacher-input').fill('질문');
+  await page.locator('#teacher-input').press('Enter');
+  await page.locator('.mentor-slot .mentor-run-status').getByText(await text('teacher.mentor_no_intervention'), {exact:true})
+    .waitFor({timeout:3000});
   return {pageErrors:[]};
 }

@@ -515,7 +515,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         lockChatUI(uiLanguage.t('teacher.chat_ended'));
 
         setTimeout(() => {
-          window.location.href = url;
+          if (!demoStopped) window.location.href = url;
         }, 500);
       } else {
         const error = await safeReadJson(response);
@@ -525,7 +525,8 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         window.location.href = url;
       }
     } catch (error) {
-      if (error && error.code === 'AUTH_EXPIRED') {
+      // An invalidation can abort the body after the headers arrived; the lock notice stays.
+      if (demoStopped || (error && error.code === 'AUTH_EXPIRED')) {
         return;
       }
       console.error('Network error closing session:', error);
@@ -675,7 +676,7 @@ const chatConfig = JSON.parse(document.getElementById("chat-config").textContent
         setAnalysisState('ready-to-analyze');
       }
     } catch (error) {
-      if (error && error.code === 'AUTH_EXPIRED') {
+      if (demoStopped || (error && error.code === 'AUTH_EXPIRED')) {
         return;
       }
       console.error('Failed to analyze session:', error);

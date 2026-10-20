@@ -154,11 +154,13 @@ export function mountMentorStream(ui) {
         turn.check.hidden = false;
       } else if (response.ok) {
         const data = await response.json();
-        if (turn.requestId !== requestId || leftPage || ui.isLocked()) return;
-        // A receipt for another request or namespace must not be applied.
-        if (!uiLanguage.receipt(token, data, requestId)) {
-          finish(turn, 'unknown', uiLanguage.t('demo.refresh_state'));
-          return;
+        // Demo captures only (normal has no signal): late or foreign receipts are dropped.
+        if (token.signal) {
+          if (turn.requestId !== requestId || leftPage || ui.isLocked()) return;
+          if (!uiLanguage.receipt(token, data, requestId)) {
+            finish(turn, 'unknown', uiLanguage.t('demo.refresh_state'));
+            return;
+          }
         }
         apply(turn, data);
         if (turn.running) {
@@ -241,10 +243,12 @@ export function mountMentorStream(ui) {
       }
       if (response.headers.get('Content-Type')?.includes('application/json')) {
         const data = await response.json();
-        if (turn.requestId !== requestId || leftPage || !turn.running || ui.isLocked()) return;
-        if (!uiLanguage.receipt(token, data, requestId)) {
-          finish(turn, 'unknown', uiLanguage.t('demo.refresh_state'));
-          return;
+        if (token.signal) {
+          if (turn.requestId !== requestId || leftPage || !turn.running || ui.isLocked()) return;
+          if (!uiLanguage.receipt(token, data, requestId)) {
+            finish(turn, 'unknown', uiLanguage.t('demo.refresh_state'));
+            return;
+          }
         }
         apply(turn, data);
       } else await readSSE(response.body, (type, data) => {

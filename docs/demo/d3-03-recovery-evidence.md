@@ -128,6 +128,25 @@ positive CSV now carries `prepared_example` and the configured versions.
 | New test, Green | `npm run test:browser -- browser_demo_d3_03_recovery` | 1/1 passed |
 | Filtered suites | `npm run test:browser -- demo_d3_03 student_recovery mentor_recovery chat sessions student_stream mentor_stream s4_ ai_ s2_ s5_ scenario_editor admin_scenarios language i18n s6_delete` | 85/85 passed, 953 s |
 
+## Review repair r2 (PR #243 review r2, P1 + P2)
+
+- P1 `chat.js`: a close or end/analyze whose body is aborted by invalidation
+  returns silently (no alert, no navigation), and the delayed close
+  navigation checks `demoStopped` before it runs.
+- P2 `student-stream.js`, `mentor-stream.js`: the post-decode attempt and
+  receipt guards run only for demo captures (`capture()` has a signal only in
+  demo); normal applies the decoded JSON exactly as before.
+
+Regression cases: close body aborted after the headers arrived, close
+invalidated while its 500 ms navigation is pending, and a normal-mode mentor
+JSON result that settles as the chat locks (still applied). Each one failed
+with only its own fix reverted.
+
+| Check (repair r2) | Command | Result |
+| --- | --- | --- |
+| Red, per case | recovery test with HEAD `chat.js` / timer guard removed / HEAD stream files | 3 expected failures (alert, `/scenarios`, mentor result not applied) |
+| Green and modules | `npm run test:browser -- demo_d3_03 student_stream mentor_stream student_recovery mentor_recovery` | 5/5 passed, 141 s |
+
 ## Not covered here
 
 - Real demo server, CSRF middleware, `demo-tour.js` answering

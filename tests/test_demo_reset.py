@@ -339,19 +339,6 @@ async def test_locked_retired_file_is_kept_until_unlocked(h):
     assert result.pending == 0 and not old_path.exists()
 
 
-async def test_reset_close_failure_is_db_locked_and_keeps_lease_and_file(h):
-    visitor = await ready(h)
-    snap = await h.visitors.snapshot(visitor)
-    h.request_db.close_error = True
-    response = await reset(h)
-    assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "DEMO_DB_LOCKED"
-    assert response.headers["retry-after"] == "1"
-    assert h.visitors.lease_count((snap.visitor_id, 1)) == 1
-    assert snap.ref.path.exists() and not snap.ref.factory.disposed
-    assert (await h.visitors.snapshot(visitor)).state == "reset_failed"
-
-
 async def test_storage_limit_rejects_reset_and_start_without_state_change(h):
     from dataclasses import replace
 
@@ -400,71 +387,7 @@ async def test_257th_distinct_request_id_is_limit_reached_without_eviction(h):
     assert not replay.leader
 
 
-# -- 7.2 caller disconnect and drain ----------------------------------------
-
-
-async def test_caller_disconnect_after_mark_still_completes_reset(
-    h, monkeypatch
-):
-    visitor = await ready(h)
-    entered, proceed = asyncio.Event(), asyncio.Event()
-    drain = h.lifecycle.drain
-
-    async def gated(scope, timeout_seconds):
-        entered.set()
-        await proceed.wait()
-        return await drain(scope, timeout_seconds)
-
-    monkeypatch.setattr(h.lifecycle, "drain", gated)
-    rid = uid()
-    caller = asyncio.create_task(reset(h, rid))
-    await entered.wait()  # mark, handoff and own-lease release are done
-    caller.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await caller
-    assert (await h.visitors.snapshot(visitor)).state == "resetting"
-    progress = await h.client.get("/demo/state", params={"request_id": rid})
-    assert progress.status_code == 202
-    proceed.set()
-    await asyncio.wait_for(asyncio.gather(*h.session._tasks.values()), 10)
-    await h.client.get("/demo/state")
-    result = await h.client.get("/demo/state", params={"request_id": rid})
-    assert result.status_code == 200
-    assert result.json()["result"]["state"] == "ready"
-    snap = await h.visitors.snapshot(visitor)
-    assert (snap.state, snap.generation, snap.auth_epoch) == ("ready", 2, 2)
-    assert h.visitors.clones == 2
-
-
-async def test_reset_alone_drains_and_separate_live_lease_times_out(h):
-    h.session.drain_seconds = 1
-    visitor = await ready(h)
-    # Only the request's own lease exists: no timeout (7.2).
-    alone = await reset(h)
-    assert alone.status_code == 200 and alone.json()["generation"] == 2
-    await h.client.get("/demo/state")
-    ctx = await live_context(h, visitor)
-    old_path = ctx.factory.path
-    began = time.monotonic()
-    rid = uid()
-    failed = await reset(h, rid, generation=2, epoch=2)
-    assert time.monotonic() - began >= 0.9
-    assert failed.status_code == 503
-    assert failed.json()["detail"]["code"] == "DEMO_DRAIN_TIMEOUT"
-    clones = h.visitors.clones
-    assert old_path.exists() and not ctx.factory.disposed
-    state = (await h.client.get("/demo/state")).json()
-    assert state["state"] == "reset_failed"
-    assert state["generation"] == state["auth_epoch"] == 3
-    await h.visitors.cleanup_retired()  # live lease: still not removable
-    assert old_path.exists() and not ctx.factory.disposed
-    await h.visitors.release_lease(ctx.lease)
-    result = await h.visitors.cleanup_retired()
-    assert not old_path.exists() and result.removed >= 1
-    retry = await reset(h, generation=3, epoch=3)
-    assert retry.status_code == 200
-    assert retry.json()["generation"] == retry.json()["auth_epoch"] == 3
-    assert h.visitors.clones == clones + 1
+# -- 7.2 caller disconnect and drain: see the real-app cases below ---------
 
 
 @pytest.mark.skip(reason="needs G4 / #198: stream/analysis/ledger reset race")
@@ -477,10 +400,17 @@ def test_reset_during_student_mentor_analysis_and_shield_ledger_writes():
     ...
 
 
-# -- 9.1 two tabs, real app (HTTP) ------------------------------------------
+# -- 7.2 / 9.1 real app (HTTP, DemoRequestDB) in a subprocess ---------------
 
 
-def run_case(case, tmp_path):
+# Short drain (7.2 timeout) and no background cleanup tick racing the cases.
+SLOW_DRAIN = {
+    "DEMO_DRAIN_SECONDS": "1",
+    "DEMO_CLEANUP_INTERVAL_SECONDS": "300",
+}
+
+
+def run_case(case, tmp_path, **extra):
     env = {
         key: value
         for key, value in os.environ.items()
@@ -510,6 +440,7 @@ def run_case(case, tmp_path):
         DEMO_CSRF_SECRET="c" * 48,
         SESSION_SECRET="n" * 48,
         PYTHONPATH=str(Path(__file__).resolve().parents[1]),
+        **extra,
     )
     result = subprocess.run(
         [sys.executable, __file__, case, str(tmp_path)],
@@ -520,6 +451,18 @@ def run_case(case, tmp_path):
         timeout=240,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_reset_close_failure_is_db_locked_and_keeps_lease_and_file(tmp_path):
+    run_case("close_failure", tmp_path, **SLOW_DRAIN)
+
+
+def test_caller_disconnect_after_mark_still_completes_reset(tmp_path):
+    run_case("disconnect", tmp_path, **SLOW_DRAIN)
+
+
+def test_reset_alone_drains_and_separate_live_lease_times_out(tmp_path):
+    run_case("live_lease", tmp_path, **SLOW_DRAIN)
 
 
 def test_two_tabs_send_different_reset_ids_concurrently(tmp_path):
@@ -589,6 +532,180 @@ async def case_two_tabs(tmp):
             "/demo/state", params={"request_id": loser_id}
         )
         assert unknown.status_code == 404  # rejected id leaves no receipt
+
+
+async def seed_app(app_tests, main):
+    app_tests.install_seed(
+        main, await app_tests.make_seed(Path(os.environ["DEMO_DATA_ROOT"]))
+    )
+
+
+def count_clones(visitors):
+    clones, clone = [], visitors.root.clone
+
+    async def counted(*args, **kwargs):
+        clones.append(1)
+        return await clone(*args, **kwargs)
+
+    visitors.root.clone = counted
+    return clones
+
+
+async def post_reset(app_tests, client, rid=None, *, generation, epoch):
+    return await client.post(
+        "/demo/reset",
+        json={
+            "request_id": rid or str(uuid4()),
+            "expected_generation": generation,
+            "expected_auth_epoch": epoch,
+            "confirm": True,
+        },
+        headers=app_tests.headers(client),
+    )
+
+
+async def case_close_failure(tmp):
+    import test_demo_d1_04_app as app_tests
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src import main
+
+    app = main.app
+    await seed_app(app_tests, main)
+    async with app.router.lifespan_context(app):
+        visitors = app.state.demo_request_db.visitors
+        client = app_tests.client_for(app)
+        state = await app_tests.start(client, "admin")
+        visitor = await app_tests.visitor_of(app, client)
+        snap = await visitors.snapshot(visitor)
+        close = AsyncSession.close
+
+        async def failing_close(self):
+            await close(self)  # no leak; the product must still keep the lease
+            busy = sqlite3.OperationalError("database is locked")
+            busy.sqlite_errorcode = sqlite3.SQLITE_BUSY
+            raise OperationalError("close", {}, busy)
+
+        # Persistent: the route guard retries the release after the reset fails.
+        AsyncSession.close = failing_close
+        try:
+            response = await post_reset(
+                app_tests,
+                client,
+                generation=state["generation"],
+                epoch=state["auth_epoch"],
+            )
+        finally:
+            AsyncSession.close = close
+        assert response.status_code == 503, response.text
+        assert app_tests.code(response) == "DEMO_DB_LOCKED"
+        assert response.headers["retry-after"] == "1"
+        assert visitors.lease_count((snap.visitor_id, 1)) == 1
+        assert snap.ref.path.exists() and not snap.ref.factory.disposed
+        assert (await visitors.snapshot(visitor)).state == "reset_failed"
+
+
+async def case_disconnect(tmp):
+    import test_demo_d1_04_app as app_tests
+
+    from src import main
+
+    app = main.app
+    await seed_app(app_tests, main)
+    async with app.router.lifespan_context(app):
+        runtime = app.state.demo_request_db
+        visitors, lifecycle = runtime.visitors, runtime.lifecycle
+        clones = count_clones(visitors)
+        client = app_tests.client_for(app)
+        state = await app_tests.start(client, "admin")
+        visitor = await app_tests.visitor_of(app, client)
+        entered, proceed = asyncio.Event(), asyncio.Event()
+        drain = lifecycle.drain
+
+        async def gated(scope, timeout_seconds):
+            entered.set()
+            await proceed.wait()
+            return await drain(scope, timeout_seconds)
+
+        lifecycle.drain = gated
+        try:
+            rid = str(uuid4())
+            caller = asyncio.create_task(
+                post_reset(
+                    app_tests,
+                    client,
+                    rid,
+                    generation=state["generation"],
+                    epoch=state["auth_epoch"],
+                )
+            )
+            # Mark, handoff and own-lease release are done.
+            await asyncio.wait_for(entered.wait(), 10)
+            caller.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await caller
+            assert (await visitors.snapshot(visitor)).state == "resetting"
+            progress = await client.get(
+                "/demo/state", params={"request_id": rid}
+            )
+            assert progress.status_code == 202
+        finally:
+            proceed.set()
+            del lifecycle.drain
+        tasks = app.state.demo_session._tasks.values()
+        await asyncio.wait_for(asyncio.gather(*tasks), 10)
+        await client.get("/demo/state")
+        result = await client.get("/demo/state", params={"request_id": rid})
+        assert result.status_code == 200
+        assert result.json()["result"]["state"] == "ready"
+        snap = await visitors.snapshot(visitor)
+        assert (snap.state, snap.generation, snap.auth_epoch) == ("ready", 2, 2)
+        assert len(clones) == 2  # one start + one reset clone
+
+
+async def case_live_lease(tmp):
+    import test_demo_d1_04_app as app_tests
+
+    from src import main
+
+    app = main.app
+    await seed_app(app_tests, main)
+    async with app.router.lifespan_context(app):
+        visitors = app.state.demo_request_db.visitors
+        client = app_tests.client_for(app)
+        state = await app_tests.start(client, "admin")
+        visitor = await app_tests.visitor_of(app, client)
+        # Only the request's own lease exists: no timeout (7.2).
+        alone = await post_reset(
+            app_tests, client, generation=1, epoch=state["auth_epoch"]
+        )
+        assert alone.status_code == 200 and alone.json()["generation"] == 2
+        state = (await client.get("/demo/state")).json()
+        snap = await visitors.snapshot(visitor)
+        lease = await visitors.acquire_lease(snap.ref, snap.auth_epoch)
+        old_path = snap.ref.path
+        began = time.monotonic()
+        failed = await post_reset(
+            app_tests, client, generation=2, epoch=state["auth_epoch"]
+        )
+        assert time.monotonic() - began >= 0.9
+        assert failed.status_code == 503, failed.text
+        assert app_tests.code(failed) == "DEMO_DRAIN_TIMEOUT"
+        clones = count_clones(visitors)
+        assert old_path.exists() and not snap.ref.factory.disposed
+        state = (await client.get("/demo/state")).json()
+        assert state["state"] == "reset_failed"
+        assert state["generation"] == state["auth_epoch"] == 3
+        await visitors.cleanup_retired()  # live lease: still not removable
+        assert old_path.exists() and not snap.ref.factory.disposed
+        await visitors.release_lease(lease)
+        result = await visitors.cleanup_retired()
+        assert not old_path.exists() and result.removed >= 1
+        retry = await post_reset(app_tests, client, generation=3, epoch=3)
+        assert retry.status_code == 200, retry.text
+        assert retry.json()["generation"] == retry.json()["auth_epoch"] == 3
+        assert len(clones) == 1
 
 
 if __name__ == "__main__":

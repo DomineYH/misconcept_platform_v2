@@ -185,8 +185,20 @@ def run_case(case, tmp_path, **extra):
     env = {
         key: value
         for key, value in os.environ.items()
-        if not key.startswith(("DEMO_", "ANTHROPIC_", "OPENAI_", "GOOGLE_"))
-        and key not in {"APP_MODE", "DATABASE_URL", "TESTING", "SESSION_SECRET"}
+        if not key.startswith(
+            ("DEMO_", "ANTHROPIC_", "OPENAI_", "AZURE_", "GOOGLE_", "GEMINI_")
+        )
+        and key
+        not in {
+            "APP_MODE",
+            "DATABASE_URL",
+            "TESTING",
+            "SESSION_SECRET",
+            "ENV",
+            "BOOTSTRAP_ADMIN_ON_STARTUP",
+            "PROVIDER_SECRET_ENCRYPTION_KEY",
+            "PROVIDER_SECRET_ENCRYPTION_KEY_VERSION",
+        }
     }
     env.update(
         APP_MODE="demo",

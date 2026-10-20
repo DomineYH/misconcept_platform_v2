@@ -6,6 +6,7 @@ run THIS file as the script (one process per group to keep boot costs low).
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -26,9 +27,12 @@ from test_demo_d1_04_app import (
     visitor_files,
     wait_ready,
 )
-from test_provider_connections import api as provider_api
 
-api = provider_api  # fixture re-export, as test_model_management does
+if __name__ != "__main__":
+    # Imports src.main; as a script it must wait for the egress guard.
+    from test_provider_connections import api as provider_api
+
+    api = provider_api  # fixture re-export, as test_model_management does
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = "https://demo.test"
 CLEAN_PREFIXES = (
@@ -626,6 +630,38 @@ async def case_csrf(tmp):
         assert_demo_cookies(response)
         assert a.cookies.get("demo_csrftoken")
 
+        # §9.1: reset X, then reset Y, then re-read X: the receipt is readable
+        # and historical, but Y's mapping, cookies and role do not change.
+        current = response.json()
+        second = {
+            "request_id": str(uuid4()),
+            "expected_generation": current["generation"],
+            "expected_auth_epoch": current["auth_epoch"],
+            "confirm": True,
+        }
+        response = await a.post("/demo/reset", json=second, headers=headers(a))
+        assert response.status_code in (200, 202), response.text
+        await wait_ready(a, current["generation"] + 1)
+        response = await a.get("/demo/state")  # syncs cookies to Y
+        assert response.status_code == 200
+        after_y = snapshot(response.json())
+        assert after_y["generation"] == current["generation"] + 1
+        jar = dict(a.cookies)
+        response = await a.get(
+            "/demo/state", params={"request_id": later_reset["request_id"]}
+        )
+        assert response.status_code == 200, response.text
+        receipt = response.json()
+        assert receipt["historical"] is True
+        assert receipt["operation"] == "reset"
+        assert receipt["request_id"] == later_reset["request_id"]
+        assert receipt["result"]["next_url"] is None
+        assert receipt["result"]["generation"] < after_y["generation"]
+        assert snapshot(receipt["current"]) == after_y
+        assert_no_cookie(response)
+        assert dict(a.cookies) == jar
+        assert snapshot((await a.get("/demo/state")).json()) == after_y
+
 
 async def keep_real_tables(spec, tmp):
     """Swap make_seed's synthetic session tables for the migrated ones.
@@ -633,8 +669,6 @@ async def keep_real_tables(spec, tmp):
     The shared stand-in omits columns the real delete routes query (teacher_id
     ...); #197's product seed keeps them. Removal when #197 lands.
     """
-    import sqlite3
-
     from sqlalchemy.ext.asyncio import create_async_engine
 
     from src.db.migrations.migrate import run_all_migrations
@@ -780,15 +814,18 @@ async def case_auth(tmp):
         assert code(response) == "DEMO_ROLE_DELETED"
 
 
+NEW, CHILD, GEN = str(uuid4()), str(uuid4()), str(uuid4())
+PASSWORD = {"expected_version": 1, "current_password": "x" * 12}
+ACTION = {"request_id": NEW, "expected_version": 1}
+CONV = f"/admin/comparison-conversations/{NEW}"
+# Every POST of the §20 "forbidden" table (paths match src/api/routes/*).
 DANGEROUS = (
     (
         "/admin/ai/providers/openai/key",
-        {
-            "expected_version": 1,
-            "current_password": "x" * 12,
-            "api_key": "sk-demo-key-123456",
-        },
+        {**PASSWORD, "api_key": "sk-demo-key-123456"},
     ),
+    ("/admin/ai/providers/openai/enabled", {**PASSWORD, "enabled": True}),
+    ("/admin/ai/providers/openai/delete", PASSWORD),
     ("/admin/ai/providers/openai/catalog", {"expected_version": 1}),
     (
         "/admin/ai/models",
@@ -798,20 +835,72 @@ DANGEROUS = (
             "display_name": "Injected",
         },
     ),
+    ("/admin/ai/models/1/update", {"expected_version": 1, "enabled": True}),
+    ("/admin/ai/models/1/probes", {"request_id": NEW}),
     ("/admin/ai/settings/update", {"expected_version": 1}),
-    ("/admin/comparisons", {}),
-    ("/admin/comparison-conversations", {}),
+    ("/admin/comparisons", {"request_id": NEW, "message": "hi"}),
+    (
+        f"/admin/comparisons/{NEW}/panels/a/retry",
+        {"request_id": NEW, "generation_id": GEN},
+    ),
+    ("/admin/comparison-conversations", {"request_id": NEW}),
+    (f"{CONV}/turn", {**ACTION, "message": "hello"}),
+    (
+        f"{CONV}/adopt",
+        {**ACTION, "child_id": CHILD, "panel_id": "a", "generation_id": GEN},
+    ),
+    (f"{CONV}/mentor", {**ACTION, "target_turn_id": GEN, "trigger": "manual"}),
+    (f"{CONV}/end", ACTION),
+    (
+        f"{CONV}/children/{CHILD}/panels/a/retry",
+        {**ACTION, "generation_id": GEN},
+    ),
 )
+# Rows a forbidden route could leave behind: connections, models, probes,
+# comparisons, the usage ledger and settings.
+GUARDED_TABLES = (
+    "provider_connection",
+    "provider_audit_log",
+    "model_config",
+    "model_probe",
+    "comparison_run",
+    "comparison_conversation",
+    "generation_run",
+    "api_usage_log",
+    "app_setting",
+)
+
+
+def guarded_counts(root):
+    """Row counts of the single visitor DB, opened read-only."""
+    (name,) = visitor_files(root)
+    db = sqlite3.connect(f"file:{root / name}?mode=ro", uri=True)
+    try:
+        present = {
+            row[0]
+            for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert present >= set(GUARDED_TABLES), set(GUARDED_TABLES) - present
+        return {
+            table: db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+            for table in GUARDED_TABLES
+        }
+    finally:
+        db.close()
 
 
 async def case_dangerous(tmp):
     from src import main
 
     app = main.app
-    install_seed(main, await make_seed(Path(os.environ["DEMO_DATA_ROOT"])))
+    root = Path(os.environ["DEMO_DATA_ROOT"])
+    install_seed(main, await make_seed(root))
     async with app.router.lifespan_context(app):
         admin = client_for(app)
         state = await start(admin, "admin")
+        before = guarded_counts(root)
         failures = []
         for path, body in DANGEROUS:
             response = await admin.post(
@@ -826,6 +915,7 @@ async def case_dangerous(tmp):
                 )
         print("DANGEROUS", failures)
         assert not failures, failures
+        assert guarded_counts(root) == before
 
 
 async def case_egress(tmp):
@@ -879,11 +969,17 @@ if __name__ == "__main__":
 
     case, tmp = sys.argv[1], Path(sys.argv[2])
     install_egress_guard()
-    from src import main as app_main  # noqa: F401
 
     async def run():
         try:
             await prove_egress_guard()
+            # The guard is proven before the app (or a provider) is imported.
+            loaded = [
+                m for m in sys.modules if m == "src" or m.startswith("src.")
+            ]
+            assert not loaded, loaded
+            import src.main  # noqa: F401
+
             await globals()["case_" + case](tmp)
         finally:
             for client in CLIENTS:

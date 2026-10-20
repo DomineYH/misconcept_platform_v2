@@ -242,6 +242,11 @@ async def session_detail(
 
     if session.deleted_at is None:
         await db.refresh(session, ["messages"])
+    analysis = (
+        await _load_analysis_response(session_id, db, admin=True)
+        if session.deleted_at is None and session.ended_at
+        else None
+    )
 
     return templates.TemplateResponse(
         "partials/session_detail.html",
@@ -253,10 +258,13 @@ async def session_detail(
                 {
                     "analysis_result_url": f"/admin/sessions/{session_id}/analysis"
                 }
-                if session.deleted_at is None
-                and session.ended_at
-                and await _load_analysis_response(session_id, db, admin=True)
-                is not None
+                if analysis is not None
+                else {}
+            ),
+            # §19 demo origin; normal reports carry none, so nothing is added.
+            **(
+                {"provenance": analysis["provenance"]}
+                if analysis and "provenance" in analysis
                 else {}
             ),
         },

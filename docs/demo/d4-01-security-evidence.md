@@ -6,6 +6,24 @@
 
 아직 실행하지 않았다. #202가 후보 SHA를 고정하면 별도 order로 세 파일과 README 전체 명령을 그 SHA에서 실행해 여기에 기록한다.
 
+## 실행 P4 — #248(D3/D4) 병합 뒤 재실행 (2026-10-20, 작성 중 확인)
+
+- 기준: origin/main `190d74b`(#248: `admin_scenarios.py` D3 envelope, `admin_session_actions.py` D4 `demo_adapter`)를 `feat/203-final`에 병합한 `1df03bf`(충돌 없음). 세 test 파일은 main 변경에 포함되지 않았다. 검사한 tree = commit한 tree.
+- 환경·명령: P2/P3와 같다(ext4 `git clone --shared`, Python 3.12.3, pytest 8.4.2, worker 1개, 파일마다 별도 프로세스, 직렬).
+
+| 파일 | 결과 | 시간 |
+| --- | --- | --- |
+| `tests/test_demo_security.py` | 17 passed | 76.2 s |
+| `tests/test_demo_isolation.py` | 7 passed | 39.4 s |
+| `tests/test_demo_reset.py` | not run: P3 결과 재사용(25 passed, `1905c99`) | — |
+
+skip 0, xfail 0.
+
+- `test_demo_runs_make_no_external_calls` 통과: 관리자 `analyze_regenerate`까지 모든 run 종류가 로컬 adapter로 끝나고 외부 시도 0(D4 해소).
+- `test_demo_rejects_injected_external_model` 통과: 시나리오 API 외부 모델 주입이 422 `DEMO_UNSUPPORTED_CONFIGURATION`(D3 해소). 검사 기대값은 바꾸지 않았다.
+- isolation은 변경된 `admin_session_actions.py`의 관리자 세션 삭제 경로를 쓰므로 함께 재실행했다. reset은 관리자 경로를 쓰지 않고(`/admin/` 호출 0) test 파일도 바뀌지 않아 재실행하지 않았다. 세 파일 전체 실행은 G4 후보 SHA에서 한다.
+- 남은 제품 결함: 없음(D1·D1b·D3·D4 모두 해소).
+
 ## 실행 P3 — #198 수정 뒤 재실행 (2026-10-20, 작성 중 확인)
 
 - 기준: `feat/203-final`에 origin/main `0cc3fab`(#250 seed provenance)와 origin/feat/198-g3 `ae8c76d`(#198 PR4: D1·D1b 수정)를 병합(`b28ccc1`), 그 위 test 수정 commit `7013229`에서 검사. 검사한 tree = commit한 tree. `ae8c76d`는 이 시점 origin/main에 아직 없다.

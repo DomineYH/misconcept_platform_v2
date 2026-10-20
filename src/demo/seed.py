@@ -41,7 +41,7 @@ INPUTS = dict(
 VOLATILE = {"user": {"password_hash"}}
 # The builder's exact logical rows; startup rejects any other seed content.
 SEED_LOGICAL_SHA256 = (
-    "8d3fa9dde40a9d65273868a20271cdf767665e27c54384a54c74e575b3342980"
+    "93808c612ae6496a31f100dde1ce5c6780a3a6fd8cd136b82bc871eb6d746141"
 )
 # Contract §8: what the demo seed stores in AppSetting.
 DEMO_LIMITS = dict(total=2, openai=2, anthropic=2, google=2, admin=1, demo=2)
@@ -162,6 +162,7 @@ async def _populate(db, manifest, manifest_sha256):
 
     from src.api.schemas.ai_settings import CallLimits, CallTimeouts
     from src.api.schemas.scenario_config import ScenarioConfig
+    from src.demo.session import Provenance
     from src.models import (
         ApiUsageLog,
         AppSetting,
@@ -531,6 +532,8 @@ async def _populate(db, manifest, manifest_sha256):
         generated_at=_at(401).isoformat(),
         error_code=None,
         outcome="ok",
+        # §19: what a visitor run stores from the adapter, fixed as seed.
+        provenance=Provenance(record_origin="seed_prepared").model_dump(),
     )
     run = GenerationRun(
         id=run_id,

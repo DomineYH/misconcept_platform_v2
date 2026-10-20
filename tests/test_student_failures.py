@@ -196,9 +196,12 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
     from test_student_generation import FakeStream
 
     from src.services import student_stream
+    from src.services.call_policy import CallDeadline
 
     class ReasoningStream(FakeStream):
         async def iterate(self):
+            budget, timer = armed
+            timer.reschedule(asyncio.get_running_loop().time() + budget)
             for _ in range(1000):
                 await asyncio.sleep(0.005)
                 yield event(
@@ -212,6 +215,17 @@ async def test_hidden_reasoning_does_not_suppress_heartbeat_or_reset_deadline(
     setting.timeouts_json = {**setting.timeouts_json, "student_first_output": 1}
     await data.db.commit()
     monkeypatch.setattr(student_stream, "HEARTBEAT_SECONDS", 0.02)
+    first = CallDeadline.first
+    armed = []
+
+    def first_unarmed(self):
+        # Budget starts at the first stream read; SDK/setup latency can't spend it.
+        budget, self.first_ends = self.first_ends - self.started, None
+        timer = first(self)
+        armed.extend((budget, timer))
+        return timer
+
+    monkeypatch.setattr(CallDeadline, "first", first_unarmed)
     student.stream = ReasoningStream([])
     student.responses.create.return_value = student.stream
     login(client, data.owner)

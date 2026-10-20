@@ -10,6 +10,12 @@ from src.services.model_capabilities import capabilities
 def provider_parameters(request):
     from src.services.call_execution import PROVIDER_ADAPTERS
 
+    if request.provider == "demo":
+        # The fixed local adapter has no SDK body; plans estimate its input.
+        return dict(
+            system_instruction=request.system_instruction,
+            messages=request.messages,
+        )
     return PROVIDER_ADAPTERS[request.provider][1].parameters(request)
 
 

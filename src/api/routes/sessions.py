@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, get_db_session, templates
+from src.api.routes.session_analysis import demo_scope, guarded_db
 from src.api.routes.session_analysis import router as analysis_router
 from src.api.routes.session_helpers import (
     load_session,
@@ -25,7 +26,7 @@ from src.api.routes.session_messages import router as messages_router
 from src.api.routes.student_generation import router as student_router
 from src.config import config
 from src.i18n import display_language
-from src.models import Message, User
+from src.models import Message, Session, User
 from src.services.analysis_results import load_analysis_response
 from src.services.lesson_snapshots import start_lesson
 from src.services.session_history import session_display
@@ -142,9 +143,17 @@ async def close_session(
         session_id, user, db, language=display_language(request)
     )
 
-    ended_at, already_ended = await mark_session_ended(
-        session, db, force=True, language=display_language(request)
-    )
+    # Demo: the visitor scope signals its live runs; normal is unchanged.
+    async with guarded_db(request, db) as write_db:
+        if write_db is not db:
+            session = await write_db.get(Session, session.id)
+        ended_at, already_ended = await mark_session_ended(
+            session,
+            write_db,
+            force=True,
+            language=display_language(request),
+            **demo_scope(request),
+        )
 
     return CloseSessionResponse(
         status="ended",

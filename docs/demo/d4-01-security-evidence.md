@@ -20,6 +20,8 @@
 
 skip 0, xfail 0.
 
+- 최종 기준 재실행: `ae8c76d`가 origin/main(`23bbfba` 이후)에 들어온 뒤 origin/main을 다시 병합(`1905c99`, 다른 test 두 파일의 flake 수정만 추가)하고 같은 명령으로 재실행했다. isolation 7 passed(42.8 s), reset 25 passed(159.2 s), security 15 passed·2 failed(58.2 s, D4·D3). 결과 동일.
+
 - D1/D1b 해소: 교사 종료·분석이 202·`ok`로 끝나고 격리 run 원장·교사 CSV 두 사례가 통과한다.
 - 분석 commit 경합: `[analysis_commit-reset_first]`·`[analysis_commit-write_first]` 둘 다 통과. `parked_or_done`은 barrier 도착(`gate.arrived`)을 기다린 뒤에만 진행하므로 두 지점(파이프라인 결과 직후·`execute_analysis` 완료 직후)에 실제로 도달했다.
 - 검사 결함 수정(`7013229`): ① 경합 표의 분석 쓰기 먼저 상태를 `completed`→`ok`(분석 run 종료 상태는 `ok`/`degraded`, `analysis_pipeline.py:158`). ② egress 사례의 명시 retry를 별도 세션으로 옮김. 같은 세션에 테스트가 직접 넣은 실패 턴(세 번째 교사 메시지, `datetime('now')` 시각)이 §18 시각 순서·준비된 두 턴 바인딩과 맞지 않아 분석이 `invalid_reference`로 끝났다. 단언은 줄이지 않았다(중간 원장 증가 확인만 retry 앞 시점 값 student 2·mentor 2로 옮김, 최종 student 4·mentor 2·analysis 2 유지).

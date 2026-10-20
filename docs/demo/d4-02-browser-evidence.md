@@ -33,22 +33,18 @@
 
 | 모듈 | 결과 | 범위 |
 | --- | --- | --- |
-| `browser_demo_isolation.mjs` | passed (67.4 s) | 실행 1 항목 + 아래 추가 항목 |
+| `browser_demo_isolation.mjs` | 시도 2a failed, 시도 2b passed(67.4 s, `6d77b95`) | 실행 1 항목 + 아래 추가 항목 |
 | `browser_demo_journey.mjs` | not run: 모든 case pending(needs G4 / #202). 러너의 PASS는 pending 출력뿐 | A 여섯 단계·CSV |
 | `browser_demo_recovery.mjs` | not run: 모든 case pending(needs G4 / #202). 러너의 PASS는 pending 출력뿐 | I 복구·언어·접근성 |
 
-seed receipt(#197 `build()`, helper가 매 기동 시 새로 빌드, `RECEIPT` 행):
+helper는 매 기동 시 seed를 새로 빌드하므로 `seed_sha256`(물리 bytes)은 실행마다 다르고 `logical_data_sha256`·`manifest_sha256`은 같다. 각 실행의 receipt는 그 실행의 log `RECEIPT` 행이다. 공통 값: `db_schema_version` `037_demo_provider.sql`, `manifest_sha256` `60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516`, `logical_data_sha256` `8d3fa9dde40a9d65273868a20271cdf767665e27c54384a54c74e575b3342980`.
 
-| 필드 | 값 |
-| --- | --- |
-| `source_commit` | `56d65b0e9fbcf68128ae4c06560132f7955f86d6` |
-| `db_schema_version` | `037_demo_provider.sql` |
-| `manifest_sha256` | `60cc355c4a5cee0cf1316bb97d8c52b09a03e39bb242514f66062e34159c0516` |
-| `seed_sha256` | `557c6b0809f153f1c0366dea7870b9e5e13df22b72f9f9982fb01bca3001c632` |
-| `logical_data_sha256` | `8d3fa9dde40a9d65273868a20271cdf767665e27c54384a54c74e575b3342980` |
-| `command` | `python -m src.demo.seed build --out <tmp>/seed` |
+| 시도 | 결과 | `seed_sha256` | `source_commit` | 빌드 방식 | log |
+| --- | --- | --- | --- | --- | --- |
+| 2a | failed: `/admin/sessions/1/analysis` 503(아래 결함) | `557c6b0809f153f1c0366dea7870b9e5e13df22b72f9f9982fb01bca3001c632` | `56d65b0` | in-process `build()` | `logs-w195/204/browser-isolation-1.log` |
+| 2b | passed 67.4 s | `4f9c47a7f17450cb25625d5878dcf4fe3dbd60b73885ce2beda517613f4064cb` | `56d65b0` | in-process `build()` | `logs-w195/204/browser-isolation-2.log` |
 
-`migration_set_sha256`은 receipt 필드가 아니며 #197 manifest가 검증한다(`build()`가 설치 migration과 다르면 실패).
+`migration_set_sha256`은 receipt 필드가 아니며 #197 manifest가 검증한다(`build()`가 설치 migration과 다르면 실패). 2a/2b의 receipt `command`는 실제 실행이 아닌 기록용 문자열이었다(리뷰 지적) — 실행 3부터 CLI를 실제로 실행한다.
 
 실행 2에서 추가로 확인한 것(#197 seed, seed_refs admin=1·teacher=2·completed_session=1):
 
@@ -57,9 +53,18 @@ seed receipt(#197 `build()`, helper가 매 기동 시 새로 빌드, `RECEIPT` �
 - B가 A에서 새로 만든 사용자 ID로 `POST /admin/users/<id>/update` → 404 `DEMO_RESOURCE_NOT_FOUND`, no-store, Set-Cookie 없음, 본문에 A 자료 없음. 그 뒤에도 B 불변.
 - F(§9·§22): A에서 삭제된 seed 교사로 role 전환 → 409 `DEMO_ROLE_DELETED`. 관리자 자기 삭제(`/admin/users/1/delete`) → 400(기존 제한), `/metrics` 총계와 role/auth_epoch 불변.
 
+## 실행 3 — review repair r1 (2026-10-20, 작성 중 확인)
+
+- 변경: helper가 #197 seed CLI `python -m src.demo.seed build --out <tmp>/seed`를 격리 환경(scrub된 env, `APP_MODE=demo`) 하위 프로세스로 실제 실행하고 exit status 0을 확인한 뒤 그 stdout receipt를 그대로 출력한다(일회용 경로만 `<tmp>`로 가림). 모듈은 개행으로 끝난 `RECEIPT`/`READY` 행만 해석하고, 깨진 JSON은 startup 실패로 거절하며 helper를 정리한다. #198 분석 상세 검사는 실행 가능한 case로 남기고 명시적으로 skip한다(기대 status 200 유지).
+- 기준: `feat/204-browser` `6d77b95` + 이 수정(같은 commit으로 기록). 명령: `flock /tmp/mp2-heavy.lock -c 'npm run test:browser -- browser_demo_isolation'`.
+- 결과: passed (21.5 s), log `logs-w195/204/browser-isolation-r1.log`. 출력: `SKIP B: B's admin analysis detail … product defect -> #198 …`.
+- receipt(CLI 실제 실행분): `seed_sha256` `94da6ace5b1a211e07026f3b0ac54c07a9a90b4ec6e52023f7f23b4221b79427`, `source_commit` `6d77b9575b44ed1cade8d0628a21ccdc40283cc8`, `command` `python -m src.demo.seed build --out <tmp>/seed`, 나머지는 위 공통 값과 같다.
+- skip case 확인: 같은 모듈의 임시 사본에서 skip만 끈 실행은 `503 !== 200`으로 실패했다(`logs-w195/204/browser-isolation-r1-unskipped.log`, 사본은 삭제). 즉 검사는 보존되어 있고 #198 수정 전에는 여전히 빨갛다.
+- 시작 protocol 진단(브라우저 없음): 가짜 helper로 분할 수신 receipt는 정상 해석, 깨진 JSON과 receipt 부재는 promise 거절, uncaught 예외 0(`logs-w195/204/receipt-diag.log`).
+
 ## 작성 중 대체(최종 evidence 전에 제거)
 
-1. seed 바인딩: `src.main.demo_seed`가 main에서 아직 CONFIGURATION_INVALID다(`src/main.py:200`, #194 S4 = PR #242 검토 중). helper는 #197 `build()`로 실제 product seed를 새로 만들고 `src.main.demo_seed`를 `load_seed(seed_dir)`로 바인딩한다(brief의 대체 ①). 실행 1의 합성 seed(`make_seed`)는 제거했다. #194 S4가 병합되면 helper의 바인딩도 제거한다.
+1. seed 바인딩: `src.main.demo_seed`가 main에서 아직 CONFIGURATION_INVALID다(`src/main.py:200`, #194 S4 = PR #242 검토 중). helper는 #197 seed CLI로 실제 product seed를 새로 만들고 `src.main.demo_seed`를 `load_seed(seed_dir)`로 바인딩한다(brief의 대체 ①). 실행 1의 합성 seed(`make_seed`)는 제거했다. #194 S4가 병합되면 helper의 바인딩도 제거한다.
 2. 만료 재진입용 helper 시계(`VisitorRegistry.clock`): 아직 없음. recovery 모듈 작성 때 추가한다.
 
 ## Pending
@@ -70,7 +75,7 @@ needs G4 / #202:
 - I: 새로고침·뒤로/앞으로·BFCache, 중복 클릭, 투어 닫기/건너뛰기/재개, 두 탭 stale, 한/영 전환, 390×844·키보드·200% 확대, 만료 재진입.
 
 product defect -> #198:
-- B: B의 seed 세션 관리자 분석 상세가 A 편집 뒤 불변(아래 결함 때문에 확인 불가).
+- B: B의 seed 세션 관리자 분석 상세가 A 편집 뒤 불변. `ANALYSIS_DETAIL` case(요청·status 200·전후 비교)로 남아 있고 `skip` 문자열을 null로 바꾸면 실행된다.
 
 ## 발견한 제품 결함
 

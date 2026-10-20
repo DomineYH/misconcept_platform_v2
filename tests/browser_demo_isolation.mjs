@@ -10,9 +10,17 @@ const PENDING = [
   'B: A runs a dialogue and its analysis; B lists/totals/detail unchanged',
   "B: A's run ID requested from B -> 404 DEMO_RESOURCE_NOT_FOUND without body"
 ];
-// Product gap, not G4: GET /admin/sessions/{id}/analysis is 503 DEMO_CONFIGURATION_INVALID in demo because
-// load_plan reaches context_budget.provider_parameters, which has no "demo" adapter (KeyError, src/services/context_budget.py:13).
-const PENDING_198 = ["B: B's admin analysis detail of the seed session unchanged by A's edits"];
+// Kept executable; set skip to null once #198 adds the context_budget demo branch.
+const ANALYSIS_DETAIL = {
+  name: "B: B's admin analysis detail of the seed session unchanged by A's edits",
+  skip: 'product defect -> #198: GET /admin/sessions/{id}/analysis is 503 DEMO_CONFIGURATION_INVALID in demo; ' +
+    'load_plan reaches context_budget.provider_parameters, which has no "demo" adapter (KeyError, src/services/context_budget.py:13)',
+  async read(get) {
+    const response = await get(`/admin/sessions/${SEED.session}/analysis`);
+    assert.equal(response.status(), 200, await response.text());
+    return response.json();
+  }
+};
 // #197 manifest seed_refs (src/demo/fixtures/manifest.json).
 const SEED = {admin: 1, teacher: 2, session: 1};
 const SUFFIX = ['demo_response_source', 'demo_external_ai_called', 'demo_content_version', 'demo_fixture_version', 'demo_record_origin'];
@@ -22,34 +30,44 @@ async function server(args = []) {
     stdio: ['pipe', 'pipe', 'pipe'], env: process.env
   });
   let log = '';
+  let out = '';
   let receipt = null;
   const closed = new Promise(resolve => child.once('close', resolve));
-  const port = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`helper not READY in 180s: ${log}`)), 180000);
-    const read = chunk => {
-      log += chunk;
-      const seed = /^RECEIPT (.+)$/m.exec(log);
-      if (seed) receipt = JSON.parse(seed[1]);
-      const match = /^READY (\d+)$/m.exec(log);
-      if (match) { clearTimeout(timer); resolve(Number(match[1])); }
-    };
-    child.stdout.on('data', read);
-    child.stderr.on('data', read);
-    child.once('error', reject);
-    closed.then(code => reject(new Error(`helper exited ${code}: ${log}`)));
-  });
-  return {
-    base: `http://127.0.0.1:${port}`,
-    receipt,
-    async stop() {
-      child.stdin.end();
-      const code = await Promise.race([closed, new Promise(resolve => setTimeout(resolve, 20000, 'timeout'))]);
-      if (code === 'timeout') child.kill('SIGKILL');
-      assert.equal(code, 0, `helper exit: ${log}`);
-      assert(!/External (network|AI SDK) forbidden/.test(log), `egress attempted: ${log}`);
-      return log;
-    }
-  };
+  async function stop() {
+    child.stdin.end();
+    const code = await Promise.race([closed, new Promise(resolve => setTimeout(resolve, 20000, 'timeout'))]);
+    if (code === 'timeout') child.kill('SIGKILL');
+    assert.equal(code, 0, `helper exit: ${log}`);
+    assert(!/External (network|AI SDK) forbidden/.test(log), `egress attempted: ${log}`);
+    return log;
+  }
+  try {
+    const port = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`helper not READY in 180s: ${log}`)), 180000);
+      const fail = error => { clearTimeout(timer); reject(error); };
+      child.stdout.on('data', chunk => {
+        log += chunk;
+        out += chunk;
+        // Protocol lines only count once complete: a chunk may end mid-line.
+        const seed = /^RECEIPT (.*)\n/m.exec(out);
+        if (seed && receipt === null) {
+          try { receipt = JSON.parse(seed[1]); } catch (error) { fail(new Error(`malformed RECEIPT: ${error.message}`)); return; }
+        }
+        const match = /^READY (\d+)\n/m.exec(out);
+        if (match) { clearTimeout(timer); resolve(Number(match[1])); }
+      });
+      child.stderr.on('data', chunk => { log += chunk; });
+      child.once('error', fail);
+      closed.then(code => fail(new Error(`helper exited ${code}: ${log}`)));
+    });
+    // The seed build receipt for the evidence (§17); demo prints it before READY.
+    if (!args.includes('--normal')) assert(receipt?.seed_sha256 && receipt.manifest_sha256, `seed receipt: ${log}`);
+    return {base: `http://127.0.0.1:${port}`, receipt, stop};
+  } catch (error) {
+    child.kill('SIGKILL');
+    await closed;
+    throw error;
+  }
 }
 
 function setCookies(headers) {
@@ -235,6 +253,7 @@ async function demoChecks(browser, {base}, pageErrors) {
     return {seen, csv: await csv.text()};
   };
   const bBefore = await view();
+  const detailBefore = ANALYSIS_DETAIL.skip ? null : await ANALYSIS_DETAIL.read(bGet);
   // §23: the seed's completed session exports 27 admin + 5 suffix columns, marked as prepared.
   const header = bBefore.csv.replace(/^\uFEFF/, '').split(/\r?\n/)[0].split(',');
   assert.equal(header.length, 32, header.join(','));
@@ -262,6 +281,8 @@ async function demoChecks(browser, {base}, pageErrors) {
   await expectCode(missing, 404, 'DEMO_RESOURCE_NOT_FOUND');
   assert(!/A-only|a_only|A-renamed/.test(missingText), missingText);
   assert.deepEqual(await view(), bBefore, 'B unchanged after the refused request');
+  if (ANALYSIS_DETAIL.skip) console.log(`SKIP ${ANALYSIS_DETAIL.name}: ${ANALYSIS_DETAIL.skip}`);
+  else assert.deepEqual(await ANALYSIS_DETAIL.read(bGet), detailBefore, ANALYSIS_DETAIL.name);
 
   // §9/§22: switching to the deleted seed teacher is refused; the administrator cannot delete itself.
   const aNow = await state(pages.A);
@@ -302,19 +323,23 @@ async function normalChecks(browser, {base}) {
 
 export default async function check() {
   for (const name of PENDING) console.log(`PENDING ${name}: needs G4 / #202`);
-  for (const name of PENDING_198) console.log(`PENDING ${name}: product defect -> #198 (context_budget demo branch)`);
   const pageErrors = [];
-  const [demo, normal] = await Promise.all([server(), server(['--normal'])]);
-  const browser = await chromium.launch({headless: true});
+  const servers = await Promise.allSettled([server(), server(['--normal'])]);
+  const failed = servers.find(result => result.status === 'rejected');
+  if (failed) {
+    await Promise.allSettled(servers.filter(result => result.status === 'fulfilled').map(result => result.value.stop()));
+    throw failed.reason;
+  }
+  const [demo, normal] = servers.map(result => result.value);
+  let browser;
   let values = [];
-  // The seed build receipt for the evidence (§17); the helper prints it before READY.
-  assert(demo.receipt?.seed_sha256 && demo.receipt.manifest_sha256, 'seed receipt');
-  console.log(`RECEIPT ${JSON.stringify(demo.receipt)}`);
   try {
+    console.log(`RECEIPT ${JSON.stringify(demo.receipt)}`);
+    browser = await chromium.launch({headless: true});
     values = await demoChecks(browser, demo, pageErrors);
     await normalChecks(browser, normal);
   } finally {
-    await browser.close();
+    await browser?.close();
     const stopped = await Promise.allSettled([demo.stop(), normal.stop()]);
     for (const result of stopped) if (result.status === 'rejected') throw result.reason;
     const logs = stopped.map(result => result.value).join('\n');

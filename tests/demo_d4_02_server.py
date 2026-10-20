@@ -15,6 +15,7 @@ import json
 import os
 import secrets
 import socket
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -94,13 +95,29 @@ async def serve(listener, normal):
     from src import main
 
     if not normal:
-        from src.demo.seed import build, load_seed
+        from src.demo.seed import load_seed
 
-        # The #197 product seed, built fresh; its receipt goes to the evidence.
+        # The #197 product seed, built by its own CLI in this isolated env.
         seed_dir = Path(os.environ["DEMO_DATA_ROOT"]).parent / "seed"
-        # The command names the temp dir symbolically: logs carry no real path.
-        receipt = await build(
-            seed_dir, command="python -m src.demo.seed build --out <tmp>/seed"
+        built = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "src.demo.seed",
+                "build",
+                "--out",
+                str(seed_dir),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if built.returncode != 0:
+            raise SystemExit(f"seed CLI exited {built.returncode}")
+        receipt = json.loads(built.stdout.strip().splitlines()[-1])
+        # Redact only the disposable directory; every other field is as built.
+        receipt["command"] = receipt["command"].replace(
+            str(seed_dir), "<tmp>/seed"
         )
         print("RECEIPT", json.dumps(receipt, sort_keys=True), flush=True)
         # ponytail: test-side binding until #194 S4 binds load_seed in
